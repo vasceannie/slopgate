@@ -10,7 +10,14 @@ from time import time
 from types import ModuleType
 from typing import TextIO, TypedDict
 
-from vibeforcer._types import ObjectDict, ObjectMapping, bool_value, object_dict, string_value
+from vibeforcer._types import (
+    ObjectDict,
+    ObjectMapping,
+    bool_value,
+    object_dict,
+    object_list,
+    string_value,
+)
 from vibeforcer.util.logger import warning
 
 fcntl: ModuleType | None
@@ -76,8 +83,9 @@ class HookStateStore:
         session_id: str,
         rule_id: str,
         path: str | None = None,
+        attempt_fingerprint: str | None = None,
     ) -> int:
-        key = self._deny_key(session_id, rule_id, path)
+        key = self._deny_key(session_id, rule_id, path, attempt_fingerprint)
         with self._locked_state():
             state = self._load_state()
             deny_hits = state["deny_hits"]
@@ -91,12 +99,24 @@ class HookStateStore:
         session_id: str,
         rule_id: str,
         path: str | None = None,
+        attempt_fingerprint: str | None = None,
     ) -> None:
-        key = self._deny_key(session_id, rule_id, path)
         with self._locked_state():
             state = self._load_state()
             deny_hits = state["deny_hits"]
-            _ = deny_hits.pop(key, None)
+            keys_to_clear = [
+                key
+                for key in deny_hits
+                if self._deny_key_matches(
+                    key,
+                    session_id=session_id,
+                    rule_id=rule_id,
+                    path=path,
+                    attempt_fingerprint=attempt_fingerprint,
+                )
+            ]
+            for key in keys_to_clear:
+                _ = deny_hits.pop(key, None)
             self._save_state(state)
 
     def recent_repeated_failures(
@@ -126,14 +146,23 @@ class HookStateStore:
         return pairs[:limit]
 
     def set_retry_lock(
-        self, session_id: str, rule_id: str, path: str | None, count: int
+        self,
+        session_id: str,
+        *,
+        repeated_rule_ids: list[str],
+        current_rule_ids: list[str],
+        paths: list[str],
+        attempt_fingerprint: str | None,
+        count: int,
     ) -> None:
         key = self._session_key(session_id)
         with self._locked_state():
             state = self._load_state()
             state["retry_locks"][key] = {
-                "rule_id": rule_id,
-                "path": self._normalize_path(path) if path else "__pathless__",
+                "repeated_rule_ids": repeated_rule_ids,
+                "current_rule_ids": current_rule_ids,
+                "paths": [self._normalize_path(path) for path in paths if path],
+                "attempt_fingerprint": attempt_fingerprint,
                 "count": count,
                 "timestamp": int(time()),
             }
@@ -146,13 +175,23 @@ class HookStateStore:
         if raw is None:
             return None
         result: ObjectDict = {}
-        rule_id = string_value(raw.get("rule_id"))
-        path = string_value(raw.get("path"))
+        repeated_rule_ids = [
+            item for item in object_list(raw.get("repeated_rule_ids")) if isinstance(item, str)
+        ]
+        current_rule_ids = [
+            item for item in object_list(raw.get("current_rule_ids")) if isinstance(item, str)
+        ]
+        paths = [item for item in object_list(raw.get("paths")) if isinstance(item, str)]
+        attempt_fingerprint = string_value(raw.get("attempt_fingerprint"))
         count = raw.get("count")
-        if rule_id is not None:
-            result["rule_id"] = rule_id
-        if path is not None:
-            result["path"] = path
+        if repeated_rule_ids:
+            result["repeated_rule_ids"] = repeated_rule_ids
+        if current_rule_ids:
+            result["current_rule_ids"] = current_rule_ids
+        if paths:
+            result["paths"] = paths
+        if attempt_fingerprint is not None:
+            result["attempt_fingerprint"] = attempt_fingerprint
         if isinstance(count, int):
             result["count"] = count
         return result
@@ -224,16 +263,47 @@ class HookStateStore:
             sort_keys=True,
         )
 
-    def _deny_key(self, session_id: str, rule_id: str, path: str | None) -> str:
+    def _deny_key(
+        self,
+        session_id: str,
+        rule_id: str,
+        path: str | None,
+        attempt_fingerprint: str | None,
+    ) -> str:
         normalized_path = self._normalize_path(path) if path else "__pathless__"
         return json.dumps(
             {
                 "session_id": self._session_key(session_id),
                 "rule_id": rule_id.strip(),
                 "path": normalized_path,
+                "attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__",
             },
             sort_keys=True,
         )
+
+    def _deny_key_matches(
+        self,
+        key: str,
+        *,
+        session_id: str,
+        rule_id: str,
+        path: str | None,
+        attempt_fingerprint: str | None,
+    ) -> bool:
+        try:
+            parsed = object_dict(json.loads(key))
+        except json.JSONDecodeError:
+            return False
+        if string_value(parsed.get("session_id")) != self._session_key(session_id):
+            return False
+        if string_value(parsed.get("rule_id")) != rule_id.strip():
+            return False
+        expected_path = self._normalize_path(path) if path else "__pathless__"
+        if string_value(parsed.get("path")) != expected_path:
+            return False
+        if attempt_fingerprint is None:
+            return True
+        return string_value(parsed.get("attempt_fingerprint")) == attempt_fingerprint
 
     def _session_key(self, session_id: str) -> str:
         return session_id.strip()

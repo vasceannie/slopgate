@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from collections.abc import Mapping
 from pathlib import Path
 from time import monotonic
 
-from vibeforcer._types import ObjectDict
+from vibeforcer._types import ObjectDict, object_list
 from vibeforcer.adapters import get_adapter
 from vibeforcer.adapters.base import PlatformAdapter
 from typing import Literal
@@ -299,6 +301,62 @@ def _denial_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     return [item for item in findings if item.decision in {"deny", "block"}]
 
 
+def _retry_budget_relevant_denials(findings: list[RuleFinding]) -> list[RuleFinding]:
+    return [item for item in _denial_findings(findings) if item.rule_id != "RETRY-BUDGET-001"]
+
+
+def _normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
+    raw_path = Path(path_value)
+    if raw_path.is_absolute():
+        return str(raw_path.resolve(strict=False))
+    return str((ctx.cwd / raw_path).resolve(strict=False))
+
+
+def _stable_hash(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _attempt_fingerprint(ctx: HookContext) -> str | None:
+    if not is_edit_like_tool(ctx.tool_name):
+        return None
+    payload = {
+        "tool_name": ctx.tool_name.lower(),
+        "candidate_paths": sorted(
+            {
+                _normalize_attempt_path(ctx, path_value)
+                for path_value in ctx.candidate_paths
+                if path_value
+            }
+        ),
+        "targets": sorted(
+            {
+                (
+                    _normalize_attempt_path(ctx, target.path),
+                    target.source,
+                    hashlib.sha256(target.content.encode("utf-8")).hexdigest(),
+                )
+                for target in ctx.content_targets
+                if target.path
+            }
+        ),
+        "tool_input_hash": _stable_hash(ctx.tool_input),
+    }
+    if not payload["candidate_paths"] and not payload["targets"]:
+        return None
+    return _stable_hash(payload)
+
+
+def _current_denied_rule_ids(findings: list[RuleFinding]) -> list[str]:
+    return sorted({item.rule_id for item in _retry_budget_relevant_denials(findings)})
+
+
 def _dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     unique: list[RuleFinding] = []
     seen: set[tuple[str, str | None, str | None, str | None]] = set()
@@ -323,17 +381,29 @@ def _filter_search_reminder_dedupe(ctx: HookContext, findings: list[RuleFinding]
 
 
 def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
-    denied = _denial_findings(findings)
+    denied = _retry_budget_relevant_denials(findings)
+    attempt_fingerprint = _attempt_fingerprint(ctx)
+    current_rule_ids = _current_denied_rule_ids(findings)
+    repeated_rule_ids: set[str] = set()
+    max_repeat_count = 0
     for item in denied:
         path_value = _finding_path(item)
-        repeat_count = ctx.state.record_deny_hit(ctx.session_id, item.rule_id, path_value)
+        repeat_count = ctx.state.record_deny_hit(
+            ctx.session_id,
+            item.rule_id,
+            path_value,
+            attempt_fingerprint,
+        )
         classification = _failure_class(item.rule_id)
         item.metadata["failure_class"] = classification
         item.metadata["repeat_count"] = repeat_count
+        if attempt_fingerprint:
+            item.metadata["attempt_fingerprint"] = attempt_fingerprint
+        max_repeat_count = max(max_repeat_count, repeat_count)
         if repeat_count >= 2:
+            repeated_rule_ids.add(item.rule_id)
             item.metadata["repeat_hit"] = True
             item.message = ((item.message or "").rstrip() + " Change design before retrying.").strip()
-            ctx.state.set_retry_lock(ctx.session_id, item.rule_id, path_value, repeat_count)
         if repeat_count >= 3 and item.decision != "block":
             item.decision = "block"
             item.severity = max(item.severity, Severity.HIGH)
@@ -346,6 +416,23 @@ def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) ->
             hints.append("Repeated deny detected: write a short repair plan before your next write.")
         item.additional_context = "\n\n".join(
             part for part in [item.additional_context, *hints] if part
+        )
+
+    if repeated_rule_ids:
+        retry_paths = sorted(
+            {
+                _normalize_attempt_path(ctx, path_value)
+                for path_value in ctx.candidate_paths
+                if path_value
+            }
+        )
+        ctx.state.set_retry_lock(
+            ctx.session_id,
+            repeated_rule_ids=sorted(repeated_rule_ids),
+            current_rule_ids=current_rule_ids,
+            paths=retry_paths,
+            attempt_fingerprint=attempt_fingerprint,
+            count=max_repeat_count,
         )
 
     touched_paths = [target.path for target in ctx.content_targets if target.path]
@@ -398,6 +485,24 @@ def _enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None
     if ctx.state.has_repair_plan(ctx.session_id):
         ctx.state.clear_retry_lock(ctx.session_id)
         return
+    current_attempt_fingerprint = _attempt_fingerprint(ctx)
+    locked_attempt_fingerprint = lock.get("attempt_fingerprint")
+    if (
+        isinstance(locked_attempt_fingerprint, str)
+        and current_attempt_fingerprint != locked_attempt_fingerprint
+    ):
+        return
+    current_rule_ids = set(_current_denied_rule_ids(findings))
+    if not current_rule_ids:
+        return
+    repeated_rule_ids = {
+        item
+        for item in object_list(lock.get("repeated_rule_ids"))
+        if isinstance(item, str)
+    }
+    matched_rule_ids = sorted(current_rule_ids & repeated_rule_ids)
+    if repeated_rule_ids and not matched_rule_ids:
+        return
     findings.append(
         RuleFinding(
             rule_id="RETRY-BUDGET-001",
@@ -405,12 +510,17 @@ def _enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None
             severity=Severity.HIGH,
             decision="deny",
             message=(
-                "Third write attempt blocked after repeated denies. "
+                "Third write attempt blocked after repeated denies of the same edit pattern. "
                 "Reread the file, name violated constraints, and write a short repair plan first."
             ),
             metadata={
-                "rule_id_locked": lock.get("rule_id"),
-                "path_locked": lock.get("path"),
+                "repeated_rule_ids": sorted(repeated_rule_ids),
+                "matched_rule_ids": matched_rule_ids,
+                "current_rule_ids": sorted(current_rule_ids),
+                "locked_rule_ids": lock.get("current_rule_ids"),
+                "paths_locked": lock.get("paths"),
+                "attempt_fingerprint_locked": locked_attempt_fingerprint,
+                "attempt_fingerprint_current": current_attempt_fingerprint,
                 "retry_count": lock.get("count"),
             },
             additional_context=(
@@ -479,12 +589,8 @@ def evaluate_payload(
     )
 
     _capture_repair_plan_signal(ctx)
-    pre_findings: list[RuleFinding] = []
-    _enforce_retry_budget(ctx, pre_findings)
-    if pre_findings:
-        acc = _EvalAccumulator(findings=pre_findings)
-    else:
-        acc = _run_rules(ctx, platform, enforcement_mode)
+    acc = _run_rules(ctx, platform, enforcement_mode)
+    _enforce_retry_budget(ctx, acc.findings)
     _apply_loop_aware_steering(ctx, acc.findings)
     _inject_recent_failure_context(ctx, acc.findings)
     acc.findings = _filter_search_reminder_dedupe(ctx, acc.findings)

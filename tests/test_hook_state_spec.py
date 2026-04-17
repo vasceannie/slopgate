@@ -889,6 +889,67 @@ class TestLoopAwareDenialSteering:
         third = evaluate_payload(payload)
         assert "RETRY-BUDGET-001" in finding_ids(third)
 
+    def test_third_write_is_not_blocked_when_code_changes(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
+        repeated_payload = {
+            "session_id": "budget-session",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/api.py",
+                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
+            },
+        }
+        changed_payload = {
+            "session_id": "budget-session",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/api.py",
+                "content": "def f(params):\n    return params\n",
+            },
+        }
+
+        _ = evaluate_payload(repeated_payload)
+        _ = evaluate_payload(repeated_payload)
+        third = evaluate_payload(changed_payload)
+
+        assert "RETRY-BUDGET-001" not in finding_ids(third)
+
+    def test_third_write_is_not_blocked_when_triggered_rule_changes(
+        self, tmp_path: Path
+    ) -> None:
+        _ensure_enrolled(str(tmp_path))
+        repeated_payload = {
+            "session_id": "budget-session",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/api.py",
+                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
+            },
+        }
+        changed_rule_payload = {
+            "session_id": "budget-session",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/api.py",
+                "content": "def get_all_users():\n    return UserRepository.find_all()\n",
+            },
+        }
+
+        _ = evaluate_payload(repeated_payload)
+        _ = evaluate_payload(repeated_payload)
+        third = evaluate_payload(changed_rule_payload)
+
+        assert "RETRY-BUDGET-001" not in finding_ids(third)
+        assert "PY-CODE-013" in finding_ids(third)
+
     def test_session_start_includes_recent_repeated_failures(
         self, tmp_path: Path
     ) -> None:

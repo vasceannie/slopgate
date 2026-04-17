@@ -304,6 +304,55 @@ class TestThinWrapper(unittest.TestCase):
         result = evaluate_payload(payload)
         _assert_not_denied(result)
 
+    def test_cast_wrapper_exempt(self) -> None:
+        code = (
+            "from typing import cast\n\n"
+            "def factory(value: object) -> str:\n"
+            "    return cast(str, value)\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/main.py", "new_string": code},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+
+    def test_test_helper_self_delegate_exempt(self) -> None:
+        code = (
+            "class Recorder:\n"
+            "    def _record(self, action: str) -> None:\n"
+            "        pass\n\n"
+            "    def pause(self) -> None:\n"
+            "        return self._record('pause')\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "tests/tui/conftest.py", "new_string": code},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+
+    def test_test_helper_list_wrapper_exempt(self) -> None:
+        code = (
+            "class FakeRuns:\n"
+            "    def __init__(self, runs: list[str]) -> None:\n"
+            "        self._runs = runs\n\n"
+            "    def list_runs(self) -> list[str]:\n"
+            "        return list(self._runs)\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "tests/tui/conftest.py", "new_string": code},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+
 
 class TestGodClass(unittest.TestCase):
     def test_god_blocked(self) -> None:

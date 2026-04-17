@@ -632,8 +632,72 @@ class PythonThinWrapperRule(Rule):
         if isinstance(func, ast.Name):
             return func.id
         if isinstance(func, ast.Attribute):
-            return ast.dump(func)
+            return PythonThinWrapperRule._attribute_name(func)
         return "<unknown>"
+
+    @staticmethod
+    def _attribute_name(node: ast.Attribute) -> str:
+        parts: list[str] = [node.attr]
+        current: ast.expr = node.value
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+        else:
+            return node.attr
+        return ".".join(reversed(parts))
+
+    @staticmethod
+    def _call_root_name(call_node: ast.Call) -> str | None:
+        func = call_node.func
+        if isinstance(func, ast.Name):
+            return func.id
+        if isinstance(func, ast.Attribute):
+            current: ast.expr = func
+            while isinstance(current, ast.Attribute):
+                current = current.value
+            if isinstance(current, ast.Name):
+                return current.id
+        return None
+
+    @staticmethod
+    def _has_self_or_cls_receiver(
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        call_node: ast.Call,
+    ) -> bool:
+        if not node.args.args:
+            return False
+        receiver_name = node.args.args[0].arg
+        if receiver_name not in {"self", "cls"}:
+            return False
+        return PythonThinWrapperRule._call_root_name(call_node) == receiver_name
+
+    @staticmethod
+    def _is_test_helper_path(path_value: str) -> bool:
+        normalized = path_value.replace("\\", "/").lower()
+        return (
+            normalized.startswith("tests/")
+            or "/tests/" in normalized
+            or normalized.endswith("/conftest.py")
+            or normalized == "conftest.py"
+        )
+
+    @staticmethod
+    def _is_exempt_cast_wrapper(call_node: ast.Call) -> bool:
+        return isinstance(call_node.func, ast.Name) and call_node.func.id == "cast"
+
+    @staticmethod
+    def _is_exempt_test_helper_wrapper(
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        call_node: ast.Call,
+        path_value: str,
+    ) -> bool:
+        if not PythonThinWrapperRule._is_test_helper_path(path_value):
+            return False
+        if isinstance(call_node.func, ast.Name) and call_node.func.id in {"list", "cast"}:
+            return True
+        return PythonThinWrapperRule._has_self_or_cls_receiver(node, call_node)
 
     @staticmethod
     def _is_wrapper_candidate(
@@ -660,6 +724,10 @@ class PythonThinWrapperRule(Rule):
                 continue
             call_node = self._extract_single_call(node.body[0])
             if call_node is None:
+                continue
+            if self._is_exempt_cast_wrapper(call_node):
+                continue
+            if self._is_exempt_test_helper_wrapper(node, call_node, path_value):
                 continue
             wrapped = self._call_target_name(call_node)
             findings.append(RuleFinding(
