@@ -484,6 +484,15 @@ _SECURITY_EXCLUDED = (
 )
 
 
+def _is_security_doc_or_example(path_value: str) -> bool:
+    lowered = path_value.lower().replace("\\", "/")
+    if lowered.startswith("docs/") and lowered.endswith(".md"):
+        return True
+    if lowered.startswith("docs/examples/") and lowered.endswith(".json"):
+        return True
+    return False
+
+
 class RulebookSecurityRule(Rule):
     """Prevent disabling or weakening security guardrails."""
 
@@ -497,6 +506,8 @@ class RulebookSecurityRule(Rule):
             return []
         for target in ctx.content_targets:
             lowered = target.path.lower()
+            if _is_security_doc_or_example(lowered):
+                continue
             if any(f in lowered for f in _SECURITY_EXCLUDED):
                 continue
             for pat in _SECURITY_PATTERNS:

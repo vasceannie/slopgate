@@ -98,7 +98,7 @@ def evaluate_common(
             if _is_third_party_path(path_value):
                 continue
             full_path = (
-                (ctx.config.root / path_value).resolve()
+                (ctx.cwd / path_value).resolve()
                 if not Path(path_value).is_absolute()
                 else Path(path_value)
             )

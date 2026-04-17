@@ -85,6 +85,7 @@ def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
 def _config_with_enabled_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *rule_ids: str
 ) -> None:
+    (tmp_path / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n")
     raw = json.loads((_RESOURCES / "defaults.json").read_text(encoding="utf-8"))
     enabled = dict(raw.get("enabled_rules", {}))
     for rule_id in rule_ids:
@@ -95,6 +96,13 @@ def _config_with_enabled_rules(
     monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
 
 
+def _ensure_enrolled(cwd: str) -> None:
+    root = Path(cwd)
+    marker = root / "quality_gate.toml"
+    if not marker.exists():
+        marker.write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+
+
 def _read_payload(
     file_path: str,
     *,
@@ -103,6 +111,7 @@ def _read_payload(
     offset: int | None = None,
     limit: int | None = None,
 ) -> dict[str, object]:
+    _ensure_enrolled(cwd)
     tool_input: dict[str, object] = {"file_path": file_path}
     if offset is not None:
         tool_input["offset"] = offset
@@ -123,6 +132,7 @@ def _bash_payload(
     cwd: str,
     session_id: str = "spec-session",
 ) -> dict[str, object]:
+    _ensure_enrolled(cwd)
     return {
         "session_id": session_id,
         "cwd": cwd,
@@ -138,6 +148,7 @@ def _grep_payload(
     cwd: str,
     session_id: str = "spec-session",
 ) -> dict[str, object]:
+    _ensure_enrolled(cwd)
     return {
         "session_id": session_id,
         "cwd": cwd,
@@ -154,6 +165,7 @@ def _posttool_payload(
     code: str,
     session_id: str = "spec-session",
 ) -> dict[str, object]:
+    _ensure_enrolled(str(cwd))
     target = cwd / rel_path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(code, encoding="utf-8")
@@ -557,10 +569,6 @@ class TestSearchReminderCurrentGuards:
         assert "REMIND-SEARCH-001" in finding_ids(result)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="search reminder dedupe and native-tool suppression are not implemented yet",
-)
 class TestSearchReminderStatefulSpec:
     def test_native_grep_tool_does_not_self_remind(self, tmp_path: Path) -> None:
         result = evaluate_payload(_grep_payload("TODO", cwd=str(tmp_path)))
@@ -620,6 +628,7 @@ class TestCrossPlatformSessionIdentityCurrentGuards:
 
 class TestSecurityRuleCurrentGuards:
     def test_real_source_bypass_still_denied(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -634,6 +643,7 @@ class TestSecurityRuleCurrentGuards:
         assert_denied_by(result, "BUILTIN-RULEBOOK-SECURITY", "bypass")
 
     def test_fixture_like_paths_remain_allowed(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -648,12 +658,9 @@ class TestSecurityRuleCurrentGuards:
         assert_not_denied(result)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="path-based docs/examples carveouts are not implemented yet",
-)
 class TestSecurityRuleBoundarySpec:
     def test_markdown_docs_can_describe_bypass_settings(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -668,6 +675,7 @@ class TestSecurityRuleBoundarySpec:
         assert_not_denied(result)
 
     def test_json_examples_can_show_guardrail_settings(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -682,11 +690,13 @@ class TestSecurityRuleBoundarySpec:
         assert_not_denied(result)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="repeat-aware debt escalation is not implemented yet",
-)
 class TestRepeatedDebtEscalationSpec:
+    @pytest.fixture(autouse=True)
+    def _enable_rule(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013")
+
     def test_second_thin_wrapper_hit_tracks_repeat_count(self, tmp_path: Path) -> None:
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         first = evaluate_payload(
@@ -822,3 +832,89 @@ class TestRepeatedDebtEscalationSpec:
         )
         assert first_finding["metadata"].get("repeat_count") == 1
         assert second_finding["metadata"].get("repeat_count") == 2
+
+
+class TestLoopAwareDenialSteering:
+    @pytest.fixture(autouse=True)
+    def _enable_rules(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013", "PY-CODE-009")
+
+    def test_second_hit_adds_failure_class_and_repeat_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        code = "def get_all_users():\n    return UserRepository.find_all()\n"
+        first = evaluate_payload(
+            _posttool_payload(
+                cwd=tmp_path,
+                rel_path="src/thin.py",
+                code=code,
+                session_id="loop-session",
+            )
+        )
+        second = evaluate_payload(
+            _posttool_payload(
+                cwd=tmp_path,
+                rel_path="src/thin.py",
+                code=code,
+                session_id="loop-session",
+            )
+        )
+        first_finding = _finding("PY-CODE-013", first.findings)
+        second_finding = _finding("PY-CODE-013", second.findings)
+        assert first_finding is not None
+        assert second_finding is not None
+        assert first_finding.metadata.get("failure_class") == "structural"
+        assert second_finding.metadata.get("repeat_hit") is True
+        assert second_finding.additional_context and "Classify the failure first" in (
+            second_finding.additional_context
+        )
+
+    def test_third_write_is_blocked_after_repeat_lock(self, tmp_path: Path) -> None:
+        _ensure_enrolled(str(tmp_path))
+        payload = {
+            "session_id": "budget-session",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/api.py",
+                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
+            },
+        }
+        _ = evaluate_payload(payload)
+        _ = evaluate_payload(payload)
+        third = evaluate_payload(payload)
+        assert "RETRY-BUDGET-001" in finding_ids(third)
+
+    def test_session_start_includes_recent_repeated_failures(
+        self, tmp_path: Path
+    ) -> None:
+        code = "def get_all_users():\n    return UserRepository.find_all()\n"
+        _ = evaluate_payload(
+            _posttool_payload(
+                cwd=tmp_path,
+                rel_path="src/thin.py",
+                code=code,
+                session_id="memory-session",
+            )
+        )
+        _ = evaluate_payload(
+            _posttool_payload(
+                cwd=tmp_path,
+                rel_path="src/thin.py",
+                code=code,
+                session_id="memory-session",
+            )
+        )
+        session_start = evaluate_payload(
+            {
+                "session_id": "memory-session",
+                "cwd": str(tmp_path),
+                "hook_event_name": "SessionStart",
+                "tool_name": "",
+                "tool_input": {},
+            }
+        )
+        assert "SESSION-RECENT-FAILURES" in finding_ids(session_start)

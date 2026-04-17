@@ -129,3 +129,29 @@ class TestAnalyze:
         assert len(_string_list(examples, "GIT-001")) <= 3, (
             "rule examples must be capped at 3"
         )
+
+    def test_churn_metrics_include_repeated_deny_rates(self) -> None:
+        entries = [
+            self._entry(rule_id="PY-CODE-009", session="s1"),
+            self._entry(rule_id="PY-CODE-009", session="s1"),
+            self._entry(rule_id="PY-CODE-010", session="s2"),
+        ]
+        stats = _analyze(entries)
+        repeated = _pair_counts(stats, "repeated_deny_rate_by_rule")
+        assert repeated.get("PY-CODE-009") == 1
+        assert float(stats.get("first_time_resolution_rate", 0.0)) < 1.0
+
+    def test_pathless_rules_are_tracked(self) -> None:
+        entry = self._entry(rule_id="SHELL-001")
+        entry["findings"] = [
+            {
+                "rule_id": "SHELL-001",
+                "decision": "deny",
+                "severity": "HIGH",
+                "message": "No shell",
+                "metadata": {},
+            }
+        ]
+        stats = _analyze([entry, entry])
+        pathless = _pair_counts(stats, "top_pathless_loop_rules")
+        assert pathless.get("SHELL-001", 0) >= 1

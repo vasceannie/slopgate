@@ -440,15 +440,8 @@ class SearchReminderRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not ctx.config.search_reminder_message:
             return []
-        if ctx.tool_name in {"Grep", "WebSearch"}:
-            return [
-                RuleFinding(
-                    rule_id=self.rule_id,
-                    title=self.title,
-                    severity=Severity.LOW,
-                    additional_context=ctx.config.search_reminder_message,
-                )
-            ]
+        if ctx.tool_name in {"Grep", "WebSearch", "Read"}:
+            return []
         if ctx.bash_command and _command_has_word(ctx.bash_command.lower(), "grep"):
             return [
                 RuleFinding(

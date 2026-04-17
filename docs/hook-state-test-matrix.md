@@ -160,6 +160,23 @@ Goal: keep the spec behavioral, while forcing the implementation to fit the real
 
   Trace and summary output as well as findings metadata.
 
+## 7. Loop-Aware Denial Steering
+
+Goal: break same-rule/same-file retry loops by forcing a changed approach after first deny.
+
+### Primary cases
+
+- First deny includes failure classification (`structural`, `policy_tooling`, `quality`) and explicit re-plan instruction.
+- Top repeat rules include concrete repair hints (helper extraction, params object, constants, no-shell-edit guidance).
+- Second hit on the same `(session, rule, path)` is visibly repeat-aware and carries repeat metadata.
+- Third hit escalates (stronger deny/block posture) or hard-stops.
+- After two denies, a third write is blocked until a short repair plan is recorded.
+- Session-start context includes compact recent-failure memory (rule/path/count) to avoid loops.
+
+### Loop-smell compound hint
+
+- If one file accumulates 3+ structural/quality denies in-session, emit a compound hint to stop incremental patching and extract helpers/config objects first.
+
 ## Execution Order
 
 1. Add executable spec tests for the settled behavior.

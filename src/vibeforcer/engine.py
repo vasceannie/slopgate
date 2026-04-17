@@ -17,6 +17,7 @@ from vibeforcer.models import EngineResult, RuleFinding, Severity
 from vibeforcer.rules import build_always_on_rules, build_repo_strict_rules
 from vibeforcer.rules.base import Rule
 from vibeforcer.util import warning
+from vibeforcer.util.payloads import is_edit_like_tool
 
 
 DECISION_ORDER: dict[str | None, int] = {
@@ -214,6 +215,10 @@ EnforcementMode = Literal["outside_repo", "repo_strict", "repo_relaxed"]
 def _resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
     repo_cwd = Path(ctx.cwd) if ctx.cwd else Path.cwd()
     repo_root = repo_cwd.resolve()
+    if not repo_root.exists():
+        repo_root = Path.cwd().resolve()
+        if not repo_root.exists():
+            repo_root = ctx.config.root.resolve()
 
     if not is_repo_enrolled(repo_root):
         return "outside_repo"
@@ -240,6 +245,176 @@ def _run_rules(ctx: HookContext, platform: str, mode: EnforcementMode) -> _EvalA
             _run_rule(rule, ctx, platform, acc)
     _safe_enrich(ctx, platform, acc)
     return acc
+
+
+_REPLAN_PROMPT = (
+    "If a hook denies or blocks your change, do not immediately retry the same edit pattern. "
+    "Classify the failure first: structural, policy/tooling, or quality. Change approach before retrying. "
+    "If the same file or rule is denied twice, stop and make a short repair plan before the next write. "
+    "Prefer small helper extractions, params objects, and named constants over large rewrites."
+)
+
+_RULE_HINTS: dict[str, str] = {
+    "PY-CODE-008": "Next step: extract one helper first; avoid full-file rewrites.",
+    "PY-CODE-009": "Next step: introduce a typed params object (dataclass/TypedDict) first.",
+    "PY-QUALITY-010": "Next step: define UPPER_CASE constants first, then replace repeated literals.",
+    "SHELL-001": "Do not run shell retries. Next step: use structured read/edit/write tools.",
+    "PY-SHELL-001": "Do not run shell retries. Next step: use structured read/edit/write tools.",
+}
+
+
+def _failure_class(rule_id: str) -> str:
+    if rule_id.startswith("PY-CODE") or rule_id.startswith("PY-QUALITY"):
+        return "structural" if rule_id.startswith("PY-CODE") else "quality"
+    if "SHELL" in rule_id or rule_id.startswith("GIT-"):
+        return "policy_tooling"
+    return "quality"
+
+
+def _finding_path(item: RuleFinding) -> str | None:
+    path = item.metadata.get("path")
+    if isinstance(path, str) and path:
+        return path
+    return None
+
+
+def _denial_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
+    return [item for item in findings if item.decision in {"deny", "block"}]
+
+
+def _dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
+    unique: list[RuleFinding] = []
+    seen: set[tuple[str, str | None, str | None, str | None]] = set()
+    for item in findings:
+        key = (item.rule_id, item.decision, item.message, item.additional_context)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
+
+
+def _filter_search_reminder_dedupe(ctx: HookContext, findings: list[RuleFinding]) -> list[RuleFinding]:
+    reminder_indexes = [idx for idx, item in enumerate(findings) if item.rule_id == "REMIND-SEARCH-001"]
+    if not reminder_indexes:
+        return findings
+    if ctx.state.should_emit_search_reminder(ctx.session_id):
+        ctx.state.record_search_reminder(ctx.session_id)
+        first = reminder_indexes[0]
+        return [item for idx, item in enumerate(findings) if item.rule_id != "REMIND-SEARCH-001" or idx == first]
+    return [item for item in findings if item.rule_id != "REMIND-SEARCH-001"]
+
+
+def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
+    denied = _denial_findings(findings)
+    for item in denied:
+        path_value = _finding_path(item)
+        repeat_count = ctx.state.record_deny_hit(ctx.session_id, item.rule_id, path_value)
+        classification = _failure_class(item.rule_id)
+        item.metadata["failure_class"] = classification
+        item.metadata["repeat_count"] = repeat_count
+        if repeat_count >= 2:
+            item.metadata["repeat_hit"] = True
+            item.message = ((item.message or "").rstrip() + " Change design before retrying.").strip()
+            ctx.state.set_retry_lock(ctx.session_id, item.rule_id, path_value, repeat_count)
+        if repeat_count >= 3 and item.decision != "block":
+            item.decision = "block"
+            item.severity = max(item.severity, Severity.HIGH)
+            item.metadata["escalated"] = True
+        hints = [_REPLAN_PROMPT]
+        rule_hint = _RULE_HINTS.get(item.rule_id)
+        if rule_hint:
+            hints.append(rule_hint)
+        if repeat_count >= 2:
+            hints.append("Repeated deny detected: write a short repair plan before your next write.")
+        item.additional_context = "\n\n".join(
+            part for part in [item.additional_context, *hints] if part
+        )
+
+    touched_paths = [target.path for target in ctx.content_targets if target.path]
+    if touched_paths:
+        found_pairs = {
+            (item.rule_id, _finding_path(item) or "__pathless__")
+            for item in denied
+        }
+        for path in touched_paths:
+            normalized = str((ctx.cwd / path).resolve(strict=False))
+            for rule_id in ("PY-CODE-013",):
+                key = (rule_id, normalized)
+                if key not in found_pairs:
+                    ctx.state.clear_deny_hit(ctx.session_id, rule_id, normalized)
+
+
+def _inject_recent_failure_context(ctx: HookContext, findings: list[RuleFinding]) -> None:
+    if ctx.event_name != "SessionStart":
+        return
+    repeated = ctx.state.recent_repeated_failures(ctx.session_id, limit=4)
+    if not repeated:
+        return
+    lines = ["## Recent repeated failures", "Avoid repeating these patterns this session:"]
+    for item in repeated:
+        rule_id = item.get("rule_id", "unknown")
+        path = item.get("path", "__pathless__")
+        count = item.get("count", 0)
+        if path == "__pathless__":
+            lines.append(f"- {rule_id} x{count}")
+        else:
+            lines.append(f"- {rule_id} on {Path(str(path)).name} x{count}")
+    findings.append(
+        RuleFinding(
+            rule_id="SESSION-RECENT-FAILURES",
+            title="Session repeated-failure memory",
+            severity=Severity.LOW,
+            additional_context="\n".join(lines),
+        )
+    )
+
+
+def _enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
+    if ctx.event_name not in {"PreToolUse", "PermissionRequest"}:
+        return
+    if not is_edit_like_tool(ctx.tool_name):
+        return
+    lock = ctx.state.get_retry_lock(ctx.session_id)
+    if not lock:
+        return
+    if ctx.state.has_repair_plan(ctx.session_id):
+        ctx.state.clear_retry_lock(ctx.session_id)
+        return
+    findings.append(
+        RuleFinding(
+            rule_id="RETRY-BUDGET-001",
+            title="Retry budget enforcement",
+            severity=Severity.HIGH,
+            decision="deny",
+            message=(
+                "Third write attempt blocked after repeated denies. "
+                "Reread the file, name violated constraints, and write a short repair plan first."
+            ),
+            metadata={
+                "rule_id_locked": lock.get("rule_id"),
+                "path_locked": lock.get("path"),
+                "retry_count": lock.get("count"),
+            },
+            additional_context=(
+                "Required before next write:\n"
+                "1) reread the target file\n"
+                "2) list violated constraints\n"
+                "3) write a short repair plan"
+            ),
+        )
+    )
+
+
+def _capture_repair_plan_signal(ctx: HookContext) -> None:
+    if ctx.event_name not in {"UserPromptSubmit", "SessionStart"}:
+        return
+    prompt = ctx.user_prompt.lower()
+    if "repair plan" not in prompt:
+        return
+    constraints_named = "constraint" in prompt or "rule" in prompt
+    reread_done = "reread" in prompt or "re-read" in prompt or "read" in prompt
+    ctx.state.mark_repair_plan(ctx.session_id, constraints_named, reread_done)
 
 
 def render_output(
@@ -281,7 +456,17 @@ def evaluate_payload(
         }
     )
 
-    acc = _run_rules(ctx, platform, enforcement_mode)
+    _capture_repair_plan_signal(ctx)
+    pre_findings: list[RuleFinding] = []
+    _enforce_retry_budget(ctx, pre_findings)
+    if pre_findings:
+        acc = _EvalAccumulator(findings=pre_findings)
+    else:
+        acc = _run_rules(ctx, platform, enforcement_mode)
+    _apply_loop_aware_steering(ctx, acc.findings)
+    _inject_recent_failure_context(ctx, acc.findings)
+    acc.findings = _filter_search_reminder_dedupe(ctx, acc.findings)
+    acc.findings = _dedupe_findings(acc.findings)
     output = render_output(ctx, acc.findings, adapter=adapter)
 
     ctx.trace.result(

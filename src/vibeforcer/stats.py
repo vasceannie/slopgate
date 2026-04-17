@@ -98,6 +98,11 @@ class _Counters:
     session_deny_seq: dict[str, list[tuple[str, str, str]]] = field(
         default_factory=lambda: defaultdict(list),
     )
+    deny_counts_by_key: Counter[tuple[str, str, str]] = field(default_factory=Counter)
+    first_time_resolved: int = 0
+    repeated_denies: int = 0
+    retries_before_resolution: list[int] = field(default_factory=list)
+    pathless_loop_rules: Counter[str] = field(default_factory=Counter)
     fixture_filtered: int = 0
 
 
@@ -142,8 +147,13 @@ def _process_finding(
         return False
 
     counters.denies_by_rule[rule_id] += 1
+    metadata = object_dict(finding.get("metadata", {}))
+    path_val = string_value(metadata.get("path")) or "__pathless__"
     counters.session_deny_seq[ectx.session].append((rule_id, ectx.tool, ectx.ts_str))
-    _record_deny_metadata(finding.get("metadata", {}), counters)
+    counters.deny_counts_by_key[(ectx.session, rule_id, path_val)] += 1
+    _record_deny_metadata(metadata, counters)
+    if path_val == "__pathless__":
+        counters.pathless_loop_rules[rule_id] += 1
     if len(counters.rule_examples[rule_id]) < 3:
         counters.rule_examples[rule_id].append(str(finding.get("message", "")))
     return True
@@ -206,6 +216,28 @@ def analyze(entries: list[dict[str, object]]) -> ObjectDict:
         _process_entry(entry, counters)
 
     retry_counts = _compute_retry_patterns(counters)
+    top_looping_files: Counter[str] = Counter()
+    repeated_by_rule: Counter[str] = Counter()
+    for (_, rule_id, path), count in counters.deny_counts_by_key.items():
+        if count <= 1:
+            counters.first_time_resolved += 1
+            continue
+        counters.repeated_denies += 1
+        counters.retries_before_resolution.append(count - 1)
+        repeated_by_rule[rule_id] += 1
+        top_looping_files[path] += count
+    median_retries = 0.0
+    if counters.retries_before_resolution:
+        sorted_vals = sorted(counters.retries_before_resolution)
+        mid = len(sorted_vals) // 2
+        if len(sorted_vals) % 2 == 1:
+            median_retries = float(sorted_vals[mid])
+        else:
+            median_retries = (sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0
+    total_resolution = counters.first_time_resolved + counters.repeated_denies
+    first_time_resolution_rate = (
+        counters.first_time_resolved / total_resolution if total_resolution else 0.0
+    )
     dates = sorted(counters.daily_counts.keys())
     date_range = f"{dates[0]} to {dates[-1]}" if dates else "unknown"
 
@@ -223,6 +255,11 @@ def analyze(entries: list[dict[str, object]]) -> ObjectDict:
         "daily_counts": sorted(counters.daily_counts.items()),
         "retry_patterns": retry_counts.most_common(15),
         "rule_examples": dict(counters.rule_examples),
+        "first_time_resolution_rate": round(first_time_resolution_rate, 4),
+        "repeated_deny_rate_by_rule": repeated_by_rule.most_common(20),
+        "median_retries_before_resolution": median_retries,
+        "top_looping_files": top_looping_files.most_common(15),
+        "top_pathless_loop_rules": counters.pathless_loop_rules.most_common(15),
     }
 
 
@@ -269,6 +306,7 @@ def print_report(stats: Mapping[str, object]) -> None:
     _print_denied_rules(stats)
     _print_denied_files(stats)
     _print_retry_patterns(stats)
+    _print_churn_metrics(stats)
     _print_daily_volume(stats)
     _print_pairs_section(
         title="Severity Breakdown",
@@ -326,6 +364,25 @@ def _print_daily_volume(stats: Mapping[str, object]) -> None:
     for day, count in _pairs(stats, "daily_counts")[-14:]:
         bar = "\u2588" * min(count // 50, 60)
         print(f"  {day}  {count:5,}  {bar}")
+
+
+def _print_churn_metrics(stats: Mapping[str, object]) -> None:
+    print("\n--- Deny Churn ---")
+    resolution_rate = stats.get("first_time_resolution_rate", 0.0)
+    median_retries = stats.get("median_retries_before_resolution", 0.0)
+    if isinstance(resolution_rate, (float, int)):
+        print(f"  First-time resolution rate: {float(resolution_rate) * 100:.1f}%")
+    if isinstance(median_retries, (float, int)):
+        print(f"  Median retries before resolution: {float(median_retries):.2f}")
+    print("  Repeated deny rate by rule:")
+    for rule, count in _pairs(stats, "repeated_deny_rate_by_rule")[:5]:
+        print(f"    {rule:24s} {count:5,}")
+    print("  Top looping files:")
+    for path, count in _pairs(stats, "top_looping_files")[:5]:
+        print(f"    {count:4,}  {path}")
+    print("  Top pathless loop rules:")
+    for rule, count in _pairs(stats, "top_pathless_loop_rules")[:5]:
+        print(f"    {rule:24s} {count:5,}")
 
 
 def run_stats(
