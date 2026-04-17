@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from time import time
 from types import ModuleType
-from typing import TextIO, cast
+from typing import TextIO, TypedDict
 
+from vibeforcer._types import ObjectDict, ObjectMapping, bool_value, object_dict, string_value
 from vibeforcer.util.logger import warning
 
 fcntl: ModuleType | None
@@ -46,18 +47,18 @@ class HookStateStore:
     def has_full_read(self, session_id: str, path: str) -> bool:
         key = self._full_read_key(session_id, path)
         state = self._load_state()
-        return key in state.get("full_reads", {})
+        return key in state["full_reads"]
 
     def should_emit_search_reminder(self, session_id: str) -> bool:
         key = self._session_key(session_id)
         state = self._load_state()
-        return key not in state.get("search_reminders", {})
+        return key not in state["search_reminders"]
 
     def record_search_reminder(self, session_id: str) -> None:
         key = self._session_key(session_id)
         with self._locked_state():
             state = self._load_state()
-            state.setdefault("search_reminders", {})[key] = int(time())
+            state["search_reminders"][key] = int(time())
             self._save_state(state)
 
     def record_full_read(self, session_id: str, path: str) -> None:
@@ -67,7 +68,7 @@ class HookStateStore:
         key = self._full_read_key(session_id, normalized_path)
         with self._locked_state():
             state = self._load_state()
-            state.setdefault("full_reads", {})[key] = int(time())
+            state["full_reads"][key] = int(time())
             self._save_state(state)
 
     def record_deny_hit(
@@ -79,7 +80,7 @@ class HookStateStore:
         key = self._deny_key(session_id, rule_id, path)
         with self._locked_state():
             state = self._load_state()
-            deny_hits = state.setdefault("deny_hits", {})
+            deny_hits = state["deny_hits"]
             count = deny_hits.get(key, 0) + 1
             deny_hits[key] = count
             self._save_state(state)
@@ -94,7 +95,7 @@ class HookStateStore:
         key = self._deny_key(session_id, rule_id, path)
         with self._locked_state():
             state = self._load_state()
-            deny_hits = state.setdefault("deny_hits", {})
+            deny_hits = state["deny_hits"]
             _ = deny_hits.pop(key, None)
             self._save_state(state)
 
@@ -102,33 +103,26 @@ class HookStateStore:
         self,
         session_id: str,
         limit: int = 5,
-    ) -> list[dict[str, object]]:
+    ) -> list[ObjectDict]:
         key_prefix = self._session_key(session_id)
         state = self._load_state()
-        deny_hits = state.get("deny_hits", {})
-        pairs: list[dict[str, object]] = []
+        deny_hits = state["deny_hits"]
+        pairs: list[ObjectDict] = []
         for key, count in deny_hits.items():
-            if not isinstance(key, str) or not isinstance(count, int) or count < 2:
+            if count < 2:
                 continue
             try:
-                parsed = json.loads(key)
+                parsed = object_dict(json.loads(key))
             except json.JSONDecodeError:
                 continue
-            if not isinstance(parsed, Mapping):
+            if string_value(parsed.get("session_id")) != key_prefix:
                 continue
-            if parsed.get("session_id") != key_prefix:
+            rule_id = string_value(parsed.get("rule_id"))
+            if rule_id is None:
                 continue
-            rule_id = parsed.get("rule_id")
-            if not isinstance(rule_id, str):
-                continue
-            path = parsed.get("path")
-            if not isinstance(path, str):
-                path = "__pathless__"
+            path = string_value(parsed.get("path")) or "__pathless__"
             pairs.append({"rule_id": rule_id, "path": path, "count": count})
-        pairs.sort(
-            key=lambda item: int(cast(int, item.get("count", 0))),
-            reverse=True,
-        )
+        pairs.sort(key=_failure_count, reverse=True)
         return pairs[:limit]
 
     def set_retry_lock(
@@ -137,7 +131,7 @@ class HookStateStore:
         key = self._session_key(session_id)
         with self._locked_state():
             state = self._load_state()
-            state.setdefault("retry_locks", {})[key] = {
+            state["retry_locks"][key] = {
                 "rule_id": rule_id,
                 "path": self._normalize_path(path) if path else "__pathless__",
                 "count": count,
@@ -145,23 +139,29 @@ class HookStateStore:
             }
             self._save_state(state)
 
-    def get_retry_lock(self, session_id: str) -> dict[str, object] | None:
+    def get_retry_lock(self, session_id: str) -> ObjectDict | None:
         key = self._session_key(session_id)
         state = self._load_state()
-        raw = state.get("retry_locks", {}).get(key)
-        if not isinstance(raw, Mapping):
+        raw = state["retry_locks"].get(key)
+        if raw is None:
             return None
-        return {
-            "rule_id": raw.get("rule_id"),
-            "path": raw.get("path"),
-            "count": raw.get("count"),
-        }
+        result: ObjectDict = {}
+        rule_id = string_value(raw.get("rule_id"))
+        path = string_value(raw.get("path"))
+        count = raw.get("count")
+        if rule_id is not None:
+            result["rule_id"] = rule_id
+        if path is not None:
+            result["path"] = path
+        if isinstance(count, int):
+            result["count"] = count
+        return result
 
     def clear_retry_lock(self, session_id: str) -> None:
         key = self._session_key(session_id)
         with self._locked_state():
             state = self._load_state()
-            _ = state.setdefault("retry_locks", {}).pop(key, None)
+            _ = state["retry_locks"].pop(key, None)
             self._save_state(state)
 
     def mark_repair_plan(
@@ -170,7 +170,7 @@ class HookStateStore:
         key = self._session_key(session_id)
         with self._locked_state():
             state = self._load_state()
-            state.setdefault("repair_plans", {})[key] = {
+            state["repair_plans"][key] = {
                 "constraints_named": constraints_named,
                 "reread_done": reread_done,
                 "timestamp": int(time()),
@@ -180,10 +180,13 @@ class HookStateStore:
     def has_repair_plan(self, session_id: str) -> bool:
         key = self._session_key(session_id)
         state = self._load_state()
-        raw = state.get("repair_plans", {}).get(key)
-        if not isinstance(raw, Mapping):
+        raw = state["repair_plans"].get(key)
+        if raw is None:
             return False
-        return bool(raw.get("constraints_named")) and bool(raw.get("reread_done"))
+        return (
+            bool_value(raw.get("constraints_named")) is True
+            and bool_value(raw.get("reread_done")) is True
+        )
 
     @contextmanager
     def _locked_state(self) -> Iterator[None]:
@@ -241,7 +244,7 @@ class HookStateStore:
         except OSError:
             return str(Path(path).absolute())
 
-    def _load_state(self) -> dict[str, object]:
+    def _load_state(self) -> _HookStateSnapshot:
         cutoff = int(time()) - self._TTL_SECONDS
         state = self._read_state_file()
         full_reads = self._coerce_full_reads(state.get("full_reads"), cutoff)
@@ -257,38 +260,28 @@ class HookStateStore:
             "repair_plans": repair_plans,
         }
 
-    def _read_state_file(self) -> dict[str, object]:
+    def _read_state_file(self) -> ObjectDict:
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
         except (OSError, json.JSONDecodeError):
             return {}
-        if not isinstance(raw, Mapping):
-            return {}
-        result: dict[str, object] = {}
-        for key, value in cast(Mapping[object, object], raw).items():
-            if isinstance(key, str):
-                result[key] = value
-        return result
+        return object_dict(raw)
 
     @staticmethod
     def _coerce_full_reads(raw_full_reads: object, cutoff: int) -> dict[str, int]:
-        if not isinstance(raw_full_reads, Mapping):
-            return {}
         full_reads: dict[str, int] = {}
-        for key, timestamp in cast(Mapping[object, object], raw_full_reads).items():
-            if isinstance(key, str) and isinstance(timestamp, int) and timestamp >= cutoff:
+        for key, timestamp in object_dict(raw_full_reads).items():
+            if isinstance(timestamp, int) and timestamp >= cutoff:
                 full_reads[key] = timestamp
         return full_reads
 
     @staticmethod
     def _coerce_int_map(raw: object, cutoff: int) -> dict[str, int]:
-        if not isinstance(raw, Mapping):
-            return {}
         out: dict[str, int] = {}
-        for key, value in cast(Mapping[object, object], raw).items():
-            if not isinstance(key, str) or not isinstance(value, int):
+        for key, value in object_dict(raw).items():
+            if not isinstance(value, int):
                 continue
             if value >= cutoff:
                 out[key] = value
@@ -296,34 +289,24 @@ class HookStateStore:
 
     @staticmethod
     def _coerce_counter_map(raw: object) -> dict[str, int]:
-        if not isinstance(raw, Mapping):
-            return {}
         out: dict[str, int] = {}
-        for key, value in cast(Mapping[object, object], raw).items():
-            if isinstance(key, str) and isinstance(value, int) and value >= 0:
+        for key, value in object_dict(raw).items():
+            if isinstance(value, int) and value >= 0:
                 out[key] = value
         return out
 
     @staticmethod
-    def _coerce_object_map(raw: object, cutoff: int) -> dict[str, dict[str, object]]:
-        if not isinstance(raw, Mapping):
-            return {}
-        out: dict[str, dict[str, object]] = {}
-        for key, value in cast(Mapping[object, object], raw).items():
-            if not isinstance(key, str) or not isinstance(value, Mapping):
-                continue
-            typed = cast(Mapping[object, object], value)
+    def _coerce_object_map(raw: object, cutoff: int) -> dict[str, ObjectDict]:
+        out: dict[str, ObjectDict] = {}
+        for key, value in object_dict(raw).items():
+            typed = object_dict(value)
             timestamp = typed.get("timestamp")
             if not isinstance(timestamp, int) or timestamp < cutoff:
                 continue
-            inner: dict[str, object] = {}
-            for inner_key, inner_value in typed.items():
-                if isinstance(inner_key, str):
-                    inner[inner_key] = inner_value
-            out[key] = inner
+            out[key] = typed
         return out
 
-    def _save_state(self, state: dict[str, object]) -> None:
+    def _save_state(self, state: ObjectMapping) -> None:
         fd, tmp_name = tempfile.mkstemp(
             prefix="hook-state-", suffix=".json", dir=str(self._path.parent)
         )
@@ -337,3 +320,16 @@ class HookStateStore:
                     os.unlink(tmp_name)
             except OSError as exc:
                 warning("hook state temp cleanup failed", path=tmp_name, error=str(exc))
+
+
+class _HookStateSnapshot(TypedDict):
+    full_reads: dict[str, int]
+    search_reminders: dict[str, int]
+    deny_hits: dict[str, int]
+    retry_locks: dict[str, ObjectDict]
+    repair_plans: dict[str, ObjectDict]
+
+
+def _failure_count(item: ObjectDict) -> int:
+    count = item.get("count")
+    return count if isinstance(count, int) else 0

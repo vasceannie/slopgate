@@ -3363,3 +3363,996 @@ index ea4ad1173de0a18f7c55ce3c9ad3d39676854f17..4ead7303b08fdc73803978a1a5c03cc2
 
 ----- PATCH END -----
 
+[2026-04-17T08:51:56.310080891+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-04-17T08:51:56.326666333+00:00] auth: mode=ChatGPT account_id=d4534aa7-2595-4628-a95d-18a282fb9b64
+[2026-04-17T08:51:56.326716731+00:00] auth: set ChatGPT-Account-Id header: d4534aa7-2595-4628-a95d-18a282fb9b64
+[2026-04-17T08:51:56.332904071+00:00] startup: wham_force_internal=false ua=codex_cli_rs/0.121.0 (Ubuntu 24.4.0; x86_64) vscode/1.107.0 (codex_cloud_tasks_tui)
+[2026-04-17T08:51:56.381085810+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T08:51:56.381435579+00:00] env: git origins: ["https://github.com/vasceannie/vibeforcer.git", "https://lab.baked.rocks/claude/vibeforcer.git"]
+[2026-04-17T08:51:56.381507138+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T08:51:56.381540486+00:00] env: GET https://chatgpt.com/backend-api/wham/environments/by-repo/github/vasceannie/vibeforcer
+[2026-04-17T08:51:56.641283186+00:00] http.list_tasks: env=<all> limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhkuQuACAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzsXRzMWqzsfEzcnEycXQzsjJx83H087OxM7O//qKnYuTn5mfyMaancvMzJjNzszOxsvMyMaax83My5zGxc2amsqaysj/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T08:51:56.641416412+00:00] refresh.apply: env=<all> count=16
+[2026-04-17T08:51:57.100303265+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T08:51:57.100401841+00:00] env: by-repo returned 1 env(s) for vasceannie/vibeforcer
+[2026-04-17T08:51:57.100454860+00:00] env: single environment available; selecting it
+[2026-04-17T08:51:57.100537978+00:00] env.select: autodetected id=69e174706d748191be9d51c765165eba label=vasceannie/vibeforcer
+[2026-04-17T08:51:57.123988477+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T08:51:57.125111222+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T08:51:57.403661755+00:00] http.list_tasks: env=69e174706d748191be9d51c765165eba limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhkuQuACAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzsXRzMWqzsfEzcnEycXQzsjJx83H087OxM7O//qKnYuTn5mfyMaancvMzJjNzszOxsvMyMaax83My5zGxc2amsqaysj/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T08:51:57.403783761+00:00] refresh.apply: env=69e174706d748191be9d51c765165eba count=16
+[2026-04-17T08:51:57.408059569+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T08:51:57.750974204+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T08:51:58.006307300+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T08:52:09.998575786+00:00] http.list_tasks: env=69e174706d748191be9d51c765165eba limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhkuQuACAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzsXRzMWqzsfEzcnEycXQzsjJx83H087OxM7O//qKnYuTn5mfyMaancvMzJjNzszOxsvMyMaax83My5zGxc2amsqaysj/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T08:52:09.998667963+00:00] refresh.apply: env=69e174706d748191be9d51c765165eba count=16
+[2026-04-17T08:52:29.588841849+00:00] apply_result: mode=preflight id=task_e_69e1f03bc1388326a0e525238fa99a62 status=Error applied=0 skipped=2 conflicts=0 cmd=(cd /home/trav/.openclaw/workspace-hooker/vibeforcer && git apply --check /tmp/.tmpUhJOEg/patch.diff)
+stdout_tail=
+
+stderr_tail=
+error: patch failed: src/vibeforcer/lint/_detectors/duplicates.py:1
+error: src/vibeforcer/lint/_detectors/duplicates.py: patch does not apply
+error: patch failed: tests/test_enrichment.py:1
+error: tests/test_enrichment.py: patch does not apply
+
+patch_summary: kind=git-diff lines=435 chars=16516 cwd=/home/trav/.openclaw/workspace-hooker/vibeforcer ; head=
+diff --git a/src/vibeforcer/lint/_constant_index.py b/src/vibeforcer/lint/_constant_index.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..37dac1d2ca8c7c478b68cb3651a3b75e6c534256
+--- /dev/null
++++ b/src/vibeforcer/lint/_constant_index.py
+@@ -0,0 +1,110 @@
++"""Index project string constants for repeated literal hinting."""
++
++from __future__ import annotations
++
++import ast
++import re
++from collections import defaultdict
++from functools import lru_cache
++from pathlib import Path
++from typing import Final
++
++_CONSTANT_FILE_NAMES: Final[tuple[str, ...]] = (
++    "constants.py",
++    "config.py",
+----- PATCH BEGIN -----
+diff --git a/src/vibeforcer/lint/_constant_index.py b/src/vibeforcer/lint/_constant_index.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..37dac1d2ca8c7c478b68cb3651a3b75e6c534256
+--- /dev/null
++++ b/src/vibeforcer/lint/_constant_index.py
+@@ -0,0 +1,110 @@
++"""Index project string constants for repeated literal hinting."""
++
++from __future__ import annotations
++
++import ast
++import re
++from collections import defaultdict
++from functools import lru_cache
++from pathlib import Path
++from typing import Final
++
++_CONSTANT_FILE_NAMES: Final[tuple[str, ...]] = (
++    "constants.py",
++    "config.py",
++    "settings.py",
++    "defaults.py",
++)
++
++_DEFAULT_CONST_NAME_PATTERN: Final[str] = r"^[A-Z][A-Z0-9_]*$"
++
++
++def normalize_string_literal(value: str) -> str:
++    """Normalize a literal value before lookup in the constant index."""
++    return value.strip()
++
++
++def _is_constant_name(name: str, pattern: re.Pattern[str]) -> bool:
++    return bool(pattern.match(name))
++
++
++def _candidate_paths(project_root: Path) -> list[Path]:
++    candidates: list[Path] = []
++    for base in (project_root, project_root / "src", project_root / "app", project_root / "config"):
++        if not base.exists() or not base.is_dir():
++            continue
++        for file_name in _CONSTANT_FILE_NAMES:
++            for candidate in base.rglob(file_name):
++                if candidate.is_file():
++                    candidates.append(candidate)
++    return candidates
++
++
++def _string_constant_refs(
++    file_path: Path,
++    *,
++    const_name_pattern: re.Pattern[str],
++) -> list[tuple[str, int, str]]:
++    source = file_path.read_text(encoding="utf-8")
++    tree = ast.parse(source)
++    refs: list[tuple[str, int, str]] = []
++
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Assign):
++            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
++                continue
++            for target in node.targets:
++                if not isinstance(target, ast.Name):
++                    continue
++                if not _is_constant_name(target.id, const_name_pattern):
++                    continue
++                refs.append((target.id, node.lineno, node.value.value))
++        elif isinstance(node, ast.AnnAssign):
++            if not isinstance(node.target, ast.Name):
++                continue
++            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
++                continue
++            if not _is_constant_name(node.target.id, const_name_pattern):
++                continue
++            refs.append((node.target.id, node.lineno, node.value.value))
++
++    return refs
++
++
++@lru_cache(maxsize=32)
++def _cached_constant_string_index(
++    project_root: str,
++    const_name_pattern: str = _DEFAULT_CONST_NAME_PATTERN,
++) -> dict[str, tuple[tuple[str, str, int], ...]]:
++    root_path = Path(project_root)
++    pattern = re.compile(const_name_pattern)
++    index: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
++
++    for path in _candidate_paths(root_path):
++        relative = path.relative_to(root_path).as_posix()
++        try:
++            for const_name, line_no, literal in _string_constant_refs(
++                path,
++                const_name_pattern=pattern,
++            ):
++                normalized = normalize_string_literal(literal)
++                index[normalized].append((const_name, relative, line_no))
++        except (OSError, SyntaxError, UnicodeDecodeError):
++            continue
++
++    return {key: tuple(value) for key, value in index.items()}
++
++
++def build_constant_string_index(
++    project_root: Path,
++    *,
++    const_name_pattern: str = _DEFAULT_CONST_NAME_PATTERN,
++) -> dict[str, tuple[tuple[str, str, int], ...]]:
++    """Build (or fetch) constant lookup map for this project root."""
++    root = str(project_root.resolve())
++    return _cached_constant_string_index(root, const_name_pattern)
++
++
++def clear_constant_string_index_cache() -> None:
++    """Clear process-local constant index cache (test helper)."""
++    _cached_constant_string_index.cache_clear()
+diff --git a/src/vibeforcer/lint/_detectors/duplicates.py b/src/vibeforcer/lint/_detectors/duplicates.py
+index c95b9d83dc97b3c7ed82002a2a5fce14df2083e9..679ba924c67f3b794fef27899c04b600795f5758 100644
+--- a/src/vibeforcer/lint/_detectors/duplicates.py
++++ b/src/vibeforcer/lint/_detectors/duplicates.py
+@@ -1,47 +1,51 @@
+ """Detectors for code duplication.
+ 
+ - ``detect_semantic_clones``: functions with identical AST structure
+ - ``detect_repeated_literals``: magic numbers and strings used excessively
+ - ``detect_repeated_blocks``: repeated consecutive statement blocks
+ - ``detect_duplicate_call_sequences``: functions with identical call patterns
+ """
+ 
+ from __future__ import annotations
+ 
+ import ast
+ import copy
+ import hashlib
+ import sys
+ from collections import defaultdict
+ from collections.abc import Callable, Hashable, Set
+ from pathlib import Path
+ from typing import TypeGuard, TypeVar, cast
+ from typing_extensions import override
+ 
+ from vibeforcer.lint._baseline import Violation
+ from vibeforcer.lint._config import get_config
++from vibeforcer.lint._constant_index import (
++    build_constant_string_index,
++    normalize_string_literal,
++)
+ from vibeforcer.lint._helpers import (
+     ParsedFile,
+     ensure_parsed,
+     find_source_files,
+     function_body_lines,
+ )
+ from .wrappers import call_name
+ 
+ 
+ _BUILTINS = frozenset(
+     {
+         "len",
+         "range",
+         "print",
+         "str",
+         "int",
+         "float",
+         "bool",
+         "list",
+         "dict",
+         "set",
+         "tuple",
+         "type",
+         "isinstance",
+         "issubclass",
+@@ -356,79 +360,104 @@ def detect_semantic_clones(
+ 
+ def _collect_literals(
+     parsed: list[ParsedFile],
+     allowed_nums: Set[int | float],
+     allowed_strs: set[str],
+ ) -> tuple[dict[int | float, set[str]], dict[str, set[str]]]:
+     """Walk ASTs and count non-allowed literal occurrences per file."""
+     num_counts: dict[int | float, set[str]] = defaultdict(set)
+     str_counts: dict[str, set[str]] = defaultdict(set)
+ 
+     for pf in parsed:
+         for node in ast.walk(pf.tree):
+             if not isinstance(node, ast.Constant):
+                 continue
+             if isinstance(node.value, bool) or _is_docstring_node(node, pf.parent_map):
+                 continue
+             val = node.value
+             if isinstance(val, (int, float)) and val not in allowed_nums:
+                 num_counts[val].add(pf.rel)
+             elif isinstance(val, str) and val not in allowed_strs:
+                 str_counts[val].add(pf.rel)
+ 
+     return num_counts, str_counts
+ 
+ 
++def _repeated_string_literal_detail(
++    literal_value: str,
++    *,
++    file_count: int,
++    max_files: int,
++    project_root: Path,
++) -> str:
++    base_detail = (
++        f"appears in {file_count} files (max: {max_files}); "
++        + "extract to a shared constant."
++    )
++    constant_index = build_constant_string_index(project_root)
++    matches = constant_index.get(normalize_string_literal(literal_value), ())
++    if not matches:
++        return base_detail
++
++    refs = ", ".join(f"`{file_path}:{const_name}`" for const_name, file_path, _ in matches)
++    return base_detail + f" Existing constant(s): {refs}"
++
++
+ def detect_repeated_literals(
+     files: list[Path] | list[ParsedFile] | None = None,
+ ) -> list[Violation]:
+     """Flag magic numbers and string literals used excessively."""
+     cfg = get_config()
+     parsed = ensure_parsed(files, fallback=find_source_files())
+     num_counts, str_counts = _collect_literals(
+         parsed, cfg.allowed_numbers, cfg.allowed_strings
+     )
+ 
+     violations: list[Violation] = []
+     for val, fset in num_counts.items():
+         if len(fset) > cfg.max_repeated_magic_numbers:
+             violations.append(
+                 Violation(
+                     rule="repeated-magic-number",
+                     relative_path="<project>",
+                     identifier=repr(val),
+                     detail=f"appears in {len(fset)} files (max: {cfg.max_repeated_magic_numbers})",
+                 )
+             )
+     for val, fset in str_counts.items():
+         if len(fset) > cfg.max_repeated_string_literals:
+             violations.append(
+                 Violation(
+                     rule="repeated-string-literal",
+                     relative_path="<project>",
+                     identifier=repr(val)[:40],
+-                    detail=f"appears in {len(fset)} files (max: {cfg.max_repeated_string_literals})",
++                    detail=_repeated_string_literal_detail(
++                        val,
++                        file_count=len(fset),
++                        max_files=cfg.max_repeated_string_literals,
++                        project_root=cfg.project_root,
++                    ),
+                 )
+             )
+     return violations
+ 
+ 
+ _MIN_BLOCK_SIZE = 3
+ 
+ 
+ def _collect_block_windows(
+     parsed: list[ParsedFile],
+ ) -> dict[str, list[tuple[str, str, int, int]]]:
+     """Hash sliding windows of consecutive statements across all scopes."""
+     groups: dict[str, list[tuple[str, str, int, int]]] = defaultdict(list)
+     for pf in parsed:
+         for node in ast.walk(pf.tree):
+             if isinstance(node, _FUNC_TYPES):
+                 body, scope = _skip_docstring(node.body), node.name
+             elif isinstance(node, ast.Module):
+                 body, scope = _skip_docstring(node.body), "<module>"
+             else:
+                 continue
+             if len(body) < _MIN_BLOCK_SIZE:
+                 continue
+ 
+             _, canonical_import_indices = _canonicalize_import_block(body)
+diff --git a/tests/test_enrichment.py b/tests/test_enrichment.py
+index dae3a55cc5bb3b17de18c6a3784cb19231b7566a..cc2d520968218ceb23e2c3858d6a23a5485a91ee 100644
+--- a/tests/test_enrichment.py
++++ b/tests/test_enrichment.py
+@@ -1,45 +1,49 @@
+ """Tests for the context enrichment pipeline.
+ 
+ Tests use tmp_project to create real filesystem layouts with conftest.py,
+ sibling test files, and requirements files so enrichment can discover them.
+ """
+ 
+ from __future__ import annotations
+ 
++from dataclasses import replace
+ from pathlib import Path
+ 
+ from tests import support as test_support
+ from tests.support import LoadFixture
+ 
+ from vibeforcer._types import ObjectDict
+ from vibeforcer.engine import evaluate_payload
+ from vibeforcer.enrichment import (
+     discover_fixtures,
+     find_parametrize_examples,
+     enrich_findings,
+ )
++from vibeforcer.lint._config import load_config, set_config
++from vibeforcer.lint._constant_index import clear_constant_string_index_cache
++from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
+ from vibeforcer.models import RuleFinding, Severity
+ 
+ 
+ # ===========================================================================
+ # Helpers
+ # ===========================================================================
+ 
+ 
+ def _mkdir(directory: Path, *, parents: bool = False, exist_ok: bool = False) -> None:
+     _ = directory.mkdir(parents=parents, exist_ok=exist_ok)
+ 
+ 
+ def _write_text(path: Path, content: str) -> None:
+     _ = path.write_text(content, encoding="utf-8")
+ 
+ 
+ def _make_conftest(
+     directory: Path, fixtures: list[str], with_params: list[str] | None = None
+ ) -> Path:
+     """Create a conftest.py with the given fixture names."""
+     with_params = with_params or []
+     lines = ["import pytest\n"]
+     for name in fixtures:
+         if name in with_params:
+             lines.append(
+@@ -1033,25 +1037,102 @@ class TestPYQUALITY009Enrichment:
+         )
+ 
+         code = 'DATA = "/home/user/data/file.csv"\n'
+         payload = _pretool_write_payload("src/loader.py", code, str(tmp_project))
+         result = evaluate_payload(payload)
+         test_support.assert_denied_by(result, "PY-QUALITY-009")
+ 
+         reason = test_support.required_string(
+             test_support.hook_output(result), "permissionDecisionReason"
+         )
+         assert "config.py" in reason, f"Expected config.py reference: {reason}"
+ 
+     def test_suggests_pathlib_pattern(self, tmp_project: Path) -> None:
+         """When no path config exists, suggest pathlib pattern."""
+         code = 'DATA = "/home/user/data/file.csv"\n'
+         payload = _pretool_write_payload("src/loader.py", code, str(tmp_project))
+         result = evaluate_payload(payload)
+         test_support.assert_denied_by(result, "PY-QUALITY-009")
+ 
+         reason = test_support.required_string(
+             test_support.hook_output(result), "permissionDecisionReason"
+         )
+         assert "pathlib" in reason.lower() or "Path(" in reason, (
+             f"Expected pathlib suggestion: {reason}"
+         )
++
++
++# ===========================================================================
++# Unit tests: repeated-string-literal constant hints
++# ===========================================================================
++
++
++class TestRepeatedStringLiteralConstantHints:
++    def setup_method(self) -> None:
++        clear_constant_string_index_cache()
++
++    def _configure_lint_for(self, root: Path, *, max_repeats: int = 1) -> None:
++        cfg = load_config(root)
++        set_config(replace(cfg, max_repeated_string_literals=max_repeats))
++
++    def test_exact_match_found(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "ERROR_TIMEOUT_MSG = 'Timeout occurred'\n")
++        _write_text(src_dir / "a.py", "MSG = 'Timeout occurred'\n")
++        _write_text(src_dir / "b.py", "MSG = 'Timeout occurred'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        assert "Existing constant(s): `src/constants.py:ERROR_TIMEOUT_MSG`" in repeated[
++            0
++        ].detail
++
++    def test_no_match_keeps_extraction_guidance(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "a.py", "MSG = 'No constant for me'\n")
++        _write_text(src_dir / "b.py", "MSG = 'No constant for me'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        assert "extract to a shared constant" in repeated[0].detail
++        assert "Existing constant(s):" not in repeated[0].detail
++
++    def test_multiple_matches(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        app_dir = tmp_path / "app"
++        _mkdir(src_dir, exist_ok=True)
++        _mkdir(app_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "ERROR_MSG = 'Boom'\n")
++        _write_text(app_dir / "settings.py", "FALLBACK_ERROR_MSG = 'Boom'\n")
++        _write_text(src_dir / "a.py", "X = 'Boom'\n")
++        _write_text(src_dir / "b.py", "Y = 'Boom'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        detail = repeated[0].detail
++        assert "`src/constants.py:ERROR_MSG`" in detail
++        assert "`app/settings.py:FALLBACK_ERROR_MSG`" in detail
++
++    def test_non_string_constants_ignored(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "TIMEOUT_SECONDS = 30\n")
++        _write_text(src_dir / "a.py", "MSG = 'Same text'\n")
++        _write_text(src_dir / "b.py", "MSG = 'Same text'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        assert "Existing constant(s):" not in repeated[0].detail
+
+----- PATCH END -----
+
+[2026-04-17T09:04:52.081355319+00:00] refresh.request: env=69e174706d748191be9d51c765165eba
+[2026-04-17T09:04:52.681520315+00:00] http.list_tasks: env=69e174706d748191be9d51c765165eba limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhkuQuACAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzsXRzMWqzsfEzcnEycXQzsjJx83H087OxM7O//qKnYuTn5mfyMaancvMzJjNzszOxsvMyMaax83My5zGxc2amsqaysj/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T09:04:52.681603232+00:00] refresh.apply: env=69e174706d748191be9d51c765165eba count=16
+[2026-04-17T09:05:24.362908609+00:00] apply_result: mode=preflight id=task_e_69e1f03bc1388326a0e525238fa99a62 status=Error applied=0 skipped=2 conflicts=0 cmd=(cd /home/trav/.openclaw/workspace-hooker/vibeforcer && git apply --check /tmp/.tmpWr7zH4/patch.diff)
+stdout_tail=
+
+stderr_tail=
+error: patch failed: src/vibeforcer/lint/_detectors/duplicates.py:1
+error: src/vibeforcer/lint/_detectors/duplicates.py: patch does not apply
+error: patch failed: tests/test_enrichment.py:1
+error: tests/test_enrichment.py: patch does not apply
+
+patch_summary: kind=git-diff lines=441 chars=16894 cwd=/home/trav/.openclaw/workspace-hooker/vibeforcer ; head=
+diff --git a/src/vibeforcer/lint/_constant_index.py b/src/vibeforcer/lint/_constant_index.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7dc7e9c57cbb3d8e4c7d30082bfa41b52b5b4389
+--- /dev/null
++++ b/src/vibeforcer/lint/_constant_index.py
+@@ -0,0 +1,114 @@
++"""Index project string constants for repeated literal hinting."""
++
++from __future__ import annotations
++
++import ast
++import re
++from collections import defaultdict
++from functools import lru_cache
++from pathlib import Path
++from typing import Final
++
++_CONSTANT_FILE_NAMES: Final[tuple[str, ...]] = (
++    "constants.py",
++    "config.py",
+----- PATCH BEGIN -----
+diff --git a/src/vibeforcer/lint/_constant_index.py b/src/vibeforcer/lint/_constant_index.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7dc7e9c57cbb3d8e4c7d30082bfa41b52b5b4389
+--- /dev/null
++++ b/src/vibeforcer/lint/_constant_index.py
+@@ -0,0 +1,114 @@
++"""Index project string constants for repeated literal hinting."""
++
++from __future__ import annotations
++
++import ast
++import re
++from collections import defaultdict
++from functools import lru_cache
++from pathlib import Path
++from typing import Final
++
++_CONSTANT_FILE_NAMES: Final[tuple[str, ...]] = (
++    "constants.py",
++    "config.py",
++    "settings.py",
++    "defaults.py",
++)
++
++_DEFAULT_CONST_NAME_PATTERN: Final[str] = r"^[A-Z][A-Z0-9_]*$"
++
++
++def normalize_string_literal(value: str) -> str:
++    """Normalize a literal value before lookup in the constant index."""
++    return value.strip()
++
++
++def _is_constant_name(name: str, pattern: re.Pattern[str]) -> bool:
++    return bool(pattern.match(name))
++
++
++def _candidate_paths(project_root: Path) -> list[Path]:
++    candidates: list[Path] = []
++    seen: set[Path] = set()
++    for base in (project_root, project_root / "src", project_root / "app", project_root / "config"):
++        if not base.exists() or not base.is_dir():
++            continue
++        for file_name in _CONSTANT_FILE_NAMES:
++            for candidate in base.rglob(file_name):
++                resolved = candidate.resolve()
++                if not candidate.is_file() or resolved in seen:
++                    continue
++                seen.add(resolved)
++                candidates.append(candidate)
++    return candidates
++
++
++def _string_constant_refs(
++    file_path: Path,
++    *,
++    const_name_pattern: re.Pattern[str],
++) -> list[tuple[str, int, str]]:
++    source = file_path.read_text(encoding="utf-8")
++    tree = ast.parse(source)
++    refs: list[tuple[str, int, str]] = []
++
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Assign):
++            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
++                continue
++            for target in node.targets:
++                if not isinstance(target, ast.Name):
++                    continue
++                if not _is_constant_name(target.id, const_name_pattern):
++                    continue
++                refs.append((target.id, node.lineno, node.value.value))
++        elif isinstance(node, ast.AnnAssign):
++            if not isinstance(node.target, ast.Name):
++                continue
++            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
++                continue
++            if not _is_constant_name(node.target.id, const_name_pattern):
++                continue
++            refs.append((node.target.id, node.lineno, node.value.value))
++
++    return refs
++
++
++@lru_cache(maxsize=32)
++def _cached_constant_string_index(
++    project_root: str,
++    const_name_pattern: str = _DEFAULT_CONST_NAME_PATTERN,
++) -> dict[str, tuple[tuple[str, str, int], ...]]:
++    root_path = Path(project_root)
++    pattern = re.compile(const_name_pattern)
++    index: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
++
++    for path in _candidate_paths(root_path):
++        relative = path.relative_to(root_path).as_posix()
++        try:
++            for const_name, line_no, literal in _string_constant_refs(
++                path,
++                const_name_pattern=pattern,
++            ):
++                normalized = normalize_string_literal(literal)
++                index[normalized].append((const_name, relative, line_no))
++        except (OSError, SyntaxError, UnicodeDecodeError):
++            continue
++
++    return {key: tuple(value) for key, value in index.items()}
++
++
++def build_constant_string_index(
++    project_root: Path,
++    *,
++    const_name_pattern: str = _DEFAULT_CONST_NAME_PATTERN,
++) -> dict[str, tuple[tuple[str, str, int], ...]]:
++    """Build (or fetch) constant lookup map for this project root."""
++    root = str(project_root.resolve())
++    return _cached_constant_string_index(root, const_name_pattern)
++
++
++def clear_constant_string_index_cache() -> None:
++    """Clear process-local constant index cache (test helper)."""
++    _cached_constant_string_index.cache_clear()
+diff --git a/src/vibeforcer/lint/_detectors/duplicates.py b/src/vibeforcer/lint/_detectors/duplicates.py
+index c95b9d83dc97b3c7ed82002a2a5fce14df2083e9..679ba924c67f3b794fef27899c04b600795f5758 100644
+--- a/src/vibeforcer/lint/_detectors/duplicates.py
++++ b/src/vibeforcer/lint/_detectors/duplicates.py
+@@ -1,47 +1,51 @@
+ """Detectors for code duplication.
+ 
+ - ``detect_semantic_clones``: functions with identical AST structure
+ - ``detect_repeated_literals``: magic numbers and strings used excessively
+ - ``detect_repeated_blocks``: repeated consecutive statement blocks
+ - ``detect_duplicate_call_sequences``: functions with identical call patterns
+ """
+ 
+ from __future__ import annotations
+ 
+ import ast
+ import copy
+ import hashlib
+ import sys
+ from collections import defaultdict
+ from collections.abc import Callable, Hashable, Set
+ from pathlib import Path
+ from typing import TypeGuard, TypeVar, cast
+ from typing_extensions import override
+ 
+ from vibeforcer.lint._baseline import Violation
+ from vibeforcer.lint._config import get_config
++from vibeforcer.lint._constant_index import (
++    build_constant_string_index,
++    normalize_string_literal,
++)
+ from vibeforcer.lint._helpers import (
+     ParsedFile,
+     ensure_parsed,
+     find_source_files,
+     function_body_lines,
+ )
+ from .wrappers import call_name
+ 
+ 
+ _BUILTINS = frozenset(
+     {
+         "len",
+         "range",
+         "print",
+         "str",
+         "int",
+         "float",
+         "bool",
+         "list",
+         "dict",
+         "set",
+         "tuple",
+         "type",
+         "isinstance",
+         "issubclass",
+@@ -356,79 +360,104 @@ def detect_semantic_clones(
+ 
+ def _collect_literals(
+     parsed: list[ParsedFile],
+     allowed_nums: Set[int | float],
+     allowed_strs: set[str],
+ ) -> tuple[dict[int | float, set[str]], dict[str, set[str]]]:
+     """Walk ASTs and count non-allowed literal occurrences per file."""
+     num_counts: dict[int | float, set[str]] = defaultdict(set)
+     str_counts: dict[str, set[str]] = defaultdict(set)
+ 
+     for pf in parsed:
+         for node in ast.walk(pf.tree):
+             if not isinstance(node, ast.Constant):
+                 continue
+             if isinstance(node.value, bool) or _is_docstring_node(node, pf.parent_map):
+                 continue
+             val = node.value
+             if isinstance(val, (int, float)) and val not in allowed_nums:
+                 num_counts[val].add(pf.rel)
+             elif isinstance(val, str) and val not in allowed_strs:
+                 str_counts[val].add(pf.rel)
+ 
+     return num_counts, str_counts
+ 
+ 
++def _repeated_string_literal_detail(
++    literal_value: str,
++    *,
++    file_count: int,
++    max_files: int,
++    project_root: Path,
++) -> str:
++    base_detail = (
++        f"appears in {file_count} files (max: {max_files}); "
++        + "extract to a shared constant."
++    )
++    constant_index = build_constant_string_index(project_root)
++    matches = constant_index.get(normalize_string_literal(literal_value), ())
++    if not matches:
++        return base_detail
++
++    refs = ", ".join(f"`{file_path}:{const_name}`" for const_name, file_path, _ in matches)
++    return base_detail + f" Existing constant(s): {refs}"
++
++
+ def detect_repeated_literals(
+     files: list[Path] | list[ParsedFile] | None = None,
+ ) -> list[Violation]:
+     """Flag magic numbers and string literals used excessively."""
+     cfg = get_config()
+     parsed = ensure_parsed(files, fallback=find_source_files())
+     num_counts, str_counts = _collect_literals(
+         parsed, cfg.allowed_numbers, cfg.allowed_strings
+     )
+ 
+     violations: list[Violation] = []
+     for val, fset in num_counts.items():
+         if len(fset) > cfg.max_repeated_magic_numbers:
+             violations.append(
+                 Violation(
+                     rule="repeated-magic-number",
+                     relative_path="<project>",
+                     identifier=repr(val),
+                     detail=f"appears in {len(fset)} files (max: {cfg.max_repeated_magic_numbers})",
+                 )
+             )
+     for val, fset in str_counts.items():
+         if len(fset) > cfg.max_repeated_string_literals:
+             violations.append(
+                 Violation(
+                     rule="repeated-string-literal",
+                     relative_path="<project>",
+                     identifier=repr(val)[:40],
+-                    detail=f"appears in {len(fset)} files (max: {cfg.max_repeated_string_literals})",
++                    detail=_repeated_string_literal_detail(
++                        val,
++                        file_count=len(fset),
++                        max_files=cfg.max_repeated_string_literals,
++                        project_root=cfg.project_root,
++                    ),
+                 )
+             )
+     return violations
+ 
+ 
+ _MIN_BLOCK_SIZE = 3
+ 
+ 
+ def _collect_block_windows(
+     parsed: list[ParsedFile],
+ ) -> dict[str, list[tuple[str, str, int, int]]]:
+     """Hash sliding windows of consecutive statements across all scopes."""
+     groups: dict[str, list[tuple[str, str, int, int]]] = defaultdict(list)
+     for pf in parsed:
+         for node in ast.walk(pf.tree):
+             if isinstance(node, _FUNC_TYPES):
+                 body, scope = _skip_docstring(node.body), node.name
+             elif isinstance(node, ast.Module):
+                 body, scope = _skip_docstring(node.body), "<module>"
+             else:
+                 continue
+             if len(body) < _MIN_BLOCK_SIZE:
+                 continue
+ 
+             _, canonical_import_indices = _canonicalize_import_block(body)
+diff --git a/tests/test_enrichment.py b/tests/test_enrichment.py
+index dae3a55cc5bb3b17de18c6a3784cb19231b7566a..85395fb860f1deaefe451145deefb2a5bc7eec24 100644
+--- a/tests/test_enrichment.py
++++ b/tests/test_enrichment.py
+@@ -1,45 +1,49 @@
+ """Tests for the context enrichment pipeline.
+ 
+ Tests use tmp_project to create real filesystem layouts with conftest.py,
+ sibling test files, and requirements files so enrichment can discover them.
+ """
+ 
+ from __future__ import annotations
+ 
++from dataclasses import replace
+ from pathlib import Path
+ 
+ from tests import support as test_support
+ from tests.support import LoadFixture
+ 
+ from vibeforcer._types import ObjectDict
+ from vibeforcer.engine import evaluate_payload
+ from vibeforcer.enrichment import (
+     discover_fixtures,
+     find_parametrize_examples,
+     enrich_findings,
+ )
++from vibeforcer.lint._config import load_config, set_config
++from vibeforcer.lint._constant_index import clear_constant_string_index_cache
++from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
+ from vibeforcer.models import RuleFinding, Severity
+ 
+ 
+ # ===========================================================================
+ # Helpers
+ # ===========================================================================
+ 
+ 
+ def _mkdir(directory: Path, *, parents: bool = False, exist_ok: bool = False) -> None:
+     _ = directory.mkdir(parents=parents, exist_ok=exist_ok)
+ 
+ 
+ def _write_text(path: Path, content: str) -> None:
+     _ = path.write_text(content, encoding="utf-8")
+ 
+ 
+ def _make_conftest(
+     directory: Path, fixtures: list[str], with_params: list[str] | None = None
+ ) -> Path:
+     """Create a conftest.py with the given fixture names."""
+     with_params = with_params or []
+     lines = ["import pytest\n"]
+     for name in fixtures:
+         if name in with_params:
+             lines.append(
+@@ -1033,25 +1037,104 @@ class TestPYQUALITY009Enrichment:
+         )
+ 
+         code = 'DATA = "/home/user/data/file.csv"\n'
+         payload = _pretool_write_payload("src/loader.py", code, str(tmp_project))
+         result = evaluate_payload(payload)
+         test_support.assert_denied_by(result, "PY-QUALITY-009")
+ 
+         reason = test_support.required_string(
+             test_support.hook_output(result), "permissionDecisionReason"
+         )
+         assert "config.py" in reason, f"Expected config.py reference: {reason}"
+ 
+     def test_suggests_pathlib_pattern(self, tmp_project: Path) -> None:
+         """When no path config exists, suggest pathlib pattern."""
+         code = 'DATA = "/home/user/data/file.csv"\n'
+         payload = _pretool_write_payload("src/loader.py", code, str(tmp_project))
+         result = evaluate_payload(payload)
+         test_support.assert_denied_by(result, "PY-QUALITY-009")
+ 
+         reason = test_support.required_string(
+             test_support.hook_output(result), "permissionDecisionReason"
+         )
+         assert "pathlib" in reason.lower() or "Path(" in reason, (
+             f"Expected pathlib suggestion: {reason}"
+         )
++
++
++# ===========================================================================
++# Unit tests: repeated-string-literal constant hints
++# ===========================================================================
++
++
++class TestRepeatedStringLiteralConstantHints:
++    def setup_method(self) -> None:
++        clear_constant_string_index_cache()
++
++    def _configure_lint_for(self, root: Path, *, max_repeats: int = 1) -> None:
++        cfg = load_config(root)
++        set_config(replace(cfg, max_repeated_string_literals=max_repeats))
++
++    def test_exact_match_found(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "ERROR_TIMEOUT_MSG = 'Timeout occurred'\n")
++        _write_text(src_dir / "a.py", "MSG = 'Timeout occurred'\n")
++        _write_text(src_dir / "b.py", "MSG = 'Timeout occurred'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        detail = repeated[0].detail
++        assert "Existing constant(s): `src/constants.py:ERROR_TIMEOUT_MSG`" in detail
++        assert detail.count("`src/constants.py:ERROR_TIMEOUT_MSG`") == 1
++
++    def test_no_match_keeps_extraction_guidance(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "a.py", "MSG = 'No constant for me'\n")
++        _write_text(src_dir / "b.py", "MSG = 'No constant for me'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        assert "extract to a shared constant" in repeated[0].detail
++        assert "Existing constant(s):" not in repeated[0].detail
++
++    def test_multiple_matches(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        app_dir = tmp_path / "app"
++        _mkdir(src_dir, exist_ok=True)
++        _mkdir(app_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "ERROR_MSG = 'Boom'\n")
++        _write_text(app_dir / "settings.py", "FALLBACK_ERROR_MSG = 'Boom'\n")
++        _write_text(src_dir / "a.py", "X = 'Boom'\n")
++        _write_text(src_dir / "b.py", "Y = 'Boom'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        detail = repeated[0].detail
++        assert "`src/constants.py:ERROR_MSG`" in detail
++        assert "`app/settings.py:FALLBACK_ERROR_MSG`" in detail
++        assert detail.count("`src/constants.py:ERROR_MSG`") == 1
++        assert detail.count("`app/settings.py:FALLBACK_ERROR_MSG`") == 1
++
++    def test_non_string_constants_ignored(self, tmp_path: Path) -> None:
++        src_dir = tmp_path / "src"
++        _mkdir(src_dir, exist_ok=True)
++        _write_text(src_dir / "constants.py", "TIMEOUT_SECONDS = 30\n")
++        _write_text(src_dir / "a.py", "MSG = 'Same text'\n")
++        _write_text(src_dir / "b.py", "MSG = 'Same text'\n")
++        self._configure_lint_for(tmp_path)
++
++        violations = detect_repeated_literals([src_dir / "a.py", src_dir / "b.py"])
++
++        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
++        assert repeated, "Expected repeated-string-literal violation"
++        assert "Existing constant(s):" not in repeated[0].detail
+
+----- PATCH END -----
+
+[2026-04-17T09:31:31.533303747+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-04-17T09:31:31.549509895+00:00] auth: mode=ChatGPT account_id=d4534aa7-2595-4628-a95d-18a282fb9b64
+[2026-04-17T09:31:31.549563353+00:00] auth: set ChatGPT-Account-Id header: d4534aa7-2595-4628-a95d-18a282fb9b64
+[2026-04-17T09:31:31.555753637+00:00] startup: wham_force_internal=false ua=codex_cli_rs/0.121.0 (Ubuntu 24.4.0; x86_64) vscode/1.107.0 (codex_cloud_tasks_tui)
+[2026-04-17T09:31:31.593085985+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T09:31:31.594254167+00:00] env: git origins: ["https://github.com/vasceannie/vibeforcer.git", "https://lab.baked.rocks/claude/vibeforcer.git"]
+[2026-04-17T09:31:31.594288917+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T09:31:31.594299246+00:00] env: GET https://chatgpt.com/backend-api/wham/environments/by-repo/github/vasceannie/vibeforcer
+[2026-04-17T09:31:31.967106252+00:00] http.list_tasks: env=<all> limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhmZ8+ICAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzc7RzsyqzsbEys7EzMfQxcbNy8rN087OxM7O//qKnYuTn5mfyMaamcudx5yYnZrGxsvMyMXIyprGnZ3KyczJypmbncX/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T09:31:31.967195049+00:00] refresh.apply: env=<all> count=17
+[2026-04-17T09:31:32.314129104+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T09:31:32.314214942+00:00] env: by-repo returned 1 env(s) for vasceannie/vibeforcer
+[2026-04-17T09:31:32.314232761+00:00] env: single environment available; selecting it
+[2026-04-17T09:31:32.314396026+00:00] env.select: autodetected id=69e174706d748191be9d51c765165eba label=vasceannie/vibeforcer
+[2026-04-17T09:31:32.337059328+00:00] env: parsed HTTP GitHub origin => vasceannie/vibeforcer
+[2026-04-17T09:31:32.362536532+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T09:31:32.596484284+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T09:31:33.048961017+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T09:31:33.118316471+00:00] http.list_tasks: env=69e174706d748191be9d51c765165eba limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhmZ8+ICAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzc7RzsyqzsbEys7EzMfQxcbNy8rN087OxM7O//qKnYuTn5mfyMaamcudx5yYnZrGxsvMyMXIyprGnZ3KyczJypmbncX/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T09:31:33.118576503+00:00] refresh.apply: env=69e174706d748191be9d51c765165eba count=17
+[2026-04-17T09:31:33.377860133+00:00] env: status=200 OK content-type=application/json
+[2026-04-17T09:31:36.684226356+00:00] http.list_tasks: env=69e174706d748191be9d51c765165eba limit=20 cursor_in=<none> cursor_out=+RID:~G4U-AJOIzhmZ8+ICAJBnBg==#RT:1#TRC:20#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLlNTNTR1Zjo3e204NTVxS0pvMk42RHdOeAAFdnRmcy5TUzU0dWY6N3ttODU1cUtKbzJONkR3TngABUJkZHB2b3VWdGZzVXBEdnNzZm91RHBlZlVidGxGeXVmc29ibQAD+szOzMnRzc7RzsyqzsbEys7EzMfQxcbNy8rN087OxM7O//qKnYuTn5mfyMaamcudx5yYnZrGxsvMyMXIyprGnZ3KyczJypmbncX/#ISV:2#IEO:65567#QCF:8#CID:2 items=20
+[2026-04-17T09:31:36.684334223+00:00] refresh.apply: env=69e174706d748191be9d51c765165eba count=17

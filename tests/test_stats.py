@@ -139,7 +139,9 @@ class TestAnalyze:
         stats = _analyze(entries)
         repeated = _pair_counts(stats, "repeated_deny_rate_by_rule")
         assert repeated.get("PY-CODE-009") == 1
-        assert float(stats.get("first_time_resolution_rate", 0.0)) < 1.0
+        resolution_rate = stats.get("first_time_resolution_rate", 0.0)
+        assert isinstance(resolution_rate, (float, int))
+        assert float(resolution_rate) < 1.0
 
     def test_pathless_rules_are_tracked(self) -> None:
         entry = self._entry(rule_id="SHELL-001")

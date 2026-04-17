@@ -49,16 +49,16 @@ class ConstantIndex:
 
 
 _FILE_CACHE: dict[Path, tuple[int, int, dict[str, list[StringConstantMatch]]]] = {}
-_SESSION_INDEX: ConstantIndex | None = None
+_session_index: ConstantIndex | None = None
 
 
 def set_session_constant_index(index: ConstantIndex) -> None:
-    global _SESSION_INDEX
-    _SESSION_INDEX = index
+    global _session_index
+    _session_index = index
 
 
 def get_session_constant_index() -> ConstantIndex | None:
-    return _SESSION_INDEX
+    return _session_index
 
 
 def _iter_constant_candidates(root: Path) -> list[Path]:

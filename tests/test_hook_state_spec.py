@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from time import time
 from typing import TypedDict
@@ -38,15 +39,15 @@ class _InspectableHookStateStore(HookStateStore):
     def full_read_key(self, session_id: str, path: str) -> str:
         return self._full_read_key(session_id, path)
 
-    def save_state_for_test(self, state: dict[str, dict[str, int]]) -> None:
+    def save_state_for_test(self, state: Mapping[str, object]) -> None:
         self._save_state(state)
 
     @property
     def ttl_seconds(self) -> int:
         return self._TTL_SECONDS
 
-    def load_state_for_test(self) -> dict[str, dict[str, int]]:
-        return self._load_state()
+    def load_state_for_test(self) -> ObjectDict:
+        return object_dict(self._load_state())
 
 
 def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
@@ -536,7 +537,7 @@ class TestHookStateStore:
             assert process.returncode == 0, stderr
 
         state = store.load_state_for_test()
-        assert len(state["full_reads"]) == len(targets)
+        assert len(object_dict(state.get("full_reads"))) == len(targets)
         for idx, target in enumerate(targets):
             assert store.has_full_read(f"session-{idx}", str(target))
 

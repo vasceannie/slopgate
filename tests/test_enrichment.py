@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests import support as test_support
 from tests.support import LoadFixture
 
@@ -1060,7 +1062,7 @@ class TestPYQUALITY009Enrichment:
 
 class TestEnrichmentConstantIndexScope:
     def test_unrelated_quality_rule_does_not_build_constant_index(
-        self, tmp_project: Path, monkeypatch
+        self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls: list[Path] = []
 
