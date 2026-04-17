@@ -84,6 +84,43 @@ class TestLongLines(unittest.TestCase):
         _assert_not_denied(result)
 
 
+class TestAstHealthRule(unittest.TestCase):
+    def test_edit_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "src/main.py",
+                "new_string": "        self._controller = controller\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+    def test_multiedit_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "edits": [
+                    {
+                        "file_path": "src/main.py",
+                        "old_string": "self.value = 0\n",
+                        "new_string": "        self.value = value\n",
+                    }
+                ]
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+
 class TestDeepNesting(unittest.TestCase):
     def test_deep_blocked(self) -> None:
         code = (

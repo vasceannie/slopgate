@@ -31,6 +31,21 @@ def _parse_strict(source: str, max_chars: int) -> ast.Module | None:
         return None
 
 
+def _is_full_module_candidate(ctx: HookContext, source_kind: str) -> bool:
+    """Return True when pre-edit content likely represents a full Python module.
+
+    `Edit`, `MultiEdit`, and patch-style payloads frequently contain fragments rather
+    than a complete file. Those fragments are still useful for targeted AST rules, but
+    they should not trip the fail-closed AST health rule.
+    """
+    tool_name = ctx.tool_name.lower()
+    if source_kind in {"multi_edit", "multi_edit_old", "patch"}:
+        return False
+    if tool_name in {"edit", "multiedit", "patch", "applypatch", "apply_patch"}:
+        return False
+    return True
+
+
 @final
 class PythonAstHealthRule(Rule):
     """Emit findings when AST checks cannot run due to parse/read failures."""
@@ -60,6 +75,8 @@ class PythonAstHealthRule(Rule):
         if is_pre:
             for ct in ctx.content_targets:
                 if not ct.path.lower().endswith((".py", ".pyi")):
+                    continue
+                if not _is_full_module_candidate(ctx, ct.source):
                     continue
                 if len(ct.content) > ctx.config.python_ast_max_parse_chars:
                     findings.append(self._finding(ctx, ct.path, "oversized"))
