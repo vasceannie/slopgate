@@ -9,7 +9,7 @@ from typing_extensions import override
 from vibeforcer.constants import SAFE_READ_SHELL_VERBS
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import lower_path, path_matches_glob
+from vibeforcer.util.payloads import is_bash_tool, is_edit_like_tool, lower_path, path_matches_glob
 from vibeforcer.util.subprocesses import run_shell
 
 if TYPE_CHECKING:
@@ -25,7 +25,9 @@ def _command_has_word(command: str, word: str) -> bool:
 
 def _is_safe_read_shell(command: str) -> bool:
     lowered = command.lower()
-    if "sed -i" in lowered or "tee " in lowered or ">>" in lowered or " > " in lowered:
+    if "sed -i" in lowered or "tee " in lowered:
+        return False
+    if re.search(r">>?\s*\S", lowered):
         return False
     return any(_command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
 
@@ -329,10 +331,17 @@ class SensitiveDataRule(Rule):
         ]
 
 
-def _match_system_path(paths: list[str], prefixes: list[str]) -> str | None:
+def _resolve_candidate_path(path_value: str, cwd: Path) -> str:
+    path = Path(path_value).expanduser()
+    if not path.is_absolute():
+        path = cwd / path
+    return lower_path(str(path.resolve(strict=False)))
+
+
+def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str | None:
     """Return the first path matching a system prefix, or None."""
     for path_value in paths:
-        lowered = lower_path(path_value)
+        lowered = _resolve_candidate_path(path_value, cwd)
         if any(lowered.startswith(p) for p in prefixes):
             return path_value
     return None
@@ -364,7 +373,7 @@ class SystemProtectionRule(Rule):
         prefixes = [i.lower() for i in ctx.config.system_path_prefixes]
         if not prefixes:
             return []
-        matched = _match_system_path(ctx.candidate_paths, prefixes)
+        matched = _match_system_path(ctx.candidate_paths, prefixes, ctx.cwd)
         if not matched and ctx.bash_command:
             matched = _match_system_command(ctx.bash_command, prefixes)
         if not matched:
@@ -476,7 +485,7 @@ def _run_quality_commands(
             first_file=ctx.candidate_paths[0] if ctx.candidate_paths else "",
             language=",".join(sorted(ctx.languages)),
         )
-        result = run_shell(formatted, ctx.config.root)
+        result = run_shell(formatted, ctx.config.repo_root)
         ctx.trace.subprocess(
             {
                 "event_name": ctx.event_name,
@@ -532,5 +541,92 @@ class PostEditQualityRule(Rule):
                 title=self.title,
                 severity=Severity.LOW,
                 additional_context=f"Post-edit quality failures:\n\n{joined}",
+            )
+        ]
+
+
+def _resolve_python_candidates(ctx: "HookContext") -> tuple[list[Path], list[Path]]:
+    src_files: list[Path] = []
+    test_files: list[Path] = []
+    for candidate in ctx.candidate_paths:
+        if not candidate.lower().endswith(".py"):
+            continue
+        full = (
+            (ctx.config.repo_root / candidate).resolve()
+            if not Path(candidate).is_absolute()
+            else Path(candidate)
+        )
+        if not full.exists() or not full.is_file():
+            continue
+        normalized = lower_path(str(full))
+        if "/tests/" in normalized or full.name.startswith("test_"):
+            test_files.append(full)
+        else:
+            src_files.append(full)
+    return src_files, test_files
+
+
+def _collect_touched_lint_failures(ctx: "HookContext") -> list[str]:
+    src_files, test_files = _resolve_python_candidates(ctx)
+    if not src_files and not test_files:
+        return []
+    from vibeforcer.lint._collectors import run_all_collectors
+    from vibeforcer.lint._config import load_config as load_lint_config
+    from vibeforcer.lint._config import set_config as set_lint_config
+
+    lint_cfg = load_lint_config(ctx.config.repo_root)
+    set_lint_config(lint_cfg)
+    failures: list[str] = []
+    for rule_name, violations in run_all_collectors(src_files, test_files):
+        if not violations:
+            continue
+        failures.append(f"{rule_name}: {len(violations)}")
+    return failures
+
+
+class PostEditLintRule(Rule):
+    rule_id: str = "QUALITY-LINT-001"
+    title: str = "Touched-file lint advisory"
+    events: tuple[str, ...] = ("PostToolUse",)
+
+    @override
+    def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
+        if not is_rule_enabled(ctx, self.rule_id):
+            return []
+        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+            return []
+        failures = _collect_touched_lint_failures(ctx)
+        if not failures:
+            return []
+        summary = ", ".join(failures[:6])
+        if len(failures) > 6:
+            summary += f", +{len(failures) - 6} more"
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=(
+                    Severity.HIGH
+                    if ctx.config.post_edit_quality_block_on_failure
+                    else Severity.LOW
+                ),
+                decision=(
+                    "block" if ctx.config.post_edit_quality_block_on_failure else None
+                ),
+                message=(
+                    "Touched-file lint detectors found issues. "
+                    f"{summary}. Run `vibeforcer lint check` for details."
+                )
+                if ctx.config.post_edit_quality_block_on_failure
+                else None,
+                additional_context=(
+                    None
+                    if ctx.config.post_edit_quality_block_on_failure
+                    else (
+                        "Touched-file lint detectors found issues: "
+                        f"{summary}. Run `vibeforcer lint check` for details."
+                    )
+                ),
+                metadata={"failing_collectors": failures},
             )
         ]

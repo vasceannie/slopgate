@@ -154,13 +154,18 @@ def _load_json(path: Path) -> dict[str, object]:
 
 
 
+def resolve_repo_root(start: Path | None = None) -> Path | None:
+    """Resolve enrolled repo root by walking ancestors from *start*."""
+    path = (start or Path.cwd()).resolve()
+    for candidate in (path, *path.parents):
+        if (candidate / "quality_gate.toml").exists():
+            return candidate
+    return None
+
+
 def is_repo_enrolled(repo_root: Path | None = None) -> bool:
-    """Return True when repo_root contains quality_gate.toml."""
-    if repo_root is None:
-        repo_root = Path.cwd().resolve()
-    else:
-        repo_root = repo_root.resolve()
-    return (repo_root / "quality_gate.toml").exists()
+    """Return True when *repo_root* (or one ancestor) is enrolled."""
+    return resolve_repo_root(repo_root) is not None
 
 
 def is_repo_disabled(repo_root: Path | None = None) -> bool:
@@ -306,6 +311,12 @@ def _merge_config(
     toml_data = _load_toml(repo_root)
     toml_thresholds = _object_dict(toml_data.get("thresholds", {}))
     qg_section = _object_dict(toml_data.get("quality_gate", {}))
+    repo_enabled_rules = {
+        str(key): bool(value)
+        for key, value in _object_dict(toml_data.get("enabled_rules", {})).items()
+    }
+    repo_post_edit_quality = _object_dict(toml_data.get("post_edit_quality", {}))
+    repo_async_jobs = _object_dict(toml_data.get("async_jobs", {}))
     disabled_rules_list = _string_list(qg_section.get("disabled_rules", []))
     severity_overrides_map = {
         str(key): str(value)
@@ -319,9 +330,44 @@ def _merge_config(
         str(key): bool(value)
         for key, value in _object_dict(raw.get("enabled_rules", {})).items()
     }
+    enabled_rules.update(repo_enabled_rules)
+    post_edit_quality_enabled = _bool_value(
+        repo_post_edit_quality.get(
+            "enabled",
+            post_edit_quality.get("enabled"),
+        ),
+        False,
+    )
+    post_edit_quality_block_on_failure = _bool_value(
+        repo_post_edit_quality.get(
+            "block_on_failure",
+            post_edit_quality.get("block_on_failure"),
+        ),
+        True,
+    )
+    post_edit_quality_commands = _command_map(
+        repo_post_edit_quality.get(
+            "commands_by_language",
+            post_edit_quality.get("commands_by_language", {}),
+        )
+    )
+    async_jobs_enabled = _bool_value(
+        repo_async_jobs.get(
+            "enabled",
+            async_jobs.get("enabled"),
+        ),
+        False,
+    )
+    async_jobs_commands = _command_map(
+        repo_async_jobs.get(
+            "commands_by_language",
+            async_jobs.get("commands_by_language", {}),
+        )
+    )
 
     return RuntimeConfig(
         root=actual_root,
+        repo_root=repo_root,
         trace_dir=trace_dir,
         prompt_context_files=prompt_context_files,
         search_reminder_message=_string_value(
@@ -355,16 +401,11 @@ def _merge_config(
             ),
             int(RUNTIME_POLICY_DEFAULTS["long_parameter_limit"]),
         ),
-        post_edit_quality_enabled=_bool_value(post_edit_quality.get("enabled"), False),
-        post_edit_quality_block_on_failure=_bool_value(
-            post_edit_quality.get("block_on_failure"),
-            True,
-        ),
-        post_edit_quality_commands=_command_map(
-            post_edit_quality.get("commands_by_language", {})
-        ),
-        async_jobs_enabled=_bool_value(async_jobs.get("enabled"), False),
-        async_jobs_commands=_command_map(async_jobs.get("commands_by_language", {})),
+        post_edit_quality_enabled=post_edit_quality_enabled,
+        post_edit_quality_block_on_failure=post_edit_quality_block_on_failure,
+        post_edit_quality_commands=post_edit_quality_commands,
+        async_jobs_enabled=async_jobs_enabled,
+        async_jobs_commands=async_jobs_commands,
         python_max_complexity=_int_value(
             toml_thresholds.get("max_complexity"),
             int(RUNTIME_POLICY_DEFAULTS["max_complexity"]),
@@ -402,7 +443,7 @@ def _merge_config(
     )
 
 
-def load_config(root: Path | None = None) -> RuntimeConfig:
+def load_config(root: Path | None = None, repo_root: Path | None = None) -> RuntimeConfig:
     """Load configuration with XDG discovery chain.
 
     Config is loaded from resolve_config_path(). Root is used for
@@ -411,7 +452,9 @@ def load_config(root: Path | None = None) -> RuntimeConfig:
     actual_root = (root or detect_root()).resolve()
     config_path = resolve_config_path()
     raw = _load_json(config_path)
-    repo_root = Path.cwd().resolve()
-    config = _merge_config(actual_root, raw, repo_root)
+    resolved_repo_root = resolve_repo_root(repo_root) or (
+        repo_root.resolve() if repo_root is not None else Path.cwd().resolve()
+    )
+    config = _merge_config(actual_root, raw, resolved_repo_root)
     ensure_trace_directories(config)
     return config

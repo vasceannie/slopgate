@@ -164,7 +164,9 @@ def _command_has_word(command: str, word: str) -> bool:
 
 def _is_safe_read_shell(command: str) -> bool:
     lowered = command.lower()
-    if "sed -i" in lowered or "tee " in lowered or ">>" in lowered or " > " in lowered:
+    if "sed -i" in lowered or "tee " in lowered:
+        return False
+    if re.search(r">>?\s*\S", lowered):
         return False
     return any(_command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
 

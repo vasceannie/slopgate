@@ -70,7 +70,7 @@ def _read_source(path_value: str, ctx: HookContext) -> str | None:
     if not path_value.lower().endswith((".py", ".pyi")):
         return None
     full = (
-        (ctx.config.root / path_value).resolve()
+        (ctx.config.repo_root / path_value).resolve()
         if not Path(path_value).is_absolute()
         else Path(path_value)
     )

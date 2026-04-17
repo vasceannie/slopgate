@@ -27,6 +27,8 @@
  */
 
 import type { Plugin } from "@opencode-ai/plugin"
+import { existsSync } from "node:fs"
+import { dirname } from "node:path"
 
 const VIBEFORCER_BIN = Bun.env.VIBEFORCER_BIN || "vibeforcer"
 
@@ -40,12 +42,29 @@ interface EnforcerResult {
   updated_args?: Record<string, unknown>
 }
 
-async function callEnforcer(payload: Record<string, unknown>): Promise<EnforcerResult | null> {
+function findManagedRepoRoot(start: string): string | null {
+  let current = start
+  while (true) {
+    if (existsSync(`${current}/quality_gate.toml`)) {
+      return current
+    }
+    const parent = dirname(current)
+    if (parent === current) return null
+    current = parent
+  }
+}
+
+async function callEnforcer(
+  payload: Record<string, unknown>,
+  managedRepo: boolean,
+): Promise<EnforcerResult | null> {
   try {
+    const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
     const proc = Bun.spawn(
       [VIBEFORCER_BIN, "handle", "--platform", "opencode"],
       {
         env: Bun.env,
+        cwd: payloadCwd,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
@@ -66,17 +85,36 @@ async function callEnforcer(payload: Record<string, unknown>): Promise<EnforcerR
 
     if (exitCode !== 0) {
       console.error(`[vibeforcer] exit ${exitCode}: ${stderr}`)
+      if (managedRepo) {
+        return {
+          action: "block",
+          reason: "vibeforcer degraded mode: enforcer subprocess failed in managed repo.",
+        }
+      }
       return null
     }
 
     const trimmed = output.trim()
-    if (!trimmed) return null
+    if (!trimmed) {
+      if (managedRepo) {
+        return {
+          action: "block",
+          reason: "vibeforcer degraded mode: empty enforcer response in managed repo.",
+        }
+      }
+      return null
+    }
 
     return JSON.parse(trimmed) as EnforcerResult
   } catch (err) {
     // Catch subprocess failures, JSON parse errors, Bun API changes, etc.
-    // Fail open: a broken enforcer should not crash the OpenCode session.
     console.error(`[vibeforcer] callEnforcer failed: ${err}`)
+    if (managedRepo) {
+      return {
+        action: "block",
+        reason: "vibeforcer degraded mode: enforcer call failed in managed repo.",
+      }
+    }
     return null
   }
 }
@@ -111,7 +149,10 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         transcript_path: null,
       }
 
-      const result = await callEnforcer(payload)
+      const result = await callEnforcer(
+        payload,
+        findManagedRepoRoot(currentDirectory) !== null,
+      )
       if (!result) return
 
       switch (result.action) {
@@ -155,8 +196,15 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         tool_response: output.result,
       }
 
-      const result = await callEnforcer(payload)
+      const result = await callEnforcer(
+        payload,
+        findManagedRepoRoot(currentDirectory) !== null,
+      )
       if (!result) return
+
+      if (result.action === "block") {
+        throw new Error(`[vibeforcer-posttool] ${result.reason || "Post-tool policy violation"}`)
+      }
 
       if (result.action === "warn" || result.action === "context") {
         const message = result.reason || result.context
@@ -185,7 +233,10 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           transcript_path: null,
         }
 
-        const result = await callEnforcer(payload)
+        const result = await callEnforcer(
+          payload,
+          findManagedRepoRoot(currentDirectory) !== null,
+        )
         if (result?.context) {
           await client.app.log({
             body: {
@@ -208,7 +259,10 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           transcript_path: null,
         }
 
-        const result = await callEnforcer(payload)
+        const result = await callEnforcer(
+          payload,
+          findManagedRepoRoot(currentDirectory) !== null,
+        )
         if (!result) return
 
         if (result.action === "continue") {
@@ -247,7 +301,10 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           transcript_path: null,
         }
 
-        const result = await callEnforcer(payload)
+        const result = await callEnforcer(
+          payload,
+          findManagedRepoRoot(currentDirectory) !== null,
+        )
         if (!result) return
 
         if (result.action === "block") {

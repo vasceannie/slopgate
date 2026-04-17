@@ -99,6 +99,7 @@
     "PY-CODE-008": true,
     "PY-CODE-009": true,
     "QUALITY-POST-001": true,
+    "QUALITY-LINT-001": true,
     "PY-SHELL-001": true,
     "PY-QUALITY-004": true,
     "PY-QUALITY-005": true,
@@ -124,7 +125,6 @@
     "RS-QUALITY-003": true,
     "SHELL-001": true,
     "GIT-002": true,
-    "WARN-FILE-001": true,
     "WARN-BASELINE-001": true,
     "WARN-BASELINE-002": true,
     "STOP-001": true,
@@ -167,48 +167,6 @@
       ],
       "action": "deny",
       "message": "Stdlib logging is banned in Python sources. Use the project logger abstraction instead."
-    },
-    {
-      "rule_id": "PY-EXC-001",
-      "title": "Block broad exception handler",
-      "severity": "HIGH",
-      "events": [
-        "PreToolUse",
-        "PermissionRequest"
-      ],
-      "target": "content",
-      "path_globs": [
-        "**/*.py",
-        "**/*.pyi"
-      ],
-      "patterns": [
-        "except\\s+Exception\\s*(?:as\\s+\\w+)?:\\s*\\n\\s+(?:logger\\.|logging\\.)"
-      ],
-      "action": "deny",
-      "message": "Broad `except Exception:` handlers that only log are blocked. Catch specific exceptions or re-raise with context.\n\nInstead of:\n    try:\n        result = fetch_data(url)\n    except Exception:\n        logger.error(\"fetch failed\")\n\nUse:\n    try:\n        result = fetch_data(url)\n    except (httpx.HTTPError, TimeoutError) as exc:\n        raise DataFetchError(f\"fetch failed for {{url}}\") from exc\n\nIf you genuinely need a broad catch at a boundary, re-raise or propagate: except Exception as exc: logger.exception(...); raise"
-    },
-    {
-      "rule_id": "PY-EXC-002",
-      "title": "Block silent exception swallow",
-      "severity": "HIGH",
-      "events": [
-        "PreToolUse",
-        "PermissionRequest"
-      ],
-      "target": "content",
-      "path_globs": [
-        "**/*.py",
-        "**/*.pyi"
-      ],
-      "patterns": [
-        "except\\s+(Exception|BaseException)\\s*(?:as\\s+\\w+)?:\\s*\\n\\s+pass\\s*$",
-        "except\\s*:\\s*\\n\\s+pass\\s*$",
-        "except\\s+(Exception|BaseException)\\s*(?:as\\s+\\w+)?:\\s*\\n\\s+continue\\s*$",
-        "except\\s+(Exception|BaseException)\\s*(?:as\\s+\\w+)?:\\s*\\n\\s+return\\s+None\\s*$",
-        "except\\s+(Exception|BaseException)\\s*(?:as\\s+\\w+)?:\\s*\\n\\s+return\\s*$"
-      ],
-      "action": "deny",
-      "message": "Silent `except Exception: pass/continue/return None` is blocked. These handlers swallow errors completely, making failures invisible.\n\nInstead of:\n    try:\n        result = process(data)\n    except Exception:\n        pass\n\nEither catch specific exceptions:\n    try:\n        result = process(data)\n    except (ValueError, KeyError) as exc:\n        logger.warning(\"process failed: %s\", exc)\n\nOr re-raise with context:\n    except Exception as exc:\n        raise ProcessingError(\"data processing failed\") from exc\n\nIf the failure is truly expected and safe to ignore, catch the specific exception type."
     },
     {
       "rule_id": "PY-TYPE-001",
@@ -314,7 +272,10 @@
         "**/*.tsx"
       ],
       "patterns": [
-        ":\\s*any\\b"
+        ":\\s*any\\b",
+        "\\bArray\\s*<\\s*any\\s*>",
+        "\\bRecord\\s*<[^>]+,\\s*any\\s*>",
+        "<\\s*[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*any\\s*>"
       ],
       "action": "deny",
       "message": "TypeScript `any` is blocked. Use a specific type or generic."
@@ -333,7 +294,8 @@
         "**/*.tsx"
       ],
       "patterns": [
-        "\\bas\\s+(any|unknown|never)\\b"
+        "\\bas\\s+(any|unknown|never)\\b",
+        "\\bas\\s+Array\\s*<\\s*any\\s*>"
       ],
       "action": "deny",
       "message": "Unsafe TypeScript assertions (`as any|unknown|never`) are blocked."

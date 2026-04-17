@@ -1378,7 +1378,7 @@ class TestOpenCodeAdapterRenderPreTool:
 class TestOpenCodeAdapterRenderPostTool:
     """render_output for PostToolUse, Stop, SessionStart, and unknown events."""
 
-    def test_posttool_warn(self) -> None:
+    def test_posttool_block(self) -> None:
         adapter = OpenCodeAdapter()
         findings = [
             RuleFinding(
@@ -1397,7 +1397,7 @@ class TestOpenCodeAdapterRenderPostTool:
             updated_input={},
         )
         assert output is not None, "PostToolUse block should produce output"
-        assert output["action"] == "warn", "PostToolUse block should map to warn"
+        assert output["action"] == "block", "PostToolUse block should map to block"
         assert "Q-001" in test_support.required_string(output, "reason"), (
             "rule id should appear in reason"
         )
@@ -1423,7 +1423,7 @@ class TestOpenCodeAdapterRenderPostTool:
             updated_input={},
         )
         rendered = require_rendered(output)
-        assert rendered["action"] == "warn", "PostToolUse block should map to warn"
+        assert rendered["action"] == "block", "PostToolUse block should map to block"
         assert rendered["context"] == "consider adding tests", "context not included"
         assert "Q-001" in test_support.required_string(rendered, "reason"), (
             "rule id should appear in reason"
@@ -1864,7 +1864,7 @@ class TestFixtureReplay:
         assert result.event_name == "SessionStart"
         assert result.errors == []
 
-    def test_opencode_git_no_verify_denied(self) -> None:
+    def test_opencode_git_no_verify_denied(self, tmp_path: Path) -> None:
         payload = object_dict(
             cast(
                 object,
@@ -1875,6 +1875,13 @@ class TestFixtureReplay:
                 ),
             )
         )
+        repo = tmp_path / "repo"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n",
+            encoding="utf-8",
+        )
+        payload["cwd"] = str(repo)
         result = evaluate_payload(payload, platform="opencode")
         assert result.output is not None
         rendered = test_support.require_output(result)

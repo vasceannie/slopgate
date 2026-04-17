@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import shlex
 from collections.abc import Iterable
 from functools import cached_property
 from pathlib import Path
@@ -141,9 +142,49 @@ def any_path_matches(path_value: str, patterns: list[str]) -> bool:
 
 
 def shell_command_paths(command: str) -> list[str]:
-    pattern = re.compile(r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
+    redirection_pattern = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
+    pathish_pattern = re.compile(r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
+    known_filenames = {
+        "makefile",
+        "dockerfile",
+        "readme",
+        "license",
+        "pyproject.toml",
+        "package.json",
+        "tsconfig.json",
+    }
     seen: list[str] = []
-    for match in pattern.finditer(command):
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+
+    for token in tokens:
+        cleaned = token.strip("\"'")
+        if "/" in token or token.startswith(("~", "./", "../")):
+            if cleaned and cleaned not in seen:
+                seen.append(cleaned)
+            continue
+        lower_cleaned = cleaned.lower()
+        if (
+            cleaned
+            and not cleaned.startswith("-")
+            and "=" not in cleaned
+            and (
+                "." in cleaned
+                or cleaned[:1].isupper()
+                or lower_cleaned in known_filenames
+            )
+            and cleaned not in seen
+        ):
+            seen.append(cleaned)
+
+    for match in redirection_pattern.finditer(command):
+        value = match.group(1).strip("\"'")
+        if value and value not in seen:
+            seen.append(value)
+
+    for match in pathish_pattern.finditer(command):
         value = match.group(0)
         if value and value not in seen:
             seen.append(value)
@@ -179,7 +220,7 @@ class HookPayload:
         value = self.payload.get("cwd")
         if isinstance(value, str) and value.strip():
             return Path(value).resolve()
-        return self.config.root
+        return self.config.repo_root
 
     @cached_property
     def session_id(self) -> str:

@@ -138,14 +138,19 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
         "statusMessage": "Loading vibeforcer context",
     },
     "PreToolUse": {
-        "matcher": "Bash",
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
         "timeout": 10,
         "statusMessage": "vibeforcer: checking command",
     },
     "PostToolUse": {
-        "matcher": "Bash",
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
         "timeout": 10,
         "statusMessage": "vibeforcer: reviewing output",
+    },
+    "PermissionRequest": {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
+        "timeout": 10,
+        "statusMessage": "vibeforcer: permission review",
     },
     "UserPromptSubmit": {"timeout": 10},
     "Stop": {"timeout": 30},

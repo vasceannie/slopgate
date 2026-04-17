@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from vibeforcer.context import HookContext
+from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
 from vibeforcer.rules.common import (
     FullFileReadRule,
     GitNoVerifyRule,
     PostEditQualityRule,
+    PostEditLintRule,
     PromptContextRule,
     ProtectedPathsRule,
     SearchReminderRule,
@@ -42,6 +44,29 @@ _python_ast_import_error: Exception | None = None
 _python_ast_import_reported = False
 
 
+class PythonAstImportFailureRule(Rule):
+    rule_id = "PY-AST-IMPORT-001"
+    title = "Python AST engine unavailable"
+    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
+        decision = "deny" if ctx.event_name in ("PreToolUse", "PermissionRequest") else "block"
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.HIGH,
+                decision=decision,
+                message="Python AST checks are unavailable due to import failure.",
+                additional_context=repr(self._error),
+                metadata={"kind": "import_error"},
+            )
+        ]
+
+
 def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
     global _python_ast_import_error, _python_ast_import_reported
 
@@ -65,10 +90,12 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
                     "metadata": {"kind": "import_error"},
                 }
             )
-        return []
+        return [PythonAstImportFailureRule(current_error)]
 
     try:
         from vibeforcer.rules.python_ast import (
+            PythonAstHealthRule,
+            PythonBroadExceptLoggerRule,
             PythonCyclomaticComplexityRule,
             PythonDeadCodeRule,
             PythonDeepNestingRule,
@@ -79,6 +106,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
             PythonLongLineRule,
             PythonLongMethodRule,
             PythonLongParameterRule,
+            PythonSilentExceptRule,
             PythonThinWrapperRule,
         )
     except Exception as exc:  # pragma: no cover - exercised in import-failure test
@@ -86,6 +114,9 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
         return _build_python_ast_rules(ctx)
 
     python_ast_rules: list[Rule] = [
+        PythonAstHealthRule(),
+        PythonBroadExceptLoggerRule(),
+        PythonSilentExceptRule(),
         PythonLongMethodRule(),
         PythonLongParameterRule(),
         PythonLongLineRule(),
@@ -116,6 +147,7 @@ def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
         GitNoVerifyRule(),
         SearchReminderRule(),
         PostEditQualityRule(),
+        PostEditLintRule(),
         BaselineGuardRule(),
         IgnorePreexistingRule(),
         RequireQualityCheckRule(),

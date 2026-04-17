@@ -69,6 +69,7 @@ class RegexRuleConfig:
 @dataclass(slots=True)
 class RuntimeConfig:
     root: Path
+    repo_root: Path
     trace_dir: Path
     prompt_context_files: list[str]
     search_reminder_message: str

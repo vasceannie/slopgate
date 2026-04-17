@@ -20,6 +20,7 @@ from pytest import MonkeyPatch
 from vibeforcer._types import ObjectDict, object_dict
 from vibeforcer.engine import evaluate_payload
 from vibeforcer.models import EngineResult
+from vibeforcer.util.payloads import shell_command_paths
 from tests.support import (
     BUNDLE_ROOT,
     LoadFixture,
@@ -221,12 +222,34 @@ class TestInlinePayloadDenies:
         result = evaluate_payload(pretool_write("/etc/passwd", "x"))
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
 
+    def test_system_path_relative_escape(
+        self, pretool_bash: BashBuilder, tmp_path: Path
+    ) -> None:
+        nested = tmp_path / "a" / "b" / "c" / "d"
+        nested.mkdir(parents=True)
+        result = evaluate_payload(
+            pretool_bash("cat ../../../../../../../../etc/passwd", cwd=nested)
+        )
+        assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
+
     def test_sensitive_data(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(pretool_bash("cat ~/.ssh/id_rsa"))
         assert_denied_by(result, "GLOBAL-BUILTIN-SENSITIVE-DATA")
 
     def test_exec_protection_bash_write(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(pretool_bash("echo x > .claude/hooks/run-pretool.sh"))
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
+
+    def test_exec_protection_bash_redirect_without_spaces(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash("grep foo src/app.py>pyproject.toml"))
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
+
+    def test_exec_protection_bash_touch_makefile(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash("touch Makefile"))
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
 
     def test_exec_protection_write_config(self, pretool_write: WriteBuilder) -> None:
@@ -275,6 +298,14 @@ class TestInlinePayloadDenies:
         }
         result = evaluate_payload(payload)
         assert_denied_by(result, "PY-TYPE-001", "Any")
+
+
+def test_shell_command_paths_captures_redirect_targets() -> None:
+    paths = shell_command_paths(
+        "grep foo src/app.py>pyproject.toml && echo hi > Makefile && touch Makefile"
+    )
+    assert "pyproject.toml" in paths
+    assert "Makefile" in paths
 
 
 # ===========================================================================
@@ -429,6 +460,13 @@ class TestEdgeCases:
         assert ("PY-EXC-002" in ids) is should_deny, (
             f"Unexpected PY-EXC-002 result for code:\n{code}"
         )
+
+    def test_exc_002_single_line_default_return_denied(
+        self, pretool_write: WriteBuilder
+    ) -> None:
+        code = "def f():\n    try:\n        return run()\n    except Exception: return []\n"
+        result = evaluate_payload(pretool_write("src/module.py", code))
+        assert "PY-EXC-002" in finding_ids(result)
 
     def test_any_builtin_not_denied(self, pretool_write: WriteBuilder) -> None:
         """Python's builtin any() must not trigger PY-TYPE-001."""
@@ -913,6 +951,12 @@ def test_build_rules_survives_python_ast_import_error(
     assert "GIT-001" in fallback_ids
     assert "PY-CODE-008" not in fallback_ids
     assert "PY-IMPORT-001" not in fallback_ids
+    assert "PY-AST-IMPORT-001" in fallback_ids
+
+
+def test_python_ast_parse_failure_is_reported(pretool_write: WriteBuilder) -> None:
+    result = evaluate_payload(pretool_write("src/bad.py", "def broken(:\n    pass\n"))
+    assert_denied_by(result, "PY-AST-001")
 
 
 # ===========================================================================
@@ -1394,6 +1438,18 @@ class TestTypeScriptRules:
         result = evaluate_payload(pretool_write("src/parser.ts", code))
         assert "TS-TYPE-001" not in finding_ids(result)
 
+    def test_ts_type_001_array_any_denied(self, pretool_write: WriteBuilder) -> None:
+        code = "const values: Array<any> = [];\n"
+        result = evaluate_payload(pretool_write("src/parser.ts", code))
+        assert "TS-TYPE-001" in finding_ids(result)
+
+    def test_ts_type_001_generic_default_any_denied(
+        self, pretool_write: WriteBuilder
+    ) -> None:
+        code = "type Box<T = any> = { value: T };\n"
+        result = evaluate_payload(pretool_write("src/parser.ts", code))
+        assert "TS-TYPE-001" in finding_ids(result)
+
     def test_ts_type_002_as_any_denied(self, pretool_write: WriteBuilder) -> None:
         code = "const x = value as any;\n"
         result = evaluate_payload(pretool_write("src/util.ts", code))
@@ -1402,6 +1458,11 @@ class TestTypeScriptRules:
     def test_ts_type_002_as_unknown_denied(self, pretool_write: WriteBuilder) -> None:
         code = "const x = value as unknown;\n"
         result = evaluate_payload(pretool_write("src/util.tsx", code))
+        assert "TS-TYPE-002" in finding_ids(result)
+
+    def test_ts_type_002_as_array_any_denied(self, pretool_write: WriteBuilder) -> None:
+        code = "const x = value as Array<any>;\n"
+        result = evaluate_payload(pretool_write("src/util.ts", code))
         assert "TS-TYPE-002" in finding_ids(result)
 
     def test_ts_type_002_as_string_allowed(self, pretool_write: WriteBuilder) -> None:
@@ -2528,6 +2589,19 @@ class TestEnforcementModes:
         assert any(rule_id.startswith("PY-CODE-") for rule_id in strict_ids)
         assert any(rule_id.startswith("PY-") for rule_id in strict_ids)
 
+    def test_enrolled_repo_subdirectory_stays_repo_strict(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_strict_subdir"
+        subdir = repo / "src"
+        subdir.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        candidate = evaluate_payload(
+            _pretool_bash_payload(subdir, 'git commit -n -m "skip checks"')
+        )
+        assert "GIT-001" in finding_ids(candidate)
+
     def test_enrolled_repo_with_noqualitygate_is_relaxed(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo_relaxed"
         repo.mkdir(parents=True)
@@ -2570,3 +2644,132 @@ class TestEnforcementModes:
             _pretool_write_payload(repo, "Makefile", "all:\n")
         )
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(safety_candidate)
+
+    def test_post_edit_quality_runs_from_repo_root(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+        repo = tmp_path / "repo_quality_cwd"
+        subdir = repo / "nested"
+        subdir.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+        defaults = json.loads(
+            (BUNDLE_ROOT / "src" / "vibeforcer" / "resources" / "defaults.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        defaults["post_edit_quality"]["enabled"] = True
+        defaults["post_edit_quality"]["block_on_failure"] = True
+        defaults["post_edit_quality"]["commands_by_language"] = {
+            "python": ["pwd && false"]
+        }
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(defaults), encoding="utf-8")
+        monkeypatch.setenv("VIBEFORCER_CONFIG", str(cfg))
+
+        payload = {
+            "session_id": "t",
+            "cwd": str(subdir),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo 'print(1)' > app.py"},
+        }
+        result = evaluate_payload(payload)
+        assert "QUALITY-POST-001" in finding_ids(result)
+        finding = next(item for item in result.findings if item.rule_id == "QUALITY-POST-001")
+        assert finding.message is not None
+        assert str(repo.resolve()) in finding.message
+
+    def test_repo_toml_can_enable_post_edit_quality(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        repo = tmp_path / "repo_quality_gate_runtime"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            (
+                "[quality_gate]\n"
+                "enabled = true\n\n"
+                "[post_edit_quality]\n"
+                "enabled = true\n"
+                "block_on_failure = true\n\n"
+                "[post_edit_quality.commands_by_language]\n"
+                "python = [\"false\"]\n"
+            ),
+            encoding="utf-8",
+        )
+        defaults = json.loads(
+            (
+                BUNDLE_ROOT / "src" / "vibeforcer" / "resources" / "defaults.json"
+            ).read_text(encoding="utf-8")
+        )
+        defaults["post_edit_quality"]["enabled"] = False
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps(defaults), encoding="utf-8")
+        monkeypatch.setenv("VIBEFORCER_CONFIG", str(cfg))
+
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo 'print(1)' > app.py"},
+        }
+        result = evaluate_payload(payload)
+        assert "QUALITY-POST-001" in finding_ids(result)
+
+    def test_post_edit_lint_rule_reports_touched_file_issues(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_lint_touched"
+        tests_dir = repo / "tests"
+        tests_dir.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+        _ = (tests_dir / "test_smell.py").write_text(
+            "def test_smell():\n    x = 1\n",
+            encoding="utf-8",
+        )
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat tests/test_smell.py"},
+        }
+        result = evaluate_payload(payload)
+        assert "QUALITY-LINT-001" in finding_ids(result)
+        assert_blocked(result, "QUALITY-LINT-001")
+
+
+def test_trace_records_platform_capability_and_repo_root(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo_trace_capability"
+    repo.mkdir(parents=True)
+    _ = (repo / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    )
+    defaults = json.loads(
+        (BUNDLE_ROOT / "src" / "vibeforcer" / "resources" / "defaults.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps(defaults), encoding="utf-8")
+    monkeypatch.setenv("VIBEFORCER_CONFIG", str(cfg))
+    monkeypatch.setenv("VIBEFORCER_ROOT", str(tmp_path / "vf-root"))
+
+    payload = {
+        "session_id": "trace-cap",
+        "cwd": str(repo),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git commit -n -m skip"},
+    }
+    _ = evaluate_payload(payload, platform="opencode")
+
+    events = (tmp_path / "vf-root" / "logs" / "events.jsonl").read_text(
+        encoding="utf-8"
+    ).strip().splitlines()
+    assert events
+    record = json.loads(events[-1])
+    assert record["platform_capability"] == "degraded"
+    assert record["resolved_repo_root"] == str(repo.resolve())

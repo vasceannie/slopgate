@@ -96,7 +96,7 @@ class OpenCodeAdapter(PlatformAdapter):
         if event_name == "PostToolUse":
             payload: ObjectDict = {}
             if decision in {"block", "deny"}:
-                payload["action"] = "warn"
+                payload["action"] = "block"
                 payload["reason"] = self.join_messages(
                     self.decision_findings(findings, decision)
                 )

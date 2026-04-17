@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from ._rules import (
+    PythonAstHealthRule,
+    PythonBroadExceptLoggerRule,
     PythonCyclomaticComplexityRule,
     PythonDeadCodeRule,
     PythonDeepNestingRule,
@@ -11,11 +13,14 @@ from ._rules import (
     PythonLongLineRule,
     PythonLongMethodRule,
     PythonLongParameterRule,
+    PythonSilentExceptRule,
     PythonThinWrapperRule,
 )
 
 __all__ = [
     "PythonCyclomaticComplexityRule",
+    "PythonAstHealthRule",
+    "PythonBroadExceptLoggerRule",
     "PythonDeadCodeRule",
     "PythonDeepNestingRule",
     "PythonFeatureEnvyRule",
@@ -25,5 +30,6 @@ __all__ = [
     "PythonLongLineRule",
     "PythonLongMethodRule",
     "PythonLongParameterRule",
+    "PythonSilentExceptRule",
     "PythonThinWrapperRule",
 ]

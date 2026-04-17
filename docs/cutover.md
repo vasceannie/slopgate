@@ -17,7 +17,8 @@
 
 - All 30 Python rules — identical behavior
 - All 39 regex rules — loaded from same config format
-- All 3 adapters (claude, codex, opencode) — identical
+- Adapter core behavior is shared, but platform hook capabilities differ
+  (Claude has fullest parity; Codex/OpenCode have platform-specific limits)
 - `quality_gate.toml` per-repo overrides — identical
 - JSONL trace format — identical
 - Fixture format — identical

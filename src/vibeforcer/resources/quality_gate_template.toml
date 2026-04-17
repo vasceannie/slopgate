@@ -92,3 +92,22 @@ patterns = [
 
 [scope]
 default = "all"
+
+# Optional repo-local runtime overrides for hook-time enforcement.
+# These override machine-level defaults only for this managed repo.
+
+[enabled_rules]
+# "GIT-001" = true
+
+[post_edit_quality]
+# enabled = true
+# block_on_failure = true
+
+[post_edit_quality.commands_by_language]
+# python = ["python -m pytest -q tests/quality"]
+
+[async_jobs]
+# enabled = false
+
+[async_jobs.commands_by_language]
+# python = ["python -m pytest -q tests/quality"]

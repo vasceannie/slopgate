@@ -26,7 +26,7 @@ def run_async_jobs(payload_dict: Mapping[str, object]) -> tuple[str, list[str]]:
             first_file=ctx.candidate_paths[0] if ctx.candidate_paths else "",
             language=",".join(sorted(ctx.languages)),
         )
-        result = run_shell(formatted, ctx.config.root)
+        result = run_shell(formatted, ctx.config.repo_root)
         ctx.trace.subprocess(
             {
                 "event_name": ctx.event_name,

@@ -10,7 +10,12 @@ from vibeforcer.adapters import get_adapter
 from vibeforcer.adapters.base import PlatformAdapter
 from typing import Literal
 
-from vibeforcer.config import is_path_skipped, is_repo_disabled, is_repo_enrolled
+from vibeforcer.config import (
+    is_path_skipped,
+    is_repo_disabled,
+    is_repo_enrolled,
+    resolve_repo_root,
+)
 from vibeforcer.context import HookContext, build_context
 from vibeforcer.enrichment import enrich_findings
 from vibeforcer.models import EngineResult, RuleFinding, Severity
@@ -90,6 +95,18 @@ def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
         "session_id": ctx.session_id,
         "tool_name": ctx.tool_name,
     }
+
+
+def _platform_capability(platform: str) -> tuple[str, str | None]:
+    normalized = platform.strip().lower()
+    if normalized == "opencode":
+        return (
+            "degraded",
+            "opencode lacks full prompt/stop blocking parity and post-tool deny is advisory",
+        )
+    if normalized == "codex":
+        return ("partial", "codex hook semantics differ from claude in some environments")
+    return ("full", None)
 
 
 def _error_trace_payload(
@@ -214,11 +231,7 @@ EnforcementMode = Literal["outside_repo", "repo_strict", "repo_relaxed"]
 
 def _resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
     repo_cwd = Path(ctx.cwd) if ctx.cwd else Path.cwd()
-    repo_root = repo_cwd.resolve()
-    if not repo_root.exists():
-        repo_root = Path.cwd().resolve()
-        if not repo_root.exists():
-            repo_root = ctx.config.root.resolve()
+    repo_root = resolve_repo_root(repo_cwd) or repo_cwd.resolve()
 
     if not is_repo_enrolled(repo_root):
         return "outside_repo"
@@ -235,9 +248,10 @@ def _run_rules(ctx: HookContext, platform: str, mode: EnforcementMode) -> _EvalA
     disabled = set(ctx.config.disabled_rules)
 
     rules: list[Rule] = [*build_always_on_rules(ctx)]
-    repo_cwd = Path(ctx.cwd) if ctx.cwd else Path.cwd()
+    repo_root = resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd())
+    effective_root = repo_root or (Path(ctx.cwd) if ctx.cwd else Path.cwd())
 
-    if mode == "repo_strict" and not is_path_skipped(repo_cwd, ctx.config.skip_paths):
+    if mode == "repo_strict" and not is_path_skipped(effective_root, ctx.config.skip_paths):
         rules.extend(build_repo_strict_rules(ctx))
 
     for rule in rules:
@@ -443,16 +457,21 @@ def evaluate_payload(
     ctx = build_context(adapter.normalize_payload(payload_dict))
 
     enforcement_mode = _resolve_enforcement_mode(ctx)
+    resolved_repo_root = resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd())
+    capability, degraded_reason = _platform_capability(platform)
 
     ctx.trace.event(
         {
             "platform": platform,
+            "platform_capability": capability,
+            "degraded_reason": degraded_reason,
             "event_name": ctx.event_name,
             "session_id": ctx.session_id,
             "tool_name": ctx.tool_name,
             "candidate_paths": ctx.candidate_paths,
             "languages": sorted(ctx.languages),
             "enforcement_mode": enforcement_mode,
+            "resolved_repo_root": str(resolved_repo_root) if resolved_repo_root else None,
         }
     )
 
@@ -472,6 +491,8 @@ def evaluate_payload(
     ctx.trace.result(
         {
             "platform": platform,
+            "platform_capability": capability,
+            "degraded_reason": degraded_reason,
             "event_name": ctx.event_name,
             "session_id": ctx.session_id,
             "tool_name": ctx.tool_name,
@@ -479,6 +500,7 @@ def evaluate_payload(
             "errors": acc.errors,
             "output": output,
             "enforcement_mode": enforcement_mode,
+            "resolved_repo_root": str(resolved_repo_root) if resolved_repo_root else None,
         }
     )
     return EngineResult(
