@@ -31,6 +31,7 @@ def _find_binary() -> str:
 
 _CLAUDE_EVENTS = (
     "SessionStart",
+    "CwdChanged",
     "UserPromptSubmit",
     "PreToolUse",
     "PermissionRequest",
@@ -138,19 +139,15 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
         "statusMessage": "Loading vibeforcer context",
     },
     "PreToolUse": {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
+        # Codex hook docs currently expose Pre/Post tool hooks for Bash only.
+        "matcher": "Bash",
         "timeout": 10,
-        "statusMessage": "vibeforcer: checking command",
+        "statusMessage": "vibeforcer: checking bash command",
     },
     "PostToolUse": {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
+        "matcher": "Bash",
         "timeout": 10,
-        "statusMessage": "vibeforcer: reviewing output",
-    },
-    "PermissionRequest": {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Update|Patch|Delete|Create",
-        "timeout": 10,
-        "statusMessage": "vibeforcer: permission review",
+        "statusMessage": "vibeforcer: reviewing bash output",
     },
     "UserPromptSubmit": {"timeout": 10},
     "Stop": {"timeout": 30},

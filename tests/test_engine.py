@@ -228,7 +228,7 @@ class TestInlinePayloadDenies:
         nested = tmp_path / "a" / "b" / "c" / "d"
         nested.mkdir(parents=True)
         result = evaluate_payload(
-            pretool_bash("cat ../../../../../../../../etc/passwd", cwd=nested)
+            pretool_bash("cat ../../../../../../../../etc/passwd", cwd=str(nested))
         )
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
 
@@ -2551,6 +2551,16 @@ def _pretool_bash_payload(cwd: Path, command: str) -> ObjectDict:
     }
 
 
+def _pretool_delete_payload(cwd: Path, file_path: str) -> ObjectDict:
+    return {
+        "session_id": "t",
+        "cwd": str(cwd),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Delete",
+        "tool_input": {"file_path": file_path},
+    }
+
+
 class TestEnforcementModes:
     def test_outside_repo_runs_safety_only(self, tmp_path: Path) -> None:
         outside = tmp_path / "outside"
@@ -2601,6 +2611,21 @@ class TestEnforcementModes:
             _pretool_bash_payload(subdir, 'git commit -n -m "skip checks"')
         )
         assert "GIT-001" in finding_ids(candidate)
+
+    def test_worktree_auto_enrolls_from_repo_marker(self, tmp_path: Path) -> None:
+        repo, worktree = _init_git_worktree(tmp_path)
+        worktree_marker = worktree / "quality_gate.toml"
+        worktree_marker.unlink()
+
+        result = evaluate_payload(
+            _pretool_bash_payload(worktree, 'git commit -n -m "skip checks"')
+        )
+
+        assert worktree_marker.exists()
+        assert worktree_marker.read_text(encoding="utf-8") == (repo / "quality_gate.toml").read_text(
+            encoding="utf-8"
+        )
+        assert "GIT-001" in finding_ids(result)
 
     def test_enrolled_repo_with_noqualitygate_is_relaxed(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo_relaxed"
@@ -2737,6 +2762,57 @@ class TestEnforcementModes:
         result = evaluate_payload(payload)
         assert "QUALITY-LINT-001" in finding_ids(result)
         assert_blocked(result, "QUALITY-LINT-001")
+
+    def test_repo_enrollment_rule_blocks_disable_sentinel(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_sentinel"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        result = evaluate_payload(_pretool_write_payload(repo, ".noqualitygate", ""))
+        assert_denied_by(result, "REPO-ENROLL-001")
+
+    def test_repo_enrollment_rule_blocks_delete_marker(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_delete"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        result = evaluate_payload(_pretool_delete_payload(repo, "quality_gate.toml"))
+        assert_denied_by(result, "REPO-ENROLL-001")
+
+    def test_repo_enrollment_rule_blocks_enabled_false(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_disable_flag"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        result = evaluate_payload(
+            _pretool_write_payload(repo, "quality_gate.toml", "[quality_gate]\nenabled = false\n")
+        )
+        assert_denied_by(result, "REPO-ENROLL-001")
+
+    def test_repo_enrollment_rule_blocks_patch_delete(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_patch_delete"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Patch",
+            "tool_input": {
+                "patch": "*** Begin Patch\n*** Delete File: quality_gate.toml\n*** End Patch\n"
+            },
+        }
+        result = evaluate_payload(payload)
+        assert_denied_by(result, "REPO-ENROLL-001")
 
 
 def test_trace_records_platform_capability_and_repo_root(

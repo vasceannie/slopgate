@@ -27,11 +27,12 @@ from vibeforcer.rules.error_rules import (
 )
 from vibeforcer.rules.stop_rules import (
     ConfigChangeGuardRule,
-    SessionStartContextRule,
     HookInfraExecProtectionRule,
     IgnorePreexistingRule,
+    RepoEnrollmentProtectionRule,
     RequireQualityCheckRule,
     RulebookSecurityRule,
+    SessionStartContextRule,
     WarnLargeFileRule,
 )
 
@@ -153,6 +154,7 @@ def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
         RequireQualityCheckRule(),
         WarnLargeFileRule(),
         HookInfraExecProtectionRule(),
+        RepoEnrollmentProtectionRule(),
         RulebookSecurityRule(),
         ConfigChangeGuardRule(),
         SessionStartContextRule(),

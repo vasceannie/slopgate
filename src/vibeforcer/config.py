@@ -3,9 +3,14 @@ from __future__ import annotations
 import json
 import importlib
 import os
+import subprocess
 from pathlib import Path
 from collections.abc import Callable
 from typing import cast
+
+from vibeforcer.models import RegexRuleConfig, RuntimeConfig
+from vibeforcer.policy_defaults import RUNTIME_POLICY_DEFAULTS
+from vibeforcer.util import warning
 
 _toml_loads: Callable[[str], object] | None = None
 for module_name in ("tomllib", "tomli"):
@@ -16,10 +21,6 @@ for module_name in ("tomllib", "tomli"):
     if callable(getattr(_module, "loads", None)):
         _toml_loads = cast(Callable[[str], object], getattr(_module, "loads"))
         break
-
-from vibeforcer.models import RegexRuleConfig, RuntimeConfig
-from vibeforcer.policy_defaults import RUNTIME_POLICY_DEFAULTS
-from vibeforcer.util import warning
 
 # Sentinel filenames that disable the quality gate for a repo.
 _DISABLE_SENTINELS = (".noqualitygate", ".no-quality-gate")
@@ -151,6 +152,164 @@ def _load_json(path: Path) -> dict[str, object]:
         )
         raise RuntimeError(f"Invalid JSON in {path}: {exc}") from exc
 
+
+def _git_output(
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    timeout: int = 3,
+) -> str | None:
+    """Run a git command and return stripped stdout on success."""
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd is not None else None,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.strip()
+    return output or None
+
+
+def resolve_git_root(start: Path | None = None) -> Path | None:
+    """Resolve the current git working tree root, if any."""
+    path = (start or Path.cwd()).resolve()
+    base = path if path.is_dir() else path.parent
+    root = _git_output(
+        ["git", "-C", str(base), "rev-parse", "--show-toplevel"],
+        cwd=base,
+        timeout=3,
+    )
+    return Path(root).resolve() if root else None
+
+
+def resolve_main_git_repo_root(start: Path | None = None) -> Path | None:
+    """Resolve the main repo root for a git repo or worktree."""
+    git_root = resolve_git_root(start)
+    if git_root is None:
+        return None
+    common_dir = _git_output(
+        ["git", "-C", str(git_root), "rev-parse", "--git-common-dir"],
+        cwd=git_root,
+        timeout=3,
+    )
+    if common_dir is None:
+        return git_root
+    common_path = Path(common_dir)
+    if not common_path.is_absolute():
+        common_path = (git_root / common_path).resolve()
+    else:
+        common_path = common_path.resolve()
+    return common_path.parent.resolve()
+
+
+def _quality_gate_path(root: Path) -> Path:
+    return root / "quality_gate.toml"
+
+
+def _quality_gate_template() -> str:
+    from vibeforcer.lint import __version__ as lint_version
+    from vibeforcer.lint._updater import render_quality_gate_toml
+
+    return render_quality_gate_toml(version=lint_version)
+
+
+def _write_quality_gate(root: Path, template: str) -> bool:
+    marker = _quality_gate_path(root)
+    if marker.exists():
+        return False
+    root.mkdir(parents=True, exist_ok=True)
+    _ = marker.write_text(template, encoding="utf-8")
+    return True
+
+
+def list_git_worktrees(repo_root: Path) -> list[Path]:
+    """List all known worktree roots for *repo_root*."""
+    main_repo_root = resolve_main_git_repo_root(repo_root) or repo_root.resolve()
+    output = _git_output(
+        ["git", "-C", str(main_repo_root), "worktree", "list", "--porcelain"],
+        cwd=main_repo_root,
+        timeout=5,
+    )
+    if output is None:
+        return []
+    worktrees: list[Path] = []
+    for line in output.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        worktree_path = Path(line.replace("worktree ", "", 1)).resolve()
+        if worktree_path not in worktrees:
+            worktrees.append(worktree_path)
+    return worktrees
+
+
+def ensure_worktree_enrollment(start: Path | None = None) -> Path | None:
+    """Copy the main repo quality gate into a worktree when inherited."""
+    path = (start or Path.cwd()).resolve()
+    repo_root = resolve_repo_root(path)
+    if repo_root is not None:
+        return repo_root
+
+    worktree_root = resolve_git_root(path)
+    if worktree_root is None:
+        return None
+
+    main_repo_root = resolve_main_git_repo_root(worktree_root)
+    if main_repo_root is None or main_repo_root == worktree_root:
+        return None
+
+    source_marker = _quality_gate_path(main_repo_root)
+    if not source_marker.exists():
+        return None
+
+    try:
+        template = source_marker.read_text(encoding="utf-8")
+        _write_quality_gate(worktree_root, template)
+    except OSError as exc:
+        warning(
+            "worktree enrollment copy failed",
+            worktree=str(worktree_root),
+            source=str(source_marker),
+            error=str(exc),
+        )
+        return None
+    return worktree_root
+
+
+def enroll_repo(
+    start: Path | None = None,
+    *,
+    include_worktrees: bool = True,
+) -> tuple[Path, list[Path]]:
+    """Enroll a repo and optionally propagate the marker to existing worktrees."""
+    target = (start or Path.cwd()).resolve()
+    default_root = target if target.is_dir() else target.parent
+    repo_root = resolve_main_git_repo_root(target) or default_root
+
+    template = _quality_gate_template()
+    written_roots: list[Path] = []
+    if _write_quality_gate(repo_root, template):
+        written_roots.append(repo_root)
+    else:
+        try:
+            template = _quality_gate_path(repo_root).read_text(encoding="utf-8")
+        except OSError:
+            template = _quality_gate_template()
+
+    if include_worktrees and resolve_main_git_repo_root(repo_root) is not None:
+        for worktree_root in list_git_worktrees(repo_root):
+            if worktree_root == repo_root:
+                continue
+            if _write_quality_gate(worktree_root, template):
+                written_roots.append(worktree_root)
+
+    return repo_root, written_roots
 
 
 
@@ -452,7 +611,8 @@ def load_config(root: Path | None = None, repo_root: Path | None = None) -> Runt
     actual_root = (root or detect_root()).resolve()
     config_path = resolve_config_path()
     raw = _load_json(config_path)
-    resolved_repo_root = resolve_repo_root(repo_root) or (
+    enrollment_root = ensure_worktree_enrollment(repo_root)
+    resolved_repo_root = enrollment_root or resolve_repo_root(repo_root) or (
         repo_root.resolve() if repo_root is not None else Path.cwd().resolve()
     )
     config = _merge_config(actual_root, raw, resolved_repo_root)

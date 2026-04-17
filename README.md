@@ -1,6 +1,6 @@
 # vibeforcer
 
-Global CLI guardrails engine for AI coding agents. **Real-time hook enforcement + batch code quality linting.** One tool, three platforms.
+Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Codex CLI and OpenCode are supported with platform-specific limitations.
 
 ## Install
 
@@ -37,8 +37,14 @@ vibeforcer lint init .            # scaffold quality_gate.toml
 | Platform | Status | Install |
 |---|---|---|
 | **Claude Code** | ✅ Production | `vibeforcer install claude` |
-| **Codex CLI** | ✅ Ready | `vibeforcer install codex` |
-| **OpenCode** | ✅ Ready | `vibeforcer install opencode` |
+| **Codex CLI** | ⚠️ Partial | `vibeforcer install codex` |
+| **OpenCode** | ⚠️ Degraded | `vibeforcer install opencode` |
+
+## Platform Notes
+
+- **Claude Code**: full first-class hook target. Vibeforcer can use Claude's richer event model, including prompt/session/tool interception.
+- **Codex CLI**: experimental hook support with narrower runtime coverage than Claude Code. Current upstream docs expose `PreToolUse` and `PostToolUse` around Bash commands rather than full edit/write tool parity, so vibeforcer installs Bash-focused Codex hooks and treats Codex as partial coverage.
+- **OpenCode**: implemented via a plugin shim rather than a Claude-style hook schema. OpenCode exposes plugin events such as `tool.execute.before`, `tool.execute.after`, `permission.asked`, and session events, but prompt interception and stop blocking do not have Claude-equivalent parity.
 
 ## Architecture
 
@@ -102,6 +108,8 @@ vibeforcer test
 vibeforcer version
 ```
 
+For Codex CLI and OpenCode, "real-time" should be read as best-effort within the host platform's current hook or plugin surface, not as Claude-equivalent parity.
+
 ### Code Quality Linting (batch)
 
 ```bash
@@ -155,6 +163,12 @@ Per-repo overrides via `quality_gate.toml` in the repo root.
 - Session controls (stop checks, config change guard)
 - LangGraph best practices (state reducers, mutation detection, deprecated API)
 - Baseline inflation guard
+
+Availability depends on platform support:
+
+- **Claude Code**: widest runtime coverage
+- **Codex CLI**: currently limited by Codex's narrower hook surface
+- **OpenCode**: mediated through plugin event translation with advisory gaps around prompt and stop control
 
 ### Batch Lint Rules (28 detectors)
 - See "28 Batch Detectors" table above

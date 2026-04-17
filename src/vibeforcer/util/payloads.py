@@ -80,6 +80,8 @@ def parse_patch_candidate_paths(patch_blob: str) -> list[str]:
             value = line.replace("*** Update File: ", "", 1)
         elif line.startswith("*** Add File: "):
             value = line.replace("*** Add File: ", "", 1)
+        elif line.startswith("*** Delete File: "):
+            value = line.replace("*** Delete File: ", "", 1)
         elif line.startswith("+++ b/"):
             value = line.replace("+++ b/", "", 1)
         elif line.startswith("--- a/"):

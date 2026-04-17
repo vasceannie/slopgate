@@ -11,6 +11,7 @@ from vibeforcer.cli.commands import (
     cmd_config_init,
     cmd_config_path,
     cmd_config_show,
+    cmd_enroll,
     cmd_handle,
     cmd_handle_async,
     cmd_install,
@@ -57,6 +58,15 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     check = sub.add_parser("check", help="Check quality gate for a repo")
     _ = check.add_argument("path", nargs="?", default=".")
     check.set_defaults(func=cmd_check)
+
+    enroll = sub.add_parser("enroll", help="Enroll a repo in quality gate enforcement")
+    _ = enroll.add_argument("path", nargs="?", default=".")
+    _ = enroll.add_argument(
+        "--no-worktrees",
+        action="store_true",
+        help="Only enroll the main repo root",
+    )
+    enroll.set_defaults(func=cmd_enroll)
 
     replay = sub.add_parser("replay", help="Replay a saved payload")
     _ = replay.add_argument("--payload", required=True)

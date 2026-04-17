@@ -102,10 +102,13 @@ def _platform_capability(platform: str) -> tuple[str, str | None]:
     if normalized == "opencode":
         return (
             "degraded",
-            "opencode lacks full prompt/stop blocking parity and post-tool deny is advisory",
+            "opencode uses plugin events rather than Claude-style hooks; prompt interception is unavailable, stop blocking is advisory, and post-tool deny is best-effort",
         )
     if normalized == "codex":
-        return ("partial", "codex hook semantics differ from claude in some environments")
+        return (
+            "partial",
+            "codex hooks are experimental and currently provide Bash-focused tool interception rather than Claude-style tool parity",
+        )
     return ("full", None)
 
 

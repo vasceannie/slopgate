@@ -463,10 +463,8 @@ class HookInfraExecProtectionRule(Rule):
 # Rulebook security
 # ---------------------------------------------------------------------------
 
-import re as _re
-
 _SECURITY_PATTERNS = tuple(
-    _re.compile(p, _re.IGNORECASE)
+    re.compile(p, re.IGNORECASE)
     for p in (
         "bypass_permissions",
         "allowManagedHooksOnly",
@@ -642,4 +640,126 @@ class ConfigChangeGuardRule(Rule):
                     metadata={"source": source},
                 )
             ]
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Repo enrollment protection
+# ---------------------------------------------------------------------------
+
+_ENROLLMENT_SENTINELS = frozenset({".noqualitygate", ".no-quality-gate"})
+_ENROLLMENT_MARKER = "quality_gate.toml"
+_QUALITY_GATE_DISABLE_RE = re.compile(r"\benabled\s*=\s*false\b", re.IGNORECASE)
+
+
+def _enrollment_basename(path_value: str) -> str:
+    return Path(path_value).name.lower()
+
+
+def _is_delete_like_tool(tool_name: str) -> bool:
+    lowered = tool_name.lower()
+    return lowered in {"delete", "remove"}
+
+
+def _patch_deletes_enrollment_marker(ctx: HookContext) -> bool:
+    patch_blob = ctx.tool_input.get("patch")
+    if not isinstance(patch_blob, str):
+        return False
+    lowered = patch_blob.lower()
+    return "*** delete file:" in lowered and _ENROLLMENT_MARKER in lowered
+
+
+class RepoEnrollmentProtectionRule(Rule):
+    """Prevent agents from weakening or removing repo enrollment."""
+
+    rule_id: str = "REPO-ENROLL-001"
+    title: str = "Repo enrollment protection"
+    events: tuple[str, ...] = ("PreToolUse", "PermissionRequest")
+
+    @override
+    def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
+        if not is_rule_enabled(ctx, self.rule_id):
+            return []
+        if _is_safe_bash_for_path(ctx):
+            return []
+
+        tool_name = ctx.tool_name.lower()
+        if not (_is_modifying_tool(ctx) or _is_delete_like_tool(tool_name)):
+            return []
+
+        for path_value in ctx.candidate_paths:
+            basename = _enrollment_basename(path_value)
+            if basename in _ENROLLMENT_SENTINELS:
+                return [
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.CRITICAL,
+                        decision="deny",
+                        message=(
+                            "Creating or modifying quality-gate disable sentinels "
+                            f"is blocked in {path_value}."
+                        ),
+                        metadata={"path": path_value, "kind": "disable_sentinel"},
+                    )
+                ]
+            if basename != _ENROLLMENT_MARKER:
+                continue
+            if _is_delete_like_tool(tool_name):
+                return [
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.CRITICAL,
+                        decision="deny",
+                        message=(
+                            f"Deleting {path_value} would de-enroll the repo and is blocked."
+                        ),
+                        metadata={"path": path_value, "kind": "delete_marker"},
+                    )
+                ]
+            if tool_name == "bash":
+                return [
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.HIGH,
+                        decision="deny",
+                        message=(
+                            f"Shell-based edits to {path_value} are blocked. "
+                            "Use structured config changes that keep the repo enrolled."
+                        ),
+                        metadata={"path": path_value, "kind": "shell_edit_marker"},
+                    )
+                ]
+
+        if _patch_deletes_enrollment_marker(ctx):
+            return [
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.CRITICAL,
+                    decision="deny",
+                    message="Deleting quality_gate.toml via patch would de-enroll the repo.",
+                    metadata={"kind": "patch_delete_marker"},
+                )
+            ]
+
+        for target in ctx.content_targets:
+            if _enrollment_basename(target.path) != _ENROLLMENT_MARKER:
+                continue
+            if _QUALITY_GATE_DISABLE_RE.search(target.content):
+                return [
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.CRITICAL,
+                        decision="deny",
+                        message=(
+                            f"Setting `enabled = false` in {target.path} is blocked. "
+                            "Enrolled repos cannot be de-enrolled by agent edits."
+                        ),
+                        metadata={"path": target.path, "kind": "disable_flag"},
+                    )
+                ]
         return []

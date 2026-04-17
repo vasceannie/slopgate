@@ -17,6 +17,16 @@ def _parse_lint(argv: list[str]) -> tuple[str, str | None]:
     return lint_command, path
 
 
+def _parse_core(argv: list[str]) -> tuple[str, str | None, bool]:
+    parsed = build_parser().parse_args(argv)
+    values = object_dict(vars(parsed))
+    command = string_value(values.get("command"))
+    path = string_value(values.get("path"))
+    no_worktrees = bool(values.get("no_worktrees", False))
+    assert command is not None, f"Expected command in parsed args: {values}"
+    return command, path, no_worktrees
+
+
 def test_lint_check_defaults_to_current_directory() -> None:
     assert _parse_lint(["lint", "check", "."]) == ("check", ".")
 
@@ -53,3 +63,15 @@ def test_lint_check_respects_explicit_path() -> None:
 def test_lint_no_subcommand_defaults_to_check() -> None:
     lint_command, _path = _parse_lint(["lint"])
     assert lint_command == "check"
+
+
+def test_enroll_defaults_to_current_directory() -> None:
+    assert _parse_core(["enroll"]) == ("enroll", ".", False)
+
+
+def test_enroll_allows_disabling_worktree_propagation() -> None:
+    assert _parse_core(["enroll", "/tmp/example", "--no-worktrees"]) == (
+        "enroll",
+        "/tmp/example",
+        True,
+    )

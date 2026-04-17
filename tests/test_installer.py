@@ -1,17 +1,24 @@
 from __future__ import annotations
 
-from vibeforcer.installer import _codex_hooks_block
+import vibeforcer.installer as installer_module
+from typing import Any
 
 
-def test_codex_hooks_cover_non_bash_mutating_tools() -> None:
-    hooks = _codex_hooks_block("vibeforcer")
+def _hook_builder(name: str) -> Any:
+    return getattr(installer_module, name)
+
+
+def test_codex_hooks_are_bash_only() -> None:
+    hooks = _hook_builder("_codex_hooks_block")("vibeforcer")
     pre = hooks["PreToolUse"][0]
     post = hooks["PostToolUse"][0]
-    permission = hooks["PermissionRequest"][0]
     pre_matcher = str(pre.get("matcher", ""))
     post_matcher = str(post.get("matcher", ""))
-    permission_matcher = str(permission.get("matcher", ""))
-    for tool_name in ("Write", "Edit", "MultiEdit", "Patch", "Delete", "Create"):
-        assert tool_name in pre_matcher
-        assert tool_name in post_matcher
-        assert tool_name in permission_matcher
+    assert pre_matcher == "Bash"
+    assert post_matcher == "Bash"
+    assert "PermissionRequest" not in hooks
+
+
+def test_claude_hooks_include_cwd_changed() -> None:
+    hooks = _hook_builder("_claude_hooks_block")("vibeforcer")
+    assert "CwdChanged" in hooks

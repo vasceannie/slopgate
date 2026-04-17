@@ -69,21 +69,71 @@ def cmd_handle_async(_args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    from vibeforcer.config import is_path_skipped, is_repo_disabled, load_config
+    from vibeforcer.config import (
+        is_path_skipped,
+        is_repo_disabled,
+        load_config,
+        resolve_git_root,
+        resolve_main_git_repo_root,
+        resolve_repo_root,
+    )
 
     target = Path(_string_arg(args, "path", ".")).resolve()
-    config = load_config()
-    disabled = is_repo_disabled(target)
-    skipped = is_path_skipped(target, config.skip_paths)
-    status = "DISABLED" if (disabled or skipped) else "ACTIVE"
+    config = load_config(repo_root=target)
+    resolved_repo_root = resolve_repo_root(target)
+    git_root = resolve_git_root(target)
+    main_repo_root = resolve_main_git_repo_root(target)
+    disabled = resolved_repo_root is not None and is_repo_disabled(resolved_repo_root)
+    skipped = is_path_skipped(resolved_repo_root or target, config.skip_paths)
+    if resolved_repo_root is None:
+        status = "NOT_ENROLLED"
+    elif skipped:
+        status = "SKIPPED"
+    elif disabled:
+        status = "RELAXED"
+    else:
+        status = "ENROLLED"
     print(
         json.dumps(
             {
                 "path": str(target),
                 "status": status,
+                "resolved_repo_root": (
+                    str(resolved_repo_root) if resolved_repo_root is not None else None
+                ),
+                "git_root": str(git_root) if git_root is not None else None,
+                "main_repo_root": (
+                    str(main_repo_root) if main_repo_root is not None else None
+                ),
                 "repo_disabled": disabled,
                 "path_skipped": skipped,
                 "skip_paths": config.skip_paths,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_enroll(args: argparse.Namespace) -> int:
+    from vibeforcer.config import enroll_repo, list_git_worktrees
+
+    target = Path(_string_arg(args, "path", ".")).resolve()
+    include_worktrees = not _bool_arg(args, "no_worktrees")
+    repo_root, written_roots = enroll_repo(
+        target,
+        include_worktrees=include_worktrees,
+    )
+    worktrees = list_git_worktrees(repo_root) if include_worktrees else []
+    print(
+        json.dumps(
+            {
+                "path": str(target),
+                "status": "ENROLLED",
+                "repo_root": str(repo_root),
+                "include_worktrees": include_worktrees,
+                "worktree_count": max(0, len(worktrees) - 1) if worktrees else 0,
+                "written_roots": [str(path) for path in written_roots],
             },
             indent=2,
         )
