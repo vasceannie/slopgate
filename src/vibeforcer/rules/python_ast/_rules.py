@@ -46,6 +46,14 @@ def _is_full_module_candidate(ctx: HookContext, source_kind: str) -> bool:
     return True
 
 
+def _resolve_python_path(ctx: HookContext, path_value: str) -> Path:
+    """Resolve Python file paths consistently for AST-based rules."""
+    raw_path = Path(path_value)
+    if raw_path.is_absolute():
+        return raw_path
+    return (ctx.cwd / raw_path).resolve()
+
+
 @final
 class PythonAstHealthRule(Rule):
     """Emit findings when AST checks cannot run due to parse/read failures."""
@@ -89,11 +97,7 @@ class PythonAstHealthRule(Rule):
             for path_value in ctx.candidate_paths:
                 if not path_value.lower().endswith((".py", ".pyi")):
                     continue
-                full_path = (
-                    (ctx.config.repo_root / path_value).resolve()
-                    if not Path(path_value).is_absolute()
-                    else Path(path_value)
-                )
+                full_path = _resolve_python_path(ctx, path_value)
                 try:
                     source = full_path.read_text(encoding="utf-8")
                 except OSError:

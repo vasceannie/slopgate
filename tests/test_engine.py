@@ -2763,6 +2763,29 @@ class TestEnforcementModes:
         assert "QUALITY-LINT-001" in finding_ids(result)
         assert_blocked(result, "QUALITY-LINT-001")
 
+    def test_posttool_ast_health_resolves_relative_paths_from_cwd(
+        self, tmp_path: Path
+    ) -> None:
+        repo = tmp_path / "repo_ast_posttool"
+        nested = repo / "nested"
+        nested.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+        _ = (nested / "bad.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
+        payload = {
+            "session_id": "t",
+            "cwd": str(nested),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "bad.py", "content": "def broken(:\n    pass\n"},
+            "tool_response": {"filePath": "bad.py", "success": True},
+        }
+        result = evaluate_payload(payload)
+        ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
+        assert ast_findings
+        assert ast_findings[0].metadata.get("kind") == "parse_error"
+
     def test_repo_enrollment_rule_blocks_disable_sentinel(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo_enrolled_sentinel"
         repo.mkdir(parents=True)

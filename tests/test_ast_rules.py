@@ -85,6 +85,19 @@ class TestLongLines(unittest.TestCase):
 
 
 class TestAstHealthRule(unittest.TestCase):
+    def test_write_invalid_syntax_still_triggers_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/main.py",
+                "content": "def broken(:\n    pass\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_denied_by(result, "PY-AST-001")
+
     def test_edit_fragment_does_not_trigger_parse_failure(self) -> None:
         payload = {
             "hook_event_name": "PreToolUse",
@@ -92,6 +105,26 @@ class TestAstHealthRule(unittest.TestCase):
             "tool_input": {
                 "file_path": "src/main.py",
                 "new_string": "        self._controller = controller\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+    def test_patch_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Patch",
+            "tool_input": {
+                "patch": (
+                    "*** Begin Patch\n"
+                    "*** Update File: src/main.py\n"
+                    "@@\n"
+                    "+        self._controller = controller\n"
+                    "*** End Patch\n"
+                )
             },
             "cwd": str(BUNDLE_ROOT),
         }
@@ -116,6 +149,22 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+    def test_opencode_edit_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "edit",
+            "tool_input": {
+                "file_path": "src/main.py",
+                "new_string": "        self._controller = controller\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload, platform="opencode")
+        assert result.event_name == "PreToolUse"
         _assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
