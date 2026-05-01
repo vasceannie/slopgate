@@ -118,7 +118,7 @@ def run_all_collectors(
 
     parsed_src = parse_files(src_files)
     parsed_tests = parse_files(test_files)
-    oversized = detect_oversized_modules(src_files)
+    oversized = detect_oversized_modules([*src_files, *test_files])
     constant_index = build_project_constant_index(get_config().project_root)
     set_session_constant_index(constant_index)
     literals = detect_repeated_literals(parsed_src, constant_index=constant_index)

@@ -95,15 +95,9 @@ async function callEnforcer(
     }
 
     const trimmed = output.trim()
-    if (!trimmed) {
-      if (managedRepo) {
-        return {
-          action: "block",
-          reason: "vibeforcer degraded mode: empty enforcer response in managed repo.",
-        }
-      }
-      return null
-    }
+    // vibeforcer exits 0 with no stdout when no rule rendered an OpenCode action.
+    // That is a clean allow/no-op, not a degraded enforcer response.
+    if (!trimmed) return null
 
     return JSON.parse(trimmed) as EnforcerResult
   } catch (err) {

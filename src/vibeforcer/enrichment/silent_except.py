@@ -39,10 +39,11 @@ def _extract_called_functions(tree: ast.AST) -> list[str]:
 def enrich_silent_except(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich PY-EXC-002 with specific exception guidance."""
     paths = finding.metadata.get("hits", [])
-    if not paths:
+    path = finding.metadata.get("path")
+    content = first_target_content(ctx)
+    if not paths and not path and not content:
         return
 
-    content = first_target_content(ctx)
     extras: list[str] = []
 
     if content:

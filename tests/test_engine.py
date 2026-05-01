@@ -308,6 +308,61 @@ def test_shell_command_paths_captures_redirect_targets() -> None:
     assert "Makefile" in paths
 
 
+def test_shell_command_paths_ignores_glob_patterns() -> None:
+    paths = shell_command_paths("python -m py_compile *.py src/*.py")
+    assert "*.py" not in paths
+    assert "src/*.py" not in paths
+
+
+def test_shell_command_paths_ignores_paths_inside_quoted_option_text() -> None:
+    paths = shell_command_paths(
+        'bd close job-hunter-6vc1 --reason="Centralized parsing in '
+        'src/sse_parsing.py and cloud agent_stream/sse.py; moved '
+        'runtime_lifecycle.py."'
+    )
+    assert "src/sse_parsing.py" not in paths
+    assert "agent_stream/sse.py" not in paths
+    assert "runtime_lifecycle.py" not in paths
+
+
+def test_shell_command_paths_still_captures_path_option_values() -> None:
+    paths = shell_command_paths("tool --config=pyproject.toml --file src/app.py")
+    assert "pyproject.toml" in paths
+    assert "src/app.py" in paths
+
+
+def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = (repo / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                'bd close job-hunter-6vc1 --reason="Centralized parsing in '
+                'src/sse_parsing.py and cloud agent_stream/sse.py; moved '
+                'runtime_lifecycle.py."'
+            )
+        },
+        "cwd": str(repo),
+        "session_id": "t",
+    }
+    result = evaluate_payload(payload)
+    assert "PY-AST-001" not in finding_ids(result)
+
+
+def test_morph_tool_is_edit_like() -> None:
+    from vibeforcer.util.payloads import is_edit_like_tool
+
+    assert is_edit_like_tool("morph")
+    assert is_edit_like_tool("morph_edit_file")
+    assert is_edit_like_tool("str_replace_editor")
+
+
 # ===========================================================================
 # PreToolUse: negative tests (must NOT deny)
 # ===========================================================================
@@ -2470,6 +2525,15 @@ class TestSensitiveDataSafeSuffixEdgeCases:
         )
         assert_not_denied(result)
 
+    def test_python_key_module_not_blocked(self, pretool_write: WriteBuilder) -> None:
+        """A dotted module path like src.keys is not a .key secret file."""
+        result = evaluate_payload(pretool_write("src.keys", "API_KEYS = {}\n"))
+        assert_not_denied(result)
+
+    def test_key_file_still_blocked(self, pretool_write: WriteBuilder) -> None:
+        result = evaluate_payload(pretool_write("certs/server.key", "secret\n"))
+        assert_denied_by(result, "GLOBAL-BUILTIN-SENSITIVE-DATA")
+
 
 class TestSensitiveDataRegexPatterns:
     """Test that the regex compilation in SensitiveDataRule works correctly."""
@@ -2506,6 +2570,13 @@ class TestSensitiveDataRegexPatterns:
         """Empty or whitespace-only patterns are silently skipped."""
         compiled = self._compile_sensitive_patterns()(["", "  ", "/.env"])
         assert len(compiled) == 1, f"Expected 1 compiled pattern, got {len(compiled)}"
+
+    def test_key_extension_pattern_does_not_match_key_prefix(self) -> None:
+        compiled = self._compile_sensitive_patterns()([".key"])
+        assert compiled[0].search("certs/server.key")
+        assert compiled[0].search("certs/server.key.txt")
+        assert not compiled[0].search("src.keys")
+        assert not compiled[0].search("src/keys.py")
 
     def test_safe_suffixes_constant(self) -> None:
         """Verify the safe suffixes list includes expected entries."""
@@ -2785,6 +2856,27 @@ class TestEnforcementModes:
         ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
         assert ast_findings
         assert ast_findings[0].metadata.get("kind") == "parse_error"
+
+    def test_posttool_bash_glob_does_not_trigger_ast_read_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo = tmp_path / "repo_ast_glob_posttool"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n",
+            encoding="utf-8",
+        )
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "python -m py_compile *.py"},
+        }
+        result = evaluate_payload(payload)
+        ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
+        assert not ast_findings
 
     def test_repo_enrollment_rule_blocks_disable_sentinel(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo_enrolled_sentinel"

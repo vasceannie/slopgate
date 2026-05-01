@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -225,6 +226,14 @@ _META_CHARS = frozenset("[](){}*+?|^$\\")
 _compiled_sensitive_cache: dict[tuple[str, ...], list[re.Pattern[str]]] = {}
 
 
+def _sensitive_pattern_expr(pattern: str) -> str:
+    """Return a regex expression for a configured sensitive path pattern."""
+    if pattern in {".key", ".pem"}:
+        return re.escape(pattern) + r"(?=$|[^a-z0-9_])"
+    has_meta = any(ch in _META_CHARS for ch in pattern)
+    return pattern if has_meta else re.escape(pattern)
+
+
 def _compile_sensitive_patterns(raw: list[str]) -> list[re.Pattern[str]]:
     """Compile sensitive path patterns into regexes (cached).
 
@@ -240,8 +249,7 @@ def _compile_sensitive_patterns(raw: list[str]) -> list[re.Pattern[str]]:
         stripped = raw_pattern.strip()
         if not stripped:
             continue
-        has_meta = any(ch in _META_CHARS for ch in stripped)
-        expr = stripped if has_meta else re.escape(stripped)
+        expr = _sensitive_pattern_expr(stripped)
         compiled.append(re.compile(expr, re.IGNORECASE))
     _compiled_sensitive_cache[cache_key] = compiled
     return compiled
@@ -584,6 +592,98 @@ def _collect_touched_lint_failures(ctx: "HookContext") -> list[str]:
     return failures
 
 
+def _python_lint_targets(ctx: "HookContext") -> list[str]:
+    return [path for path in ctx.candidate_paths if path.lower().endswith(".py")]
+
+
+def _lint_target_summary(paths: list[str]) -> str:
+    if not paths:
+        return ""
+    shown = ", ".join(paths[:3])
+    if len(paths) > 3:
+        shown += f", +{len(paths) - 3} more"
+    return f" for {shown}"
+
+
+def _lint_check_instruction(paths: list[str]) -> str:
+    if not paths:
+        return "Run `vibeforcer lint check` from the project root for details."
+    shown = ", ".join(shlex.quote(path) for path in paths[:8])
+    return (
+        f"Touched lint candidates: {shown}. Run `vibeforcer lint check` "
+        "from the project root; the command intentionally accepts no file/path argument."
+    )
+
+
+_OVERSIZED_LINT_RULES = ("oversized-module", "oversized-module-soft")
+
+
+def _has_oversized_module_failure(failures: list[str]) -> bool:
+    return any(item.startswith(rule + ":") for item in failures for rule in _OVERSIZED_LINT_RULES)
+
+
+def _first_lint_path(paths: list[str]) -> str:
+    return paths[0] if paths else "<touched .py file>"
+
+
+def _lint_split_scenario(path_value: str) -> str:
+    normalized = path_value.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if name == "conftest.py":
+        return "conftest"
+    if name == "__init__.py":
+        return "package-init"
+    if name.startswith("test_") or normalized.startswith("tests/") or "/tests/" in normalized:
+        return "test-module"
+    if name in {"cli.py", "main.py", "app.py"} or normalized.endswith("/routes.py"):
+        return "entrypoint-or-router"
+    return "module-to-package"
+
+
+def _post_lint_split_detail(scenario: str) -> str:
+    if scenario == "conftest":
+        return (
+            "Conftest split: keep conftest.py as a thin fixture registry; move "
+            "factories, fake clients/apps, pilot/wait helpers, and assertion helpers "
+            "into tests/<area>/support/ modules; move subtree-only fixtures into "
+            "that subtree's conftest.py."
+        )
+    if scenario == "package-init":
+        return (
+            "Package-init split: make __init__.py facade-only with __all__ and "
+            "compatibility re-exports; move implementation and import-time side "
+            "effects into sibling modules."
+        )
+    if scenario == "test-module":
+        return (
+            "Test-module split: split by behavior under test; move reusable "
+            "factories/fakes/assertion helpers to support modules; use pytest "
+            "parametrization for repeated scenarios."
+        )
+    if scenario == "entrypoint-or-router":
+        return (
+            "Entrypoint/router split: keep commands/routes thin; move orchestration "
+            "to services, schemas/models to dedicated modules, and IO adapters to edges."
+        )
+    return (
+        "Module/package split: convert module.py into module/__init__.py plus focused "
+        "siblings; re-export the old public API; split into models/types, parsing, "
+        "services/orchestration, adapters/IO, constants/data, and errors."
+    )
+
+
+def _post_lint_oversized_guidance(paths: list[str]) -> str:
+    target = _first_lint_path(paths)
+    scenario = _lint_split_scenario(target)
+    return (
+        f"Oversized-module recovery: use the {scenario} split plan before continuing. "
+        f"{_post_lint_split_detail(scenario)} "
+        "If the file is mostly generated data or giant literals, move data into "
+        "resources, fixtures, or builders instead of hiding it in Python code. "
+        f"Verify with `python3 -m py_compile {target}` plus the smallest focused tests."
+    )
+
+
 class PostEditLintRule(Rule):
     rule_id: str = "QUALITY-LINT-001"
     title: str = "Touched-file lint advisory"
@@ -601,6 +701,18 @@ class PostEditLintRule(Rule):
         summary = ", ".join(failures[:6])
         if len(failures) > 6:
             summary += f", +{len(failures) - 6} more"
+        targets = _python_lint_targets(ctx)
+        target_summary = _lint_target_summary(targets)
+        instruction = _lint_check_instruction(targets)
+        details = (
+            f"Touched-file lint detectors found issues{target_summary}. "
+            f"{summary}. {instruction} Repair touched files before continuing."
+        )
+        if _has_oversized_module_failure(failures):
+            details = f"{details} {_post_lint_oversized_guidance(targets)}"
+        metadata: dict[str, object] = {"failing_collectors": failures, "paths": targets}
+        if targets:
+            metadata["path"] = targets[0]
         return [
             RuleFinding(
                 rule_id=self.rule_id,
@@ -613,20 +725,10 @@ class PostEditLintRule(Rule):
                 decision=(
                     "block" if ctx.config.post_edit_quality_block_on_failure else None
                 ),
-                message=(
-                    "Touched-file lint detectors found issues. "
-                    f"{summary}. Run `vibeforcer lint check` for details."
-                )
-                if ctx.config.post_edit_quality_block_on_failure
-                else None,
+                message=details if ctx.config.post_edit_quality_block_on_failure else None,
                 additional_context=(
-                    None
-                    if ctx.config.post_edit_quality_block_on_failure
-                    else (
-                        "Touched-file lint detectors found issues: "
-                        f"{summary}. Run `vibeforcer lint check` for details."
-                    )
+                    None if ctx.config.post_edit_quality_block_on_failure else details
                 ),
-                metadata={"failing_collectors": failures},
+                metadata=metadata,
             )
         ]

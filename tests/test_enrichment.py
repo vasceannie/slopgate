@@ -6,6 +6,7 @@ sibling test files, and requirements files so enrichment can discover them.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -302,6 +303,33 @@ class TestPYTEST003Enrichment:
         )
         result = evaluate_payload(payload)
         test_support.assert_denied_by(result, "PY-TEST-003")
+
+    def test_loop_assert_regex_does_not_backtrack_on_large_patch(
+        self, tmp_project: Path
+    ) -> None:
+        """Large generated loop patches without asserts should not hang hooks."""
+        tests_dir = tmp_project / "tests"
+        _mkdir(tests_dir, exist_ok=True)
+        filler = "".join(
+            f"        value_{index} = expensive_setup(row)\n" for index in range(180)
+        )
+        content = (
+            "def test_contract_rows():\n"
+            "    for row in rows:\n"
+            f"{filler}"
+        )
+        payload = _pretool_write_payload(
+            "tests/test_contract_rows.py",
+            content,
+            str(tmp_project),
+        )
+
+        started = time.monotonic()
+        result = evaluate_payload(payload)
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 1.0
+        assert "PY-TEST-003" not in test_support.finding_ids(result)
 
     def test_cross_platform_codex(self, tmp_project: Path) -> None:
         """Codex adapter: enrichment lands in permissionDecisionReason."""

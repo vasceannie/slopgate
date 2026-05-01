@@ -27,8 +27,9 @@ vibeforcer test
 # Check stats
 vibeforcer stats --days 7
 
-# Lint a project for code quality
-vibeforcer lint check .           # scan for violations
+# Lint the current project for code quality
+vibeforcer lint check             # scan the full project from the detected root
+vibeforcer lint check --details   # extended violations + repair prognosis
 vibeforcer lint init .            # scaffold quality_gate.toml
 ```
 
@@ -113,8 +114,9 @@ For Codex CLI and OpenCode, "real-time" should be read as best-effort within the
 ### Code Quality Linting (batch)
 
 ```bash
-# Scan a project for violations (compares against baseline)
-vibeforcer lint check [path]
+# Scan the current project root for violations (compares against baseline)
+# Intentionally accepts no path/file argument; use cd <project-root> first.
+vibeforcer lint check [--details|--verbose]
 
 # Repo-wide rebaselining is intentionally disabled
 # Do not run vibeforcer lint baseline [path]

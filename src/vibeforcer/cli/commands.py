@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
@@ -262,18 +263,18 @@ def cmd_config_path(_args: argparse.Namespace) -> int:
 
 def _run_one_test(
     evaluate_payload: Callable[[Mapping[str, object], PlatformName], EngineResult],
-    case: tuple[str, str, str, ObjectDict, PlatformName, bool],
+    case: tuple[str, str, str, ObjectDict, PlatformName, bool, str],
 ) -> str:
-    label, event, tool, tool_input, platform, expect_deny = case
+    label, event, tool, tool_input, platform, expect_deny, cwd = case
     payload = {
         "hook_event_name": event,
         "tool_name": tool,
         "tool_input": tool_input,
-        "cwd": "/tmp",
-        "session_id": "self-test",
+        "cwd": cwd,
+        "session_id": f"self-test-{platform}-{label}",
     }
     result = evaluate_payload(payload, platform)
-    deny_count = sum(1 for f in result.findings if f.decision == "deny")
+    deny_count = sum(1 for f in result.findings if f.decision in {"deny", "block"})
     passed = (deny_count > 0) if bool(expect_deny) else (deny_count == 0)
     status = "PASS" if passed else "FAIL"
     print(f"  [{status}] {label} ({deny_count} finding(s))")
@@ -287,35 +288,46 @@ def cmd_test(_args: argparse.Namespace) -> int:
     print("=" * SELFTEST_SEPARATOR_WIDTH)
     env_path = str(Path.home() / ".env")
     noverify: ObjectDict = {"command": "git commit --no-verify -m 'test'"}
-    cases: list[tuple[str, str, str, ObjectDict, PlatformName, bool]] = [
-        ("git --no-verify → deny", "PreToolUse", "Bash", noverify, "claude", True),
-        (
-            ".env write → deny",
-            "PreToolUse",
-            "Write",
-            {"file_path": env_path, "content": "SECRET=x"},
-            "claude",
-            True,
-        ),
-        (
-            "echo hello → allow",
-            "PreToolUse",
-            "Bash",
-            {"command": "echo hello"},
-            "claude",
-            False,
-        ),
-        ("codex adapter → deny", "PreToolUse", "Bash", noverify, "codex", True),
-        (
-            "opencode adapter → deny",
-            "tool.execute.before",
-            "bash",
-            noverify,
-            "opencode",
-            True,
-        ),
-    ]
-    statuses = [_run_one_test(evaluate_payload, case) for case in cases]
+    with tempfile.TemporaryDirectory(prefix="vibeforcer-self-test-") as tmpdir:
+        strict_repo = Path(tmpdir)
+        (strict_repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n",
+            encoding="utf-8",
+        )
+        strict_cwd = str(strict_repo)
+        outside_cwd = tempfile.gettempdir()
+        cases: list[tuple[str, str, str, ObjectDict, PlatformName, bool, str]] = [
+            ("git --no-verify → deny", "PreToolUse", "Bash", noverify, "claude", True, strict_cwd),
+            (
+                ".env write → deny",
+                "PreToolUse",
+                "Write",
+                {"file_path": env_path, "content": "SECRET=***"},
+                "claude",
+                True,
+                outside_cwd,
+            ),
+            (
+                "echo hello → allow",
+                "PreToolUse",
+                "Bash",
+                {"command": "echo hello"},
+                "claude",
+                False,
+                strict_cwd,
+            ),
+            ("codex adapter → deny", "PreToolUse", "Bash", noverify, "codex", True, strict_cwd),
+            (
+                "opencode adapter → deny",
+                "tool.execute.before",
+                "bash",
+                noverify,
+                "opencode",
+                True,
+                strict_cwd,
+            ),
+        ]
+        statuses = [_run_one_test(evaluate_payload, case) for case in cases]
     all_pass = all(status == "PASS" for status in statuses)
     print()
     print("All tests passed." if all_pass else "SOME TESTS FAILED.")

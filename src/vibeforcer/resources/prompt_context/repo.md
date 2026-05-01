@@ -22,7 +22,7 @@
 
 ## Tests
 - Use `@pytest.mark.parametrize` for data-driven tests, not `for` loops with `assert`.
-- Put shared fixtures in `conftest.py`, not individual test files.
+- Put shared fixtures through the nearest `conftest.py`. Keep `conftest.py` as a thin registry when fixtures are large; implementation-heavy fixtures may live in `tests/<area>/_fixtures/` or `tests/<area>/support/`. Use fixtures by name in test signatures or pytest decorators; do not import them from `conftest.py`.
 - No `time.sleep()` in tests. No `try/except` wrapping test logic.
 - Every `assert` needs a descriptive message (3+ bare asserts in a row = blocked).
 
@@ -45,6 +45,12 @@
 ## Shell Commands
 - No `set +e`, `2>/dev/null`, `|| true`, `|| :` — handle errors explicitly.
 - No editing Python files via `sed -i`, `tee`, or `>` redirects — use Write/Edit tools.
+
+## Hot Hook Preflight
+- `PY-CODE-013`: do not add pass-through wrappers. Inline unless the wrapper validates/normalizes inputs, names a real domain boundary, centralizes policy/caching/permission/logging, adapts one interface to another, or hides unstable third-party API details.
+- `PY-CODE-009`: group parameters by semantic meaning. In tests, prefer a named `Case` dataclass or builder defaults; do not make helpers that simply forward every arg to a constructor.
+- `QUALITY-LINT-001`: PostToolUse means the edit may already exist. Reread the touched file, fix only the reported collector/hit, and verify with the smallest repo-root quality command before continuing feature work.
+- `PY-CODE-012` and `PY-IMPORT-001` are context-only advisory signals. Do not retry solely for those unless the boundary is already in scope.
 
 ## Baselines
 - `baselines.json` violations must only decrease, never increase.

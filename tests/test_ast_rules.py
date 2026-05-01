@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from vibeforcer._types import ObjectDict, object_dict, string_value
@@ -168,6 +169,81 @@ class TestAstHealthRule(unittest.TestCase):
         _assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
+
+    def test_opencode_write_indented_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "write",
+            "tool_input": {
+                "filePath": "src/main.py",
+                "content": "        self._controller = controller\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload, platform="opencode")
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+    def test_opencode_morph_fragment_does_not_trigger_parse_failure(self) -> None:
+        payload = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "morph",
+            "tool_input": {
+                "filePath": "src/main.py",
+                "content": (
+                    "def _repaint_table(\n"
+                    "    table: DataTable[str], rows: Sequence[Row],\n"
+                    ") -> None:\n"
+                    "// ... existing code ...]\n"
+                ),
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload, platform="opencode")
+        _assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" not in rule_ids
+
+    def test_opencode_write_invalid_full_module_still_triggers_parse_failure(
+        self,
+    ) -> None:
+        payload = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "write",
+            "tool_input": {
+                "filePath": "src/main.py",
+                "content": "def broken(:\n    pass\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload, platform="opencode")
+        assert result.output is not None
+        assert result.output.get("action") == "block"
+        reason = string_value(result.output.get("reason")) or ""
+        assert "PY-AST-001" in reason
+
+    def test_posttool_indented_file_still_triggers_parse_failure(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            repo = Path(tmp_dir) / "repo"
+            repo.mkdir(parents=True)
+            _ = (repo / "quality_gate.toml").write_text(
+                "[quality_gate]\nenabled = true\n",
+                encoding="utf-8",
+            )
+            _ = (repo / "broken.py").write_text("    x = 1\n", encoding="utf-8")
+            payload = {
+                "hook_event_name": "tool.execute.after",
+                "tool_name": "write",
+                "tool_input": {"filePath": "broken.py"},
+                "cwd": str(repo),
+                "session_id": "t",
+            }
+            result = evaluate_payload(payload, platform="opencode")
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" in rule_ids
 
 
 class TestDeepNesting(unittest.TestCase):

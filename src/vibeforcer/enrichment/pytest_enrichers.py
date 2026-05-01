@@ -176,11 +176,14 @@ def enrich_fixture_outside_conftest(finding: RuleFinding, ctx: HookContext) -> N
             names = ", ".join(f"`{fixture['name']}`" for fixture in fixtures[:6])
             extras.append(f"\nExisting fixtures in conftest.py: {names}")
         extras.append(
-            f"\nMove the fixture to: {relative_path(conftest, ctx.config.root)}"
+            f"\nSurface the fixture through: {relative_path(conftest, ctx.config.root)}"
         )
     else:
         directory = relative_path(test_path.parent, ctx.config.root)
         extras.append(
-            f"\nNo conftest.py exists yet in {directory}/. Create one and define the fixture there."
+            f"\nNo conftest.py exists yet in {directory}/. Create one as a thin fixture "
+            "registry. If the fixture implementation is large, put the heavy "
+            "code in tests/<area>/_fixtures/ or tests/<area>/support/ and "
+            "import/register it from conftest.py."
         )
     append_enrichment_message(finding, extras)

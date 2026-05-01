@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from vibeforcer.engine import evaluate_payload
-from tests.support import BUNDLE_ROOT, finding_ids
+from tests.support import BUNDLE_ROOT, finding_ids, hook_output, required_string
 
 
 class TestBashOutputError:
@@ -99,6 +99,21 @@ class TestBashFailureReinforcement:
         assert "ERRORS-FAIL-001" not in finding_ids(result), (
             "read-only failures are skipped"
         )
+
+    def test_dev_null_stderr_suppression_reports_shell_rule_only(self) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(BUNDLE_ROOT),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": 'rg -l "RunSummaryEvent" -t py 2>/dev/null'
+            },
+        }
+        result = evaluate_payload(payload)
+        reason = required_string(hook_output(result), "permissionDecisionReason")
+        assert "SHELL-001" in reason
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in reason
 
 
 class TestConfigChangeGuard:

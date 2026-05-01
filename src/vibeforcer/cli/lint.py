@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+from vibeforcer.constants import MAX_LINT_VIOLATIONS_SHOWN
+from vibeforcer.lint._baseline import Violation
 
 BASELINE_DISABLED_MESSAGE = (
     "`vibeforcer lint baseline` is disabled. Repo-wide rebaselining hides technical debt. "
     "Fix violations directly, or make a deliberate, human-reviewed baselines.json change that only reduces debt."
 )
-
-from vibeforcer.lint._baseline import Violation
-
-from vibeforcer.constants import MAX_LINT_VIOLATIONS_SHOWN
-
 
 def _colorize(code: str, text: str, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if enabled else text
@@ -22,8 +21,12 @@ def _tally_rule(
     rule_name: str,
     violations: list[Violation],
     baseline: dict[str, set[str]],
-    color: bool,
+    *,
+    details: bool = False,
 ) -> tuple[int, int, int]:
+    from vibeforcer.lint._details import format_violation_details
+
+    color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     allowed = baseline.get(rule_name, set())
     current_ids = {getattr(v, "stable_id") for v in violations}
     new_ids = current_ids - allowed
@@ -49,6 +52,16 @@ def _tally_rule(
     if len(new_violations) > MAX_LINT_VIOLATIONS_SHOWN:
         remaining = len(new_violations) - MAX_LINT_VIOLATIONS_SHOWN
         print(f"    {_colorize('2', f'... and {remaining} more', color)}")
+    if details:
+        for violation in violations:
+            status = "NEW" if getattr(violation, "stable_id") in new_ids else "BASELINED"
+            print()
+            for line in format_violation_details(
+                rule_name,
+                violation,
+                status=status,
+            ):
+                print(line)
     return len(violations), len(new_violations), len(fixed_ids)
 
 
@@ -79,7 +92,20 @@ def _print_lint_summary(
     return 1
 
 
-def _lint_check(root: Path) -> int:
+def _discover_project_root(start: Path) -> Path:
+    """Find the nearest project root from *start* using repo/config markers."""
+
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    markers = ("quality_gate.toml", "pyproject.toml", ".git")
+    for candidate in (current, *current.parents):
+        if any((candidate / marker).exists() for marker in markers):
+            return candidate
+    return current
+
+
+def _lint_check(root: Path, *, details: bool = False) -> int:
     from vibeforcer.lint import __version__ as lint_version
     from vibeforcer.lint._baseline import load_baseline
     from vibeforcer.lint._collectors import run_all_collectors
@@ -87,10 +113,19 @@ def _lint_check(root: Path) -> int:
     from vibeforcer.lint._config import set_config as set_qg_config
     from vibeforcer.lint._helpers import find_source_files, find_test_files
 
+    root = _discover_project_root(root)
+    old_quality_scope = os.environ.get("QUALITY_SCOPE")
+    os.environ["QUALITY_SCOPE"] = "all"
     cfg = load_qg_config(root)
     set_qg_config(cfg)
-    src_files = find_source_files()
-    test_files = find_test_files()
+    try:
+        src_files = find_source_files()
+        test_files = find_test_files()
+    finally:
+        if old_quality_scope is None:
+            os.environ.pop("QUALITY_SCOPE", None)
+        else:
+            os.environ["QUALITY_SCOPE"] = old_quality_scope
 
     print(f"vibeforcer lint {lint_version}")
     print(f"  project: {cfg.project_root}")
@@ -102,17 +137,19 @@ def _lint_check(root: Path) -> int:
     collectors = run_all_collectors(src_files, test_files)
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
 
-    total_v = 0
-    total_n = 0
-    total_f = 0
+    totals = [0, 0, 0]
     for rule_name, violations in collectors:
         if not violations:
             continue
-        count_v, count_n, count_f = _tally_rule(rule_name, violations, baseline, color)
-        total_v += count_v
-        total_n += count_n
-        total_f += count_f
-    return _print_lint_summary(total_v, total_n, total_f, color)
+        counts = _tally_rule(
+            rule_name,
+            violations,
+            baseline,
+            details=details,
+        )
+        for index, count in enumerate(counts):
+            totals[index] += count
+    return _print_lint_summary(totals[0], totals[1], totals[2], color)
 
 
 def _lint_baseline(_root: Path) -> int:
@@ -172,13 +209,17 @@ def cmd_lint(args: argparse.Namespace) -> int:
     lint_command = raw_lint_command if isinstance(raw_lint_command, str) else "check"
     raw_path = getattr(args, "path", ".")
     path_value = raw_path if isinstance(raw_path, str) and raw_path else "."
-    args.path = path_value
     root = Path(path_value).resolve()
     dispatch = {
-        "check": _lint_check,
         "baseline": _lint_baseline,
         "init": _lint_init,
     }
+    if lint_command == "check":
+        raw_details = getattr(args, "details", False)
+        return _lint_check(
+            Path.cwd(),
+            details=raw_details if isinstance(raw_details, bool) else False,
+        )
     handler = dispatch.get(lint_command)
     if handler is not None:
         return handler(root)

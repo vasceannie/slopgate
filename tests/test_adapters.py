@@ -1817,7 +1817,7 @@ class TestFixtureReplay:
     No mocking. Verifies that the full pipeline produces sensible output.
     """
 
-    def test_codex_git_no_verify_denied(self) -> None:
+    def test_codex_git_no_verify_denied(self, tmp_path: Path) -> None:
         payload = object_dict(
             cast(
                 object,
@@ -1828,6 +1828,13 @@ class TestFixtureReplay:
                 ),
             )
         )
+        repo = tmp_path / "repo"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n",
+            encoding="utf-8",
+        )
+        payload["cwd"] = str(repo)
         result = evaluate_payload(payload, platform="codex")
         assert result.output is not None
         spec = require_spec(test_support.require_output(result))

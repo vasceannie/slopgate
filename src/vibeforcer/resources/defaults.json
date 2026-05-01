@@ -608,8 +608,7 @@
         "**/*_test.py"
       ],
       "patterns": [
-        "(?m)^\\s*(for|while)\\s+.*:.*\\n\\s+assert\\s+",
-        "(?m)^\\s*(for|while)\\s+.*:.*\\n(\\s+.*\\n)*?\\s+assert\\s+.+\\n(\\s+.*\\n)*?\\s+assert\\s+"
+        "(?m)^[ \\t]*(for|while)[^\\n]*:[ \\t]*\\n[ \\t]+assert[ \\t]+"
       ],
       "action": "deny",
       "message": "Loops containing assert statements are blocked in tests. Use @pytest.mark.parametrize for data-driven tests instead.\n\nInstead of:\n    for x in [1, 2, 3]:\n        result = func(x)\n        assert result > 0\n\nUse:\n    @pytest.mark.parametrize(\"x\", [1, 2, 3])\n    def test_func(x):\n        result = func(x)\n        assert result > 0\n\nFor complex iteration with setup, extract a helper and parametrize the inputs.",
@@ -637,7 +636,7 @@
         "@pytest\\.fixture"
       ],
       "action": "deny",
-      "message": "Global pytest fixtures must be defined in conftest.py, not individual test files.",
+      "message": "Inline pytest fixtures are blocked in test modules. Surface shared fixtures through the nearest conftest.py; if the implementation is large, keep conftest.py thin and delegate to tests/<area>/_fixtures/ or tests/<area>/support/ modules. Tests should request fixtures by name in signatures or pytest decorators; do not import them from conftest.py.",
       "case_sensitive": false,
       "multiline": true
     },

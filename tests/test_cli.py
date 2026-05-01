@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
+
 import pytest
 
 from vibeforcer.cli.cli import build_parser
+from vibeforcer.cli.commands import cmd_test
 from vibeforcer._types import object_dict, string_value
 
 
@@ -15,6 +18,12 @@ def _parse_lint(argv: list[str]) -> tuple[str, str | None]:
     path = string_value(values.get("path"))
     assert lint_command is not None, f"Expected lint_command in parsed args: {values}"
     return lint_command, path
+
+
+def _parse_lint_details(argv: list[str]) -> bool:
+    parsed = build_parser().parse_args(argv)
+    values = object_dict(vars(parsed))
+    return bool(values.get("details", False))
 
 
 def _parse_core(argv: list[str]) -> tuple[str, str | None, bool]:
@@ -28,7 +37,7 @@ def _parse_core(argv: list[str]) -> tuple[str, str | None, bool]:
 
 
 def test_lint_check_defaults_to_current_directory() -> None:
-    assert _parse_lint(["lint", "check", "."]) == ("check", ".")
+    assert _parse_lint(["lint", "check"]) == ("check", None)
 
 
 def test_lint_init_respects_explicit_path() -> None:
@@ -56,8 +65,15 @@ def test_lint_update_respects_explicit_path() -> None:
     assert _parse_lint(["lint", "update", "/tmp/example"]) == ("update", "/tmp/example")
 
 
-def test_lint_check_respects_explicit_path() -> None:
-    assert _parse_lint(["lint", "check", "/tmp/example"]) == ("check", "/tmp/example")
+def test_lint_check_rejects_explicit_path() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["lint", "check", "/tmp/example"])
+
+
+def test_lint_check_details_aliases() -> None:
+    assert _parse_lint_details(["lint", "check", "--details"])
+    assert _parse_lint_details(["lint", "check", "--verbose"])
 
 
 def test_lint_no_subcommand_defaults_to_check() -> None:
@@ -75,3 +91,12 @@ def test_enroll_allows_disabling_worktree_propagation() -> None:
         "/tmp/example",
         True,
     )
+
+
+def test_self_test_smoke_passes_all_cases(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cmd_test(argparse.Namespace()) == 0
+    captured = capsys.readouterr()
+    assert "All tests passed." in captured.out
+    assert "git --no-verify → deny" in captured.out
+    assert "codex adapter → deny" in captured.out
+    assert "opencode adapter → deny" in captured.out

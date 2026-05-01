@@ -13,6 +13,7 @@ from ._rules import (
     PythonLongLineRule,
     PythonLongMethodRule,
     PythonLongParameterRule,
+    PythonModuleSizeRule,
     PythonSilentExceptRule,
     PythonThinWrapperRule,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "PythonLongLineRule",
     "PythonLongMethodRule",
     "PythonLongParameterRule",
+    "PythonModuleSizeRule",
     "PythonSilentExceptRule",
     "PythonThinWrapperRule",
 ]

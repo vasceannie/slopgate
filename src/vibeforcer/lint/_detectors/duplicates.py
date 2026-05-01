@@ -421,20 +421,19 @@ def detect_repeated_literals(
                     relative = constant_match.path.relative_to(cfg.project_root)
                 except ValueError:
                     pass
-                metadata = {
-                    "already_defined": {
-                        "name": constant_match.name,
-                        "path": str(relative),
-                        "line": constant_match.lineno,
-                    }
+                already_defined: dict[str, object] = {
+                    "name": constant_match.name,
+                    "path": str(relative),
+                    "line": constant_match.lineno,
                 }
+                metadata = cast(dict[str, object], {"already_defined": already_defined})
                 detail_suffix = (
                     f"; already defined as {constant_match.name} "
                     + f"in {relative}:{constant_match.lineno}"
                 )
             else:
                 candidate = suggest_constant_name(val)
-                metadata = {"candidate_constant_name": candidate}
+                metadata = cast(dict[str, object], {"candidate_constant_name": candidate})
                 detail_suffix = f"; consider `{candidate}`"
             violations.append(
                 Violation(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import cast
 
 from vibeforcer.lint._detectors.duplicates import _collect_block_windows
 from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
@@ -118,8 +119,7 @@ class TestRepeatedStringLiteralMetadata:
         assert repeated, "expected repeated-string-literal violation"
         metadata = repeated[0].metadata
         assert "already_defined" in metadata
-        already_defined = metadata["already_defined"]
-        assert isinstance(already_defined, dict)
+        already_defined = cast(dict[str, object], metadata["already_defined"])
         assert already_defined["name"] == "SHARED_ERROR"
 
     def test_suggests_candidate_name_when_constant_missing(self, tmp_path: Path) -> None:

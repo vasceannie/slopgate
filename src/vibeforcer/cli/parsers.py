@@ -115,8 +115,21 @@ def _add_lint_parsers(sub: SubparserRegistry) -> None:
     lint = sub.add_parser("lint", help="Batch code quality analysis")
     lint_sub = lint.add_subparsers(dest="lint_command")
 
-    check = lint_sub.add_parser("check", help="Lint a project")
-    _ = check.add_argument("path", nargs="?", default=".")
+    check = lint_sub.add_parser(
+        "check",
+        help="Lint the current project root",
+        description=(
+            "Lint the current project root. This command intentionally accepts no "
+            "file or directory argument so agents cannot bypass full-project checks."
+        ),
+    )
+    _ = check.add_argument(
+        "--details",
+        "--verbose",
+        dest="details",
+        action="store_true",
+        help="Show extended violation locations, signatures, and repair prognosis",
+    )
     check.set_defaults(func=cmd_lint, lint_command="check")
 
     baseline = lint_sub.add_parser(

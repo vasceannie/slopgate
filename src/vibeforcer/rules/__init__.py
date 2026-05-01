@@ -107,6 +107,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
             PythonLongLineRule,
             PythonLongMethodRule,
             PythonLongParameterRule,
+            PythonModuleSizeRule,
             PythonSilentExceptRule,
             PythonThinWrapperRule,
         )
@@ -121,6 +122,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
         PythonLongMethodRule(),
         PythonLongParameterRule(),
         PythonLongLineRule(),
+        PythonModuleSizeRule(),
         PythonDeepNestingRule(),
         PythonFeatureEnvyRule(),
         PythonThinWrapperRule(),

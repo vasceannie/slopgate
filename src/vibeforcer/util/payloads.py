@@ -82,6 +82,8 @@ def parse_patch_candidate_paths(patch_blob: str) -> list[str]:
             value = line.replace("*** Add File: ", "", 1)
         elif line.startswith("*** Delete File: "):
             value = line.replace("*** Delete File: ", "", 1)
+        elif line.startswith("*** Move to: "):
+            value = line.replace("*** Move to: ", "", 1)
         elif line.startswith("+++ b/"):
             value = line.replace("+++ b/", "", 1)
         elif line.startswith("--- a/"):
@@ -110,7 +112,9 @@ def is_edit_like_tool(tool_name: str) -> bool:
         return True
     if "serena" in lowered:
         return True
-    if "morph" in lowered and ("edit" in lowered or "apply" in lowered):
+    if "morph" in lowered:
+        return True
+    if "str_replace" in lowered or "strreplace" in lowered:
         return True
     if lowered.endswith("_edit"):
         return True
@@ -143,6 +147,11 @@ def any_path_matches(path_value: str, patterns: list[str]) -> bool:
     return any(path_matches_glob(path_value, pattern) for pattern in patterns)
 
 
+def _is_shell_glob_token(value: str) -> bool:
+    """Return True when a shell token is a glob pattern, not a literal path."""
+    return any(char in value for char in "*?[")
+
+
 def shell_command_paths(command: str) -> list[str]:
     redirection_pattern = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
     pathish_pattern = re.compile(r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
@@ -156,6 +165,14 @@ def shell_command_paths(command: str) -> list[str]:
         "tsconfig.json",
     }
     seen: list[str] = []
+
+    def append_path(value: str) -> None:
+        cleaned_value = value.strip("\"'")
+        if not cleaned_value or _is_shell_glob_token(cleaned_value):
+            return
+        if cleaned_value not in seen:
+            seen.append(cleaned_value)
+
     try:
         tokens = shlex.split(command, posix=True)
     except ValueError:
@@ -163,33 +180,49 @@ def shell_command_paths(command: str) -> list[str]:
 
     for token in tokens:
         cleaned = token.strip("\"'")
-        if "/" in token or token.startswith(("~", "./", "../")):
-            if cleaned and cleaned not in seen:
-                seen.append(cleaned)
+        if not cleaned or any(char.isspace() for char in cleaned):
+            continue
+        if _is_shell_glob_token(cleaned):
+            continue
+        if cleaned.startswith("-"):
+            if "=" not in cleaned:
+                continue
+            option_name, option_value = cleaned.split("=", 1)
+            if option_name.lower() in {
+                "--reason",
+                "--message",
+                "--description",
+                "--comment",
+                "--title",
+            }:
+                continue
+            cleaned = option_value
+            if not cleaned or any(char.isspace() for char in cleaned):
+                continue
+        elif "=" in cleaned:
+            _, assignment_value = cleaned.split("=", 1)
+            if not assignment_value or any(char.isspace() for char in assignment_value):
+                continue
+            cleaned = assignment_value
+        matches = [match.group(0) for match in pathish_pattern.finditer(cleaned)]
+        if matches:
+            for value in matches:
+                append_path(value)
             continue
         lower_cleaned = cleaned.lower()
         if (
-            cleaned
-            and not cleaned.startswith("-")
-            and "=" not in cleaned
-            and (
-                "." in cleaned
-                or cleaned[:1].isupper()
-                or lower_cleaned in known_filenames
-            )
-            and cleaned not in seen
+            "/" in token
+            or token.startswith(("~", "./", "../"))
+            or cleaned[:1].isupper()
+            or lower_cleaned in known_filenames
         ):
-            seen.append(cleaned)
+            append_path(cleaned)
 
     for match in redirection_pattern.finditer(command):
-        value = match.group(1).strip("\"'")
-        if value and value not in seen:
-            seen.append(value)
-
-    for match in pathish_pattern.finditer(command):
-        value = match.group(0)
-        if value and value not in seen:
-            seen.append(value)
+        redirection_target = match.group(1).strip("\"'")
+        if redirection_target == "/dev/null":
+            continue
+        append_path(redirection_target)
     return seen
 
 

@@ -12,11 +12,13 @@ It focuses on reducing repeated interruption without hiding debt.
 5. Cross-session and cross-platform invariants
 6. State store design constraints
 
-## Current behavior mismatches to resolve
+## Current status
 
-- `REMIND-SEARCH-001` currently emits on native `Grep` and `WebSearch`; the future spec intentionally reverses that behavior.
-- `BUILTIN-ENFORCE-FULL-READ` currently exempts `*.json` but not `*.jsonl`; the future spec adds `*.jsonl` because partial reads are the normal access pattern for trace logs.
-- `BUILTIN-RULEBOOK-SECURITY` currently excludes fixture and test-like paths, but not `docs/` or `docs/examples/`; any carveout there must be explicit and path-based.
+These behaviors are already implemented in the runtime and should stay covered by spec tests:
+
+- `REMIND-SEARCH-001` skips native `Grep`, `WebSearch`, and `Read`, and only nudges when the model falls back to shell `grep`.
+- `BUILTIN-ENFORCE-FULL-READ` already exempts structured data suffixes including `*.json` and `*.jsonl`.
+- `BUILTIN-RULEBOOK-SECURITY` already allows markdown docs and `docs/examples/*.json`; path-based carveouts should remain explicit.
 
 ## 1. Full-File Read Enforcement
 

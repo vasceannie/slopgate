@@ -6,9 +6,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
+from vibeforcer._types import ObjectDict, object_dict, object_list
+from vibeforcer.constants import (
+    LINT_MAX_MODULE_LINES_HARD,
+    LINT_MAX_MODULE_LINES_SOFT,
+    MAX_GOD_CLASS_LINES,
+)
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_bash_tool, is_edit_like_tool
+from vibeforcer.util.payloads import (
+    extract_path_from_mapping,
+    first_present,
+    is_bash_tool,
+    is_edit_like_tool,
+)
 
 from ._helpers import (
     decision_for_context,
@@ -31,6 +42,43 @@ def _parse_strict(source: str, max_chars: int) -> ast.Module | None:
         return None
 
 
+def _first_significant_line(source: str) -> str:
+    """Return the first non-empty, non-comment line from source."""
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return line
+    return ""
+
+
+def _looks_like_indented_fragment(source: str, exc: SyntaxError) -> bool:
+    """Return True when a parse error is probably an edit fragment, not a module."""
+    if exc.msg != "unexpected indent":
+        return False
+    first_line = _first_significant_line(source)
+    return bool(first_line and first_line[:1].isspace())
+
+
+def _parse_health_failure(
+    source: str,
+    max_chars: int,
+    *,
+    suppress_fragments: bool,
+) -> str | None:
+    """Return the health failure kind, or None when source is parseable/fragmental."""
+    if len(source) > max_chars:
+        return "oversized"
+    try:
+        ast.parse(source)
+    except RecursionError:
+        return "parse_error"
+    except SyntaxError as exc:
+        if suppress_fragments and _looks_like_indented_fragment(source, exc):
+            return None
+        return "parse_error"
+    return None
+
+
 def _is_full_module_candidate(ctx: HookContext, source_kind: str) -> bool:
     """Return True when pre-edit content likely represents a full Python module.
 
@@ -41,7 +89,16 @@ def _is_full_module_candidate(ctx: HookContext, source_kind: str) -> bool:
     tool_name = ctx.tool_name.lower()
     if source_kind in {"multi_edit", "multi_edit_old", "patch"}:
         return False
-    if tool_name in {"edit", "multiedit", "patch", "applypatch", "apply_patch"}:
+    if tool_name != "write" and is_edit_like_tool(ctx.tool_name):
+        return False
+    if tool_name in {
+        "edit",
+        "multiedit",
+        "multi_edit",
+        "patch",
+        "applypatch",
+        "apply_patch",
+    }:
         return False
     return True
 
@@ -52,6 +109,267 @@ def _resolve_python_path(ctx: HookContext, path_value: str) -> Path:
     if raw_path.is_absolute():
         return raw_path
     return (ctx.cwd / raw_path).resolve()
+
+
+def _line_count(source: str) -> int:
+    """Return the line count in the same spirit as lint read_lines()."""
+    return len(source.splitlines())
+
+
+def _normalized_module_path(path_value: str) -> str:
+    """Return a slash-normalized path for scenario checks."""
+    return path_value.replace("\\", "/").lower()
+
+
+
+def _module_split_scenario(path_value: str) -> str:
+    """Classify an oversized module so hook guidance can be specific."""
+    normalized = _normalized_module_path(path_value)
+    name = normalized.rsplit("/", 1)[-1]
+    if name == "conftest.py":
+        return "conftest"
+    if name == "__init__.py":
+        return "package-init"
+    if name.startswith("test_") or normalized.startswith("tests/") or "/tests/" in normalized:
+        return "test-module"
+    if name in {"cli.py", "main.py", "app.py"} or normalized.endswith("/routes.py"):
+        return "entrypoint-or-router"
+    return "module-to-package"
+
+
+def _oversized_module_split_guidance(path_value: str, scenario: str) -> str:
+    """Return scenario-aware recovery guidance for an oversized Python module."""
+    verification = (
+        f"Verify after the split: `python3 -m py_compile {path_value}` plus the "
+        "smallest focused test/lint command that covers the moved code."
+    )
+    common = (
+        "Oversized module split playbook:\n"
+        "1) Do not cut by line number alone; split around responsibilities and import seams.\n"
+        "2) Preserve public imports with a small facade/re-export layer when callers exist.\n"
+        "3) Move tests with the behavior, then run the narrowest compile/test check."
+    )
+    if scenario == "conftest":
+        return (
+            "conftest.py is a fixture registry, not a dumping ground. Keep pytest "
+            "fixtures and local plugin hooks there; move event factories, fake clients, "
+            "fake apps, builders, pilot/wait helpers, and assertion helpers into "
+            "`tests/<area>/support/` modules. If fixtures only serve one subtree, move "
+            "them into that subtree's narrower conftest.py. Import helpers into conftest "
+            "and expose only the fixtures pytest must discover.\n\n"
+            f"{common}\n{verification}"
+        )
+    if scenario == "package-init":
+        return (
+            "A large __init__.py should become a facade only: move implementation into "
+            "sibling modules/subpackages, keep __all__ and compatibility re-exports, and "
+            "avoid side effects at import time.\n\n"
+            f"{common}\n{verification}"
+        )
+    if scenario == "test-module":
+        return (
+            "For an oversized test module, split by behavior under test, not by random "
+            "ranges. Move reusable factories/fakes/assertion helpers into test support "
+            "modules; use pytest parametrization for repeated scenarios; keep each test "
+            "file focused on one surface or workflow.\n\n"
+            f"{common}\n{verification}"
+        )
+    if scenario == "entrypoint-or-router":
+        return (
+            "For a bloated CLI/app/router module, split parsing/routing from behavior: "
+            "commands/routes stay thin, orchestration moves to services, schemas/models "
+            "move to dedicated modules, and side-effect adapters live at the edge.\n\n"
+            f"{common}\n{verification}"
+        )
+    return (
+        "Convert the module into a package when one file owns multiple concerns: "
+        "`module.py` -> `module/` with `__init__.py` re-exporting the old public API, "
+        "then split into focused modules such as models/types, parsing, persistence, "
+        "services/orchestration, adapters/IO, constants/data, and errors. If the file "
+        "is mostly generated data or giant literals, move that data into fixtures, "
+        "resources, or builders instead of hiding it in Python code.\n\n"
+        f"{common}\n{verification}"
+    )
+
+
+def _class_body_lines(node: ast.ClassDef) -> int:
+    """Count the total lines spanned by a class body."""
+    if not node.body:
+        return 0
+    first = node.body[0]
+    last = node.body[-1]
+    start = first.lineno
+    end = getattr(last, "end_lineno", last.lineno)
+    return end - start + 1
+
+
+def _read_python_source(ctx: HookContext, path_value: str) -> str | None:
+    """Read a Python path relative to the hook cwd; return None on failure."""
+    try:
+        return _resolve_python_path(ctx, path_value).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _project_replacement(
+    ctx: HookContext,
+    path_value: str,
+    old_string: str,
+    new_string: str,
+) -> str | None:
+    """Return projected file content after a single replacement edit."""
+    if not old_string:
+        return None
+    source = _read_python_source(ctx, path_value)
+    if source is None or old_string not in source:
+        return None
+    return source.replace(old_string, new_string, 1)
+
+
+def _project_top_level_edit(ctx: HookContext, tool_input: ObjectDict) -> tuple[str, str] | None:
+    """Project a Claude/OpenCode-style single Edit payload into final source."""
+    path_value = extract_path_from_mapping(tool_input)
+    if not path_value or not path_value.lower().endswith((".py", ".pyi")):
+        return None
+    old_string = first_present(
+        tool_input,
+        ("old_string", "oldString", "old_text", "oldText"),
+        strip=False,
+    )
+    new_string = first_present(
+        tool_input,
+        ("new_string", "newString", "new_text", "newText"),
+        strip=False,
+    )
+    projected = _project_replacement(ctx, path_value, old_string, new_string)
+    if projected is None:
+        return None
+    return path_value, projected
+
+
+def _project_multiedit_sources(ctx: HookContext, tool_input: ObjectDict) -> list[tuple[str, str]]:
+    """Project MultiEdit payloads into final per-file source content."""
+    default_path = extract_path_from_mapping(tool_input)
+    projected_by_path: dict[str, str] = {}
+    for item in object_list(tool_input.get("edits")):
+        item_dict = object_dict(item)
+        path_value = extract_path_from_mapping(item_dict) or default_path
+        if not path_value or not path_value.lower().endswith((".py", ".pyi")):
+            continue
+        source = projected_by_path.get(path_value)
+        if source is None:
+            source = _read_python_source(ctx, path_value)
+        if source is None:
+            continue
+        old_string = first_present(
+            item_dict,
+            ("old_string", "oldString", "old_text", "oldText"),
+            strip=False,
+        )
+        new_string = first_present(
+            item_dict,
+            ("new_string", "newString", "new_text", "newText"),
+            strip=False,
+        )
+        if old_string and old_string in source:
+            projected_by_path[path_value] = source.replace(old_string, new_string, 1)
+    return [(path_value, source) for path_value, source in projected_by_path.items()]
+
+
+def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
+    """Return full/projection Python sources for size-oriented hook checks.
+
+    Unlike general AST rules, size checks must understand both complete-file
+    writes and edit payloads whose final file crosses a threshold.
+    """
+    sources: list[tuple[str, str]] = []
+    is_pre = ctx.event_name in ("PreToolUse", "PermissionRequest")
+    if is_pre:
+        tool_input = ctx.tool_input
+        top_level_projection = _project_top_level_edit(ctx, tool_input)
+        if top_level_projection is not None:
+            sources.append(top_level_projection)
+        sources.extend(_project_multiedit_sources(ctx, tool_input))
+        for ct in ctx.content_targets:
+            if not ct.path.lower().endswith((".py", ".pyi")):
+                continue
+            if ct.source in {"multi_edit", "multi_edit_old"}:
+                continue
+            sources.append((ct.path, ct.content))
+    else:
+        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+            return []
+        for path_value in ctx.candidate_paths:
+            if not path_value.lower().endswith((".py", ".pyi")):
+                continue
+            source = _read_python_source(ctx, path_value)
+            if source is not None:
+                sources.append((path_value, source))
+
+    unique: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for path_value, source in sources:
+        key = (path_value, source)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((path_value, source))
+    return unique
+
+
+@final
+class PythonModuleSizeRule(Rule):
+    """Block Python modules that exceed lint module line-count thresholds."""
+
+    rule_id = "PY-CODE-018"
+    title = "Block oversized Python module"
+    events = ("PreToolUse", "PermissionRequest")
+
+    def _finding(
+        self,
+        ctx: HookContext,
+        path_value: str,
+        line_count: int,
+        *,
+        hard: bool,
+    ) -> RuleFinding:
+        threshold = LINT_MAX_MODULE_LINES_HARD if hard else LINT_MAX_MODULE_LINES_SOFT
+        collector = "oversized-module" if hard else "oversized-module-soft"
+        severity = Severity.HIGH if hard else Severity.MEDIUM
+        scenario = _module_split_scenario(path_value)
+        return RuleFinding(
+            rule_id=self.rule_id,
+            title=self.title,
+            severity=severity,
+            decision=decision_for_context(ctx),
+            message=(
+                f"Python module `{path_value}` is {collector}: {line_count} lines "
+                f"exceeds limit {threshold}. Use the {scenario} split plan before writing it."
+            ),
+            additional_context=_oversized_module_split_guidance(path_value, scenario),
+            metadata={
+                "path": path_value,
+                "collector": collector,
+                "split_scenario": scenario,
+                "lines": line_count,
+                "limit": threshold,
+            },
+        )
+
+    @override
+    def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
+        if not is_rule_enabled(ctx, self.rule_id):
+            return []
+        if not ctx.config.python_ast_enabled:
+            return []
+        findings: list[RuleFinding] = []
+        for path_value, source in _python_structural_sources(ctx):
+            line_count = _line_count(source)
+            if line_count > LINT_MAX_MODULE_LINES_HARD:
+                findings.append(self._finding(ctx, path_value, line_count, hard=True))
+            elif line_count > LINT_MAX_MODULE_LINES_SOFT:
+                findings.append(self._finding(ctx, path_value, line_count, hard=False))
+        return findings
 
 
 @final
@@ -69,6 +387,11 @@ class PythonAstHealthRule(Rule):
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
             message=f"Python AST analysis could not run for `{path_value}` ({kind}).",
+            additional_context=(
+                "Stop broad refactors until this file parses. "
+                f"Reread `{path_value}` in full, run `python3 -m py_compile {path_value}`, "
+                "then repair syntax/readability before continuing."
+            ),
             metadata={"path": path_value, "kind": kind},
         )
 
@@ -86,11 +409,15 @@ class PythonAstHealthRule(Rule):
                     continue
                 if not _is_full_module_candidate(ctx, ct.source):
                     continue
-                if len(ct.content) > ctx.config.python_ast_max_parse_chars:
-                    findings.append(self._finding(ctx, ct.path, "oversized"))
+                failure = _parse_health_failure(
+                    ct.content,
+                    ctx.config.python_ast_max_parse_chars,
+                    suppress_fragments=True,
+                )
+                if failure == "oversized" and _line_count(ct.content) > LINT_MAX_MODULE_LINES_SOFT:
                     continue
-                if parse_module(ct.content, ctx.config.python_ast_max_parse_chars) is None:
-                    findings.append(self._finding(ctx, ct.path, "parse_error"))
+                if failure is not None:
+                    findings.append(self._finding(ctx, ct.path, failure))
         else:
             if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
                 return []
@@ -103,11 +430,15 @@ class PythonAstHealthRule(Rule):
                 except OSError:
                     findings.append(self._finding(ctx, path_value, "read_error"))
                     continue
-                if len(source) > ctx.config.python_ast_max_parse_chars:
-                    findings.append(self._finding(ctx, path_value, "oversized"))
+                failure = _parse_health_failure(
+                    source,
+                    ctx.config.python_ast_max_parse_chars,
+                    suppress_fragments=False,
+                )
+                if failure == "oversized" and _line_count(source) > LINT_MAX_MODULE_LINES_SOFT:
                     continue
-                if parse_module(source, ctx.config.python_ast_max_parse_chars) is None:
-                    findings.append(self._finding(ctx, path_value, "parse_error"))
+                if failure is not None:
+                    findings.append(self._finding(ctx, path_value, failure))
         return findings
 
 
@@ -575,7 +906,10 @@ class PythonFeatureEnvyRule(Rule):
                     message=(
                         f"Function `{node.name}` in `{path_value}` has feature envy: "
                         f"{count}/{total} attribute accesses target `{obj_name}`. "
-                        f"Consider moving this logic to {obj_name}'s class."
+                        "Advisory only: this is context for a future design pass; "
+                        "do not retry the write solely for this. Consider moving "
+                        f"this logic to {obj_name}'s class when you are already "
+                        "touching that boundary."
                     ),
                     metadata={
                         "path": path_value,
@@ -752,7 +1086,7 @@ class PythonThinWrapperRule(Rule):
 
 @final
 class PythonGodClassRule(Rule):
-    """PY-CODE-014: Block classes with more than 10 non-dunder methods."""
+    """PY-CODE-014: Block god classes by method count or class body size."""
 
     rule_id = "PY-CODE-014"
     title = "Block god class"
@@ -775,35 +1109,52 @@ class PythonGodClassRule(Rule):
         if module is None:
             return []
         findings: list[RuleFinding] = []
-        limit = ctx.config.python_max_god_class_methods
+        method_limit = ctx.config.python_max_god_class_methods
+        line_limit = MAX_GOD_CLASS_LINES
         for node in ast.walk(module):
             if not isinstance(node, ast.ClassDef):
                 continue
             method_count = self._non_dunder_method_count(node)
-            if method_count > limit:
-                findings.append(RuleFinding(
-                    rule_id=self.rule_id,
-                    title=self.title,
-                    severity=Severity.HIGH,
-                    decision=decision_for_context(ctx),
-                    message=(
-                        f"Class `{node.name}` in `{path_value}` has {method_count}"
-                        f" non-dunder methods. Keep classes at or below {limit}"
-                        f" methods or split responsibilities."
-                    ),
-                    metadata={
-                        "path": path_value,
-                        "class": node.name,
-                        "method_count": method_count,
-                    },
-                ))
+            body_lines = _class_body_lines(node)
+            reasons: list[str] = []
+            if method_count > method_limit:
+                reasons.append(f"methods={method_count} (limit={method_limit})")
+            if body_lines > line_limit:
+                reasons.append(f"lines={body_lines} (limit={line_limit})")
+            if not reasons:
+                continue
+            findings.append(RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.HIGH,
+                decision=decision_for_context(ctx),
+                message=(
+                    f"Class `{node.name}` in `{path_value}` is a god-class: "
+                    f"{', '.join(reasons)}. Split responsibilities before writing it."
+                ),
+                metadata={
+                    "path": path_value,
+                    "class": node.name,
+                    "collector": "god-class",
+                    "method_count": method_count,
+                    "method_limit": method_limit,
+                    "body_lines": body_lines,
+                    "line_limit": line_limit,
+                },
+            ))
         return findings
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        return evaluate_common(self, ctx, self._check_source)
+        if not ctx.config.python_ast_enabled:
+            return []
+        findings: list[RuleFinding] = []
+        for path_value, source in _python_structural_sources(ctx):
+            findings.extend(self._check_source(source, path_value, ctx))
+        return findings
+
 
 
 # Node types that each add 1 to cyclomatic complexity
@@ -1119,9 +1470,11 @@ class PythonImportFanoutRule(Rule):
             family_msg = ""
         message = (
             f"`{path_value}` imports {len(names)} names from `{mod_name}` "
-            f"({names_preview}).{family_msg} "
-            f"Consider `import {mod_name}` and access via namespace, "
-            f"or introduce a facade/service class to reduce coupling."
+            f"({names_preview}).{family_msg} Advisory only: this is context "
+            "for a future dependency-design pass; do not retry the write solely "
+            f"for this. Consider `import {mod_name}` and access via namespace, "
+            f"or introduce a facade/service class to reduce coupling when the "
+            f"module boundary is already in scope."
         )
         return RuleFinding(
             rule_id=self.rule_id,
