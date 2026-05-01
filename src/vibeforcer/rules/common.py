@@ -16,6 +16,9 @@ from vibeforcer.util.subprocesses import run_shell
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
 
+_FIND_MUTATING_ACTIONS = frozenset({"-delete", "-exec", "-execdir", "-ok", "-okdir"})
+_GIT_NO_VERIFY_SHORTCUT = "-n (shorthand for --no-verify)"
+
 
 def _command_has_word(command: str, word: str) -> bool:
     """Check if *word* appears as a standalone token in *command*."""
@@ -24,11 +27,24 @@ def _command_has_word(command: str, word: str) -> bool:
     return bool(re.search(pattern, command, re.IGNORECASE))
 
 
+def _shell_tokens(command: str) -> list[str]:
+    try:
+        return shlex.split(command, posix=True)
+    except ValueError:
+        return command.split()
+
+
+def _find_command_has_mutation(tokens: list[str]) -> bool:
+    return "find" in tokens and bool(_FIND_MUTATING_ACTIONS & set(tokens))
+
+
 def _is_safe_read_shell(command: str) -> bool:
     lowered = command.lower()
     if "sed -i" in lowered or "tee " in lowered:
         return False
     if re.search(r">>?\s*\S", lowered):
+        return False
+    if _find_command_has_mutation(_shell_tokens(lowered)):
         return False
     return any(_command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
 
@@ -398,15 +414,29 @@ class SystemProtectionRule(Rule):
         ]
 
 
+def _is_git_commit_command(tokens: list[str]) -> bool:
+    return len(tokens) >= 2 and tokens[:2] == ["git", "commit"]
+
+
+def _is_git_no_verify_shortcut(token: str) -> bool:
+    return token == "-n" or (
+        token.startswith("-")
+        and not token.startswith("--")
+        and "n" in token[1:]
+    )
+
+
 def _detect_git_bypass(command: str) -> str | None:
     """Return bypass type string, or None if no bypass detected."""
     lowered = command.lower()
     git_cmds = ("git commit", "git push", "git merge")
     if "--no-verify" in lowered and any(k in lowered for k in git_cmds):
         return "--no-verify"
-    n_tokens = (" -n ", "\t-n ", " -an ", " -nm ")
-    if "git commit" in lowered and any(t in lowered for t in n_tokens):
-        return "-n (shorthand for --no-verify)"
+    tokens = _shell_tokens(lowered)
+    if _is_git_commit_command(tokens) and any(
+        _is_git_no_verify_shortcut(token) for token in tokens[2:]
+    ):
+        return _GIT_NO_VERIFY_SHORTCUT
     if "core.hookspath" in lowered and "/dev/null" in lowered:
         return "core.hookspath=/dev/null"
     return None

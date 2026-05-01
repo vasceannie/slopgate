@@ -367,7 +367,8 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
         f"{phase_note}The edit landed, but touched-file lint found quality debt. "
         "Do not continue feature work. Next action: 1) reread the touched file, "
         "2) fix only the reported collector/hit, 3) verify from the project root "
-        "with `vibeforcer lint check` (no file/path argument), "
+        "with the smallest repo-root quality command: `vibeforcer lint check` "
+        "(no file/path argument), "
         "4) if no path is available, inspect the last edited file from tool context."
         f"{pathless_note}"
     )
@@ -517,10 +518,11 @@ def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) ->
     max_repeat_count = 0
     for item in denied:
         path_value = _finding_path(item)
+        state_path = _normalize_attempt_path(ctx, path_value) if path_value else None
         repeat_count = ctx.state.record_deny_hit(
             ctx.session_id,
             item.rule_id,
-            path_value,
+            state_path,
             attempt_fingerprint,
         )
         classification = _failure_class(item.rule_id)
@@ -567,11 +569,16 @@ def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) ->
     touched_paths = [target.path for target in ctx.content_targets if target.path]
     if touched_paths:
         found_pairs = {
-            (item.rule_id, _finding_path(item) or "__pathless__")
+            (
+                item.rule_id,
+                _normalize_attempt_path(ctx, path_value)
+                if (path_value := _finding_path(item)) is not None
+                else "__pathless__",
+            )
             for item in denied
         }
         for path in touched_paths:
-            normalized = str((ctx.cwd / path).resolve(strict=False))
+            normalized = _normalize_attempt_path(ctx, path)
             for rule_id in ("PY-CODE-013",):
                 key = (rule_id, normalized)
                 if key not in found_pairs:

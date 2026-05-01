@@ -14,7 +14,7 @@ import pytest
 from vibeforcer._types import ObjectDict, object_dict, object_list, string_value
 from vibeforcer.adapters import get_adapter
 from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import RuleFinding, Severity
+from vibeforcer.models import EngineResult, RuleFinding, Severity
 from vibeforcer.state import HookStateStore
 from tests.support import BUNDLE_ROOT, assert_denied_by, assert_not_denied, finding_ids
 
@@ -178,6 +178,50 @@ def _posttool_payload(
         "tool_input": {"file_path": rel_path, "content": code},
         "tool_response": {"filePath": rel_path, "success": True},
     }
+
+
+def _repeat_tracking_repair_sequence(cwd: Path) -> tuple[EngineResult, EngineResult]:
+    thin_wrapper = "def get_all_users():\n    return UserRepository.find_all()\n"
+    repaired_code = (
+        "def get_all_users():\n"
+        "    users = UserRepository.find_all()\n"
+        "    return users\n"
+    )
+    session_id = "repeat-session"
+    rel_path = "src/thin.py"
+    _ = evaluate_payload(
+        _posttool_payload(
+            cwd=cwd,
+            rel_path=rel_path,
+            code=thin_wrapper,
+            session_id=session_id,
+        )
+    )
+    _ = evaluate_payload(
+        _posttool_payload(
+            cwd=cwd,
+            rel_path=rel_path,
+            code=thin_wrapper,
+            session_id=session_id,
+        )
+    )
+    repaired = evaluate_payload(
+        _posttool_payload(
+            cwd=cwd,
+            rel_path=rel_path,
+            code=repaired_code,
+            session_id=session_id,
+        )
+    )
+    repeated_after_repair = evaluate_payload(
+        _posttool_payload(
+            cwd=cwd,
+            rel_path=rel_path,
+            code=thin_wrapper,
+            session_id=session_id,
+        )
+    )
+    return repaired, repeated_after_repair
 
 
 def _python_subprocess_env() -> dict[str, str]:
@@ -778,6 +822,23 @@ class TestRepeatedDebtEscalationSpec:
         finding = _finding("PY-CODE-013", second_path.findings)
         assert finding is not None
         assert finding.metadata.get("repeat_count") == 1
+
+    def test_repeat_tracking_resets_after_clean_repair_write(
+        self, tmp_path: Path
+    ) -> None:
+        repaired, repeated_after_repair = _repeat_tracking_repair_sequence(tmp_path)
+
+        repaired_finding = _finding("PY-CODE-013", repaired.findings)
+        repeated_finding = _finding("PY-CODE-013", repeated_after_repair.findings)
+        assert repaired_finding is None, (
+            "Clean repair write should not keep the thin-wrapper finding active"
+        )
+        assert repeated_finding is not None, (
+            "Reintroduced thin wrapper should produce a new PY-CODE-013 finding"
+        )
+        assert repeated_finding.metadata.get("repeat_count") == 1, (
+            "Repeat counter should reset after the path is repaired cleanly"
+        )
 
     def test_new_session_resets_repeat_counter(self, tmp_path: Path) -> None:
         code = "def get_all_users():\n    return UserRepository.find_all()\n"

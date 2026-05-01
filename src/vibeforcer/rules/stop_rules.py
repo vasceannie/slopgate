@@ -370,6 +370,17 @@ _CONFIG_FRAGMENTS = (
 )
 
 
+def _path_contains_fragment(path_value: str, fragment: str) -> bool:
+    """Return True when path matches a protected fragment or a child below it."""
+    lowered = path_value.lower()
+    normalized_fragment = fragment.rstrip("/")
+    return (
+        lowered == normalized_fragment
+        or lowered.endswith("/" + normalized_fragment)
+        or normalized_fragment + "/" in lowered
+    )
+
+
 def _is_safe_bash_for_path(ctx: HookContext) -> bool:
     """Return True if the bash command is a safe read-only operation."""
     if not ctx.tool_name or ctx.tool_name.lower() != "bash":
@@ -406,9 +417,8 @@ def _infra_deny(path_value: str, fragment: str, kind: str) -> list[RuleFinding]:
 
 def _check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
     """Check config fragments — always protected, no worktree exception."""
-    lowered = path_value.lower()
     for cfrag in _CONFIG_FRAGMENTS:
-        if cfrag not in lowered:
+        if not _path_contains_fragment(path_value, cfrag):
             continue
         if _is_safe_bash_for_path(ctx):
             return []
@@ -419,9 +429,8 @@ def _check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] |
 
 def _check_infra_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
     """Check infra fragments with a narrow vibeforcer worktree exception."""
-    lowered = path_value.lower()
     for frag in _INFRA_FRAGMENTS:
-        if frag not in lowered:
+        if not _path_contains_fragment(path_value, frag):
             continue
         if (
             _is_worktree(path_value, ctx.cwd)

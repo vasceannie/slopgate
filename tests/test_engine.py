@@ -199,8 +199,17 @@ class TestMultiRuleDenyFixtures:
 
 
 class TestInlinePayloadDenies:
-    def test_git_n_shorthand(self, pretool_bash: BashBuilder) -> None:
-        result = evaluate_payload(pretool_bash('git commit -n -m "skip"'))
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param('git commit -n -m "skip"', id="n_before_message"),
+            pytest.param("git commit -n", id="terminal_n"),
+            pytest.param('git commit -m "skip" -n', id="terminal_n_after_message"),
+            pytest.param('git commit -an -m "skip"', id="combined_short_flags"),
+        ],
+    )
+    def test_git_n_shorthand(self, pretool_bash: BashBuilder, command: str) -> None:
+        result = evaluate_payload(pretool_bash(command))
         assert_denied_by(result, "GIT-001")
 
     def test_protected_path_makefile(self, pretool_write: WriteBuilder) -> None:
@@ -2111,6 +2120,33 @@ class TestSedNotSafeRead:
         ids = finding_ids(result)
         assert (
             "BUILTIN-PROTECTED-PATHS" in ids or "GLOBAL-BUILTIN-HOOK-INFRA-EXEC" in ids
+        )
+
+
+class TestFindMutationsNotSafeRead:
+    """find is only read-only when invoked without mutating predicates/actions."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("find .claude/hooks -delete", id="delete_predicate"),
+            pytest.param(
+                "find .claude/hooks -exec rm {} +",
+                id="exec_rm_action",
+            ),
+        ],
+    )
+    def test_find_mutation_on_hook_path_blocked(
+        self, pretool_bash: BashBuilder, command: str
+    ) -> None:
+        result = evaluate_payload(pretool_bash(command))
+        blocked_rules = {
+            "BUILTIN-PROTECTED-PATHS",
+            "GLOBAL-BUILTIN-HOOK-INFRA-EXEC",
+        }
+        ids = finding_ids(result)
+        assert ids & blocked_rules, (
+            f"Expected protected hook path denial for {command!r}, got {ids}"
         )
 
 
