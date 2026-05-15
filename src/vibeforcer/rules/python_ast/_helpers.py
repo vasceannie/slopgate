@@ -16,15 +16,19 @@ if TYPE_CHECKING:
     CheckFn = Callable[[str, str, "HookContext"], list[RuleFinding]]
 
 
-# Paths containing any of these segments are third-party / vendored code
-# and should be excluded from quality analysis.
-_THIRD_PARTY_SEGMENTS = (
-    ".venv/",
-    "site-packages/",
-    "node_modules/",
-    ".tox/",
-    ".nox/",
-    "/.eggs/",
+# Paths containing any of these directory names are third-party, generated,
+# or virtual-environment code and should be excluded from quality analysis.
+_THIRD_PARTY_DIR_NAMES = frozenset(
+    {
+        ".venv",
+        "venv",
+        "env",
+        "site-packages",
+        "node_modules",
+        ".tox",
+        ".nox",
+        ".eggs",
+    }
 )
 
 # Prefixes that signal a function family (parse_*, build_*, validate_*, …)
@@ -51,7 +55,7 @@ _FAMILY_PREFIXES = (
 def _is_third_party_path(path: str) -> bool:
     """Return True if path points to third-party / vendored code."""
     normalised = path.replace("\\", "/")
-    return any(seg in normalised for seg in _THIRD_PARTY_SEGMENTS)
+    return any(part in _THIRD_PARTY_DIR_NAMES for part in normalised.split("/"))
 
 
 def decision_for_context(ctx: HookContext) -> str:

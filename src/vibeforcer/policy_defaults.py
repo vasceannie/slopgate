@@ -112,7 +112,14 @@ class _LintScopeDefaults(TypedDict):
 LINT_PATH_DEFAULTS: Final[_LintPathDefaults] = {
     "src": "src",
     "tests": "tests",
-    "exclude_dirs": [".venv", "__pycache__", "node_modules", ".git"],
+    "exclude_dirs": [
+        ".venv",
+        "venv",
+        "env",
+        "__pycache__",
+        "node_modules",
+        ".git",
+    ],
     "exclude_patterns": ["*_pb2.py", "*_pb2_grpc.py", "*_pb2.pyi"],
 }
 

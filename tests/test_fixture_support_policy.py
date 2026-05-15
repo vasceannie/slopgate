@@ -10,7 +10,8 @@ import pytest
 from vibeforcer.engine import evaluate_payload
 from vibeforcer.lint._config import load_config, reset_config
 from vibeforcer.lint._detectors.test_smells import detect_fixtures_outside_conftest
-from vibeforcer.lint._helpers import parse_files
+from vibeforcer.lint._helpers import find_source_files, parse_files
+from vibeforcer.policy_defaults import LINT_PATH_DEFAULTS
 
 from tests import support as test_support
 
@@ -35,6 +36,47 @@ def _write_project_file(root: Path, relative_path: str, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def test_default_lint_excludes_include_common_virtualenv_dirs() -> None:
+    exclude_dirs = LINT_PATH_DEFAULTS["exclude_dirs"]
+
+    assert ".venv" in exclude_dirs
+    assert "venv" in exclude_dirs
+    assert "env" in exclude_dirs
+
+
+def test_quality_gate_template_excludes_common_virtualenv_dirs() -> None:
+    template_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "vibeforcer"
+        / "resources"
+        / "quality_gate_template.toml"
+    )
+    template = template_path.read_text(encoding="utf-8")
+
+    assert 'exclude_dirs = [".venv", "venv", "env",' in template
+
+
+def test_linter_file_discovery_skips_common_virtualenv_dirs(tmp_path: Path) -> None:
+    load_config(tmp_path)
+    try:
+        source_file = _write_project_file(tmp_path, "src/app.py", "x = 1\n")
+        _ = _write_project_file(tmp_path, "src/.venv/lib/nope.py", "x = 1\n")
+        _ = _write_project_file(tmp_path, "src/venv/lib/nope.py", "x = 1\n")
+        _ = _write_project_file(tmp_path, "src/env/lib/nope.py", "x = 1\n")
+        _ = _write_project_file(tmp_path, "src/environment/app.py", "x = 1\n")
+
+        discovered = {path.relative_to(tmp_path).as_posix() for path in find_source_files()}
+
+        assert source_file.relative_to(tmp_path).as_posix() in discovered
+        assert "src/environment/app.py" in discovered
+        assert "src/.venv/lib/nope.py" not in discovered
+        assert "src/venv/lib/nope.py" not in discovered
+        assert "src/env/lib/nope.py" not in discovered
+    finally:
+        reset_config()
 
 
 @pytest.mark.parametrize(

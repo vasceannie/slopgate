@@ -216,6 +216,24 @@ class TestInlinePayloadDenies:
         result = evaluate_payload(pretool_write("Makefile", "all:\n\techo hi\n"))
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
 
+    def test_protected_path_pytest_ini(self, pretool_write: WriteBuilder) -> None:
+        result = evaluate_payload(pretool_write("pytest.ini", "[pytest]\n"))
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
+        assert "PY-LINTER-001" in finding_ids(result)
+
+    def test_protected_path_pytest_ini_read_allowed(self, bundle_root: Path) -> None:
+        result = evaluate_payload(
+            {
+                "session_id": "t",
+                "cwd": str(bundle_root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "pytest.ini"},
+            }
+        )
+        assert_not_denied(result)
+        assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
+
     def test_protected_staging_rule_file_denied(
         self, pretool_write: WriteBuilder
     ) -> None:
@@ -1056,6 +1074,31 @@ def test_python_ast_parse_failure_is_reported(pretool_write: WriteBuilder) -> No
     assert_denied_by(result, "PY-AST-001")
 
 
+@pytest.mark.parametrize(
+    "path_value",
+    [
+        pytest.param(".venv/lib/python3.12/site-packages/pkg/bad.py", id="dot-venv"),
+        pytest.param("venv/lib/python3.12/site-packages/pkg/bad.py", id="venv"),
+        pytest.param("env/lib/python3.12/site-packages/pkg/bad.py", id="env"),
+        pytest.param("src/pkg/site-packages/vendor/bad.py", id="site-packages"),
+    ],
+)
+def test_python_ast_parse_failure_skips_virtualenv_paths(
+    pretool_write: WriteBuilder, path_value: str
+) -> None:
+    result = evaluate_payload(pretool_write(path_value, "def broken(:\n    pass\n"))
+
+    assert "PY-AST-001" not in finding_ids(result)
+
+
+def test_python_ast_virtualenv_skip_uses_exact_path_components(
+    pretool_write: WriteBuilder,
+) -> None:
+    result = evaluate_payload(pretool_write("src/environment/bad.py", "def broken(:\n"))
+
+    assert_denied_by(result, "PY-AST-001")
+
+
 # ===========================================================================
 # Robustness
 # ===========================================================================
@@ -1767,6 +1810,11 @@ class TestHookInfraWorktreeException:
             "sed -i 's/strict/basic/' pyrightconfig.json",
             "PY-LINTER-002",
             id="pyright-sed",
+        ),
+        pytest.param(
+            "echo '[pytest]' >> pytest.ini",
+            "PY-LINTER-002",
+            id="pytest-ini-redirect",
         ),
     ],
 )

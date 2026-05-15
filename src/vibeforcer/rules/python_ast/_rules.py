@@ -22,6 +22,7 @@ from vibeforcer.util.payloads import (
 )
 
 from ._helpers import (
+    _is_third_party_path,
     decision_for_context,
     detect_family_prefix,
     evaluate_common,
@@ -229,7 +230,11 @@ def _project_replacement(
 def _project_top_level_edit(ctx: HookContext, tool_input: ObjectDict) -> tuple[str, str] | None:
     """Project a Claude/OpenCode-style single Edit payload into final source."""
     path_value = extract_path_from_mapping(tool_input)
-    if not path_value or not path_value.lower().endswith((".py", ".pyi")):
+    if (
+        not path_value
+        or not path_value.lower().endswith((".py", ".pyi"))
+        or _is_third_party_path(path_value)
+    ):
         return None
     old_string = first_present(
         tool_input,
@@ -254,7 +259,11 @@ def _project_multiedit_sources(ctx: HookContext, tool_input: ObjectDict) -> list
     for item in object_list(tool_input.get("edits")):
         item_dict = object_dict(item)
         path_value = extract_path_from_mapping(item_dict) or default_path
-        if not path_value or not path_value.lower().endswith((".py", ".pyi")):
+        if (
+            not path_value
+            or not path_value.lower().endswith((".py", ".pyi"))
+            or _is_third_party_path(path_value)
+        ):
             continue
         source = projected_by_path.get(path_value)
         if source is None:
@@ -293,6 +302,8 @@ def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
         for ct in ctx.content_targets:
             if not ct.path.lower().endswith((".py", ".pyi")):
                 continue
+            if _is_third_party_path(ct.path):
+                continue
             if ct.source in {"multi_edit", "multi_edit_old"}:
                 continue
             sources.append((ct.path, ct.content))
@@ -301,6 +312,8 @@ def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
             return []
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):
+                continue
+            if _is_third_party_path(path_value):
                 continue
             source = _read_python_source(ctx, path_value)
             if source is not None:
@@ -407,6 +420,8 @@ class PythonAstHealthRule(Rule):
             for ct in ctx.content_targets:
                 if not ct.path.lower().endswith((".py", ".pyi")):
                     continue
+                if _is_third_party_path(ct.path):
+                    continue
                 if not _is_full_module_candidate(ctx, ct.source):
                     continue
                 failure = _parse_health_failure(
@@ -423,6 +438,8 @@ class PythonAstHealthRule(Rule):
                 return []
             for path_value in ctx.candidate_paths:
                 if not path_value.lower().endswith((".py", ".pyi")):
+                    continue
+                if _is_third_party_path(path_value):
                     continue
                 full_path = _resolve_python_path(ctx, path_value)
                 try:
@@ -1380,6 +1397,8 @@ def _flat_sibling_projected_removed_files(ctx: HookContext) -> dict[Path, set[st
     for path_value in removed_paths:
         if not path_value.lower().endswith((".py", ".pyi")):
             continue
+        if _is_third_party_path(path_value):
+            continue
         full = _flat_sibling_resolve_candidate_path(ctx, path_value)
         prefix = PythonFlatFileSiblingsRule.prefix_for_name(full.name)
         if prefix is None:
@@ -1536,6 +1555,8 @@ class PythonFlatFileSiblingsRule(Rule):
         dirs: dict[Path, set[str]] = {}
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):
+                continue
+            if _is_third_party_path(path_value):
                 continue
             full = _flat_sibling_resolve_candidate_path(ctx, path_value)
             parent = full.parent
