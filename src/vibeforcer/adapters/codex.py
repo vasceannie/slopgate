@@ -14,7 +14,14 @@ from vibeforcer._types import (
 from vibeforcer.adapters.base import PlatformAdapter
 from vibeforcer.models import RuleFinding, Severity
 
-CODEX_EVENTS = {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"}
+CODEX_EVENTS = {
+    "SessionStart",
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "Stop",
+}
 
 
 class CodexAdapter(PlatformAdapter):
@@ -59,21 +66,29 @@ class CodexAdapter(PlatformAdapter):
         if event_name == "PreToolUse":
             specific: dict[str, object] = {"hookEventName": "PreToolUse"}
             pretool_response: dict[str, object] = {"hookSpecificOutput": specific}
-            if decision in {"deny", "ask", "allow"}:
-                specific["permissionDecision"] = decision
+            if decision in {"deny", "block", "ask"}:
+                rendered_decision = "deny" if decision in {"block", "ask"} else decision
+                specific["permissionDecision"] = rendered_decision
                 specific["permissionDecisionReason"] = self.join_messages(
                     self.decision_findings(findings, decision)
                 )
-            elif decision == "block":
-                specific["permissionDecision"] = "deny"
-                specific["permissionDecisionReason"] = self.join_messages(
-                    self.decision_findings(findings, decision)
-                )
-            if context:
-                specific["additionalContext"] = context
-            if updated_input:
-                specific["updatedInput"] = updated_input
             return pretool_response if len(specific) > 1 else None
+
+        if event_name == "PermissionRequest":
+            if decision not in {"deny", "allow", "block", "ask"}:
+                return None
+            behavior = "allow" if decision == "allow" else "deny"
+            inner: ObjectDict = {"behavior": behavior}
+            if behavior == "deny":
+                inner["message"] = self.join_messages(
+                    self.decision_findings(findings, decision)
+                )
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": inner,
+                }
+            }
 
         if event_name == "PostToolUse":
             critical_blocks = [

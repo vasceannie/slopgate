@@ -111,7 +111,7 @@ class TestRepeatedStringLiteralMetadata:
         set_config(cfg)
 
         parsed = [
-            _make_parsed(f'print("E_CONN_RESET")\n', rel=f"src/file_{idx}.py")
+            _make_parsed('print("E_CONN_RESET")\n', rel=f"src/file_{idx}.py")
             for idx in range(11)
         ]
         violations = detect_repeated_literals(parsed)
@@ -137,6 +137,45 @@ class TestRepeatedStringLiteralMetadata:
         metadata = repeated[0].metadata
         assert "candidate_constant_name" in metadata
         assert metadata["candidate_constant_name"] == "RETRY_LATER"
+
+    def test_ignores_repeated_punctuation_delimiters(self, tmp_path: Path) -> None:
+        _ = (tmp_path / "src").mkdir()
+        cfg = load_config(tmp_path)
+        set_config(cfg)
+
+        parsed = [
+            _make_parsed(
+                "\n".join(
+                    [
+                        'print(":")',
+                        'print(".")',
+                        'print(")")',
+                        'print("`")',
+                        'print(", ")',
+                    ]
+                ),
+                rel=f"src/file_{idx}.py",
+            )
+            for idx in range(11)
+        ]
+        violations = detect_repeated_literals(parsed)
+        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
+        assert repeated == []
+
+    def test_keeps_repeated_semantic_event_literal_signal(self, tmp_path: Path) -> None:
+        _ = (tmp_path / "src").mkdir()
+        cfg = load_config(tmp_path)
+        set_config(cfg)
+
+        parsed = [
+            _make_parsed('event = "PreToolUse"\n', rel=f"src/file_{idx}.py")
+            for idx in range(11)
+        ]
+        violations = detect_repeated_literals(parsed)
+        repeated = [v for v in violations if v.rule == "repeated-string-literal"]
+        assert len(repeated) == 1
+        assert repeated[0].identifier == "'PreToolUse'"
+        assert repeated[0].metadata["candidate_constant_name"] == "PRE_TOOL_USE"
 
     def test_same_body_different_imports_duplicate_alert_still_fires(self):
         """Body-only duplicate detection still works when imports differ."""

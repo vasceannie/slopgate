@@ -116,6 +116,46 @@ class TestBashFailureReinforcement:
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in reason
 
 
+class TestDevNullSystemProtection:
+    """GLOBAL-BUILTIN-SYSTEM-PROTECTION: allow exact /dev/null only."""
+
+    @staticmethod
+    def _pre_bash(command: str) -> dict[str, object]:
+        return {
+            "session_id": "t",
+            "cwd": str(BUNDLE_ROOT),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }
+
+    @staticmethod
+    def _pre_write(path: str) -> dict[str, object]:
+        return {
+            "session_id": "t",
+            "cwd": str(BUNDLE_ROOT),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": path, "content": "x"},
+        }
+
+    def test_exact_dev_null_bash_reference_allowed(self) -> None:
+        result = evaluate_payload(self._pre_bash("cat /dev/null"))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
+
+    def test_other_dev_paths_still_blocked_in_bash(self) -> None:
+        result = evaluate_payload(self._pre_bash("cat /dev/sda"))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result)
+
+    def test_exact_dev_null_tool_path_allowed(self) -> None:
+        result = evaluate_payload(self._pre_write("/dev/null"))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
+
+    def test_other_dev_tool_paths_still_blocked(self) -> None:
+        result = evaluate_payload(self._pre_write("/dev/sda"))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result)
+
+
 class TestConfigChangeGuard:
     """CONFIG-001: block config changes that weaken security."""
 

@@ -12,6 +12,7 @@ from vibeforcer.enrichment._helpers import (
     safe_parse,
     safe_read,
 )
+from vibeforcer.enrichment.local_context import find_local_call_sites
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -324,7 +325,12 @@ def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
             + "function, then remove the wrapper."
         )
     else:
-        extras.append(
-            f"\n`{func_name}` appears to be called from other files. Search for all usages before inlining."
-        )
+        call_sites = find_local_call_sites(func_name, ctx, full_path)
+        if call_sites:
+            extras.append("\nLocal call sites to update before removing this wrapper:")
+            extras.extend(f"- {site}" for site in call_sites)
+        else:
+            extras.append(
+                f"\n`{func_name}` appears to be called from other files. Search for all usages before inlining."
+            )
     append_enrichment_message(finding, extras)

@@ -670,12 +670,21 @@ def _is_delete_like_tool(tool_name: str) -> bool:
     return lowered in {"delete", "remove"}
 
 
-def _patch_deletes_enrollment_marker(ctx: HookContext) -> bool:
+def _patch_touches_enrollment_marker(ctx: HookContext) -> bool:
     patch_blob = ctx.tool_input.get("patch")
     if not isinstance(patch_blob, str):
         return False
     lowered = patch_blob.lower()
-    return "*** delete file:" in lowered and _ENROLLMENT_MARKER in lowered
+    if _ENROLLMENT_MARKER not in lowered:
+        return False
+    return any(
+        marker in lowered
+        for marker in (
+            "*** add file:",
+            "*** update file:",
+            "*** delete file:",
+        )
+    )
 
 
 class RepoEnrollmentProtectionRule(Rule):
@@ -741,16 +750,34 @@ class RepoEnrollmentProtectionRule(Rule):
                         metadata={"path": path_value, "kind": "shell_edit_marker"},
                     )
                 ]
-
-        if _patch_deletes_enrollment_marker(ctx):
             return [
                 RuleFinding(
                     rule_id=self.rule_id,
                     title=self.title,
-                    severity=Severity.CRITICAL,
+                    severity=Severity.HIGH,
                     decision="deny",
-                    message="Deleting quality_gate.toml via patch would de-enroll the repo.",
-                    metadata={"kind": "patch_delete_marker"},
+                    message=(
+                        f"Direct edits to {path_value} are blocked. "
+                        "Do not relax quality gates to make lint pass; fix the code "
+                        "or use a human-reviewed config migration."
+                    ),
+                    metadata={"path": path_value, "kind": "direct_edit_marker"},
+                )
+            ]
+
+        if _patch_touches_enrollment_marker(ctx):
+            return [
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.HIGH,
+                    decision="deny",
+                    message=(
+                        "Patch edits to quality_gate.toml are blocked. "
+                        "Do not relax quality gates to make lint pass; fix the code "
+                        "or use a human-reviewed config migration."
+                    ),
+                    metadata={"kind": "patch_touch_marker"},
                 )
             ]
 
@@ -771,4 +798,18 @@ class RepoEnrollmentProtectionRule(Rule):
                         metadata={"path": target.path, "kind": "disable_flag"},
                     )
                 ]
+            return [
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.HIGH,
+                    decision="deny",
+                    message=(
+                        f"Direct edits to {target.path} are blocked. "
+                        "Do not relax quality gates to make lint pass; fix the code "
+                        "or use a human-reviewed config migration."
+                    ),
+                    metadata={"path": target.path, "kind": "direct_content_marker"},
+                )
+            ]
         return []

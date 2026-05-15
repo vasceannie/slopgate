@@ -144,7 +144,9 @@
     "PY-CODE-015": true,
     "PY-CODE-016": true,
     "PY-EXC-002": true,
-    "PY-CODE-017": true
+    "PY-CODE-017": true,
+    "PY-IMPORT-002": true,
+    "PY-IMPORT-003": true
   },
   "regex_rules": [
     {
@@ -207,13 +209,14 @@
       "patterns": [
         "(?i)#\\s*type:\\s*ignore(\\[[^\\]]+\\])?\\b",
         "(?i)#\\s*pyright:\\s*ignore(\\[[^\\]]+\\])?\\b",
+        "(?i)#\\s*ty:\\s*ignore(\\[[^\\]]+\\])?\\b",
         "(?i)#\\s*pyre-ignore\\b",
         "(?i)#\\s*noqa\\b",
         "(?i)#\\s*ruff:\\s*noqa\\b",
         "(?i)#\\s*pylint:\\s*disable\\s*="
       ],
       "action": "deny",
-      "message": "Python type or lint suppression comments (# type: ignore, # noqa, # pylint: disable, # pyright: ignore) are blocked. Fix the underlying typing or lint issue instead.\n\nCommon fixes:\n- `# type: ignore[arg-type]` \u2192 fix the argument type or add an overload\n- `# type: ignore[return-value]` \u2192 narrow the return type or add a TypeGuard\n- `# type: ignore[assignment]` \u2192 use a Union type or restructure\n- `# noqa: E501` \u2192 break the line or extract a variable\n- If the library has bad stubs, add a local .pyi stub or use a Protocol."
+      "message": "Python type or lint suppression comments (# type: ignore, # noqa, # pylint: disable, # pyright: ignore, # ty: ignore) are blocked. Fix the underlying typing or lint issue instead.\n\nCommon fixes:\n- `# type: ignore[arg-type]` / `# ty: ignore[...]` \u2192 fix the argument type or add an overload\n- `# type: ignore[return-value]` \u2192 narrow the return type or add a TypeGuard\n- `# type: ignore[assignment]` \u2192 use a Union type or restructure\n- `# noqa: E501` \u2192 break the line or extract a variable\n- If the library has bad stubs, add a local .pyi stub or use a Protocol."
     },
     {
       "rule_id": "TS-LINT-001",
@@ -379,10 +382,14 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>)\\s*.*src/.*\\.py"
+        "\\bsed\\b(?=[^|;&\\n]*\\s-i(?:[A-Za-z0-9_.-]*)?\\b)[^|;&\\n]*\\s(?:--\\s+)?['\"]?(?!-)(?:~?/|\\.{0,2}/)?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.py['\"]?(?=$|[\\s|;&])",
+        "\\bperl\\b(?=[^|;&\\n]*\\s-p?i(?:[A-Za-z0-9_.-]*)?\\b)[^|;&\\n]*\\s(?:--\\s+)?['\"]?(?!-)(?:~?/|\\.{0,2}/)?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.py['\"]?(?=$|[\\s|;&])",
+        "\\btee\\b[^|;&\\n]*\\s(?:--\\s+)?['\"]?(?!-)(?:~?/|\\.{0,2}/)?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.py['\"]?(?=$|[\\s|;&])",
+        "(?:^|[\\s;|&])(?:[0-9]*>>?|&>)\\s*['\"]?(?!/dev/null\\b)(?!-)(?:~?/|\\.{0,2}/)?[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.py['\"]?(?=$|[\\s|;&])",
+        "\\|[^\\n]*\\bxargs\\b[^|;&\\n]*\\b(?:sed\\b(?=[^|;&\\n]*\\s-i(?:[A-Za-z0-9_.-]*)?\\b)|perl\\b(?=[^|;&\\n]*\\s-p?i(?:[A-Za-z0-9_.-]*)?\\b)|tee\\b)"
       ],
       "action": "deny",
-      "message": "Shell edits to Python source files under src/ are blocked. Use the Edit or Write tool so size and quality guards apply."
+      "message": "Shell edits to Python files are blocked. Use the Edit or Write tool so size and quality guards apply."
     },
     {
       "rule_id": "PY-QUALITY-004",

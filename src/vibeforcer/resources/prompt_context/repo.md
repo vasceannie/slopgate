@@ -7,7 +7,7 @@
 
 ## Python Types
 - Never use `Any` from typing. Use `Protocol`, `TypedDict`, `TypeVar`, or concrete types.
-- Never add suppression comments: `# type: ignore`, `# noqa`, `# pyright: ignore`, `# pylint: disable`.
+- Never add suppression comments: `# type: ignore`, `# ty: ignore`, `# noqa`, `# pyright: ignore`, `# pylint: disable`.
 - Fix the root cause instead of suppressing.
 
 ## Exception Handling
@@ -38,6 +38,8 @@
 - No `import logging` / `from logging import` — use the project logger.
 - No hardcoded absolute paths (`/home/user/...`, `/Users/...`).
 - No magic numbers — define named constants.
+- No non-standard Python import aliases. Use canonical library aliases only (`pandas as pd`, `polars as pl`, `numpy as np`, `matplotlib.pyplot as plt`); do not rename imports to hide duplicate code.
+- No stacked private module chains like `pkg._impl._core` or `from src.cli.auth._orchestrate._core import X`. One private segment is allowed; nested private segments mean the package needs a public facade or descriptive child modules.
 - No commented-out code blocks.
 - Functions: ≤50 lines, ≤4 params, nesting ≤4 levels, complexity ≤10.
 - Classes: ≤10 non-dunder methods.

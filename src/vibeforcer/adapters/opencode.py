@@ -82,7 +82,7 @@ class OpenCodeAdapter(PlatformAdapter):
             return None
 
         if event_name == "PermissionRequest":
-            if decision == "deny":
+            if decision in {"deny", "block", "ask"}:
                 return {
                     "action": "block",
                     "reason": self.join_messages(

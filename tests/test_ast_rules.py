@@ -15,17 +15,30 @@ def _assert_denied_by(
     result: EngineResult,
     rule_id: str,
 ) -> None:
+    reason = _permission_reason(result)
+    assert _permission_decision(result) == "deny"
+    assert rule_id in reason, f"expected {rule_id!r} in reason: {reason!r}"
+
+
+def _permission_decision(result: EngineResult) -> str | None:
     assert result.output is not None, "expected output, got None"
     spec = object_dict(result.output.get("hookSpecificOutput"))
     decision = string_value(spec.get("permissionDecision"))
     if decision is None:
         inner = object_dict(spec.get("decision"))
         decision = string_value(inner.get("behavior"))
-        reason = string_value(inner.get("message")) or ""
+    return decision
+
+
+def _permission_reason(result: EngineResult) -> str:
+    assert result.output is not None, "expected output, got None"
+    spec = object_dict(result.output.get("hookSpecificOutput"))
+    decision = string_value(spec.get("permissionDecision"))
+    if decision is None:
+        inner = object_dict(spec.get("decision"))
+        return string_value(inner.get("message")) or ""
     else:
-        reason = string_value(spec.get("permissionDecisionReason")) or ""
-    assert decision == "deny", f"expected deny, got {decision!r}"
-    assert rule_id in reason, f"expected {rule_id!r} in reason: {reason!r}"
+        return string_value(spec.get("permissionDecisionReason")) or ""
 
 
 def _assert_not_denied(result: EngineResult) -> None:
@@ -504,6 +517,68 @@ class TestDeadCode(unittest.TestCase):
         }
         result = evaluate_payload(payload)
         _assert_not_denied(result)
+
+
+class TestImportAliasGuard(unittest.TestCase):
+    def _make_payload(self, code: str, *, tool_name: str = "Write") -> ObjectDict:
+        tool_input = {"file_path": "src/main.py", "content": code}
+        if tool_name == "Patch":
+            tool_input = {"patch": code}
+        return {
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "cwd": str(BUNDLE_ROOT),
+        }
+
+    def test_nonstandard_module_import_alias_denied(self) -> None:
+        code = "import app.shared.normalizers as normalizers_v2\n"
+        result = evaluate_payload(self._make_payload(code))
+        _assert_denied_by(result, "PY-IMPORT-002")
+
+    def test_nonstandard_from_import_alias_denied(self) -> None:
+        code = "from app.shared.normalizers import normalize_user as normalize_order\n"
+        result = evaluate_payload(self._make_payload(code))
+        _assert_denied_by(result, "PY-IMPORT-002")
+
+    def test_nonstandard_import_alias_gives_exact_replacement(self) -> None:
+        code = "from app.services import resolver as r\n"
+        result = evaluate_payload(self._make_payload(code))
+        _assert_denied_by(result, "PY-IMPORT-002")
+        reason = _permission_reason(result)
+
+        assert "from app.services import resolver" in reason
+        assert "resolver.<name>(...)" in reason
+
+    def test_allowed_scientific_library_aliases_not_denied(self) -> None:
+        code = "\n".join(
+            [
+                "import numpy as np",
+                "import pandas as pd",
+                "import polars as pl",
+                "from matplotlib import pyplot as plt",
+                "import seaborn as sns",
+                "",
+            ]
+        )
+        result = evaluate_payload(self._make_payload(code))
+        _assert_not_denied(result)
+        rule_ids = {f.rule_id for f in result.findings}
+        assert "PY-IMPORT-002" not in rule_ids, "canonical aliases must remain allowed"
+
+    def test_patch_added_nonstandard_import_alias_denied(self) -> None:
+        patch_text = (
+            "*** Begin Patch\n"
+            "*** Add File: src/aliased.py\n"
+            "+import app.shared as shared2\n"
+            "+\n"
+            "+def load(value: object) -> object:\n"
+            "+    loaded = shared2.load(value)\n"
+            "+    return {\"loaded\": loaded}\n"
+            "*** End Patch\n"
+        )
+        result = evaluate_payload(self._make_payload(patch_text, tool_name="Patch"))
+        _assert_denied_by(result, "PY-IMPORT-002")
 
 
 class TestImportFanout(unittest.TestCase):

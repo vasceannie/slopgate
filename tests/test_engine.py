@@ -364,6 +364,39 @@ def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Pat
     assert "PY-AST-001" not in finding_ids(result)
 
 
+def test_posttool_bash_move_skips_old_missing_path_but_checks_new_path(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo_move_ast_health"
+    source_dir = repo / "src" / "pkg"
+    target_dir = source_dir / "moved"
+    target_dir.mkdir(parents=True)
+    _ = (repo / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    old_path = source_dir / "worker.py"
+    new_path = target_dir / "worker.py"
+    _ = new_path.write_text("def worker(:\n    return 1\n", encoding="utf-8")
+    assert not old_path.exists()
+    assert new_path.exists()
+
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "mv src/pkg/worker.py src/pkg/moved/worker.py"},
+        "cwd": str(repo),
+        "session_id": "t",
+    }
+
+    result = evaluate_payload(payload)
+
+    ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
+    assert [(f.metadata.get("path"), f.metadata.get("kind")) for f in ast_findings] == [
+        ("src/pkg/moved/worker.py", "parse_error")
+    ]
+
+
 def test_morph_tool_is_edit_like() -> None:
     from vibeforcer.util.payloads import is_edit_like_tool
 
@@ -1422,6 +1455,12 @@ def test_py_log_001(pretool_write: WriteBuilder, code: str, should_deny: bool) -
         pytest.param("x = foo()  # pylint: disable=C0114\n", True, id="pylint-disable"),
         pytest.param("x = foo()  # pyright: ignore\n", True, id="pyright-ignore"),
         pytest.param("x = foo()  # pyre-ignore\n", True, id="pyre-ignore"),
+        pytest.param("x = foo()  # ty: ignore\n", True, id="ty-ignore"),
+        pytest.param(
+            "x = foo()  # ty: ignore[possibly-unbound]\n",
+            True,
+            id="ty-ignore-code",
+        ),
         pytest.param("x = foo()  # this is fine\n", False, id="normal-comment"),
     ],
 )
@@ -2944,6 +2983,57 @@ class TestEnforcementModes:
         result = evaluate_payload(
             _pretool_write_payload(repo, "quality_gate.toml", "[quality_gate]\nenabled = false\n")
         )
+        assert_denied_by(result, "REPO-ENROLL-001")
+
+    def test_repo_enrollment_rule_blocks_direct_policy_marker_edits(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_policy_marker_edit"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        result = evaluate_payload(
+            _pretool_write_payload(
+                repo,
+                "quality_gate.toml",
+                """
+[quality_gate]
+enabled = true
+[magic_values]
+allowed_strings = ["type", "value", "text", "status", "field", "company"]
+[wrappers]
+allowed = []
+""".lstrip(),
+            )
+        )
+        assert_denied_by(result, "REPO-ENROLL-001")
+
+    def test_repo_enrollment_rule_blocks_patch_marker_edits(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo_enrolled_policy_marker_patch"
+        repo.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Patch",
+            "tool_input": {
+                "patch": """
+*** Begin Patch
+*** Update File: quality_gate.toml
+@@
+ allowed_strings = [
++    "field",
++    "company",
+ ]
+*** End Patch
+""".lstrip()
+            },
+        }
+        result = evaluate_payload(payload)
         assert_denied_by(result, "REPO-ENROLL-001")
 
     def test_repo_enrollment_rule_blocks_patch_delete(self, tmp_path: Path) -> None:

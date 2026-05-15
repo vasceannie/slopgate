@@ -378,10 +378,23 @@ def _collect_literals(
             val = node.value
             if isinstance(val, (int, float)) and val not in allowed_nums:
                 num_counts[val].add(pf.rel)
-            elif isinstance(val, str) and val not in allowed_strs:
+            elif (
+                isinstance(val, str)
+                and val not in allowed_strs
+                and _is_semantic_string_literal(val)
+            ):
                 str_counts[val].add(pf.rel)
 
     return num_counts, str_counts
+
+
+def _is_semantic_string_literal(value: str) -> bool:
+    """Return True when a string literal is worth extracting to a named owner."""
+
+    stripped = value.strip()
+    if not stripped:
+        return False
+    return any(char.isalnum() for char in stripped)
 
 
 def detect_repeated_literals(

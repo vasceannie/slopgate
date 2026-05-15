@@ -9,11 +9,12 @@ Supports:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict
+from vibeforcer._types import object_dict, object_list
 
 
 def _find_binary() -> str:
@@ -49,6 +50,67 @@ _CLAUDE_EVENTS = (
 _ClaudeHookCommand = dict[str, str]
 _ClaudeHookEntry = dict[str, str | list[_ClaudeHookCommand]]
 _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
+
+
+def _entry_has_vibeforcer_command(entry: object) -> bool:
+    entry_dict = object_dict(entry)
+    if not entry_dict:
+        return False
+    hooks = entry_dict.get("hooks")
+    hook_entries = object_list(hooks)
+    if not hook_entries:
+        return False
+    for hook in hook_entries:
+        hook_dict = object_dict(hook)
+        if not hook_dict:
+            continue
+        command = hook_dict.get("command")
+        if isinstance(command, str) and "vibeforcer" in command and " handle" in command:
+            return True
+    return False
+
+
+def _coerce_hook_entries(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    entries: list[dict[str, object]] = []
+    for entry in cast(list[object], value):
+        entry_dict = object_dict(entry)
+        if entry_dict:
+            entries.append(entry_dict)
+    return entries
+
+
+def _merge_owned_hooks(
+    existing_hooks: object, managed_hooks: dict[str, list[dict[str, object]]]
+) -> dict[str, list[dict[str, object]]]:
+    merged: dict[str, list[dict[str, object]]] = {}
+    for event, entries in object_dict(existing_hooks).items():
+        merged[event] = _coerce_hook_entries(entries)
+    for event, entries in managed_hooks.items():
+        preserved = [
+            entry
+            for entry in merged.get(event, [])
+            if not _entry_has_vibeforcer_command(entry)
+        ]
+        merged[event] = [*preserved, *entries]
+    return merged
+
+
+def _remove_owned_hooks(existing_hooks: object) -> dict[str, list[dict[str, object]]]:
+    remaining: dict[str, list[dict[str, object]]] = {}
+    hooks_dict = object_dict(existing_hooks)
+    if not hooks_dict:
+        return remaining
+    for event, entries in hooks_dict.items():
+        kept = [
+            entry
+            for entry in _coerce_hook_entries(entries)
+            if not _entry_has_vibeforcer_command(entry)
+        ]
+        if kept:
+            remaining[event] = kept
+    return remaining
 
 
 def _claude_hooks_block(binary: str) -> _ClaudeHooks:
@@ -89,7 +151,7 @@ def _install_claude(dry_run: bool = False) -> int:
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings = {}
 
-    settings["hooks"] = hooks
+    settings["hooks"] = _merge_owned_hooks(settings.get("hooks"), cast(dict[str, list[dict[str, object]]], hooks))
     _ = settings_path.write_text(
         json.dumps(settings, indent=2) + "\n", encoding="utf-8"
     )
@@ -112,10 +174,14 @@ def _uninstall_claude(dry_run: bool = False) -> int:
         return 0
 
     if dry_run:
-        print(f"Would remove 'hooks' key from {settings_path}")
+        print(f"Would remove vibeforcer hook entries from {settings_path}")
         return 0
 
-    del settings["hooks"]
+    remaining_hooks = _remove_owned_hooks(settings.get("hooks"))
+    if remaining_hooks:
+        settings["hooks"] = remaining_hooks
+    else:
+        del settings["hooks"]
     _ = settings_path.write_text(
         json.dumps(settings, indent=2) + "\n", encoding="utf-8"
     )
@@ -139,15 +205,22 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
         "statusMessage": "Loading vibeforcer context",
     },
     "PreToolUse": {
-        # Codex hook docs currently expose Pre/Post tool hooks for Bash only.
-        "matcher": "Bash",
+        # Codex hook docs expose Pre/Post/Permission hooks for Bash,
+        # apply_patch, edit aliases, and MCP tools. Keep global installs narrow
+        # to shell plus file-edit aliases; MCP-wide interception is too broad.
+        "matcher": "Bash|apply_patch|Edit|Write",
         "timeout": 10,
-        "statusMessage": "vibeforcer: checking bash command",
+        "statusMessage": "vibeforcer: checking tool use",
+    },
+    "PermissionRequest": {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "timeout": 10,
+        "statusMessage": "vibeforcer: checking approval request",
     },
     "PostToolUse": {
-        "matcher": "Bash",
+        "matcher": "Bash|apply_patch|Edit|Write",
         "timeout": 10,
-        "statusMessage": "vibeforcer: reviewing bash output",
+        "statusMessage": "vibeforcer: reviewing tool output",
     },
     "UserPromptSubmit": {"timeout": 10},
     "Stop": {"timeout": 30},
@@ -175,6 +248,47 @@ def _codex_hooks_block(binary: str) -> _CodeHooks:
     return hooks
 
 
+_SECTION_RE = re.compile(r"^\s*\[[^\]]+\]")
+_CODEX_HOOKS_RE = re.compile(r"^(\s*codex_hooks\s*=\s*)[^#\n]*(\s*(?:#.*)?)$")
+
+
+def _enable_codex_hooks_toml(config_path: Path) -> None:
+    """Enable the current Codex hooks feature flag without rewriting config.toml."""
+    if config_path.exists():
+        text = config_path.read_text(encoding="utf-8")
+    else:
+        text = ""
+
+    lines = text.splitlines()
+    features_index: int | None = None
+    next_section_index = len(lines)
+    for index, line in enumerate(lines):
+        if line.strip() == "[features]":
+            features_index = index
+            break
+    if features_index is not None:
+        for index in range(features_index + 1, len(lines)):
+            if _SECTION_RE.match(lines[index]):
+                next_section_index = index
+                break
+        for index in range(features_index + 1, next_section_index):
+            match = _CODEX_HOOKS_RE.match(lines[index])
+            if match:
+                lines[index] = f"{match.group(1)}true{match.group(2)}"
+                config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                return
+        lines.insert(features_index + 1, "codex_hooks = true")
+        config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return
+
+    suffix = "" if not lines else "\n\n"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        text.rstrip("\n") + suffix + "[features]\ncodex_hooks = true\n",
+        encoding="utf-8",
+    )
+
+
 def _install_codex(dry_run: bool = False) -> int:
     binary = _find_binary()
     hooks_path = Path.home() / ".codex" / "hooks.json"
@@ -197,27 +311,14 @@ def _install_codex(dry_run: bool = False) -> int:
     else:
         existing = {}
 
-    existing["hooks"] = hooks
+    existing["hooks"] = _merge_owned_hooks(existing.get("hooks"), cast(dict[str, list[dict[str, object]]], hooks))
     _ = hooks_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
-    # Enable hooks feature flag
-    config_path = Path.home() / ".codex" / "config.json"
-    if config_path.exists():
-        try:
-            parsed = cast(object, json.loads(config_path.read_text(encoding="utf-8")))
-            config = object_dict(parsed)
-        except json.JSONDecodeError:
-            config = {}
-    else:
-        config = {}
-
-    features = object_dict(config.get("features"))
-    features["hooks"] = True
-    config["features"] = features
-    _ = config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    config_path = Path.home() / ".codex" / "config.toml"
+    _enable_codex_hooks_toml(config_path)
 
     print(f"Installed vibeforcer hooks into {hooks_path}")
-    print(f"Enabled hooks feature flag in {config_path}")
+    print(f"Enabled codex_hooks feature flag in {config_path}")
     print(f"Binary: {binary}")
     return 0
 
@@ -229,11 +330,27 @@ def _uninstall_codex(dry_run: bool = False) -> int:
         return 0
 
     if dry_run:
-        print(f"Would delete: {hooks_path}")
+        print(f"Would remove vibeforcer hook entries from {hooks_path}")
         return 0
 
-    hooks_path.unlink()
-    print(f"Removed: {hooks_path}")
+    try:
+        parsed = cast(object, json.loads(hooks_path.read_text(encoding="utf-8")))
+        existing = object_dict(parsed)
+    except json.JSONDecodeError:
+        hooks_path.unlink()
+        print(f"Removed invalid hooks file: {hooks_path}")
+        return 0
+
+    remaining_hooks = _remove_owned_hooks(existing.get("hooks"))
+    if remaining_hooks:
+        existing["hooks"] = remaining_hooks
+        _ = hooks_path.write_text(
+            json.dumps(existing, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"Removed vibeforcer hooks from {hooks_path}")
+    else:
+        hooks_path.unlink()
+        print(f"Removed: {hooks_path}")
     return 0
 
 

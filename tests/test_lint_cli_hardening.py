@@ -78,6 +78,37 @@ def test_lint_check_details_outputs_prescriptive_blocks(
     assert "prognosis: one module owns multiple responsibilities" in captured.out
 
 
+def test_lint_check_flags_ty_ignore_as_type_suppression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "types.py").write_text(
+        "from __future__ import annotations\n\n"
+        "def identity(value: object) -> object:\n"
+        "    return value  # ty: ignore[possibly-unbound]\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    monkeypatch.chdir(tmp_path)
+    reset_config()
+    try:
+        result = cmd_lint(argparse.Namespace(lint_command="check", details=True))
+    finally:
+        reset_config()
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[NEW] type-suppression" in captured.out
+    assert "# ty: ignore[possibly-unbound]" in captured.out
+
+
 def test_lint_details_formatter_includes_prescriptive_scaffold() -> None:
     violation = Violation(
         rule="oversized-module",

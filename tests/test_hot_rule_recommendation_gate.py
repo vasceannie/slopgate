@@ -108,6 +108,9 @@ def test_quality_lint_posttool_reason_marks_already_mutated_repair(
     assert "reread the touched file" in context
     assert "smallest repo-root quality command" in context
     assert "fix only the reported collector" in context
+    output_text = str(result.output)
+    assert "First lint violation detail" in output_text
+    assert "scaffold:" in output_text
 
 
 def test_quality_lint_pathless_reason_names_last_edit_fallback(tmp_path: Path) -> None:

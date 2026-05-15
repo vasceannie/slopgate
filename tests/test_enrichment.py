@@ -769,6 +769,39 @@ class TestPYCODE009Enrichment:
 
 
 # ===========================================================================
+# Integration: PY-CODE-013 enrichment (thin wrappers)
+# ===========================================================================
+
+
+class TestPYCODE013RepoLocalEnrichment:
+    def test_thin_wrapper_cites_repo_local_call_sites(self, tmp_project: Path) -> None:
+        src_dir = tmp_project / "src"
+        _mkdir(src_dir, exist_ok=True)
+        code = (
+            "def load_config(path):\n"
+            "    return {\"path\": path}\n\n"
+            "def read_config(path):\n"
+            "    return load_config(path)\n"
+        )
+        _write_text(src_dir / "api.py", code)
+        _write_text(
+            src_dir / "cli.py",
+            "from .api import read_config\n\nVALUE = read_config('settings.toml')\n",
+        )
+
+        payload = _pretool_write_payload("src/api.py", code, str(tmp_project))
+        result = evaluate_payload(payload)
+        test_support.assert_denied_by(result, "PY-CODE-013")
+        reason = test_support.required_string(
+            test_support.hook_output(result), "permissionDecisionReason"
+        )
+
+        assert "Local call sites" in reason
+        assert "src/cli.py" in reason
+        assert "read_config" in reason
+
+
+# ===========================================================================
 # Integration: PY-CODE-015 enrichment (cyclomatic complexity)
 # ===========================================================================
 
@@ -1034,6 +1067,35 @@ class TestPYQUALITY010Enrichment:
             test_support.hook_output(result), "permissionDecisionReason"
         )
         assert "constants.py" in reason, f"Expected constants.py reference: {reason}"
+        assert "Nearby importable constants" in reason, (
+            f"Expected nearby constant suggestions: {reason}"
+        )
+        assert "from constants import MAX_RETRIES, TIMEOUT" in reason, (
+            f"Expected importable constants in reason: {reason}"
+        )
+
+    def test_suggests_exact_importable_constant(self, tmp_project: Path) -> None:
+        """When constants.py has the literal value, denial suggests importing it."""
+        src_dir = tmp_project / "src"
+        _mkdir(src_dir, exist_ok=True)
+        _write_text(
+            src_dir / "constants.py",
+            "MAX_RETRIES = 3\nAPI_TIMEOUT_SECONDS = 300\nTIMEOUT_CEILING = 500\n",
+        )
+
+        code = "def retry():\n    timeout = 300\n    if timeout > 500:\n        pass\n"
+        payload = _pretool_write_payload("src/retry.py", code, str(tmp_project))
+        result = evaluate_payload(payload)
+        test_support.assert_denied_by(result, "PY-QUALITY-010")
+
+        reason = test_support.required_string(
+            test_support.hook_output(result), "permissionDecisionReason"
+        )
+        assert "Exact constant match" in reason, f"Expected exact match: {reason}"
+        assert "API_TIMEOUT_SECONDS = 300" in reason, f"Expected exact constant: {reason}"
+        assert "from constants import API_TIMEOUT_SECONDS" in reason, (
+            f"Expected exact import suggestion: {reason}"
+        )
 
     def test_suggests_creating_constants(self, tmp_project: Path) -> None:
         """When no constants module exists, suggest creating one."""

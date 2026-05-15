@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, NamedTuple, final
 from typing_extensions import override
 
 from vibeforcer._types import ObjectDict, object_dict, object_list
@@ -427,6 +427,11 @@ class PythonAstHealthRule(Rule):
                 full_path = _resolve_python_path(ctx, path_value)
                 try:
                     source = full_path.read_text(encoding="utf-8")
+                except FileNotFoundError:
+                    if ctx.event_name == "PostToolUse" and is_bash_tool(ctx.tool_name):
+                        continue
+                    findings.append(self._finding(ctx, path_value, "read_error"))
+                    continue
                 except OSError:
                     findings.append(self._finding(ctx, path_value, "read_error"))
                     continue
@@ -1318,54 +1323,156 @@ class PythonDeadCodeRule(Rule):
 
 
 # ---------------------------------------------------------------------------
-# PY-CODE-017: Detect _prefix_* flat-file sprawl (PostToolUse only)
+# PY-CODE-017: Detect flat prefix_* sibling module sprawl
 # ---------------------------------------------------------------------------
+
+
+class _FlatSiblingFindingInput(NamedTuple):
+    parent: Path
+    prefix: str
+    files: list[str]
+    decision: str
+    reason: str
+
+
+def _flat_sibling_resolve_candidate_path(ctx: HookContext, path_value: str) -> Path:
+    raw_path = Path(path_value)
+    return raw_path if raw_path.is_absolute() else (Path(ctx.cwd) / raw_path).resolve()
+
+
+def _flat_sibling_patch_blob(ctx: HookContext) -> str:
+    return first_present(ctx.tool_input, ("patch", "patchText", "patch_text"))
+
+
+def _flat_sibling_patch_added_and_removed_paths(
+    patch_blob: str,
+) -> tuple[list[str], list[str]]:
+    added: list[str] = []
+    removed: list[str] = []
+    current_update_path = ""
+    for line in patch_blob.splitlines():
+        if line.startswith("*** Update File: "):
+            current_update_path = line.replace("*** Update File: ", "", 1).strip()
+            continue
+        if line.startswith("*** Add File: "):
+            added.append(line.replace("*** Add File: ", "", 1).strip())
+            current_update_path = ""
+            continue
+        if line.startswith("*** Delete File: "):
+            removed.append(line.replace("*** Delete File: ", "", 1).strip())
+            current_update_path = ""
+            continue
+        if line.startswith("*** Move to: "):
+            if current_update_path:
+                removed.append(current_update_path)
+            added.append(line.replace("*** Move to: ", "", 1).strip())
+            current_update_path = ""
+    return added, removed
+
+
+def _flat_sibling_projected_removed_files(ctx: HookContext) -> dict[Path, set[str]]:
+    """Return flat sibling filenames a patch is deleting/moving away."""
+    patch_blob = _flat_sibling_patch_blob(ctx)
+    if not patch_blob:
+        return {}
+    _, removed_paths = _flat_sibling_patch_added_and_removed_paths(patch_blob)
+    removed_by_parent: dict[Path, set[str]] = {}
+    for path_value in removed_paths:
+        if not path_value.lower().endswith((".py", ".pyi")):
+            continue
+        full = _flat_sibling_resolve_candidate_path(ctx, path_value)
+        prefix = PythonFlatFileSiblingsRule.prefix_for_name(full.name)
+        if prefix is None:
+            continue
+        removed_by_parent.setdefault(full.parent, set()).add(full.name)
+    return removed_by_parent
 
 
 @final
 class PythonFlatFileSiblingsRule(Rule):
-    """After a .py write, check if the parent dir has 3+ files sharing a
-    _prefix_ naming pattern -- a sign the module should be a sub-package.
+    """Block package splits that create flat sibling modules instead of packages.
+
+    The original guard only caught ``_prefix_*.py`` files after a write. That
+    missed the more common ``prefix_*.py`` shape (``result_models.py``,
+    ``result_runner.py``) and files that sit beside an already-created package
+    directory (``context_models.py`` next to ``context/``). Those are both
+    strong signs the split should be ``prefix/__init__.py`` plus focused child
+    modules.
     """
 
     rule_id = "PY-CODE-017"
-    title = "Block flat _prefix_* sibling file sprawl"
-    events = ("PostToolUse",)
+    title = "Block flat prefix_* sibling file sprawl"
+    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
 
-    _MIN_SIBLINGS = 3  # trigger threshold
+    _MIN_SIBLINGS = 3
+    _IGNORED_PREFIXES = frozenset({"test"})
 
     @staticmethod
-    def _prefix_groups(directory: Path) -> dict[str, list[str]]:
-        """Group _prefix_*.py files by their shared prefix."""
+    def prefix_for_name(name: str) -> str | None:
+        """Return the package prefix for prefix_*.py and _prefix_*.py names."""
         import re as _re
 
+        match = _re.match(r"^_?([a-z][a-z0-9]*)_[a-z0-9_]+\.pyi?$", name)
+        if match is None:
+            return None
+        prefix = match.group(1)
+        if prefix in PythonFlatFileSiblingsRule._IGNORED_PREFIXES:
+            return None
+        return prefix
+
+    @staticmethod
+    def _prefix_groups(
+        directory: Path, extra_files: set[str], removed_files: set[str]
+    ) -> dict[str, list[str]]:
+        """Group existing plus projected sibling files by shared package prefix."""
         groups: dict[str, list[str]] = {}
-        pat = _re.compile(r"^_([a-z]+)_[a-z_]+\.py$")
-        for child in directory.iterdir():
-            if not child.is_file():
-                continue
-            m = pat.match(child.name)
-            if m:
-                groups.setdefault(m.group(1), []).append(child.name)
+        names = set(extra_files)
+        if directory.exists():
+            for child in directory.iterdir():
+                if child.is_file():
+                    names.add(child.name)
+        names.difference_update(removed_files)
+        for name in names:
+            prefix = PythonFlatFileSiblingsRule.prefix_for_name(name)
+            if prefix is not None:
+                groups.setdefault(prefix, []).append(name)
         return groups
 
     @staticmethod
-    def _build_pkg_block(files: list[str], prefix: str) -> str:
-        """Return indented stem lines for the suggested sub-package layout."""
-        tag = "_" + prefix + "_"
-        return "\n".join("        " + f.removeprefix(tag) for f in sorted(files)[:5])
+    def _module_name_for_package(files: list[str], prefix: str) -> list[str]:
+        modules: list[str] = []
+        for name in sorted(files)[:5]:
+            stem = name.removesuffix(".pyi").removesuffix(".py")
+            for tag in (f"_{prefix}_", f"{prefix}_"):
+                if stem.startswith(tag):
+                    stem = stem.removeprefix(tag)
+                    break
+            modules.append(f"{stem}.py")
+        return modules
 
-    def _finding_for_prefix(
-        self, parent: Path, prefix: str, files: list[str]
-    ) -> RuleFinding:
-        files_str = ", ".join(sorted(files)[:5])
-        pkg_block = self._build_pkg_block(files, prefix)
+    @classmethod
+    def _build_pkg_block(cls, files: list[str], prefix: str) -> str:
+        """Return indented child-module lines for the suggested package layout."""
+        return "\n".join(
+            "        " + module for module in cls._module_name_for_package(files, prefix)
+        )
+
+    @staticmethod
+    def _has_same_named_package(parent: Path, prefix: str) -> bool:
+        package = parent / prefix
+        return package.is_dir() and (package / "__init__.py").exists()
+
+    def _finding_for_group(self, group: _FlatSiblingFindingInput) -> RuleFinding:
+        sorted_files = sorted(group.files)
+        files_str = ", ".join(sorted_files[:5])
+        pkg_block = self._build_pkg_block(group.files, group.prefix)
+        representative_path = str(group.parent / sorted_files[0]) if sorted_files else str(group.parent)
         nl = "\n"
         msg = (
-            f"Directory `{parent.name}/` has {len(files)} "
-            f"`_{prefix}_*.py` sibling files ({files_str}). "
+            f"Directory `{group.parent.name}/` has flat `{group.prefix}_*.py` "
+            f"sibling modules ({files_str}); {group.reason}. "
             f"Convert to a sub-package instead:{nl}{nl}"
-            f"    {parent.name}/{prefix}/{nl}"
+            f"    {group.parent.name}/{group.prefix}/{nl}"
             f"        __init__.py   (re-export public API){nl}"
             f"{pkg_block}{nl}{nl}"
             f"The __init__.py should re-export so external imports don't change."
@@ -1374,39 +1481,85 @@ class PythonFlatFileSiblingsRule(Rule):
             rule_id=self.rule_id,
             title=self.title,
             severity=Severity.HIGH,
-            decision="block",
+            decision=group.decision,
             message=msg,
             metadata={
-                "directory": str(parent),
-                "prefix": prefix,
-                "count": len(files),
-                "files": sorted(files),
+                "path": representative_path,
+                "directory": str(group.parent),
+                "prefix": group.prefix,
+                "count": len(group.files),
+                "files": sorted_files,
+                "reason": group.reason,
             },
         )
 
-    def _findings_for_directory(self, parent: Path) -> list[RuleFinding]:
+    def _findings_for_directory(
+        self,
+        parent: Path,
+        extra_files: set[str],
+        decision: str,
+        removed_files: set[str] | None = None,
+    ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for prefix, files in self._prefix_groups(parent).items():
-            if len(files) >= self._MIN_SIBLINGS:
-                findings.append(self._finding_for_prefix(parent, prefix, files))
+        projected_removed_files = removed_files or set()
+        for prefix, files in self._prefix_groups(
+            parent, extra_files, projected_removed_files
+        ).items():
+            has_package = self._has_same_named_package(parent, prefix)
+            if has_package:
+                findings.append(
+                    self._finding_for_group(
+                        _FlatSiblingFindingInput(
+                            parent,
+                            prefix,
+                            files,
+                            decision,
+                            f"`{prefix}/` already exists",
+                        )
+                    )
+                )
+            elif len(files) >= self._MIN_SIBLINGS:
+                findings.append(
+                    self._finding_for_group(
+                        _FlatSiblingFindingInput(
+                            parent,
+                            prefix,
+                            files,
+                            decision,
+                            f"{len(files)} files share the `{prefix}` prefix",
+                        )
+                    )
+                )
         return findings
 
-    def _resolve_candidate_dirs(self, ctx: HookContext) -> list[Path]:
-        seen: set[Path] = set()
-        dirs: list[Path] = []
+    def _resolve_candidate_dirs(self, ctx: HookContext) -> dict[Path, set[str]]:
+        dirs: dict[Path, set[str]] = {}
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):
                 continue
-            full = (
-                (Path(ctx.cwd) / path_value).resolve()
-                if not Path(path_value).is_absolute()
-                else Path(path_value)
-            )
+            full = _flat_sibling_resolve_candidate_path(ctx, path_value)
             parent = full.parent
-            if parent not in seen and parent.is_dir():
-                seen.add(parent)
-                dirs.append(parent)
+            if parent.exists() and parent.is_dir():
+                files = dirs.setdefault(parent, set())
+                if ctx.event_name != "PostToolUse" or full.exists():
+                    files.add(full.name)
         return dirs
+
+    @staticmethod
+    def _should_evaluate(ctx: HookContext) -> bool:
+        """Evaluate proactive writes, but let Bash filesystem moves reach post-check.
+
+        A package-split repair may need a mechanical `mkdir`/`mv` batch while the
+        old flat siblings still exist. Blocking Bash before that batch executes
+        traps agents in a repeated-deny loop. PostToolUse still verifies the
+        resulting filesystem shape, and PY-SHELL-001 continues to block shell
+        edits to Python source.
+        """
+        if ctx.event_name in {"PreToolUse", "PermissionRequest"}:
+            return is_edit_like_tool(ctx.tool_name)
+        if ctx.event_name == "PostToolUse":
+            return is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)
+        return False
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -1414,12 +1567,315 @@ class PythonFlatFileSiblingsRule(Rule):
             return []
         if ctx.event_name not in self.events:
             return []
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not self._should_evaluate(ctx):
+            return []
+        decision = "deny" if ctx.event_name in {"PreToolUse", "PermissionRequest"} else "block"
+        findings: list[RuleFinding] = []
+        removed_by_parent = _flat_sibling_projected_removed_files(ctx)
+        for parent, extra_files in self._resolve_candidate_dirs(ctx).items():
+            findings.extend(
+                self._findings_for_directory(
+                    parent,
+                    extra_files,
+                    decision,
+                    removed_by_parent.get(parent),
+                )
+            )
+        return findings
+
+
+# ---------------------------------------------------------------------------
+# PY-IMPORT-002: Non-standard import aliases hide duplicate code
+# ---------------------------------------------------------------------------
+
+_ALLOWED_IMPORT_ALIASES: dict[str, str] = {
+    "altair": "alt",
+    "geopandas": "gpd",
+    "jax.numpy": "jnp",
+    "matplotlib": "mpl",
+    "matplotlib.pyplot": "plt",
+    "networkx": "nx",
+    "numpy": "np",
+    "pandas": "pd",
+    "plotly.express": "px",
+    "polars": "pl",
+    "pyarrow": "pa",
+    "pyspark.sql.functions": "F",
+    "pyspark.sql.types": "T",
+    "pyspark.sql.window": "W",
+    "scipy": "sp",
+    "seaborn": "sns",
+    "sqlalchemy": "sa",
+    "statsmodels.api": "sm",
+    "statsmodels.formula.api": "smf",
+    "sympy": "sp",
+    "tensorflow": "tf",
+    "tkinter": "tk",
+    "tkinter.ttk": "ttk",
+    "torch.nn": "nn",
+    "xml.etree.ElementTree": "ET",
+}
+
+
+def _import_alias_full_name(node: ast.Import | ast.ImportFrom, name: ast.alias) -> str:
+    """Return the imported object path used for alias allowlist checks."""
+    if isinstance(node, ast.Import):
+        return name.name
+    module = node.module or ""
+    if not module:
+        return name.name
+    return f"{module}.{name.name}"
+
+
+def _allowed_import_alias(node: ast.Import | ast.ImportFrom, name: ast.alias) -> bool:
+    """Return True when an import alias is a canonical library convention."""
+    if name.asname is None:
+        return True
+    if name.name == "*":
+        return False
+    full_name = _import_alias_full_name(node, name)
+    return _ALLOWED_IMPORT_ALIASES.get(full_name) == name.asname
+
+
+def _import_alias_replacement(node: ast.Import | ast.ImportFrom, name: ast.alias) -> tuple[str, str]:
+    """Return exact replacement import text and usage hint for a blocked alias."""
+    if isinstance(node, ast.Import):
+        return f"import {name.name}", f"{name.name}.<name>(...)"
+    module = node.module or ""
+    if module:
+        return f"from {module} import {name.name}", f"{name.name}.<name>(...)"
+    return f"import {name.name}", f"{name.name}.<name>(...)"
+
+
+def _patch_added_source(source: str) -> str | None:
+    """Extract added Python lines from a patch-like content target."""
+    added: list[str] = []
+    for line in source.splitlines():
+        if line.startswith("+++") or line.startswith("***"):
+            continue
+        if line.startswith("+"):
+            added.append(line[1:])
+    if not added:
+        return None
+    return "\n".join(added)
+
+
+def _is_private_module_segment(segment: str) -> bool:
+    """Return True for a single-underscore implementation module segment."""
+    return segment.startswith("_") and not segment.startswith("__")
+
+
+def _private_module_segments(module_name: str) -> list[str]:
+    """Return private segments from a dotted module/import path."""
+    return [segment for segment in module_name.split(".") if _is_private_module_segment(segment)]
+
+
+def _module_path_from_python_file(path_value: str) -> str:
+    """Return a dotted module-ish path from a Python file path."""
+    normalized = path_value.replace("\\", "/").strip("/")
+    if not normalized.endswith((".py", ".pyi")):
+        return normalized.replace("/", ".")
+    module_path = normalized.rsplit(".", 1)[0].replace("/", ".")
+    if module_path.endswith(".__init__"):
+        return module_path.removesuffix(".__init__")
+    return module_path
+
+
+def _imported_modules(node: ast.AST) -> list[tuple[int, str]]:
+    """Return imported module paths from an import node."""
+    if isinstance(node, ast.ImportFrom) and node.module:
+        return [(node.lineno, node.module)]
+    if isinstance(node, ast.Import):
+        return [(node.lineno, alias.name) for alias in node.names]
+    return []
+
+
+@final
+class PythonPrivateImportChainRule(Rule):
+    """Block stacked private module paths/imports such as _orchestrate._core."""
+
+    rule_id = "PY-IMPORT-003"
+    title = "Block stacked private Python import chains"
+    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+
+    def _finding(
+        self,
+        ctx: HookContext,
+        path_value: str,
+        target: str,
+        *,
+        line: int | None = None,
+        kind: str,
+    ) -> RuleFinding:
+        location = f" on line {line}" if line is not None else ""
+        return RuleFinding(
+            rule_id=self.rule_id,
+            title=self.title,
+            severity=Severity.HIGH,
+            decision=decision_for_context(ctx),
+            message=(
+                f"`{path_value}` introduces a stacked private Python {kind}{location}: "
+                f"`{target}`. Avoid names that force imports like "
+                "`pkg._impl._core`; expose the API through a facade or use descriptive "
+                "public module names."
+            ),
+            additional_context=(
+                "Keep at most one private module segment in an import/path. If a split "
+                "needs multiple files, prefer `orchestrate/context.py`, "
+                "`orchestrate/platform_auth.py`, etc., and re-export stable names from "
+                "the package boundary instead of making callers import nested internals."
+            ),
+            metadata={"path": path_value, "target": target, "kind": kind, "line": line},
+        )
+
+    def _path_finding(self, ctx: HookContext, path_value: str) -> RuleFinding | None:
+        module_path = _module_path_from_python_file(path_value)
+        if len(_private_module_segments(module_path)) < 2:
+            return None
+        return self._finding(ctx, path_value, module_path, kind="module path")
+
+    def _import_findings(
+        self,
+        ctx: HookContext,
+        source: str,
+        path_value: str,
+    ) -> list[RuleFinding]:
+        module = parse_module(source, ctx.config.python_ast_max_parse_chars)
+        if module is None:
+            added_source = _patch_added_source(source)
+            module = parse_module(added_source or "", ctx.config.python_ast_max_parse_chars)
+        if module is None:
             return []
         findings: list[RuleFinding] = []
-        for parent in self._resolve_candidate_dirs(ctx):
-            findings.extend(self._findings_for_directory(parent))
+        for node in ast.walk(module):
+            for line, module_name in _imported_modules(node):
+                if len(_private_module_segments(module_name)) < 2:
+                    continue
+                findings.append(
+                    self._finding(
+                        ctx,
+                        path_value,
+                        module_name,
+                        line=line,
+                        kind="import chain",
+                    )
+                )
         return findings
+
+    def _check_source(
+        self,
+        source: str,
+        path_value: str,
+        ctx: HookContext,
+    ) -> list[RuleFinding]:
+        findings: list[RuleFinding] = []
+        path_finding = self._path_finding(ctx, path_value)
+        if path_finding is not None:
+            findings.append(path_finding)
+        findings.extend(self._import_findings(ctx, source, path_value))
+        return findings
+
+    @override
+    def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
+        if not is_rule_enabled(ctx, self.rule_id):
+            return []
+        return evaluate_common(self, ctx, self._check_source)
+
+
+@final
+class PythonImportAliasRule(Rule):
+    """PY-IMPORT-002: Block non-standard import aliases.
+
+    Arbitrary ``as`` aliases let agents make duplicated blocks look different
+    enough to evade clone/repeated-block detectors. Keep only well-known library
+    coupling aliases such as ``pandas as pd`` or ``polars as pl``.
+    """
+
+    rule_id = "PY-IMPORT-002"
+    title = "Block non-standard Python import aliases"
+    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+
+    @staticmethod
+    def _iter_modules(source: str, max_chars: int) -> list[ast.Module]:
+        modules: list[ast.Module] = []
+        module = parse_module(source, max_chars)
+        if module is not None:
+            modules.append(module)
+            return modules
+        added_source = _patch_added_source(source)
+        if added_source is None:
+            return modules
+        added_module = parse_module(added_source, max_chars)
+        if added_module is not None:
+            modules.append(added_module)
+        return modules
+
+    @staticmethod
+    def _collect_aliases(module: ast.Module) -> list[tuple[int, str, str, str, str]]:
+        aliases: list[tuple[int, str, str, str, str]] = []
+        for node in ast.walk(module):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            for name in node.names:
+                if name.asname is None or _allowed_import_alias(node, name):
+                    continue
+                replacement, usage = _import_alias_replacement(node, name)
+                aliases.append((
+                    node.lineno,
+                    _import_alias_full_name(node, name),
+                    name.asname,
+                    replacement,
+                    usage,
+                ))
+        return aliases
+
+    def _check_source(
+        self,
+        source: str,
+        path_value: str,
+        ctx: HookContext,
+    ) -> list[RuleFinding]:
+        findings: list[RuleFinding] = []
+        max_chars = ctx.config.python_ast_max_parse_chars
+        for module in self._iter_modules(source, max_chars):
+            for lineno, imported_name, asname, replacement, usage in self._collect_aliases(module):
+                message = (
+                    f"`{path_value}` imports `{imported_name} as {asname}` on line "
+                    f"{lineno}. Non-standard import aliases are blocked because "
+                    "they hide duplicated code from clone/repeated-block detectors. "
+                    "Use the real module/name or extract shared behavior instead. "
+                    "Only canonical library aliases are allowed, e.g. `pandas as pd`, "
+                    "`polars as pl`, `numpy as np`, or `matplotlib.pyplot as plt`.\n\n"
+                    "Use this instead:\n"
+                    f"    {replacement}\n"
+                    f"Then call: `{usage}`"
+                )
+                findings.append(
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.HIGH,
+                        decision=decision_for_context(ctx),
+                        message=message,
+                        additional_context=(
+                            "Remove the alias or refactor the duplicated block; do "
+                            "not rename imports to make duplicate code look unique."
+                        ),
+                        metadata={
+                            "path": path_value,
+                            "line": lineno,
+                            "imported_name": imported_name,
+                            "alias": asname,
+                        },
+                    )
+                )
+        return findings
+
+    @override
+    def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
+        if not is_rule_enabled(ctx, self.rule_id):
+            return []
+        return evaluate_common(self, ctx, self._check_source)
 
 
 # ---------------------------------------------------------------------------

@@ -248,6 +248,10 @@ class TestOversizedModuleHookBehavior:
             _pre_write_payload(tmp_path, "src/soft_oversized.py", _assignment_module(351))
         )
         _assert_hook_prevents(result, expected_text="oversized")
+        findings = _findings_for_rule(result, "PY-CODE-018")
+        assert len(findings) == 1
+        assert "code-hygiene-refactor" in (findings[0].additional_context or "")
+        assert "hygiene-orchestrator" in (findings[0].additional_context or "")
 
     def test_pretool_write_blocks_hard_oversized_python_module(
         self, tmp_path: Path
@@ -392,6 +396,8 @@ class TestOversizedModuleHookBehavior:
         assert _finding_ids(result).count("QUALITY-LINT-001") == 1
         assert "PY-CODE-018" not in _finding_ids(result)
         assert "module-to-package split plan" in _result_text(result)
+        assert "code-hygiene-refactor" in _result_text(result)
+        assert "hygiene-orchestrator" in _result_text(result)
 
     def test_posttool_write_uses_single_conftest_oversized_recommendation(
         self, tmp_path: Path

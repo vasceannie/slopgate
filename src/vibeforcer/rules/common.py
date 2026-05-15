@@ -362,10 +362,17 @@ def _resolve_candidate_path(path_value: str, cwd: Path) -> str:
     return lower_path(str(path.resolve(strict=False)))
 
 
+def _is_exact_dev_null(path_value: str) -> bool:
+    """Return True only for the harmless null device path."""
+    return lower_path(path_value) == "/dev/null"
+
+
 def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str | None:
     """Return the first path matching a system prefix, or None."""
     for path_value in paths:
         lowered = _resolve_candidate_path(path_value, cwd)
+        if _is_exact_dev_null(lowered):
+            continue
         if any(lowered.startswith(p) for p in prefixes):
             return path_value
     return None
@@ -374,13 +381,18 @@ def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str 
 def _match_system_command(command: str, prefixes: list[str]) -> str | None:
     """Return '[command]' if command references a system path."""
     lowered = command.lower()
+    separator = r"(?:^|[\s;|&(<>=])"
+    terminator = r"[^\s;|&()<>'\"]*"
     for prefix in prefixes:
         if not prefix.startswith("/"):
             if prefix in lowered:
                 return "[command]"
             continue
-        pat = r"(?:^|[\s;|&(])" + re.escape(prefix)
-        if re.search(pat, lowered):
+        pat = separator + "(" + re.escape(prefix) + terminator + ")"
+        for match in re.finditer(pat, lowered):
+            matched_path = match.group(1)
+            if _is_exact_dev_null(matched_path):
+                continue
             return "[command]"
     return None
 
@@ -604,22 +616,30 @@ def _resolve_python_candidates(ctx: "HookContext") -> tuple[list[Path], list[Pat
     return src_files, test_files
 
 
-def _collect_touched_lint_failures(ctx: "HookContext") -> list[str]:
+def _collect_touched_lint_failures(ctx: "HookContext") -> tuple[list[str], list[str]]:
     src_files, test_files = _resolve_python_candidates(ctx)
     if not src_files and not test_files:
-        return []
+        return [], []
     from vibeforcer.lint._collectors import run_all_collectors
     from vibeforcer.lint._config import load_config as load_lint_config
     from vibeforcer.lint._config import set_config as set_lint_config
+    from vibeforcer.lint._details import format_violation_details
 
     lint_cfg = load_lint_config(ctx.config.repo_root)
     set_lint_config(lint_cfg)
     failures: list[str] = []
+    first_detail: list[str] = []
     for rule_name, violations in run_all_collectors(src_files, test_files):
         if not violations:
             continue
         failures.append(f"{rule_name}: {len(violations)}")
-    return failures
+        if not first_detail:
+            first_detail = format_violation_details(
+                rule_name,
+                violations[0],
+                status="HOOK",
+            )
+    return failures, first_detail
 
 
 def _python_lint_targets(ctx: "HookContext") -> list[str]:
@@ -725,7 +745,7 @@ class PostEditLintRule(Rule):
             return []
         if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
             return []
-        failures = _collect_touched_lint_failures(ctx)
+        failures, first_detail = _collect_touched_lint_failures(ctx)
         if not failures:
             return []
         summary = ", ".join(failures[:6])
@@ -738,6 +758,11 @@ class PostEditLintRule(Rule):
             f"Touched-file lint detectors found issues{target_summary}. "
             f"{summary}. {instruction} Repair touched files before continuing."
         )
+        if first_detail:
+            details = (
+                f"{details} First lint violation detail:\n"
+                + "\n".join(first_detail[:12])
+            )
         if _has_oversized_module_failure(failures):
             details = f"{details} {_post_lint_oversized_guidance(targets)}"
         metadata: dict[str, object] = {"failing_collectors": failures, "paths": targets}

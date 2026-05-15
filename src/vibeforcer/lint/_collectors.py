@@ -8,6 +8,7 @@ from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._helpers import ParsedFile, parse_files
+from vibeforcer.lint._parse_errors import detect_python_parse_errors
 
 
 def _ast_src_collectors(
@@ -103,6 +104,39 @@ def _test_collectors(
     ]
 
 
+def run_test_integrity_collectors(
+    src_files: list[Path],
+    test_files: list[Path],
+) -> list[tuple[str, list[Violation]]]:
+    """Run focused detectors for bad-test-efficacy indicators only."""
+    from vibeforcer.lint._detectors.test_smells import (
+        detect_hand_built_test_payloads,
+        detect_hypothesis_candidates,
+        detect_missing_integration_tests,
+        detect_mock_theater,
+        detect_mocked_integration_tests,
+        detect_obsolete_or_deprecated_tests,
+        detect_schema_bypasses,
+        detect_untested_production_code,
+        detect_weak_assertions,
+    )
+
+    parsed_src = parse_files(src_files)
+    parsed_tests = parse_files(test_files)
+    return [
+        ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
+        ("untested-production-code", detect_untested_production_code(parsed_src, parsed_tests)),
+        ("missing-integration-test", detect_missing_integration_tests(parsed_src, parsed_tests)),
+        ("hypothesis-candidate", detect_hypothesis_candidates(parsed_src, parsed_tests)),
+        ("obsolete-or-deprecated-test", detect_obsolete_or_deprecated_tests(parsed_src, parsed_tests)),
+        ("weak-test-assertion", detect_weak_assertions(parsed_tests)),
+        ("mock-theater", detect_mock_theater(parsed_tests)),
+        ("schema-bypass-test-data", detect_schema_bypasses(parsed_tests)),
+        ("hand-built-test-payload", detect_hand_built_test_payloads(parsed_tests)),
+        ("mocked-integration-test", detect_mocked_integration_tests(parsed_tests)),
+    ]
+
+
 def run_all_collectors(
     src_files: list[Path],
     test_files: list[Path],
@@ -124,6 +158,7 @@ def run_all_collectors(
     literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
 
     return [
+        ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
         *_structure_src_collectors(src_files, parsed_src, oversized, literals),
         *_ast_src_collectors(src_files, parsed_src),
         *_test_collectors(test_files, parsed_tests),

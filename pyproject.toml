@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+    "tomli>=2.4.1",
     "typing-extensions>=4.15.0",
 ]
 
@@ -60,10 +61,15 @@ search_path = ["src", "."]
 disable-search-path-heuristics = true
 typeCheckingMode = "strict"
 
+[tool.ty.environment]
+python = ".venv"
+python-version = "3.12"
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.39.0",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.15.13",
     "ty>=0.0.29",
 ]

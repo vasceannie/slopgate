@@ -316,8 +316,8 @@ class TestClaudeAdapterBasic:
 class TestClaudeAdapterEdgeCases:
     """Claude adapter — edge cases: failures, context-only, unknown events."""
 
-    def test_permission_request_non_deny_non_allow_returns_none(self) -> None:
-        """PermissionRequest only handles deny and allow; anything else → None."""
+    def test_permission_request_block_maps_to_deny(self) -> None:
+        """Engine can escalate to block; PermissionRequest must fail closed."""
         adapter = ClaudeAdapter()
         findings = [
             RuleFinding(
@@ -328,16 +328,20 @@ class TestClaudeAdapterEdgeCases:
                 message="m",
             )
         ]
-        assert (
-            adapter.render_output(
-                "PermissionRequest",
-                findings,
-                decision="block",
-                context=None,
-                updated_input={},
-            )
-            is None
+        inner = require_nested(
+            require_spec(
+                adapter.render_output(
+                    "PermissionRequest",
+                    findings,
+                    decision="block",
+                    context=None,
+                    updated_input={},
+                )
+            ),
+            "decision",
         )
+        assert inner["behavior"] == "deny"
+        assert "X" in test_support.required_string(inner, "message")
 
     def test_posttool_use_failure_advisory(self) -> None:
         adapter = ClaudeAdapter()
@@ -549,6 +553,29 @@ class TestCodexAdapterBasic:
             spec, "permissionDecisionReason"
         )
 
+    def test_pretool_drops_unsupported_context_and_updated_input(self) -> None:
+        adapter = CodexAdapter()
+        findings = [
+            RuleFinding(
+                rule_id="GIT-CTX",
+                title="t",
+                severity=Severity.HIGH,
+                decision="deny",
+                message="blocked",
+            )
+        ]
+        output = adapter.render_output(
+            "PreToolUse",
+            findings,
+            decision="deny",
+            context="Codex docs do not support this on PreToolUse",
+            updated_input={"command": "echo rewritten"},
+        )
+        spec = require_spec(output)
+        assert spec["permissionDecision"] == "deny"
+        assert "additionalContext" not in spec
+        assert "updatedInput" not in spec
+
     def test_pretool_block_maps_to_deny(self) -> None:
         adapter = CodexAdapter()
         findings = [
@@ -571,6 +598,48 @@ class TestCodexAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "block must map to deny for Codex PreToolUse"
         )
+
+    def test_permission_request_block_maps_to_deny(self) -> None:
+        adapter = CodexAdapter()
+        findings = [
+            RuleFinding(
+                rule_id="PERM-001",
+                title="t",
+                severity=Severity.HIGH,
+                decision="block",
+                message="approval request blocked",
+            )
+        ]
+        output = adapter.render_output(
+            "PermissionRequest",
+            findings,
+            decision="block",
+            context=None,
+            updated_input={},
+        )
+        inner = require_nested(require_spec(output), "decision")
+        assert inner["behavior"] == "deny"
+        assert "PERM-001" in test_support.required_string(inner, "message")
+
+    def test_permission_request_allow(self) -> None:
+        adapter = CodexAdapter()
+        findings = [
+            RuleFinding(
+                rule_id="PERM-ALLOW",
+                title="t",
+                severity=Severity.LOW,
+                decision="allow",
+            )
+        ]
+        output = adapter.render_output(
+            "PermissionRequest",
+            findings,
+            decision="allow",
+            context=None,
+            updated_input={"command": "echo safe"},
+        )
+        inner = require_nested(require_spec(output), "decision")
+        assert inner == {"behavior": "allow"}
 
     def test_stop_block(self) -> None:
         adapter = CodexAdapter()
@@ -670,16 +739,6 @@ class TestCodexAdapterBasic:
                 message="blocked",
             )
         ]
-        # PermissionRequest doesn't exist in Codex
-        output = adapter.render_output(
-            "PermissionRequest",
-            findings,
-            decision="deny",
-            context=None,
-            updated_input={},
-        )
-        assert output is None, "PermissionRequest must return None on Codex"
-
         # SubagentStop doesn't exist in Codex
         output = adapter.render_output(
             "SubagentStop",
@@ -817,7 +876,7 @@ class TestCodexAdapterEdgeCases:
         assert "decision" not in rendered, "CRITICAL must suppress decision key"
 
     def test_pretool_deny_with_context(self) -> None:
-        """PreToolUse deny + context both present in output."""
+        """Codex PreToolUse deny does not emit unsupported context fields."""
         adapter = CodexAdapter()
         findings = [
             RuleFinding(
@@ -840,12 +899,12 @@ class TestCodexAdapterEdgeCases:
         assert spec["permissionDecision"] == "deny", (
             "deny must set permissionDecision=deny"
         )
-        assert spec["additionalContext"] == "try something else", (
-            "context must be included"
+        assert "additionalContext" not in spec, (
+            "Codex PreToolUse must not emit unsupported additionalContext"
         )
 
     def test_pretool_only_context_no_decision(self) -> None:
-        """PreToolUse with only context (no deny/block) → additionalContext."""
+        """Codex PreToolUse context-only output is unsupported, so emit nothing."""
         adapter = CodexAdapter()
         findings = [
             RuleFinding(
@@ -862,14 +921,7 @@ class TestCodexAdapterEdgeCases:
             context="check search results",
             updated_input={},
         )
-        spec = require_spec(output)
-        # No permissionDecision, only context
-        assert "permissionDecision" not in spec, (
-            "context-only must not set permissionDecision"
-        )
-        assert spec["additionalContext"] == "check search results", (
-            "context must appear"
-        )
+        assert output is None
 
     def test_stop_context_appended_to_reason(self) -> None:
         """Stop block + context → context merged into reason."""
@@ -929,7 +981,6 @@ class TestCodexAdapterEdgeCases:
     @pytest.mark.parametrize(
         "event",
         [
-            "PermissionRequest",
             "SubagentStop",
             "PostToolUseFailure",
             "TaskCompleted",
@@ -1330,6 +1381,28 @@ class TestOpenCodeAdapterRenderPreTool:
         )
         assert output is not None, "deny on PermissionRequest should produce output"
         assert output["action"] == "block", "deny should map to block action"
+
+    def test_permission_block_maps_to_block(self) -> None:
+        adapter = OpenCodeAdapter()
+        findings = [
+            RuleFinding(
+                rule_id="PERM-BLOCK",
+                title="t",
+                severity=Severity.HIGH,
+                decision="block",
+                message="blocked by policy",
+            )
+        ]
+        output = adapter.render_output(
+            "PermissionRequest",
+            findings,
+            decision="block",
+            context=None,
+            updated_input={},
+        )
+        assert output is not None, "block on PermissionRequest should produce output"
+        assert output["action"] == "block"
+        assert "PERM-BLOCK" in test_support.required_string(output, "reason")
 
     def test_permission_allow_with_updated_input(self) -> None:
         adapter = OpenCodeAdapter()

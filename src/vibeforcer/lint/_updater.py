@@ -12,6 +12,20 @@ import re
 from pathlib import Path
 from typing import Protocol, cast
 
+from vibeforcer.lint import __version__
+from vibeforcer.policy_defaults import (
+    LINT_DEPRECATED_PATTERNS_DEFAULTS,
+    LINT_EXCEPTION_SAFETY_DEFAULTS,
+    LINT_MAGIC_DEFAULTS,
+    LINT_PATH_DEFAULTS,
+    LINT_LOGGING_DEFAULTS,
+    LINT_SCOPE_DEFAULTS,
+    LINT_TESTING_DEFAULTS,
+    LINT_THRESHOLD_DEFAULTS,
+    LINT_TYPE_SAFETY_DEFAULTS,
+    LINT_WRAPPERS_DEFAULTS,
+)
+
 
 class _TomlParserModule(Protocol):
     def loads(self, text: str) -> object: ...
@@ -26,20 +40,6 @@ for module_name in ("tomllib", "tomli"):
     if callable(getattr(_module, "loads", None)):
         _toml_parser_module = cast(_TomlParserModule, cast(object, _module))
         break
-
-from vibeforcer.lint import __version__
-from vibeforcer.policy_defaults import (
-    LINT_DEPRECATED_PATTERNS_DEFAULTS,
-    LINT_EXCEPTION_SAFETY_DEFAULTS,
-    LINT_MAGIC_DEFAULTS,
-    LINT_PATH_DEFAULTS,
-    LINT_LOGGING_DEFAULTS,
-    LINT_SCOPE_DEFAULTS,
-    LINT_TESTING_DEFAULTS,
-    LINT_THRESHOLD_DEFAULTS,
-    LINT_TYPE_SAFETY_DEFAULTS,
-    LINT_WRAPPERS_DEFAULTS,
-)
 
 # ---------------------------------------------------------------------------
 # Canonical defaults — single source of truth

@@ -304,9 +304,18 @@ _RULE_HINTS: dict[str, str] = {
         "Next step: replace branch chains with named predicates or dispatch "
         "before adding behavior."
     ),
+    "PY-CODE-017": (
+        "Recovery skill: load `code-hygiene-refactor` before retrying. Read the "
+        "quality/architecture and python/project-structure rule shards. Convert "
+        "flat `prefix_*.py` siblings into a `prefix/` package with a small "
+        "`__init__.py` facade/re-export layer; do not add another flat sibling."
+    ),
     "PY-CODE-018": (
-        "Next step: choose a split shape first: conftest registry/support modules, "
-        "module-to-package facade, thin __init__.py, CLI/router-to-services, or data/resources extraction."
+        "Recovery skill: load `code-hygiene-refactor` before retrying; if the "
+        "repair spans many files, switch to `hygiene-orchestrator`. Next step: "
+        "choose a split shape first: conftest registry/support modules, "
+        "module-to-package facade, thin __init__.py, CLI/router-to-services, "
+        "test-module split, or data/resources extraction."
     ),
     "PY-TEST-003": (
         "Next step: convert loops-with-asserts into pytest parametrization "
@@ -334,8 +343,10 @@ _RULE_HINTS: dict[str, str] = {
         "explicitly approved this edit."
     ),
     "QA-PATH-003": (
-        "Next step: do not edit quality tests except allowed baselines; "
-        "fix source quality instead."
+        "Next step: do not edit quality tests. Fix the source rule implementation "
+        "under `src/vibeforcer/...`; if expected output legitimately changed, "
+        "update only `tests/quality/baselines.json`, then run "
+        "`python -m pytest -q tests/quality`."
     ),
     "SHELL-001": (
         "Do not run shell retries. Next step: use structured read/edit/write "
@@ -363,7 +374,7 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
             " Path was not extracted from the tool payload. Use the file you just "
             "wrote/edited; do not blindly rerun the same patch."
         )
-    return (
+    hint = (
         f"{phase_note}The edit landed, but touched-file lint found quality debt. "
         "Do not continue feature work. Next action: 1) reread the touched file, "
         "2) fix only the reported collector/hit, 3) verify from the project root "
@@ -371,6 +382,23 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
         "(no file/path argument), "
         "4) if no path is available, inspect the last edited file from tool context."
         f"{pathless_note}"
+    )
+    if _quality_lint_has_oversized_module(item):
+        hint = (
+            f"{hint} Recovery skill: load `code-hygiene-refactor` before retrying; "
+            "if the repair spans many files, switch to `hygiene-orchestrator`. "
+            "Use the oversized-module split playbook instead of patching around "
+            "line-count symptoms."
+        )
+    return hint
+
+
+def _quality_lint_has_oversized_module(item: RuleFinding) -> bool:
+    collectors = object_list(item.metadata.get("failing_collectors"))
+    return any(
+        isinstance(collector, str)
+        and collector.startswith(("oversized-module:", "oversized-module-soft:"))
+        for collector in collectors
     )
 
 

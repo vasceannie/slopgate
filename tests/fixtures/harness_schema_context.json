@@ -1,0 +1,2128 @@
+{
+  "contract_basis": {
+    "claude": {
+      "authority": "human-authored-source-cross-checked",
+      "source_ids": [
+        "claude_hooks",
+        "claude_settings"
+      ]
+    },
+    "codex": {
+      "authority": "human-authored-source-cross-checked",
+      "source_ids": [
+        "codex_hooks",
+        "codex_config_reference"
+      ]
+    },
+    "opencode": {
+      "authority": "human-authored-source-cross-checked",
+      "source_ids": [
+        "opencode_plugin_docs",
+        "opencode_config_schema"
+      ]
+    }
+  },
+  "errors": {},
+  "expected_contract": {
+    "claude": {
+      "blocking_notes": "Richest direct hook surface; this is Vibeforcer's installed subset, not the full official Claude event surface.",
+      "canonical_events": [
+        "SessionStart",
+        "CwdChanged",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStop",
+        "TaskCompleted",
+        "TeammateIdle",
+        "InstructionsLoaded",
+        "ConfigChange"
+      ],
+      "native_events": [
+        "SessionStart",
+        "CwdChanged",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStop",
+        "TaskCompleted",
+        "TeammateIdle",
+        "InstructionsLoaded",
+        "ConfigChange"
+      ]
+    },
+    "codex": {
+      "blocking_notes": "Partial hooks. Re-check unsupported/fail-open/fail-closed response fields before claiming enforcement.",
+      "canonical_events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "Stop"
+      ],
+      "native_events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "Stop"
+      ]
+    },
+    "opencode": {
+      "blocking_notes": "Plugin-mediated. tool.execute.before is the strongest blocking point; stop/prompt behavior is degraded/advisory unless proven by current docs and local smoke.",
+      "canonical_events": [
+        "PreToolUse",
+        "PostToolUse",
+        "PermissionRequest",
+        "SessionStart",
+        "Stop"
+      ],
+      "native_events": [
+        "tool.execute.before",
+        "tool.execute.after",
+        "permission.asked",
+        "session.created",
+        "session.idle"
+      ]
+    }
+  },
+  "generated_at_utc": "2026-05-15T09:46:06+00:00",
+  "harness_event_surfaces": {
+    "claude": {
+      "authority": "official-docs-plus-local-installer",
+      "coverage_decision": "install-supported-subset-not-full-official-surface",
+      "extraction_method": "claude-hooks-table",
+      "installed_source": {
+        "load_method": "ast-literal",
+        "path": "src/vibeforcer/installer.py",
+        "symbol": "_CLAUDE_EVENTS"
+      },
+      "intentionally_not_installed_events": [
+        "Elicitation",
+        "ElicitationResult",
+        "FileChanged",
+        "Notification",
+        "PermissionDenied",
+        "PostCompact",
+        "PostToolBatch",
+        "PreCompact",
+        "SessionEnd",
+        "Setup",
+        "StopFailure",
+        "SubagentStart",
+        "TaskCreated",
+        "UserPromptExpansion",
+        "WorktreeCreate",
+        "WorktreeRemove"
+      ],
+      "notes": "Vibeforcer installs a deliberate Claude subset while preserving unknown/non-owned hook events during merge/uninstall.",
+      "official_events": [
+        "ConfigChange",
+        "CwdChanged",
+        "Elicitation",
+        "ElicitationResult",
+        "FileChanged",
+        "InstructionsLoaded",
+        "Notification",
+        "PermissionDenied",
+        "PermissionRequest",
+        "PostCompact",
+        "PostToolBatch",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PreCompact",
+        "PreToolUse",
+        "SessionEnd",
+        "SessionStart",
+        "Setup",
+        "Stop",
+        "StopFailure",
+        "SubagentStart",
+        "SubagentStop",
+        "TaskCompleted",
+        "TaskCreated",
+        "TeammateIdle",
+        "UserPromptExpansion",
+        "UserPromptSubmit",
+        "WorktreeCreate",
+        "WorktreeRemove"
+      ],
+      "source_id": "claude_hooks",
+      "unknown_official_events": [],
+      "vibeforcer_installed_events": [
+        "SessionStart",
+        "CwdChanged",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStop",
+        "TaskCompleted",
+        "TeammateIdle",
+        "InstructionsLoaded",
+        "ConfigChange"
+      ]
+    }
+  },
+  "schema_context": {
+    "claude": [
+      {
+        "keywords": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop",
+          "StopFailure",
+          "SessionEnd",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop",
+          "decision"
+        ],
+        "line": 17,
+        "source_id": "claude_hooks",
+        "text": "## Hook lifecycle\n\nHooks fire at specific points during a Claude Code session. When an event fires and a matcher matches, Claude Code passes JSON context about the event to your hook handler. For command hooks, input arrives on stdin. For HTTP hooks, it arrives as the POST request body. Your handler can then inspect the input, take action, and optionally return a decision. Events fall into three cadences: once per session (`SessionStart`, `SessionEnd`), once per turn (`UserPromptSubmit`, `Stop`, `StopFailure`), and on every tool call inside the agentic loop (`PreToolUse`, `PostToolUse`):\n\n<div style={{maxWidth: \"500px\", margin: \"0 auto\"}}>\n  <Frame>"
+      },
+      {
+        "keywords": [
+          "SessionStart",
+          "Setup",
+          "CwdChanged",
+          "UserPromptSubmit",
+          "UserPromptExpansion",
+          "PreToolUse",
+          "PermissionRequest",
+          "PermissionDenied",
+          "PostToolUse",
+          "PostToolUseFailure",
+          "PostToolBatch",
+          "SubagentStart",
+          "TaskCreated",
+          "TaskCompleted",
+          "Stop",
+          "StopFailure",
+          "TeammateIdle",
+          "PreCompact",
+          "PostCompact",
+          "SessionEnd",
+          "Elicitation",
+          "ElicitationResult",
+          "InstructionsLoaded",
+          "ConfigChange",
+          "WorktreeCreate",
+          "WorktreeRemove",
+          "Notification",
+          "FileChanged",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "PostToolUseFailure",
+          "Stop",
+          "TaskCompleted",
+          "InstructionsLoaded"
+        ],
+        "line": 21,
+        "source_id": "claude_hooks",
+        "text": "<div style={{maxWidth: \"500px\", margin: \"0 auto\"}}>\n  <Frame>\n    <img src=\"https://mintcdn.com/claude-code/ZIW26Z9pnpsXLhbS/images/hooks-lifecycle.svg?fit=max&auto=format&n=ZIW26Z9pnpsXLhbS&q=85&s=ee23691324deb6501df09bfdae560b64\" alt=\"Hook lifecycle diagram showing optional Setup feeding into SessionStart, then a per-turn loop containing UserPromptSubmit, UserPromptExpansion for slash commands, the nested agentic loop (PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, PostToolBatch, SubagentStart/Stop, TaskCreated, TaskCompleted), and Stop or StopFailure, followed by TeammateIdle, PreCompact, PostCompact, and SessionEnd, with Elicitation and ElicitationResult nested inside MCP tool execution, PermissionDenied as a side branch from PermissionRequest for auto-mode denials, and WorktreeCreate, WorktreeRemove, Notification, ConfigChange, InstructionsLoaded, CwdChanged, and FileChanged as standalone async events\" width=\"520\" height=\"1228\" data-path=\"images/hooks-lifecycle.svg\" />\n  </Frame>\n</div>"
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 25,
+        "source_id": "claude_hooks",
+        "text": "</Frame>\n</div>\n\nThe table below summarizes when each event fires. The [Hook events](#hook-events) section documents the full input schema and decision control options for each one.\n\n| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |"
+      },
+      {
+        "keywords": [
+          "SessionStart"
+        ],
+        "line": 29,
+        "source_id": "claude_hooks",
+        "text": "| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 30,
+        "source_id": "claude_hooks",
+        "text": "| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |"
+      },
+      {
+        "keywords": [
+          "UserPromptSubmit",
+          "UserPromptSubmit"
+        ],
+        "line": 31,
+        "source_id": "claude_hooks",
+        "text": "| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |"
+      },
+      {
+        "keywords": [
+          "UserPromptExpansion"
+        ],
+        "line": 32,
+        "source_id": "claude_hooks",
+        "text": "| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 33,
+        "source_id": "claude_hooks",
+        "text": "| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |"
+      },
+      {
+        "keywords": [
+          "PermissionRequest",
+          "PermissionRequest"
+        ],
+        "line": 34,
+        "source_id": "claude_hooks",
+        "text": "| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |"
+      },
+      {
+        "keywords": [
+          "PermissionDenied"
+        ],
+        "line": 35,
+        "source_id": "claude_hooks",
+        "text": "| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |"
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUse"
+        ],
+        "line": 36,
+        "source_id": "claude_hooks",
+        "text": "| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |"
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUseFailure",
+          "PostToolUse",
+          "PostToolUseFailure"
+        ],
+        "line": 37,
+        "source_id": "claude_hooks",
+        "text": "| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |"
+      },
+      {
+        "keywords": [
+          "PostToolBatch"
+        ],
+        "line": 38,
+        "source_id": "claude_hooks",
+        "text": "| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 39,
+        "source_id": "claude_hooks",
+        "text": "| `PostToolUse`         | After a tool call succeeds                                                                                                                             |\n| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |"
+      },
+      {
+        "keywords": [
+          "SubagentStart"
+        ],
+        "line": 40,
+        "source_id": "claude_hooks",
+        "text": "| `PostToolUseFailure`  | After a tool call fails                                                                                                                                |\n| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |"
+      },
+      {
+        "keywords": [
+          "SubagentStop",
+          "Stop",
+          "Stop",
+          "SubagentStop"
+        ],
+        "line": 41,
+        "source_id": "claude_hooks",
+        "text": "| `PostToolBatch`       | After a full batch of parallel tool calls resolves, before the next model call                                                                         |\n| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |"
+      },
+      {
+        "keywords": [
+          "TaskCreated"
+        ],
+        "line": 42,
+        "source_id": "claude_hooks",
+        "text": "| `Notification`        | When Claude Code sends a notification                                                                                                                  |\n| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |"
+      },
+      {
+        "keywords": [
+          "TaskCompleted",
+          "TaskCompleted"
+        ],
+        "line": 43,
+        "source_id": "claude_hooks",
+        "text": "| `SubagentStart`       | When a subagent is spawned                                                                                                                             |\n| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 44,
+        "source_id": "claude_hooks",
+        "text": "| `SubagentStop`        | When a subagent finishes                                                                                                                               |\n| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "StopFailure",
+          "Stop"
+        ],
+        "line": 45,
+        "source_id": "claude_hooks",
+        "text": "| `TaskCreated`         | When a task is being created via `TaskCreate`                                                                                                          |\n| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |"
+      },
+      {
+        "keywords": [
+          "TeammateIdle"
+        ],
+        "line": 46,
+        "source_id": "claude_hooks",
+        "text": "| `TaskCompleted`       | When a task is being marked as completed                                                                                                               |\n| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |"
+      },
+      {
+        "keywords": [
+          "InstructionsLoaded",
+          "InstructionsLoaded"
+        ],
+        "line": 47,
+        "source_id": "claude_hooks",
+        "text": "| `Stop`                | When Claude finishes responding                                                                                                                        |\n| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |"
+      },
+      {
+        "keywords": [
+          "ConfigChange"
+        ],
+        "line": 48,
+        "source_id": "claude_hooks",
+        "text": "| `StopFailure`         | When the turn ends due to an API error. Output and exit code are ignored                                                                               |\n| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |"
+      },
+      {
+        "keywords": [
+          "CwdChanged"
+        ],
+        "line": 49,
+        "source_id": "claude_hooks",
+        "text": "| `TeammateIdle`        | When an [agent team](/en/agent-teams) teammate is about to go idle                                                                                     |\n| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |"
+      },
+      {
+        "keywords": [
+          "FileChanged"
+        ],
+        "line": 50,
+        "source_id": "claude_hooks",
+        "text": "| `InstructionsLoaded`  | When a CLAUDE.md or `.claude/rules/*.md` file is loaded into context. Fires at session start and when files are lazily loaded during a session         |\n| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |"
+      },
+      {
+        "keywords": [
+          "WorktreeCreate"
+        ],
+        "line": 51,
+        "source_id": "claude_hooks",
+        "text": "| `ConfigChange`        | When a configuration file changes during a session                                                                                                     |\n| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |"
+      },
+      {
+        "keywords": [
+          "WorktreeRemove"
+        ],
+        "line": 52,
+        "source_id": "claude_hooks",
+        "text": "| `CwdChanged`          | When the working directory changes, for example when Claude executes a `cd` command. Useful for reactive environment management with tools like direnv |\n| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |"
+      },
+      {
+        "keywords": [
+          "PreCompact"
+        ],
+        "line": 53,
+        "source_id": "claude_hooks",
+        "text": "| `FileChanged`         | When a watched file changes on disk. The `matcher` field specifies which filenames to watch                                                            |\n| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |\n| `ElicitationResult`   | After a user responds to an MCP elicitation, before the response is sent back to the server                                                            |"
+      },
+      {
+        "keywords": [
+          "PostCompact"
+        ],
+        "line": 54,
+        "source_id": "claude_hooks",
+        "text": "| `WorktreeCreate`      | When a worktree is being created via `--worktree` or `isolation: \"worktree\"`. Replaces default git behavior                                            |\n| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |\n| `ElicitationResult`   | After a user responds to an MCP elicitation, before the response is sent back to the server                                                            |\n| `SessionEnd`          | When a session terminates                                                                                                                              |"
+      },
+      {
+        "keywords": [
+          "Elicitation"
+        ],
+        "line": 55,
+        "source_id": "claude_hooks",
+        "text": "| `WorktreeRemove`      | When a worktree is being removed, either at session exit or when a subagent finishes                                                                   |\n| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |\n| `ElicitationResult`   | After a user responds to an MCP elicitation, before the response is sent back to the server                                                            |\n| `SessionEnd`          | When a session terminates                                                                                                                              |"
+      },
+      {
+        "keywords": [
+          "Elicitation",
+          "ElicitationResult"
+        ],
+        "line": 56,
+        "source_id": "claude_hooks",
+        "text": "| `PreCompact`          | Before context compaction                                                                                                                              |\n| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |\n| `ElicitationResult`   | After a user responds to an MCP elicitation, before the response is sent back to the server                                                            |\n| `SessionEnd`          | When a session terminates                                                                                                                              |\n\n### How a hook resolves"
+      },
+      {
+        "keywords": [
+          "SessionEnd"
+        ],
+        "line": 57,
+        "source_id": "claude_hooks",
+        "text": "| `PostCompact`         | After context compaction completes                                                                                                                     |\n| `Elicitation`         | When an MCP server requests user input during a tool call                                                                                              |\n| `ElicitationResult`   | After a user responds to an MCP elicitation, before the response is sent back to the server                                                            |\n| `SessionEnd`          | When a session terminates                                                                                                                              |\n\n### How a hook resolves"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 61,
+        "source_id": "claude_hooks",
+        "text": "### How a hook resolves\n\nTo see how these pieces fit together, consider this `PreToolUse` hook that blocks destructive shell commands. The `matcher` narrows to Bash tool calls and the `if` condition narrows further to Bash subcommands matching `rm *`, so `block-rm.sh` only spawns when both filters match:\n\n```json theme={null}\n{"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 66,
+        "source_id": "claude_hooks",
+        "text": "```json theme={null}\n{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+      },
+      {
+        "keywords": [
+          "permissionDecision",
+          "decision"
+        ],
+        "line": 83,
+        "source_id": "claude_hooks",
+        "text": "}\n```\n\nThe script reads the JSON input from stdin, extracts the command, and returns a `permissionDecision` of `\"deny\"` if it contains `rm -rf`:\n\n```bash theme={null}\n#!/bin/bash"
+      },
+      {
+        "keywords": [
+          "hookSpecificOutput"
+        ],
+        "line": 92,
+        "source_id": "claude_hooks",
+        "text": "if echo \"$COMMAND\" | grep -q 'rm -rf'; then\n  jq -n '{\n    hookSpecificOutput: {\n      hookEventName: \"PreToolUse\",\n      permissionDecision: \"deny\",\n      permissionDecisionReason: \"Destructive command blocked by hook\""
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 93,
+        "source_id": "claude_hooks",
+        "text": "if echo \"$COMMAND\" | grep -q 'rm -rf'; then\n  jq -n '{\n    hookSpecificOutput: {\n      hookEventName: \"PreToolUse\",\n      permissionDecision: \"deny\",\n      permissionDecisionReason: \"Destructive command blocked by hook\"\n    }"
+      },
+      {
+        "keywords": [
+          "permissionDecision",
+          "decision"
+        ],
+        "line": 94,
+        "source_id": "claude_hooks",
+        "text": "jq -n '{\n    hookSpecificOutput: {\n      hookEventName: \"PreToolUse\",\n      permissionDecision: \"deny\",\n      permissionDecisionReason: \"Destructive command blocked by hook\"\n    }\n  }'"
+      },
+      {
+        "keywords": [
+          "permissionDecision",
+          "decision"
+        ],
+        "line": 95,
+        "source_id": "claude_hooks",
+        "text": "hookSpecificOutput: {\n      hookEventName: \"PreToolUse\",\n      permissionDecision: \"deny\",\n      permissionDecisionReason: \"Destructive command blocked by hook\"\n    }\n  }'\nelse"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 106,
+        "source_id": "claude_hooks",
+        "text": "Now suppose Claude Code decides to run `Bash \"rm -rf /tmp/build\"`. Here's what happens:\n\n<Frame>\n  <img src=\"https://mintcdn.com/claude-code/-tYw1BD_DEqfyyOZ/images/hook-resolution.svg?fit=max&auto=format&n=-tYw1BD_DEqfyyOZ&q=85&s=c73ebc1eeda2037570427d7af1e0a891\" alt=\"Hook resolution flow: PreToolUse event fires, matcher checks for Bash match, if condition checks for Bash(rm *) match, hook handler runs, result returns to Claude Code\" width=\"930\" height=\"290\" data-path=\"images/hook-resolution.svg\" />\n</Frame>\n\n<Steps>"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 177,
+        "source_id": "claude_settings",
+        "text": "| `autoMemoryEnabled`               | Enable [auto memory](/en/memory#enable-or-disable-auto-memory). When `false`, Claude does not read from or write to the auto memory directory. Default: `true`. You can also toggle this with `/memory` during a session. To disable via environment variable, set [`CLAUDE_CODE_DISABLE_AUTO_MEMORY`](/en/env-vars) in `env`                                                                                                                                                                                                                                                          | `false`                                                                                                                        |\n| `autoMode`                        | Customize what the [auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) classifier blocks and allows. Contains `environment`, `allow`, `soft_deny`, and `hard_deny` arrays of prose rules. Include the literal string `\"$defaults\"` in an array to inherit the built-in rules at that position. See [Configure auto mode](/en/auto-mode-config). Not read from shared project settings                                                                                                                                                                                   | `{\"soft_deny\": [\"$defaults\", \"Never run terraform apply\"]}`                                                                    |\n| `autoScrollEnabled`               | In [fullscreen rendering](/en/fullscreen), follow new output to the bottom of the conversation. Default: `true`. Appears in `/config` as **Auto-scroll**. Permission prompts still scroll into view when this is off                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                                                                                        |\n| `autoUpdatesChannel`              | Release channel to follow for updates. Use `\"stable\"` for a version that is typically about one week old and skips versions with major regressions, or `\"latest\"` (default) for the most recent release. To disable auto-updates entirely, set [`DISABLE_AUTOUPDATER`](/en/setup#disable-auto-updates) in `env`                                                                                                                                                                                                                                                                        | `\"stable\"`                                                                                                                     |\n| `availableModels`                 | Restrict which models users can select via `/model`, `--model`, or `ANTHROPIC_MODEL`. Does not affect the Default option. See [Restrict model selection](/en/model-config#restrict-model-selection)                                                                                                                                                                                                                                                                                                                                                                                    | `[\"sonnet\", \"haiku\"]`                                                                                                          |\n| `awaySummaryEnabled`              | Show a one-line session recap when you return to the terminal after a few minutes away. Set to `false` or turn off Session recap in `/config` to disable. Same as [`CLAUDE_CODE_ENABLE_AWAY_SUMMARY`](/en/env-vars)                                                                                                                                                                                                                                                                                                                                                                    | `true`                                                                                                                         |\n| `awsAuthRefresh`                  | Custom script that modifies the `.aws` directory (see [advanced credential configuration](/en/amazon-bedrock#advanced-credential-configuration))                                                                                                                                                                                                                                                                                                                                                                                                                                       | `aws sso login --profile myprofile`                                                                                            |"
+      },
+      {
+        "keywords": [
+          "continue"
+        ],
+        "line": 207,
+        "source_id": "claude_settings",
+        "text": "| `fileSuggestion`                  | Configure a custom script for `@` file autocomplete. See [File suggestion settings](#file-suggestion-settings)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{\"type\": \"command\", \"command\": \"~/.claude/file-suggestion.sh\"}`                                                               |\n| `forceLoginMethod`                | Use `claudeai` to restrict login to Claude.ai accounts, `console` to restrict login to Claude Console (API usage billing) accounts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `claudeai`                                                                                                                     |\n| `forceLoginOrgUUID`               | Require login to belong to a specific organization. Accepts a single UUID string, which also pre-selects that organization during login, or an array of UUIDs where any listed organization is accepted without pre-selection. When set in managed settings, login fails if the authenticated account does not belong to a listed organization; an empty array fails closed and blocks login with a misconfiguration message                                                                                                                                                           | `\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"` or `[\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\", \"yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\"]` |\n| `forceRemoteSettingsRefresh`      | (Managed settings only) Block CLI startup until remote managed settings are freshly fetched from the server. If the fetch fails, the CLI exits rather than continuing with cached or no settings. When not set, startup continues without waiting for remote settings. See [fail-closed enforcement](/en/server-managed-settings#enforce-fail-closed-startup)                                                                                                                                                                                                                          | `true`                                                                                                                         |\n| `gcpAuthRefresh`                  | Custom script that refreshes GCP Application Default Credentials when they expire or cannot be loaded. See [advanced credential configuration](/en/google-vertex-ai#advanced-credential-configuration)                                                                                                                                                                                                                                                                                                                                                                                 | `gcloud auth application-default login`                                                                                        |\n| `hooks`                           | Configure custom commands to run at lifecycle events. See [hooks documentation](/en/hooks) for format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | See [hooks](/en/hooks)                                                                                                         |\n| `httpHookAllowedEnvVars`          | Allowlist of environment variable names HTTP hooks may interpolate into headers. When set, each hook's effective `allowedEnvVars` is the intersection with this list. Undefined = no restriction. Arrays merge across settings sources. See [Hook configuration](#hook-configuration)                                                                                                                                                                                                                                                                                                  | `[\"MY_TOKEN\", \"HOOK_SECRET\"]`                                                                                                  |"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 225,
+        "source_id": "claude_settings",
+        "text": "| `plansDirectory`                  | Customize where plan files are stored. Path is relative to project root. Default: `~/.claude/plans`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `\"./plans\"`                                                                                                                    |\n| `pluginTrustMessage`              | (Managed settings only) Custom message appended to the plugin trust warning shown before installation. Use this to add organization-specific context, for example to confirm that plugins from your internal marketplace are vetted.                                                                                                                                                                                                                                                                                                                                                   | `\"All plugins from our marketplace are approved by IT\"`                                                                        |\n| `policyHelper`                    | {/* min-version: 2.1.136 */}Admin-deployed executable that computes managed settings dynamically at startup. Only honored from MDM or a system `managed-settings.json` file. See [Compute managed settings with a policy helper](#compute-managed-settings-with-a-policy-helper). Requires Claude Code v2.1.136 or later                                                                                                                                                                                                                                                               | `{\"path\": \"/usr/local/bin/claude-policy\"}`                                                                                     |\n| `preferredNotifChannel`           | Method for task-complete and permission-prompt notifications: `\"auto\"`, `\"terminal_bell\"`, `\"iterm2\"`, `\"iterm2_with_bell\"`, `\"kitty\"`, `\"ghostty\"`, or `\"notifications_disabled\"`. Default: `\"auto\"`, which sends a desktop notification in iTerm2, Ghostty, and Kitty and does nothing in other terminals. Set `\"terminal_bell\"` to ring the bell character in any terminal. Appears in `/config` as **Notifications**. See [Get a terminal bell or notification](/en/terminal-config#get-a-terminal-bell-or-notification)                                                           | `\"terminal_bell\"`                                                                                                              |\n| `prefersReducedMotion`            | Reduce or disable UI animations (spinners, shimmer, flash effects) for accessibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                                                                                         |\n| `prUrlTemplate`                   | URL template for the PR badge shown in the footer and in tool-result summaries. Substitutes `{host}`, `{owner}`, `{repo}`, `{number}`, and `{url}` from the `gh`-reported PR URL. Use to point PR links at an internal code-review tool instead of `github.com`. Does not affect `#123` autolinks in Claude's prose                                                                                                                                                                                                                                                                    | `\"https://reviews.example.com/{owner}/{repo}/pull/{number}\"`                                                                   |\n| `respectGitignore`                | Control whether the `@` file picker respects `.gitignore` patterns. When `true` (default), files matching `.gitignore` patterns are excluded from suggestions                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                                                                                        |"
+      }
+    ],
+    "codex": [
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 9,
+        "source_id": "codex_hooks",
+        "text": "- Send the conversation to a custom logging/analytics engine\n- Scan your team's prompts to block accidentally pasting API keys\n- Summarize conversations to create persistent memories automatically\n- Run a custom validation check when a conversation turn stops, enforcing standards\n- Customize prompting when in a certain directory\n\nHooks are enabled by default. If you need to turn them off in `config.toml`,"
+      },
+      {
+        "keywords": [
+          "codex_hooks"
+        ],
+        "line": 20,
+        "source_id": "codex_hooks",
+        "text": "hooks = false\n```\n\nUse `hooks` as the canonical feature key. `codex_hooks` still works as a\ndeprecated alias.\n\nAdmins can force hooks off the same way in `requirements.toml` with"
+      },
+      {
+        "keywords": [
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse"
+        ],
+        "line": 32,
+        "source_id": "codex_hooks",
+        "text": "- Multiple matching command hooks for the same event are launched concurrently,\n  so one hook cannot prevent another matching hook from starting.\n- Non-managed command hooks must be reviewed and trusted before they run.\n- `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and\n  `Stop` run at turn scope.\n\n## Where Codex looks for hooks"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 33,
+        "source_id": "codex_hooks",
+        "text": "so one hook cannot prevent another matching hook from starting.\n- Non-managed command hooks must be reviewed and trusted before they run.\n- `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and\n  `Stop` run at turn scope.\n\n## Where Codex looks for hooks"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PostToolUse",
+          "Stop",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop"
+        ],
+        "line": 81,
+        "source_id": "codex_hooks",
+        "text": "Hooks are organized in three levels:\n\n- A hook event such as `PreToolUse`, `PostToolUse`, or `Stop`\n- A matcher group that decides when that event matches\n- One or more hook handlers that run when the matcher group matches"
+      },
+      {
+        "keywords": [
+          "SessionStart"
+        ],
+        "line": 88,
+        "source_id": "codex_hooks",
+        "text": "```json\n{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"matcher\": \"startup|resume\",\n        \"hooks\": ["
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 100,
+        "source_id": "codex_hooks",
+        "text": "]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+      },
+      {
+        "keywords": [
+          "PermissionRequest",
+          "PermissionRequest"
+        ],
+        "line": 112,
+        "source_id": "codex_hooks",
+        "text": "]\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUse"
+        ],
+        "line": 124,
+        "source_id": "codex_hooks",
+        "text": "]\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+      },
+      {
+        "keywords": [
+          "UserPromptSubmit",
+          "UserPromptSubmit"
+        ],
+        "line": 136,
+        "source_id": "codex_hooks",
+        "text": "]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 146,
+        "source_id": "codex_hooks",
+        "text": "]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop",
+          "continue"
+        ],
+        "line": 151,
+        "source_id": "codex_hooks",
+        "text": "\"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"/usr/bin/python3 \\\"$(git rev-parse --show-toplevel)/.codex/hooks/stop_continue.py\\\"\",\n            \"timeout\": 30\n          }\n        ]"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 178,
+        "source_id": "codex_hooks",
+        "text": "Equivalent inline TOML in `config.toml`:\n\n```toml\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 181,
+        "source_id": "codex_hooks",
+        "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_policy.py\"'\ntimeout = 30"
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUse"
+        ],
+        "line": 187,
+        "source_id": "codex_hooks",
+        "text": "timeout = 30\nstatusMessage = \"Checking Bash command\"\n\n[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PostToolUse.hooks]]"
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUse"
+        ],
+        "line": 190,
+        "source_id": "codex_hooks",
+        "text": "[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PostToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/post_tool_use_review.py\"'\ntimeout = 30"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 213,
+        "source_id": "codex_hooks",
+        "text": "managed_dir = \"/enterprise/hooks\"\nwindows_managed_dir = 'C:\\enterprise\\hooks'\n\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 216,
+        "source_id": "codex_hooks",
+        "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"python3 /enterprise/hooks/pre_tool_use_policy.py\"\ntimeout = 30"
+      },
+      {
+        "keywords": [
+          "PermissionRequest",
+          "PermissionRequest"
+        ],
+        "line": 282,
+        "source_id": "codex_hooks",
+        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |"
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "PostToolUse"
+        ],
+        "line": 283,
+        "source_id": "codex_hooks",
+        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 284,
+        "source_id": "codex_hooks",
+        "text": "| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
+      },
+      {
+        "keywords": [
+          "SessionStart"
+        ],
+        "line": 285,
+        "source_id": "codex_hooks",
+        "text": "| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
+      },
+      {
+        "keywords": [
+          "UserPromptSubmit",
+          "UserPromptSubmit"
+        ],
+        "line": 286,
+        "source_id": "codex_hooks",
+        "text": "| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, matchers can also use `Edit` or `Write`."
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 287,
+        "source_id": "codex_hooks",
+        "text": "| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, matchers can also use `Edit` or `Write`."
+      },
+      {
+        "keywords": [
+          "SessionStart",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse"
+        ],
+        "line": 317,
+        "source_id": "codex_hooks",
+        "text": "Turn-scoped hooks list `turn_id` as a Codex-specific extension in their\nevent-specific tables.\n\n`SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`,\n`UserPromptSubmit`, and `Stop` also include `permission_mode`, which describes\nthe current permission mode as `default`, `acceptEdits`, `plan`, `dontAsk`, or\n`bypassPermissions`."
+      },
+      {
+        "keywords": [
+          "UserPromptSubmit",
+          "Stop",
+          "UserPromptSubmit",
+          "Stop"
+        ],
+        "line": 318,
+        "source_id": "codex_hooks",
+        "text": "event-specific tables.\n\n`SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`,\n`UserPromptSubmit`, and `Stop` also include `permission_mode`, which describes\nthe current permission mode as `default`, `acceptEdits`, `plan`, `dontAsk`, or\n`bypassPermissions`."
+      },
+      {
+        "keywords": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "Stop",
+          "UserPromptSubmit",
+          "Stop"
+        ],
+        "line": 329,
+        "source_id": "codex_hooks",
+        "text": "## Common output fields\n\n`SessionStart`, `UserPromptSubmit`, and `Stop` support these shared JSON\nfields:\n\n```json"
+      },
+      {
+        "keywords": [
+          "continue"
+        ],
+        "line": 334,
+        "source_id": "codex_hooks",
+        "text": "```json\n{\n  \"continue\": true,\n  \"stopReason\": \"optional\",\n  \"systemMessage\": \"optional\",\n  \"suppressOutput\": false"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 335,
+        "source_id": "codex_hooks",
+        "text": "```json\n{\n  \"continue\": true,\n  \"stopReason\": \"optional\",\n  \"systemMessage\": \"optional\",\n  \"suppressOutput\": false\n}"
+      },
+      {
+        "keywords": [
+          "suppressOutput"
+        ],
+        "line": 337,
+        "source_id": "codex_hooks",
+        "text": "\"continue\": true,\n  \"stopReason\": \"optional\",\n  \"systemMessage\": \"optional\",\n  \"suppressOutput\": false\n}\n```"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop",
+          "continue"
+        ],
+        "line": 343,
+        "source_id": "codex_hooks",
+        "text": "| Field            | Effect                                          |\n| ---------------- | ----------------------------------------------- |\n| `continue`       | If `false`, marks that hook run as stopped      |\n| `stopReason`     | Recorded as the reason for stopping             |\n| `systemMessage`  | Surfaced as a warning in the UI or event stream |\n| `suppressOutput` | Parsed today but not yet implemented            |"
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop"
+        ],
+        "line": 344,
+        "source_id": "codex_hooks",
+        "text": "| Field            | Effect                                          |\n| ---------------- | ----------------------------------------------- |\n| `continue`       | If `false`, marks that hook run as stopped      |\n| `stopReason`     | Recorded as the reason for stopping             |\n| `systemMessage`  | Surfaced as a warning in the UI or event stream |\n| `suppressOutput` | Parsed today but not yet implemented            |"
+      },
+      {
+        "keywords": [
+          "suppressOutput"
+        ],
+        "line": 346,
+        "source_id": "codex_hooks",
+        "text": "| `continue`       | If `false`, marks that hook run as stopped      |\n| `stopReason`     | Recorded as the reason for stopping             |\n| `systemMessage`  | Surfaced as a warning in the UI or event stream |\n| `suppressOutput` | Parsed today but not yet implemented            |\n\nExit `0` with no output is treated as success and Codex continues."
+      },
+      {
+        "keywords": [
+          "continue"
+        ],
+        "line": 348,
+        "source_id": "codex_hooks",
+        "text": "| `systemMessage`  | Surfaced as a warning in the UI or event stream |\n| `suppressOutput` | Parsed today but not yet implemented            |\n\nExit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events."
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PermissionRequest",
+          "PreToolUse",
+          "PermissionRequest",
+          "continue"
+        ],
+        "line": 350,
+        "source_id": "codex_hooks",
+        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`."
+      },
+      {
+        "keywords": [
+          "Stop",
+          "Stop",
+          "suppressOutput"
+        ],
+        "line": 351,
+        "source_id": "codex_hooks",
+        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event."
+      },
+      {
+        "keywords": [
+          "PostToolUse",
+          "Stop",
+          "PostToolUse",
+          "Stop",
+          "continue"
+        ],
+        "line": 353,
+        "source_id": "codex_hooks",
+        "text": "`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
+      },
+      {
+        "keywords": [
+          "suppressOutput"
+        ],
+        "line": 354,
+        "source_id": "codex_hooks",
+        "text": "`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
+      },
+      {
+        "keywords": [
+          "SessionStart"
+        ],
+        "line": 358,
+        "source_id": "codex_hooks",
+        "text": "## Hooks\n\n### SessionStart\n\n`matcher` is applied to `source` for this event."
+      },
+      {
+        "keywords": [
+          "hookSpecificOutput"
+        ],
+        "line": 375,
+        "source_id": "codex_hooks",
+        "text": "```json\n{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"Load the workspace conventions before editing.\"\n  }"
+      },
+      {
+        "keywords": [
+          "Elicitation"
+        ],
+        "line": 60,
+        "source_id": "codex_config_reference",
+        "text": "},\n    {\n      key: \"approval_policy\",\n      type: \"untrusted | on-request | never | { granular = { sandbox_approval = bool, rules = bool, mcp_elicitations = bool, request_permissions = bool, skill_approval = bool } }\",\n      description:\n        \"Controls when Codex pauses for approval before executing commands. You can also use `approval_policy = { granular = { ... } }` to allow or auto-reject specific prompt categories while keeping other prompts interactive. `on-failure` is deprecated; use `on-request` for interactive runs or `never` for non-interactive runs.\",\n    },"
+      },
+      {
+        "keywords": [
+          "Elicitation"
+        ],
+        "line": 77,
+        "source_id": "codex_config_reference",
+        "text": "\"When `true`, approvals triggered by execpolicy `prompt` rules are allowed to surface.\",\n    },\n    {\n      key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\","
+      },
+      {
+        "keywords": [
+          "Elicitation"
+        ],
+        "line": 80,
+        "source_id": "codex_config_reference",
+        "text": "key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\",\n    },\n    {\n      key: \"approval_policy.granular.request_permissions\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 158,
+        "source_id": "codex_config_reference",
+        "text": "key: \"notify\",\n      type: \"array<string>\",\n      description:\n        \"Command invoked for notifications; receives a JSON payload from Codex.\",\n    },\n    {\n      key: \"check_for_update_on_startup\","
+      },
+      {
+        "keywords": [
+          "codex_hooks"
+        ],
+        "line": 331,
+        "source_id": "codex_config_reference",
+        "text": "key: \"features.hooks\",\n      type: \"boolean\",\n      description:\n        \"Enable lifecycle hooks loaded from `hooks.json` or inline `[hooks]` config. `features.codex_hooks` is a deprecated alias.\",\n    },\n    {\n      key: \"features.codex_git_commit\","
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 668,
+        "source_id": "codex_config_reference",
+        "text": "{\n      key: \"model_providers.<id>.env_key_instructions\",\n      type: \"string\",\n      description: \"Optional setup guidance for the provider API key.\",\n    },\n    {\n      key: \"model_providers.<id>.experimental_bearer_token\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1049,
+        "source_id": "codex_config_reference",
+        "text": "key: \"tui\",\n      type: \"table\",\n      description:\n        \"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1052,
+        "source_id": "codex_config_reference",
+        "text": "\"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1055,
+        "source_id": "codex_config_reference",
+        "text": "key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\",\n    },\n    {\n      key: \"tui.notification_method\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1058,
+        "source_id": "codex_config_reference",
+        "text": "\"Enable TUI notifications; optionally restrict to specific event types.\",\n    },\n    {\n      key: \"tui.notification_method\",\n      type: \"auto | osc9 | bel\",\n      description:\n        \"Notification method for terminal notifications (default: auto).\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1061,
+        "source_id": "codex_config_reference",
+        "text": "key: \"tui.notification_method\",\n      type: \"auto | osc9 | bel\",\n      description:\n        \"Notification method for terminal notifications (default: auto).\",\n    },\n    {\n      key: \"tui.notification_condition\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1064,
+        "source_id": "codex_config_reference",
+        "text": "\"Notification method for terminal notifications (default: auto).\",\n    },\n    {\n      key: \"tui.notification_condition\",\n      type: \"unfocused | always\",\n      description:\n        \"Control whether TUI notifications fire only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`.\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 1067,
+        "source_id": "codex_config_reference",
+        "text": "key: \"tui.notification_condition\",\n      type: \"unfocused | always\",\n      description:\n        \"Control whether TUI notifications fire only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`.\",\n    },\n    {\n      key: \"tui.animations\","
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 1140,
+        "source_id": "codex_config_reference",
+        "text": "description: \"Disable burst-paste detection in the TUI.\",\n    },\n    {\n      key: \"windows_wsl_setup_acknowledged\",\n      type: \"boolean\",\n      description: \"Track Windows onboarding acknowledgement (Windows only).\",\n    },"
+      },
+      {
+        "keywords": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "Stop",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "Stop"
+        ],
+        "line": 1466,
+        "source_id": "codex_config_reference",
+        "text": "key: \"hooks.<Event>\",\n      type: \"array<table>\",\n      description:\n        \"Matcher groups for a hook event such as `PreToolUse`, `PermissionRequest`, `PostToolUse`, `SessionStart`, `UserPromptSubmit`, or `Stop`.\",\n    },\n    {\n      key: \"hooks.<Event>[].hooks\","
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 1514,
+        "source_id": "codex_config_reference",
+        "text": "key: \"rules.prefix_rules\",\n      type: \"array<table>\",\n      description:\n        \"List of enforced prefix rules. Each rule must include `pattern` and `decision`.\",\n    },\n    {\n      key: \"rules.prefix_rules[].pattern\","
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 1533,
+        "source_id": "codex_config_reference",
+        "text": "description: \"A list of allowed alternative tokens at this position.\",\n    },\n    {\n      key: \"rules.prefix_rules[].decision\",\n      type: \"prompt | forbidden\",\n      description:\n        \"Required. Requirements rules can only prompt or forbid (not allow).\","
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 75,
+        "source_id": "codex_config_advanced",
+        "text": "For authentication details (including credential storage modes), see [Authentication](https://developers.openai.com/codex/auth). For the full list of configuration keys, see [Configuration Reference](https://developers.openai.com/codex/config-reference).\n\nFor shared defaults, rules, and skills checked into repos or system paths, see [Team Config](https://developers.openai.com/codex/enterprise/admin-setup#team-config).\n\nIf you just need to point the built-in OpenAI provider at an LLM proxy, router, or data-residency enabled project, set `openai_base_url` in `config.toml` instead of defining a new provider. This changes the base URL for the built-in `openai` provider without requiring a separate `model_providers.<id>` entry."
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 109,
+        "source_id": "codex_config_advanced",
+        "text": "Inline TOML hooks use the same event structure as `hooks.json`:\n\n```toml\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 112,
+        "source_id": "codex_config_advanced",
+        "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_policy.py\"'\ntimeout = 30"
+      },
+      {
+        "keywords": [
+          "Elicitation"
+        ],
+        "line": 282,
+        "source_id": "codex_config_advanced",
+        "text": "# approval_policy = { granular = {\n#   sandbox_approval = true,\n#   rules = true,\n#   mcp_elicitations = true,\n#   request_permissions = false,\n#   skill_approval = false\n# } }"
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 404,
+        "source_id": "codex_config_advanced",
+        "text": "- `codex.sse_event` (stream event kind, success/failure, duration, plus token counts on `response.completed`)\n- `codex.websocket_request` and `codex.websocket_event` (request duration plus per-message kind/success/error)\n- `codex.user_prompt` (length; content redacted unless explicitly enabled)\n- `codex.tool_decision` (approved/denied and whether the decision came from config vs user)\n- `codex.tool_result` (duration, success, output snippet)\n\n### OTel metrics emitted"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 563,
+        "source_id": "codex_config_advanced",
+        "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 564,
+        "source_id": "codex_config_advanced",
+        "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 565,
+        "source_id": "codex_config_advanced",
+        "text": "| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 566,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 567,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 568,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 569,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 570,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 571,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |\n| `windows_sandbox.fallback_prompt_shown`          | counter   |                                           | Fallback sandbox prompt shown.                        |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 575,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |\n| `windows_sandbox.fallback_prompt_shown`          | counter   |                                           | Fallback sandbox prompt shown.                        |\n| `windows_sandbox.fallback_retry_elevated`        | counter   |                                           | User retried elevated setup from the fallback prompt. |\n| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 578,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.fallback_retry_elevated`        | counter   |                                           | User retried elevated setup from the fallback prompt. |\n| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |\n| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |"
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 579,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |\n| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |\n\nThe elevated setup failure metrics include `code` and `message` when Windows setup failure details are available, and may include `originator` when emitted from the shared setup path. The `windows_sandbox.legacy_setup_preflight_failed` metric includes `originator` when emitted from the shared setup path, but fallback-prompt preflight failures may not include any fields."
+      },
+      {
+        "keywords": [
+          "Setup"
+        ],
+        "line": 582,
+        "source_id": "codex_config_advanced",
+        "text": "| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |\n\nThe elevated setup failure metrics include `code` and `message` when Windows setup failure details are available, and may include `originator` when emitted from the shared setup path. The `windows_sandbox.legacy_setup_preflight_failed` metric includes `originator` when emitted from the shared setup path, but fallback-prompt preflight failures may not include any fields.\n\n### Feedback controls"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 611,
+        "source_id": "codex_config_advanced",
+        "text": "Enable raw reasoning only if it's acceptable for your workflow. Some models/providers (like `gpt-oss`) don't emit raw reasoning; in that case, this setting has no visible effect.\n\n## Notifications\n\nUse `notify` to trigger an external program whenever Codex emits supported events (currently only `agent-turn-complete`). This is handy for desktop toasts, chat webhooks, CI updates, or any side-channel alerting that the built-in TUI notifications don't cover."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 613,
+        "source_id": "codex_config_advanced",
+        "text": "## Notifications\n\nUse `notify` to trigger an external program whenever Codex emits supported events (currently only `agent-turn-complete`). This is handy for desktop toasts, chat webhooks, CI updates, or any side-channel alerting that the built-in TUI notifications don't cover.\n\n```toml\nnotify = [\"python3\", \"/path/to/notify.py\"]"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 626,
+        "source_id": "codex_config_advanced",
+        "text": "import json, subprocess, sys\n\ndef main() -> int:\n    notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\""
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 627,
+        "source_id": "codex_config_advanced",
+        "text": "def main() -> int:\n    notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 629,
+        "source_id": "codex_config_advanced",
+        "text": "notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))\n    subprocess.check_output([\n        \"terminal-notifier\","
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 630,
+        "source_id": "codex_config_advanced",
+        "text": "if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))\n    subprocess.check_output([\n        \"terminal-notifier\",\n        \"-title\", title,"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 635,
+        "source_id": "codex_config_advanced",
+        "text": "\"terminal-notifier\",\n        \"-title\", title,\n        \"-message\", message,\n        \"-group\", \"codex-\" + notification.get(\"thread-id\", \"\"),\n        \"-activate\", \"com.googlecode.iterm2\",\n    ])\n    return 0"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 655,
+        "source_id": "codex_config_advanced",
+        "text": "Place the script somewhere on disk and point `notify` to it.\n\n#### `notify` vs `tui.notifications`\n\n- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`)."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 658,
+        "source_id": "codex_config_advanced",
+        "text": "#### `notify` vs `tui.notifications`\n\n- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 659,
+        "source_id": "codex_config_advanced",
+        "text": "- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 660,
+        "source_id": "codex_config_advanced",
+        "text": "- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`.\n\nIn `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) and falls back to BEL (`\\x07`) otherwise."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 663,
+        "source_id": "codex_config_advanced",
+        "text": "- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`.\n\nIn `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) and falls back to BEL (`\\x07`) otherwise.\n\nSee [Configuration Reference](https://developers.openai.com/codex/config-reference) for the exact keys."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 706,
+        "source_id": "codex_config_advanced",
+        "text": "Running `codex` with no subcommand launches the interactive terminal UI (TUI). Codex exposes some TUI-specific configuration under `[tui]`, including:\n\n- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 707,
+        "source_id": "codex_config_advanced",
+        "text": "Running `codex` with no subcommand launches the interactive terminal UI (TUI). Codex exposes some TUI-specific configuration under `[tui]`, including:\n\n- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 708,
+        "source_id": "codex_config_advanced",
+        "text": "- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects\n- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 709,
+        "source_id": "codex_config_advanced",
+        "text": "- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects\n- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)\n- `tui.show_tooltips`: show or hide onboarding tooltips on the welcome screen"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 714,
+        "source_id": "codex_config_advanced",
+        "text": "- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)\n- `tui.show_tooltips`: show or hide onboarding tooltips on the welcome screen\n\n`tui.notification_method` defaults to `auto`. In `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) when the terminal appears to support them, and falls back to BEL (`\\x07`) otherwise.\n\nSee [Configuration Reference](https://developers.openai.com/codex/config-reference) for the full key list."
+      }
+    ],
+    "opencode": [
+      {
+        "keywords": [
+          "tool.execute.before"
+        ],
+        "line": 88,
+        "source_id": "opencode_plugin_docs",
+        "text": "export const MyPlugin = async (ctx) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"bash\") {\n        output.args.command = escape(output.args.command)\n      }"
+      },
+      {
+        "keywords": [
+          "permission.asked"
+        ],
+        "line": 168,
+        "source_id": "opencode_plugin_docs",
+        "text": "#### Permission Events\n\n- `permission.asked`\n- `permission.replied`\n\n#### Server Events"
+      },
+      {
+        "keywords": [
+          "session.created"
+        ],
+        "line": 177,
+        "source_id": "opencode_plugin_docs",
+        "text": "#### Session Events\n\n- `session.created`\n- `session.compacted`\n- `session.deleted`\n- `session.diff`"
+      },
+      {
+        "keywords": [
+          "session.idle"
+        ],
+        "line": 182,
+        "source_id": "opencode_plugin_docs",
+        "text": "- `session.deleted`\n- `session.diff`\n- `session.error`\n- `session.idle`\n- `session.status`\n- `session.updated`"
+      },
+      {
+        "keywords": [
+          "tool.execute.after"
+        ],
+        "line": 196,
+        "source_id": "opencode_plugin_docs",
+        "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+      },
+      {
+        "keywords": [
+          "tool.execute.before"
+        ],
+        "line": 197,
+        "source_id": "opencode_plugin_docs",
+        "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 213,
+        "source_id": "opencode_plugin_docs",
+        "text": "---\n\n### Send notifications\n\nSend notifications when certain events occur:"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 215,
+        "source_id": "opencode_plugin_docs",
+        "text": "### Send notifications\n\nSend notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 217,
+        "source_id": "opencode_plugin_docs",
+        "text": "Send notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 218,
+        "source_id": "opencode_plugin_docs",
+        "text": "Send notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {\n      // Send notification on session completion"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 221,
+        "source_id": "opencode_plugin_docs",
+        "text": "export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }"
+      },
+      {
+        "keywords": [
+          "session.idle"
+        ],
+        "line": 222,
+        "source_id": "opencode_plugin_docs",
+        "text": "return {\n    event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }\n    },"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 223,
+        "source_id": "opencode_plugin_docs",
+        "text": "event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }\n    },\n  }"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 230,
+        "source_id": "opencode_plugin_docs",
+        "text": "}\n```\n\nWe are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.\n\n:::note\nIf you\u2019re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors."
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 233,
+        "source_id": "opencode_plugin_docs",
+        "text": "We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.\n\n:::note\nIf you\u2019re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.\n:::\n\n---"
+      },
+      {
+        "keywords": [
+          "tool.execute.before"
+        ],
+        "line": 245,
+        "source_id": "opencode_plugin_docs",
+        "text": "```javascript title=\".opencode/plugins/env-protection.js\"\nexport const EnvProtection = async ({ project, client, $, directory, worktree }) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"read\" && output.args.filePath.includes(\".env\")) {\n        throw new Error(\"Do not read .env files\")\n      }"
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 349,
+        "source_id": "opencode_plugin_docs",
+        "text": "Include any state that should persist across compaction:\n- Current task status\n- Important decisions made\n- Files being actively worked on\n`)\n    },"
+      }
+    ]
+  },
+  "schema_version": 1,
+  "source_keyword_hits": {
+    "claude_hooks": [
+      "ConfigChange",
+      "CwdChanged",
+      "Elicitation",
+      "ElicitationResult",
+      "FileChanged",
+      "InstructionsLoaded",
+      "Notification",
+      "PermissionDenied",
+      "PermissionRequest",
+      "PostCompact",
+      "PostToolBatch",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "PreCompact",
+      "PreToolUse",
+      "SessionEnd",
+      "SessionStart",
+      "Setup",
+      "Stop",
+      "StopFailure",
+      "SubagentStart",
+      "SubagentStop",
+      "TaskCompleted",
+      "TaskCreated",
+      "TeammateIdle",
+      "UserPromptExpansion",
+      "UserPromptSubmit",
+      "WorktreeCreate",
+      "WorktreeRemove",
+      "additionalContext",
+      "continue",
+      "decision",
+      "hookSpecificOutput",
+      "permissionDecision",
+      "suppressOutput",
+      "updatedInput"
+    ],
+    "claude_settings": [
+      "Notification",
+      "Setup",
+      "continue"
+    ],
+    "codex_config_advanced": [
+      "Elicitation",
+      "Notification",
+      "PreToolUse",
+      "Setup",
+      "decision"
+    ],
+    "codex_config_reference": [
+      "Elicitation",
+      "Notification",
+      "PermissionRequest",
+      "PostToolUse",
+      "PreToolUse",
+      "SessionStart",
+      "Setup",
+      "Stop",
+      "UserPromptSubmit",
+      "codex_hooks",
+      "decision"
+    ],
+    "codex_hooks": [
+      "PermissionRequest",
+      "PostToolUse",
+      "PreToolUse",
+      "SessionStart",
+      "Stop",
+      "UserPromptSubmit",
+      "additionalContext",
+      "codex_hooks",
+      "continue",
+      "decision",
+      "hookSpecificOutput",
+      "permissionDecision",
+      "suppressOutput",
+      "updatedInput"
+    ],
+    "opencode_config_docs": [],
+    "opencode_config_schema": [],
+    "opencode_plugin_docs": [
+      "Notification",
+      "decision",
+      "permission.asked",
+      "session.created",
+      "session.idle",
+      "tool.execute.after",
+      "tool.execute.before"
+    ]
+  },
+  "source_snapshot_policy": "manual-regeneration-required",
+  "sources": {
+    "claude_hooks": {
+      "bytes": 185996,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "claude",
+      "kind": "hooks_doc",
+      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
+      "sha256": "30ef74af06b38e300ce12058aa62be03c80c1d0e217227b60bef6222e87ca99c",
+      "snippets": [
+        {
+          "keywords": [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "Stop",
+            "StopFailure",
+            "SessionEnd",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "Stop",
+            "decision"
+          ],
+          "line": 17,
+          "text": "## Hook lifecycle\n\nHooks fire at specific points during a Claude Code session. When an event fires and a matcher matches, Claude Code passes JSON context about the event to your hook handler. For command hooks, input arrives on stdin. For HTTP hooks, it arrives as the POST request body. Your handler can then inspect the input, take action, and optionally return a decision. Events fall into three cadences: once per session (`SessionStart`, `SessionEnd`), once per turn (`UserPromptSubmit`, `Stop`, `StopFailure`), and on every tool call inside the agentic loop (`PreToolUse`, `PostToolUse`):\n\n<div style={{maxWidth: \"500px\", margin: \"0 auto\"}}>\n  <Frame>"
+        },
+        {
+          "keywords": [
+            "SessionStart",
+            "Setup",
+            "CwdChanged",
+            "UserPromptSubmit",
+            "UserPromptExpansion",
+            "PreToolUse",
+            "PermissionRequest",
+            "PermissionDenied",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PostToolBatch",
+            "SubagentStart",
+            "TaskCreated",
+            "TaskCompleted",
+            "Stop",
+            "StopFailure",
+            "TeammateIdle",
+            "PreCompact",
+            "PostCompact",
+            "SessionEnd",
+            "Elicitation",
+            "ElicitationResult",
+            "InstructionsLoaded",
+            "ConfigChange",
+            "WorktreeCreate",
+            "WorktreeRemove",
+            "Notification",
+            "FileChanged",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PermissionRequest",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "Stop",
+            "TaskCompleted",
+            "InstructionsLoaded"
+          ],
+          "line": 21,
+          "text": "<div style={{maxWidth: \"500px\", margin: \"0 auto\"}}>\n  <Frame>\n    <img src=\"https://mintcdn.com/claude-code/ZIW26Z9pnpsXLhbS/images/hooks-lifecycle.svg?fit=max&auto=format&n=ZIW26Z9pnpsXLhbS&q=85&s=ee23691324deb6501df09bfdae560b64\" alt=\"Hook lifecycle diagram showing optional Setup feeding into SessionStart, then a per-turn loop containing UserPromptSubmit, UserPromptExpansion for slash commands, the nested agentic loop (PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, PostToolBatch, SubagentStart/Stop, TaskCreated, TaskCompleted), and Stop or StopFailure, followed by TeammateIdle, PreCompact, PostCompact, and SessionEnd, with Elicitation and ElicitationResult nested inside MCP tool execution, PermissionDenied as a side branch from PermissionRequest for auto-mode denials, and WorktreeCreate, WorktreeRemove, Notification, ConfigChange, InstructionsLoaded, CwdChanged, and FileChanged as standalone async events\" width=\"520\" height=\"1228\" data-path=\"images/hooks-lifecycle.svg\" />\n  </Frame>\n</div>"
+        },
+        {
+          "keywords": [
+            "decision"
+          ],
+          "line": 25,
+          "text": "</Frame>\n</div>\n\nThe table below summarizes when each event fires. The [Hook events](#hook-events) section documents the full input schema and decision control options for each one.\n\n| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |"
+        },
+        {
+          "keywords": [
+            "SessionStart"
+          ],
+          "line": 29,
+          "text": "| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |"
+        },
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 30,
+          "text": "| Event                 | When it fires                                                                                                                                          |\n| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |"
+        },
+        {
+          "keywords": [
+            "UserPromptSubmit",
+            "UserPromptSubmit"
+          ],
+          "line": 31,
+          "text": "| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |"
+        },
+        {
+          "keywords": [
+            "UserPromptExpansion"
+          ],
+          "line": 32,
+          "text": "| `SessionStart`        | When a session begins or resumes                                                                                                                       |\n| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |"
+        },
+        {
+          "keywords": [
+            "PreToolUse",
+            "PreToolUse"
+          ],
+          "line": 33,
+          "text": "| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |"
+        }
+      ],
+      "status_code": 200,
+      "url": "https://docs.anthropic.com/en/docs/claude-code/hooks.md"
+    },
+    "claude_settings": {
+      "bytes": 124414,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "claude",
+      "kind": "settings_doc",
+      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
+      "sha256": "26dd5c1f0db22f20c753b04203da67cd3989522b90d206461a5537faf136ce80",
+      "snippets": [
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 177,
+          "text": "| `autoMemoryEnabled`               | Enable [auto memory](/en/memory#enable-or-disable-auto-memory). When `false`, Claude does not read from or write to the auto memory directory. Default: `true`. You can also toggle this with `/memory` during a session. To disable via environment variable, set [`CLAUDE_CODE_DISABLE_AUTO_MEMORY`](/en/env-vars) in `env`                                                                                                                                                                                                                                                          | `false`                                                                                                                        |\n| `autoMode`                        | Customize what the [auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) classifier blocks and allows. Contains `environment`, `allow`, `soft_deny`, and `hard_deny` arrays of prose rules. Include the literal string `\"$defaults\"` in an array to inherit the built-in rules at that position. See [Configure auto mode](/en/auto-mode-config). Not read from shared project settings                                                                                                                                                                                   | `{\"soft_deny\": [\"$defaults\", \"Never run terraform apply\"]}`                                                                    |\n| `autoScrollEnabled`               | In [fullscreen rendering](/en/fullscreen), follow new output to the bottom of the conversation. Default: `true`. Appears in `/config` as **Auto-scroll**. Permission prompts still scroll into view when this is off                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                                                                                        |\n| `autoUpdatesChannel`              | Release channel to follow for updates. Use `\"stable\"` for a version that is typically about one week old and skips versions with major regressions, or `\"latest\"` (default) for the most recent release. To disable auto-updates entirely, set [`DISABLE_AUTOUPDATER`](/en/setup#disable-auto-updates) in `env`                                                                                                                                                                                                                                                                        | `\"stable\"`                                                                                                                     |\n| `availableModels`                 | Restrict which models users can select via `/model`, `--model`, or `ANTHROPIC_MODEL`. Does not affect the Default option. See [Restrict model selection](/en/model-config#restrict-model-selection)                                                                                                                                                                                                                                                                                                                                                                                    | `[\"sonnet\", \"haiku\"]`                                                                                                          |\n| `awaySummaryEnabled`              | Show a one-line session recap when you return to the terminal after a few minutes away. Set to `false` or turn off Session recap in `/config` to disable. Same as [`CLAUDE_CODE_ENABLE_AWAY_SUMMARY`](/en/env-vars)                                                                                                                                                                                                                                                                                                                                                                    | `true`                                                                                                                         |\n| `awsAuthRefresh`                  | Custom script that modifies the `.aws` directory (see [advanced credential configuration](/en/amazon-bedrock#advanced-credential-configuration))                                                                                                                                                                                                                                                                                                                                                                                                                                       | `aws sso login --profile myprofile`                                                                                            |"
+        },
+        {
+          "keywords": [
+            "continue"
+          ],
+          "line": 207,
+          "text": "| `fileSuggestion`                  | Configure a custom script for `@` file autocomplete. See [File suggestion settings](#file-suggestion-settings)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{\"type\": \"command\", \"command\": \"~/.claude/file-suggestion.sh\"}`                                                               |\n| `forceLoginMethod`                | Use `claudeai` to restrict login to Claude.ai accounts, `console` to restrict login to Claude Console (API usage billing) accounts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `claudeai`                                                                                                                     |\n| `forceLoginOrgUUID`               | Require login to belong to a specific organization. Accepts a single UUID string, which also pre-selects that organization during login, or an array of UUIDs where any listed organization is accepted without pre-selection. When set in managed settings, login fails if the authenticated account does not belong to a listed organization; an empty array fails closed and blocks login with a misconfiguration message                                                                                                                                                           | `\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"` or `[\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\", \"yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\"]` |\n| `forceRemoteSettingsRefresh`      | (Managed settings only) Block CLI startup until remote managed settings are freshly fetched from the server. If the fetch fails, the CLI exits rather than continuing with cached or no settings. When not set, startup continues without waiting for remote settings. See [fail-closed enforcement](/en/server-managed-settings#enforce-fail-closed-startup)                                                                                                                                                                                                                          | `true`                                                                                                                         |\n| `gcpAuthRefresh`                  | Custom script that refreshes GCP Application Default Credentials when they expire or cannot be loaded. See [advanced credential configuration](/en/google-vertex-ai#advanced-credential-configuration)                                                                                                                                                                                                                                                                                                                                                                                 | `gcloud auth application-default login`                                                                                        |\n| `hooks`                           | Configure custom commands to run at lifecycle events. See [hooks documentation](/en/hooks) for format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | See [hooks](/en/hooks)                                                                                                         |\n| `httpHookAllowedEnvVars`          | Allowlist of environment variable names HTTP hooks may interpolate into headers. When set, each hook's effective `allowedEnvVars` is the intersection with this list. Undefined = no restriction. Arrays merge across settings sources. See [Hook configuration](#hook-configuration)                                                                                                                                                                                                                                                                                                  | `[\"MY_TOKEN\", \"HOOK_SECRET\"]`                                                                                                  |"
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 225,
+          "text": "| `plansDirectory`                  | Customize where plan files are stored. Path is relative to project root. Default: `~/.claude/plans`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `\"./plans\"`                                                                                                                    |\n| `pluginTrustMessage`              | (Managed settings only) Custom message appended to the plugin trust warning shown before installation. Use this to add organization-specific context, for example to confirm that plugins from your internal marketplace are vetted.                                                                                                                                                                                                                                                                                                                                                   | `\"All plugins from our marketplace are approved by IT\"`                                                                        |\n| `policyHelper`                    | {/* min-version: 2.1.136 */}Admin-deployed executable that computes managed settings dynamically at startup. Only honored from MDM or a system `managed-settings.json` file. See [Compute managed settings with a policy helper](#compute-managed-settings-with-a-policy-helper). Requires Claude Code v2.1.136 or later                                                                                                                                                                                                                                                               | `{\"path\": \"/usr/local/bin/claude-policy\"}`                                                                                     |\n| `preferredNotifChannel`           | Method for task-complete and permission-prompt notifications: `\"auto\"`, `\"terminal_bell\"`, `\"iterm2\"`, `\"iterm2_with_bell\"`, `\"kitty\"`, `\"ghostty\"`, or `\"notifications_disabled\"`. Default: `\"auto\"`, which sends a desktop notification in iTerm2, Ghostty, and Kitty and does nothing in other terminals. Set `\"terminal_bell\"` to ring the bell character in any terminal. Appears in `/config` as **Notifications**. See [Get a terminal bell or notification](/en/terminal-config#get-a-terminal-bell-or-notification)                                                           | `\"terminal_bell\"`                                                                                                              |\n| `prefersReducedMotion`            | Reduce or disable UI animations (spinners, shimmer, flash effects) for accessibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                                                                                         |\n| `prUrlTemplate`                   | URL template for the PR badge shown in the footer and in tool-result summaries. Substitutes `{host}`, `{owner}`, `{repo}`, `{number}`, and `{url}` from the `gh`-reported PR URL. Use to point PR links at an internal code-review tool instead of `github.com`. Does not affect `#123` autolinks in Claude's prose                                                                                                                                                                                                                                                                    | `\"https://reviews.example.com/{owner}/{repo}/pull/{number}\"`                                                                   |\n| `respectGitignore`                | Control whether the `@` file picker respects `.gitignore` patterns. When `true` (default), files matching `.gitignore` patterns are excluded from suggestions                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                                                                                        |"
+        }
+      ],
+      "status_code": 200,
+      "url": "https://docs.anthropic.com/en/docs/claude-code/settings.md"
+    },
+    "codex_config_advanced": {
+      "bytes": 44746,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "codex",
+      "kind": "config_advanced",
+      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "sha256": "ccf9a868f8b596650275aee483df4643992eb18f65867f07b5e2794fdef4c1dd",
+      "snippets": [
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 75,
+          "text": "For authentication details (including credential storage modes), see [Authentication](https://developers.openai.com/codex/auth). For the full list of configuration keys, see [Configuration Reference](https://developers.openai.com/codex/config-reference).\n\nFor shared defaults, rules, and skills checked into repos or system paths, see [Team Config](https://developers.openai.com/codex/enterprise/admin-setup#team-config).\n\nIf you just need to point the built-in OpenAI provider at an LLM proxy, router, or data-residency enabled project, set `openai_base_url` in `config.toml` instead of defining a new provider. This changes the base URL for the built-in `openai` provider without requiring a separate `model_providers.<id>` entry."
+        },
+        {
+          "keywords": [
+            "PreToolUse",
+            "PreToolUse"
+          ],
+          "line": 109,
+          "text": "Inline TOML hooks use the same event structure as `hooks.json`:\n\n```toml\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
+        },
+        {
+          "keywords": [
+            "PreToolUse",
+            "PreToolUse"
+          ],
+          "line": 112,
+          "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_policy.py\"'\ntimeout = 30"
+        },
+        {
+          "keywords": [
+            "Elicitation"
+          ],
+          "line": 282,
+          "text": "# approval_policy = { granular = {\n#   sandbox_approval = true,\n#   rules = true,\n#   mcp_elicitations = true,\n#   request_permissions = false,\n#   skill_approval = false\n# } }"
+        },
+        {
+          "keywords": [
+            "decision"
+          ],
+          "line": 404,
+          "text": "- `codex.sse_event` (stream event kind, success/failure, duration, plus token counts on `response.completed`)\n- `codex.websocket_request` and `codex.websocket_event` (request duration plus per-message kind/success/error)\n- `codex.user_prompt` (length; content redacted unless explicitly enabled)\n- `codex.tool_decision` (approved/denied and whether the decision came from config vs user)\n- `codex.tool_result` (duration, success, output snippet)\n\n### OTel metrics emitted"
+        },
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 563,
+          "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |"
+        },
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 564,
+          "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |"
+        },
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 565,
+          "text": "| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |"
+        }
+      ],
+      "status_code": 200,
+      "url": "https://developers.openai.com/codex/config-advanced.md"
+    },
+    "codex_config_reference": {
+      "bytes": 54245,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "codex",
+      "kind": "config_reference",
+      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "sha256": "b1b6e9aa995c4cfd8fba205740ee1568bf945408918a793dfcec2e5e5e930580",
+      "snippets": [
+        {
+          "keywords": [
+            "Elicitation"
+          ],
+          "line": 60,
+          "text": "},\n    {\n      key: \"approval_policy\",\n      type: \"untrusted | on-request | never | { granular = { sandbox_approval = bool, rules = bool, mcp_elicitations = bool, request_permissions = bool, skill_approval = bool } }\",\n      description:\n        \"Controls when Codex pauses for approval before executing commands. You can also use `approval_policy = { granular = { ... } }` to allow or auto-reject specific prompt categories while keeping other prompts interactive. `on-failure` is deprecated; use `on-request` for interactive runs or `never` for non-interactive runs.\",\n    },"
+        },
+        {
+          "keywords": [
+            "Elicitation"
+          ],
+          "line": 77,
+          "text": "\"When `true`, approvals triggered by execpolicy `prompt` rules are allowed to surface.\",\n    },\n    {\n      key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\","
+        },
+        {
+          "keywords": [
+            "Elicitation"
+          ],
+          "line": 80,
+          "text": "key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\",\n    },\n    {\n      key: \"approval_policy.granular.request_permissions\","
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 158,
+          "text": "key: \"notify\",\n      type: \"array<string>\",\n      description:\n        \"Command invoked for notifications; receives a JSON payload from Codex.\",\n    },\n    {\n      key: \"check_for_update_on_startup\","
+        },
+        {
+          "keywords": [
+            "codex_hooks"
+          ],
+          "line": 331,
+          "text": "key: \"features.hooks\",\n      type: \"boolean\",\n      description:\n        \"Enable lifecycle hooks loaded from `hooks.json` or inline `[hooks]` config. `features.codex_hooks` is a deprecated alias.\",\n    },\n    {\n      key: \"features.codex_git_commit\","
+        },
+        {
+          "keywords": [
+            "Setup"
+          ],
+          "line": 668,
+          "text": "{\n      key: \"model_providers.<id>.env_key_instructions\",\n      type: \"string\",\n      description: \"Optional setup guidance for the provider API key.\",\n    },\n    {\n      key: \"model_providers.<id>.experimental_bearer_token\","
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 1049,
+          "text": "key: \"tui\",\n      type: \"table\",\n      description:\n        \"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\","
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 1052,
+          "text": "\"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\","
+        }
+      ],
+      "status_code": 200,
+      "url": "https://developers.openai.com/codex/config-reference.md"
+    },
+    "codex_hooks": {
+      "bytes": 23438,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "codex",
+      "kind": "hooks_doc",
+      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "sha256": "3eba4bd501574b14eeb00d052436b8b227d425f472a45d99196c562be6bc798e",
+      "snippets": [
+        {
+          "keywords": [
+            "Stop",
+            "Stop"
+          ],
+          "line": 9,
+          "text": "- Send the conversation to a custom logging/analytics engine\n- Scan your team's prompts to block accidentally pasting API keys\n- Summarize conversations to create persistent memories automatically\n- Run a custom validation check when a conversation turn stops, enforcing standards\n- Customize prompting when in a certain directory\n\nHooks are enabled by default. If you need to turn them off in `config.toml`,"
+        },
+        {
+          "keywords": [
+            "codex_hooks"
+          ],
+          "line": 20,
+          "text": "hooks = false\n```\n\nUse `hooks` as the canonical feature key. `codex_hooks` still works as a\ndeprecated alias.\n\nAdmins can force hooks off the same way in `requirements.toml` with"
+        },
+        {
+          "keywords": [
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PermissionRequest",
+            "PostToolUse",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PermissionRequest",
+            "PostToolUse"
+          ],
+          "line": 32,
+          "text": "- Multiple matching command hooks for the same event are launched concurrently,\n  so one hook cannot prevent another matching hook from starting.\n- Non-managed command hooks must be reviewed and trusted before they run.\n- `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and\n  `Stop` run at turn scope.\n\n## Where Codex looks for hooks"
+        },
+        {
+          "keywords": [
+            "Stop",
+            "Stop"
+          ],
+          "line": 33,
+          "text": "so one hook cannot prevent another matching hook from starting.\n- Non-managed command hooks must be reviewed and trusted before they run.\n- `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and\n  `Stop` run at turn scope.\n\n## Where Codex looks for hooks"
+        },
+        {
+          "keywords": [
+            "PreToolUse",
+            "PostToolUse",
+            "Stop",
+            "PreToolUse",
+            "PostToolUse",
+            "Stop"
+          ],
+          "line": 81,
+          "text": "Hooks are organized in three levels:\n\n- A hook event such as `PreToolUse`, `PostToolUse`, or `Stop`\n- A matcher group that decides when that event matches\n- One or more hook handlers that run when the matcher group matches"
+        },
+        {
+          "keywords": [
+            "SessionStart"
+          ],
+          "line": 88,
+          "text": "```json\n{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"matcher\": \"startup|resume\",\n        \"hooks\": ["
+        },
+        {
+          "keywords": [
+            "PreToolUse",
+            "PreToolUse"
+          ],
+          "line": 100,
+          "text": "]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+        },
+        {
+          "keywords": [
+            "PermissionRequest",
+            "PermissionRequest"
+          ],
+          "line": 112,
+          "text": "]\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": ["
+        }
+      ],
+      "status_code": 200,
+      "url": "https://developers.openai.com/codex/hooks.md"
+    },
+    "opencode_config_docs": {
+      "bytes": 23818,
+      "content_type": "text/plain; charset=utf-8",
+      "harness": "opencode",
+      "kind": "config_doc",
+      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "sha256": "f64b743f28907fae76e14726809072e9e97e5057fc8e803fd85f7493edb006ae",
+      "snippets": [],
+      "status_code": 200,
+      "url": "https://opencode.ai/docs/config.md"
+    },
+    "opencode_config_schema": {
+      "bytes": 35636,
+      "content_type": "application/json",
+      "harness": "opencode",
+      "kind": "json_schema",
+      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
+      "schema_summary": {
+        "defs_keys": [
+          "AgentConfig",
+          "AttachmentConfig",
+          "Config",
+          "ImageAttachmentConfig",
+          "LayoutConfig",
+          "LogLevel",
+          "McpLocalConfig",
+          "McpOAuthConfig",
+          "McpRemoteConfig",
+          "PermissionActionConfig",
+          "PermissionConfig",
+          "PermissionObjectConfig",
+          "PermissionRuleConfig",
+          "ProviderConfig",
+          "ReferenceConfig",
+          "ReferenceConfigEntry",
+          "ServerConfig"
+        ],
+        "ref": "#/$defs/Config",
+        "root_keys": [
+          "$defs",
+          "$ref",
+          "$schema",
+          "allowComments",
+          "allowTrailingCommas"
+        ],
+        "schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "sha256": "4c0631894603321831a28f7e92741671bc0a02af8032540d7eb6b1f68e320250",
+      "snippets": [],
+      "status_code": 200,
+      "url": "https://opencode.ai/config.json"
+    },
+    "opencode_plugin_docs": {
+      "bytes": 9392,
+      "content_type": "text/plain; charset=utf-8",
+      "harness": "opencode",
+      "kind": "plugin_doc",
+      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "sha256": "ab99892a03931c7d7cb36f93beba067346492cb9adae0f263fb6ac83f83391bb",
+      "snippets": [
+        {
+          "keywords": [
+            "tool.execute.before"
+          ],
+          "line": 88,
+          "text": "export const MyPlugin = async (ctx) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"bash\") {\n        output.args.command = escape(output.args.command)\n      }"
+        },
+        {
+          "keywords": [
+            "permission.asked"
+          ],
+          "line": 168,
+          "text": "#### Permission Events\n\n- `permission.asked`\n- `permission.replied`\n\n#### Server Events"
+        },
+        {
+          "keywords": [
+            "session.created"
+          ],
+          "line": 177,
+          "text": "#### Session Events\n\n- `session.created`\n- `session.compacted`\n- `session.deleted`\n- `session.diff`"
+        },
+        {
+          "keywords": [
+            "session.idle"
+          ],
+          "line": 182,
+          "text": "- `session.deleted`\n- `session.diff`\n- `session.error`\n- `session.idle`\n- `session.status`\n- `session.updated`"
+        },
+        {
+          "keywords": [
+            "tool.execute.after"
+          ],
+          "line": 196,
+          "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+        },
+        {
+          "keywords": [
+            "tool.execute.before"
+          ],
+          "line": 197,
+          "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 213,
+          "text": "---\n\n### Send notifications\n\nSend notifications when certain events occur:"
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 215,
+          "text": "### Send notifications\n\nSend notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {"
+        }
+      ],
+      "status_code": 200,
+      "url": "https://opencode.ai/docs/plugins.md"
+    }
+  }
+}

@@ -136,6 +136,7 @@ LINT_TYPE_SAFETY_DEFAULTS: Final[_LintTypeSafetyDefaults] = {
     "suppression_patterns": [
         r"(?i)#\s*type:\s*ignore",
         r"(?i)#\s*pyright:\s*ignore",
+        r"(?i)#\s*ty:\s*ignore",
         r"(?i)#\s*pyre-ignore",
         r"(?i)#\s*noqa\b",
     ],

@@ -103,11 +103,13 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
             PythonFeatureEnvyRule,
             PythonFlatFileSiblingsRule,
             PythonGodClassRule,
+            PythonImportAliasRule,
             PythonImportFanoutRule,
             PythonLongLineRule,
             PythonLongMethodRule,
             PythonLongParameterRule,
             PythonModuleSizeRule,
+            PythonPrivateImportChainRule,
             PythonSilentExceptRule,
             PythonThinWrapperRule,
         )
@@ -130,6 +132,8 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
         PythonCyclomaticComplexityRule(),
         PythonDeadCodeRule(),
         PythonFlatFileSiblingsRule(),
+        PythonImportAliasRule(),
+        PythonPrivateImportChainRule(),
         PythonImportFanoutRule(),
     ]
     return python_ast_rules

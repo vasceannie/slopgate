@@ -59,12 +59,13 @@ class ClaudeAdapter(PlatformAdapter):
             return response if len(specific) > 1 else None
 
         if event_name == "PermissionRequest":
-            if decision not in {"deny", "allow"}:
+            if decision not in {"deny", "allow", "block", "ask"}:
                 return None
-            inner: ObjectDict = {"behavior": "allow" if decision == "allow" else "deny"}
+            behavior = "allow" if decision == "allow" else "deny"
+            inner: ObjectDict = {"behavior": behavior}
             if updated_input and decision == "allow":
                 inner["updatedInput"] = updated_input
-            if decision == "deny":
+            if behavior == "deny":
                 inner["message"] = self.join_messages(
                     self.decision_findings(findings, decision)
                 )

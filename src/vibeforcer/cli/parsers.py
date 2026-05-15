@@ -132,6 +132,25 @@ def _add_lint_parsers(sub: SubparserRegistry) -> None:
     )
     check.set_defaults(func=cmd_lint, lint_command="check")
 
+    test_integrity = lint_sub.add_parser(
+        "test-integrity",
+        help="Scan tests for weak assertions, mock theater, and schema-bypass fakes",
+        description=(
+            "Scan the current project tests for bad-test-efficacy indicators: weak "
+            "presence assertions, mock-only proofs, schema bypasses, hand-built "
+            "payload drift, over-mocked integration tests, untested production code, "
+            "missing integration seams, Hypothesis candidates, and obsolete tests."
+        ),
+    )
+    _ = test_integrity.add_argument(
+        "--details",
+        "--verbose",
+        dest="details",
+        action="store_true",
+        help="Show contextual repair guidance for each suspicious test",
+    )
+    test_integrity.set_defaults(func=cmd_lint, lint_command="test-integrity")
+
     baseline = lint_sub.add_parser(
         "baseline",
         help="Disabled: repo-wide rebaselining is not allowed",

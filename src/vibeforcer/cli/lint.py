@@ -157,6 +157,45 @@ def _lint_baseline(_root: Path) -> int:
     return 1
 
 
+def _lint_test_integrity(root: Path, *, details: bool = False) -> int:
+    from vibeforcer.lint import __version__ as lint_version
+    from vibeforcer.lint._baseline import load_baseline
+    from vibeforcer.lint._collectors import run_test_integrity_collectors
+    from vibeforcer.lint._config import load_config as load_qg_config
+    from vibeforcer.lint._config import set_config as set_qg_config
+    from vibeforcer.lint._helpers import find_source_files, find_test_files
+
+    root = _discover_project_root(root)
+    cfg = load_qg_config(root)
+    set_qg_config(cfg)
+    src_files = find_source_files()
+    test_files = find_test_files()
+
+    print(f"vibeforcer lint {lint_version} test-integrity")
+    print(f"  project: {cfg.project_root}")
+    print(f"  src:     {cfg.src_root}  ({len(src_files)} files)")
+    print(f"  tests:   {cfg.tests_root}  ({len(test_files)} files)")
+    print()
+
+    baseline = load_baseline()
+    collectors = run_test_integrity_collectors(src_files, test_files)
+    color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+
+    totals = [0, 0, 0]
+    for rule_name, violations in collectors:
+        if not violations:
+            continue
+        counts = _tally_rule(
+            rule_name,
+            violations,
+            baseline,
+            details=details,
+        )
+        for index, count in enumerate(counts):
+            totals[index] += count
+    return _print_lint_summary(totals[0], totals[1], totals[2], color)
+
+
 def _lint_init(root: Path) -> int:
     from vibeforcer.lint import __version__ as lint_version
     from vibeforcer.lint._updater import render_quality_gate_toml
@@ -217,6 +256,12 @@ def cmd_lint(args: argparse.Namespace) -> int:
     if lint_command == "check":
         raw_details = getattr(args, "details", False)
         return _lint_check(
+            Path.cwd(),
+            details=raw_details if isinstance(raw_details, bool) else False,
+        )
+    if lint_command == "test-integrity":
+        raw_details = getattr(args, "details", False)
+        return _lint_test_integrity(
             Path.cwd(),
             details=raw_details if isinstance(raw_details, bool) else False,
         )

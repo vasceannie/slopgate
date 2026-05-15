@@ -179,7 +179,8 @@ def find_string_constant(value: str, *, root: Path | None = None) -> StringConst
 def suggest_constant_name(value: str) -> str:
     """Build a stable, uppercase candidate constant name from a string value."""
 
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value.strip()).strip("_").upper()
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", value.strip())
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", spaced).strip("_").upper()
     if not cleaned:
         return "EXTRACTED_STRING"
     if cleaned[0].isdigit():

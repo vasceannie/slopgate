@@ -344,7 +344,7 @@ class PythonDuplicateCallSequenceRule(Rule):
             if len(members) < 2:
                 continue
             seq_preview = ", ".join(seq[:5]) + ("..." if len(seq) > 5 else "")
-            others = [f"{n} (line {l})" for n, l in members[1:]]
+            others = [f"{name} (line {line_number})" for name, line_number in members[1:]]
             findings.append(RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
@@ -418,7 +418,7 @@ class PythonSemanticCloneRule(Rule):
         for h, members in groups.items():
             if len(members) < 2:
                 continue
-            others = [f"{n} (line {l})" for n, l in members[1:]]
+            others = [f"{name} (line {line_number})" for name, line_number in members[1:]]
             findings.append(RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
