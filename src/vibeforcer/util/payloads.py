@@ -152,6 +152,53 @@ def _is_shell_glob_token(value: str) -> bool:
     return any(char in value for char in "*?[")
 
 
+_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|"})
+_COMMAND_WRAPPER_NAMES = frozenset({"env", "command", "builtin", "exec", "time", "nohup"})
+
+
+def _is_leading_shell_assignment(value: str) -> bool:
+    """Return True for NAME=value tokens that can appear before a command."""
+    if "=" not in value or value.startswith("-"):
+        return False
+    name, _ = value.split("=", 1)
+    return bool(name) and name.replace("_", "").isalnum() and "/" not in name
+
+
+def _shell_command_executable_indexes(tokens: list[str]) -> set[int]:
+    """Return indexes that represent command executables, not file targets."""
+    indexes: set[int] = set()
+    expecting_command = True
+    for index, token in enumerate(tokens):
+        cleaned = token.strip("\"'")
+        if cleaned in _COMMAND_SEPARATORS:
+            expecting_command = True
+            continue
+        if not expecting_command:
+            continue
+        if not cleaned or cleaned.startswith((">", "<")):
+            continue
+        if cleaned.startswith("-") or _is_leading_shell_assignment(cleaned):
+            continue
+        basename = Path(cleaned).name.lower()
+        if basename in _COMMAND_WRAPPER_NAMES:
+            if "/" in cleaned or cleaned.startswith(("~", "./", "../")):
+                indexes.add(index)
+            continue
+        indexes.add(index)
+        expecting_command = False
+    return indexes
+
+
+def shell_command_executable_paths(command: str) -> list[str]:
+    """Return path-like executable tokens that appear in command position."""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    executable_indexes = _shell_command_executable_indexes(tokens)
+    return [tokens[index].strip("\"'") for index in sorted(executable_indexes)]
+
+
 def shell_command_paths(command: str) -> list[str]:
     redirection_pattern = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
     pathish_pattern = re.compile(r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
@@ -165,6 +212,11 @@ def shell_command_paths(command: str) -> list[str]:
         "tsconfig.json",
     }
     seen: list[str] = []
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    executable_indexes = _shell_command_executable_indexes(tokens)
 
     def append_path(value: str) -> None:
         cleaned_value = value.strip("\"'")
@@ -173,13 +225,10 @@ def shell_command_paths(command: str) -> list[str]:
         if cleaned_value not in seen:
             seen.append(cleaned_value)
 
-    try:
-        tokens = shlex.split(command, posix=True)
-    except ValueError:
-        tokens = command.split()
-
-    for token in tokens:
+    for index, token in enumerate(tokens):
         cleaned = token.strip("\"'")
+        if index in executable_indexes:
+            continue
         if not cleaned or any(char.isspace() for char in cleaned):
             continue
         if _is_shell_glob_token(cleaned):

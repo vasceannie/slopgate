@@ -913,6 +913,7 @@ class TestPYCODE013Enrichment:
         assert "called" in reason.lower() or "time" in reason.lower(), (
             f"Expected usage info: {reason}"
         )
+        assert "Replace each `get_value(...)` call with `lookup(...)`" in reason
 
 
 # ===========================================================================
@@ -1108,6 +1109,32 @@ class TestPYQUALITY010Enrichment:
             test_support.hook_output(result), "permissionDecisionReason"
         )
         assert "constants" in reason.lower(), f"Expected constants suggestion: {reason}"
+
+    def test_names_triggered_literals_and_lines(self, tmp_project: Path) -> None:
+        """Denial should point agents at exact candidate literals before retrying."""
+        code = "def retry():\n    timeout = 300\n    if timeout > 500:\n        pass\n"
+        payload = _pretool_write_payload("src/retry.py", code, str(tmp_project))
+        result = evaluate_payload(payload)
+        test_support.assert_denied_by(result, "PY-QUALITY-010")
+
+        reason = test_support.required_string(
+            test_support.hook_output(result), "permissionDecisionReason"
+        )
+        assert "Triggered magic number candidates" in reason
+        assert "line 2: 300" in reason
+        assert "line 3: 500" in reason
+
+    def test_negative_magic_number_is_not_double_reported(self, tmp_project: Path) -> None:
+        code = "def retry(timeout):\n    if timeout < -300:\n        return False\n    return True\n"
+        payload = _pretool_write_payload("src/retry.py", code, str(tmp_project))
+        result = evaluate_payload(payload)
+        test_support.assert_denied_by(result, "PY-QUALITY-010")
+
+        reason = test_support.required_string(
+            test_support.hook_output(result), "permissionDecisionReason"
+        )
+        assert "line 2: -300" in reason
+        assert "line 2: 300" not in reason
 
 
 # ===========================================================================

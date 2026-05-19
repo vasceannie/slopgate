@@ -200,28 +200,55 @@ def _has_error_signals(output: str) -> bool:
 
 # ── Context message ─────────────────────────────────────────────────────
 
-_ERROR_CONTEXT = (
-    "⚠️ ERRORS DETECTED — You MUST fix these errors. Rules:\n"
-    "1. Do NOT run git blame, git log, or any investigation into whether "
-    "these errors are 'pre-existing' or 'introduced by your changes'.\n"
-    "2. Do NOT dismiss errors as 'out of scope', 'unrelated', or "
-    "'for a separate PR'.\n"
-    "3. Fix them now, or spawn a subagent to fix them if it would "
-    "derail your current task.\n"
-    "4. If you genuinely cannot fix something (e.g., missing credentials, "
-    "external service down), say so explicitly and add a TODO comment."
+_SECRET_VALUE_PATTERN = re.compile(
+    r"(?i)\b(api[_-]?key|token|secret|password|cookie|authorization)(=|:)\S+"
 )
+_BEARER_PATTERN = re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}")
 
-_FAILURE_CONTEXT = (
-    "⚠️ COMMAND FAILED — You MUST resolve this failure. Rules:\n"
-    "1. Do NOT run git blame, git log, or any investigation into whether "
-    "this failure is 'pre-existing' or 'introduced by your changes'.\n"
-    "2. Do NOT dismiss as 'out of scope' or 'unrelated to my changes'.\n"
-    "3. Fix the underlying issue now, or spawn a subagent if the fix "
-    "would derail your current task.\n"
-    "4. If you genuinely cannot fix it (e.g., missing credentials, "
-    "external service down), say so explicitly and add a TODO comment."
-)
+
+def _safe_command_excerpt(command: str) -> str:
+    """Return a short command excerpt without obvious inline credentials."""
+    redacted = _SECRET_VALUE_PATTERN.sub(r"\1\2[REDACTED]", command.strip())
+    redacted = _BEARER_PATTERN.sub("Bearer [REDACTED]", redacted)
+    return redacted[:200]
+
+
+def _error_context(command: str) -> str:
+    excerpt = _safe_command_excerpt(command)
+    return (
+        "⚠️ ERRORS-BASH-001 — Bash produced error-like output even though the "
+        "command exited 0.\n"
+        f"Command: `{excerpt}`\n"
+        "Next action: Rerun the smallest failing command, inspect the reported "
+        "failure, and repair it before continuing feature work.\n"
+        "Rules:\n"
+        "1. Do NOT run git blame, git log, or any investigation into whether "
+        "these errors are 'pre-existing' or 'introduced by your changes'.\n"
+        "2. Do NOT dismiss errors as 'out of scope', 'unrelated', or "
+        "'for a separate PR'.\n"
+        "3. Fix them now, or spawn a subagent to fix them if it would "
+        "derail your current task.\n"
+        "4. If you genuinely cannot fix something (e.g., missing credentials, "
+        "external service down), say so explicitly and add a TODO comment."
+    )
+
+
+def _failure_context(command: str) -> str:
+    excerpt = _safe_command_excerpt(command)
+    return (
+        "⚠️ ERRORS-FAIL-001 — Bash command exited non-zero.\n"
+        f"Command: `{excerpt}`\n"
+        "Next action: Inspect stdout/stderr, fix the root cause, then rerun the "
+        "same smallest command to verify.\n"
+        "Rules:\n"
+        "1. Do NOT run git blame, git log, or any investigation into whether "
+        "this failure is 'pre-existing' or 'introduced by your changes'.\n"
+        "2. Do NOT dismiss as 'out of scope' or 'unrelated to my changes'.\n"
+        "3. Fix the underlying issue now, or spawn a subagent if the fix "
+        "would derail your current task.\n"
+        "4. If you genuinely cannot fix it (e.g., missing credentials, "
+        "external service down), say so explicitly and add a TODO comment."
+    )
 
 
 # ── Rules ───────────────────────────────────────────────────────────────
@@ -266,8 +293,8 @@ class BashOutputErrorRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                additional_context=_ERROR_CONTEXT,
-                metadata={"command": command[:200]},
+                additional_context=_error_context(command),
+                metadata={"command": _safe_command_excerpt(command)},
             )
         ]
 
@@ -314,7 +341,7 @@ class BashFailureReinforcementRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                additional_context=_FAILURE_CONTEXT,
-                metadata={"command": command[:200]},
+                additional_context=_failure_context(command),
+                metadata={"command": _safe_command_excerpt(command)},
             )
         ]

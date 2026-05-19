@@ -10,7 +10,13 @@ from typing_extensions import override
 from vibeforcer.constants import SAFE_READ_SHELL_VERBS
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_bash_tool, is_edit_like_tool, lower_path, path_matches_glob
+from vibeforcer.util.payloads import (
+    is_bash_tool,
+    is_edit_like_tool,
+    lower_path,
+    path_matches_glob,
+    shell_command_executable_paths,
+)
 from vibeforcer.util.subprocesses import run_shell
 
 if TYPE_CHECKING:
@@ -379,8 +385,9 @@ def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str 
 
 
 def _match_system_command(command: str, prefixes: list[str]) -> str | None:
-    """Return '[command]' if command references a system path."""
+    """Return '[command]' if command references a system path as a target."""
     lowered = command.lower()
+    executable_paths = {lower_path(value) for value in shell_command_executable_paths(command)}
     separator = r"(?:^|[\s;|&(<>=])"
     terminator = r"[^\s;|&()<>'\"]*"
     for prefix in prefixes:
@@ -392,6 +399,8 @@ def _match_system_command(command: str, prefixes: list[str]) -> str | None:
         for match in re.finditer(pat, lowered):
             matched_path = match.group(1)
             if _is_exact_dev_null(matched_path):
+                continue
+            if lower_path(matched_path) in executable_paths:
                 continue
             return "[command]"
     return None
@@ -473,7 +482,9 @@ class GitNoVerifyRule(Rule):
             "Pre-commit and pre-push hooks exist for a "
             "reason — they run linters, type checks, and "
             "tests.\n\nIf hooks are failing, fix the issues "
-            "they found rather than skipping them."
+            "they found rather than skipping them. Next step: run the hook/quality "
+            "command normally, keep the full error visible, fix the hook/test failure, "
+            "then commit without bypass: `git commit -m <message>`."
         )
         return [
             RuleFinding(

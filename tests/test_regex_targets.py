@@ -140,6 +140,16 @@ class TestCommandTarget:
             "git commit must trigger GIT-002 context"
         )
 
+    def test_git_no_verify_denial_gives_safe_commit_command(self) -> None:
+        result = evaluate_payload(self._bash_payload("git commit --no-verify -m 'skip hooks'"))
+        assert "GIT-001" in finding_ids(result)
+        test_support.assert_denied_by(result, "GIT-001")
+        reason = test_support.required_string(
+            test_support.hook_output(result), "permissionDecisionReason"
+        )
+        assert "git commit -m" in reason
+        assert "fix the hook/test failure" in reason
+
     def test_safe_command_no_shell_rule(self) -> None:
         result = evaluate_payload(self._bash_payload("npm test"))
         assert "SHELL-001" not in finding_ids(result), (
@@ -181,6 +191,7 @@ class TestPathTarget:
             part for part in [qa_finding.message, qa_finding.additional_context] if part
         )
 
+        assert "src/vibeforcer" in combined
         assert "tests/quality/baselines.json" in combined
         assert "python -m pytest -q tests/quality" in combined
 

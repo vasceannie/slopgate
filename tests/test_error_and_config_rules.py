@@ -48,6 +48,18 @@ class TestBashOutputError:
             "test failures must trigger error rule"
         )
 
+    def test_test_failure_context_names_trigger_and_next_action(self) -> None:
+        payload = self._post_bash(
+            "pytest tests/",
+            "FAILED tests/test_auth.py::test_login - AssertionError\n1 failed, 5 passed",
+        )
+        result = evaluate_payload(payload)
+        message = required_string(hook_output(result), "additionalContext")
+        assert "ERRORS-BASH-001" in message
+        assert "pytest tests/" in message
+        assert "error-like output even though the command exited 0" in message
+        assert "Rerun the smallest failing command" in message
+
     def test_read_only_command_skipped(self) -> None:
         payload = self._post_bash(
             "grep -n error src/main.py",
@@ -85,6 +97,14 @@ class TestBashFailureReinforcement:
         assert "ERRORS-FAIL-001" in finding_ids(result), (
             "non-zero exit on build must trigger"
         )
+
+    def test_build_failure_context_names_trigger_and_next_action(self) -> None:
+        result = evaluate_payload(self._failure_bash("make build"))
+        message = required_string(result.output or {}, "systemMessage")
+        assert "ERRORS-FAIL-001" in message
+        assert "make build" in message
+        assert "exited non-zero" in message
+        assert "Inspect stdout/stderr" in message
 
     def test_grep_failure_skipped(self) -> None:
         result = evaluate_payload(self._failure_bash("grep pattern file.txt"))

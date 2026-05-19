@@ -308,6 +308,7 @@ def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich thin-wrapper findings with inlining guidance."""
     func_name = _metadata_str(finding.metadata, "function")
     path_str = _metadata_str(finding.metadata, "path")
+    wrapped = _metadata_str(finding.metadata, "wraps")
     if func_name is None or path_str is None:
         return
     full_path = resolve_path(path_str, ctx.config.root)
@@ -320,9 +321,10 @@ def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
         extras.append(
             f"\n`{func_name}` is called ~{call_count - 1} time(s) in this file."
         )
+        replacement = f"`{wrapped}(...)`" if wrapped is not None else "the wrapped function"
         extras.append(
-            f"Replace each `{func_name}(...)` call with a direct call to the wrapped "
-            + "function, then remove the wrapper."
+            f"Replace each `{func_name}(...)` call with {replacement}, then remove "
+            "the wrapper."
         )
     else:
         call_sites = find_local_call_sites(func_name, ctx, full_path)

@@ -335,8 +335,9 @@ _RULE_HINTS: dict[str, str] = {
         "repeated literals."
     ),
     "GLOBAL-BUILTIN-SYSTEM-PROTECTION": (
-        "Next step: do not touch protected system paths; if this was "
-        "/dev/null suppression, handle stderr explicitly instead."
+        "Next step: do not touch protected system paths as file targets. "
+        "Executable-position paths like `/usr/bin/rg` are allowed; if this "
+        "was /dev/null suppression, handle stderr explicitly instead."
     ),
     "GLOBAL-BUILTIN-HOOK-INFRA-EXEC": (
         "Next step: treat hook infrastructure as read-only unless Trav "

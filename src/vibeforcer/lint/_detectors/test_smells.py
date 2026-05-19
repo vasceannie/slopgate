@@ -654,7 +654,8 @@ def _is_high_risk_cast_target(name: str) -> bool:
 
 
 def _test_context_text(path: str, test_name: str) -> str:
-    return f"{path}/{test_name}".lower()
+    context = f"{path}/{test_name}"
+    return context.lower()
 
 
 def _looks_like_deserializer_contract(path: str, test_name: str) -> bool:
@@ -1018,7 +1019,8 @@ def _decorator_texts(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
 
 
 def _docstring_text(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> str:
-    return (ast.get_docstring(node) or "").lower()
+    docstring = ast.get_docstring(node)
+    return docstring.lower() if docstring else ""
 
 
 def _replacement_hint(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> str | None:

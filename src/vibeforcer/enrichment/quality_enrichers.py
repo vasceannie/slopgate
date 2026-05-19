@@ -41,6 +41,8 @@ _CONSTANT_MODULE_PATTERNS = (
 )
 _SOURCE_ROOT_NAMES = {"src", "app"}
 _MAX_IMPORTABLE_CONSTANTS = 5
+_MAX_TRIGGERED_MAGIC_NUMBER_HINTS = 5
+_MAGIC_NUMBER_MIN_ABSOLUTE = 200
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,13 @@ class _ImportableConstant:
     value: int | float | str
     path: Path
     lineno: int
+
+
+@dataclass(frozen=True, slots=True)
+class _MagicNumberHint:
+    path: str
+    lineno: int
+    value: int | float
 
 
 def _find_constants_module(file_path: Path, root: Path) -> Path | None:
@@ -161,6 +170,84 @@ def _target_literal_values(ctx: HookContext) -> set[int | float | str]:
             if value is not None:
                 values.add(value)
     return values
+
+
+def _parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    return {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+
+def _uppercase_assignment_target(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    if isinstance(parent, ast.UnaryOp):
+        parent = parents.get(parent)
+    if isinstance(parent, ast.Assign) and len(parent.targets) == 1:
+        target = parent.targets[0]
+        return isinstance(target, ast.Name) and target.id.isupper()
+    if isinstance(parent, ast.AnnAssign):
+        return isinstance(parent.target, ast.Name) and parent.target.id.isupper()
+    return False
+
+
+def _is_unary_numeric_operand(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(parent, ast.UnaryOp)
+        and isinstance(parent.op, ast.USub)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+    )
+
+
+def _is_triggered_magic_number(value: int | float) -> bool:
+    return abs(value) >= _MAGIC_NUMBER_MIN_ABSOLUTE
+
+
+def _triggered_magic_number_hints(ctx: HookContext) -> list[_MagicNumberHint]:
+    hints: list[_MagicNumberHint] = []
+    for target in ctx.content_targets:
+        tree = safe_parse(target.content)
+        if tree is None:
+            continue
+        parents = _parent_map(tree)
+        target_path = target.path or "<proposed content>"
+        for node in ast.walk(tree):
+            value = _literal_constant_value(node)
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not _is_triggered_magic_number(value)
+                or _uppercase_assignment_target(node, parents)
+                or _is_unary_numeric_operand(node, parents)
+            ):
+                continue
+            hints.append(
+                _MagicNumberHint(
+                    path=target_path,
+                    lineno=getattr(node, "lineno", 1),
+                    value=value,
+                )
+            )
+    return hints
+
+
+def _append_triggered_magic_number_hints(
+    extras: list[str], ctx: HookContext, root: Path
+) -> None:
+    hints = _triggered_magic_number_hints(ctx)[:_MAX_TRIGGERED_MAGIC_NUMBER_HINTS]
+    if not hints:
+        return
+    rendered = []
+    for hint in hints:
+        path_text = relative_path(Path(hint.path), root) if hint.path else "<content>"
+        rendered.append(f"{path_text} line {hint.lineno}: {hint.value}")
+    extras.append("\nTriggered magic number candidates:")
+    extras.extend(f"  {item}" for item in rendered)
+    extras.append("Define/import constants first, then replace these literals before retrying.")
 
 
 def _candidate_constants_files(root: Path) -> list[Path]:
@@ -276,6 +363,7 @@ def enrich_magic_numbers(finding: RuleFinding, ctx: HookContext) -> None:
 
     extras: list[str] = []
     target_values = _target_literal_values(ctx)
+    _append_triggered_magic_number_hints(extras, ctx, ctx.config.root)
     for source_path in _metadata_source_paths(finding, ctx.config.root):
         constants_file = _find_constants_module(source_path, ctx.config.root)
         if constants_file is not None:

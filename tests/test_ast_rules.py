@@ -112,6 +112,84 @@ class TestAstHealthRule(unittest.TestCase):
         result = evaluate_payload(payload)
         _assert_denied_by(result, "PY-AST-001")
 
+    def test_parse_failure_reason_gives_compile_recovery(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/main.py",
+                "content": "def broken(:\n    pass\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_denied_by(result, "PY-AST-001")
+        reason = _permission_reason(result)
+
+        assert "python3 -m py_compile src/main.py" in reason
+        assert "test -e src/main.py" not in reason
+
+    def test_parse_failure_reason_shell_quotes_path(self) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "src/broken file.py",
+                "content": "def broken(:\n    pass\n",
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_denied_by(result, "PY-AST-001")
+        reason = _permission_reason(result)
+
+        assert "python3 -m py_compile 'src/broken file.py'" in reason
+
+    def test_read_error_reason_checks_path_before_compile(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            repo = Path(tmp_dir) / "repo"
+            repo.mkdir(parents=True)
+            _ = (repo / "quality_gate.toml").write_text(
+                "[quality_gate]\nenabled = true\n",
+                encoding="utf-8",
+            )
+            payload = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "missing.py"},
+                "cwd": str(repo),
+                "session_id": "t",
+            }
+            result = evaluate_payload(payload)
+
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-AST-001" in rule_ids
+        assert result.output is not None
+        reason = string_value(result.output.get("reason")) or ""
+        assert "test -e missing.py" in reason
+        assert "re-read the moved/renamed file" in reason
+
+    def test_read_error_reason_shell_quotes_path(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            repo = Path(tmp_dir) / "repo"
+            repo.mkdir(parents=True)
+            _ = (repo / "quality_gate.toml").write_text(
+                "[quality_gate]\nenabled = true\n",
+                encoding="utf-8",
+            )
+            payload = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "missing file.py"},
+                "cwd": str(repo),
+                "session_id": "t",
+            }
+            result = evaluate_payload(payload)
+
+        assert result.output is not None
+        reason = string_value(result.output.get("reason")) or ""
+        assert "test -e 'missing file.py'" in reason
+
     def test_edit_fragment_does_not_trigger_parse_failure(self) -> None:
         payload = {
             "hook_event_name": "PreToolUse",

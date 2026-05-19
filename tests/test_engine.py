@@ -234,6 +234,41 @@ class TestInlinePayloadDenies:
         assert_not_denied(result)
         assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
 
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "str_replace_editor",
+            "morph_edit_file",
+            "serena_replace_symbol_body",
+        ],
+    )
+    def test_linter_config_edit_like_aliases_are_denied(self, tool_name: str) -> None:
+        result = evaluate_payload(
+            {
+                "session_id": "t",
+                "cwd": str(BUNDLE_ROOT),
+                "hook_event_name": "PreToolUse",
+                "tool_name": tool_name,
+                "tool_input": {"file_path": "ruff.toml", "content": "line-length = 120\n"},
+            }
+        )
+
+        assert_denied_by(result, "PY-LINTER-001")
+
+    def test_linter_config_read_allowed(self, bundle_root: Path) -> None:
+        result = evaluate_payload(
+            {
+                "session_id": "t",
+                "cwd": str(bundle_root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "ruff.toml"},
+            }
+        )
+
+        assert_not_denied(result)
+        assert "PY-LINTER-001" not in finding_ids(result)
+
     def test_protected_staging_rule_file_denied(
         self, pretool_write: WriteBuilder
     ) -> None:
@@ -257,6 +292,24 @@ class TestInlinePayloadDenies:
         result = evaluate_payload(
             pretool_bash("cat ../../../../../../../../etc/passwd", cwd=str(nested))
         )
+        assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
+
+    def test_absolute_search_executable_path_is_not_system_path_target(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash('/usr/bin/rg -n "needle" src'))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
+
+    def test_absolute_find_executable_after_shell_separator_is_not_system_path_target(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash("cd src && /usr/bin/find . -name '*.py'"))
+        assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
+
+    def test_system_path_argument_still_denied(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash("cat /usr/bin/rg"))
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
 
     def test_sensitive_data(self, pretool_bash: BashBuilder) -> None:
@@ -356,6 +409,18 @@ def test_shell_command_paths_still_captures_path_option_values() -> None:
     paths = shell_command_paths("tool --config=pyproject.toml --file src/app.py")
     assert "pyproject.toml" in paths
     assert "src/app.py" in paths
+
+
+def test_shell_command_paths_ignore_absolute_executable_position() -> None:
+    paths = shell_command_paths('/usr/bin/rg -n "needle" src/app.py')
+    assert "/usr/bin/rg" not in paths
+    assert "src/app.py" in paths
+
+
+def test_shell_command_paths_ignore_wrapped_absolute_executable_position() -> None:
+    paths = shell_command_paths("env FOO=bar /usr/bin/python -m pytest tests/test_app.py")
+    assert "/usr/bin/python" not in paths
+    assert "tests/test_app.py" in paths
 
 
 def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Path) -> None:
@@ -1051,8 +1116,8 @@ def test_build_rules_survives_python_ast_import_error(
     )
 
     healthy_ids = {rule.rule_id for rule in rules_mod.build_rules(ctx)}
-    assert "PY-CODE-008" in healthy_ids
-    assert "PY-IMPORT-001" in healthy_ids
+    assert "PY-CODE-008" in healthy_ids, f"Missing AST rule in healthy build: {healthy_ids}"
+    assert "PY-IMPORT-001" in healthy_ids, f"Missing import rule in healthy build: {healthy_ids}"
 
     monkeypatch.setattr(
         rules_mod,
@@ -1063,10 +1128,10 @@ def test_build_rules_survives_python_ast_import_error(
     monkeypatch.setattr(rules_mod, "_PYTHON_AST_IMPORT_REPORTED", False, raising=False)
 
     fallback_ids = {rule.rule_id for rule in rules_mod.build_rules(ctx)}
-    assert "GIT-001" in fallback_ids
-    assert "PY-CODE-008" not in fallback_ids
-    assert "PY-IMPORT-001" not in fallback_ids
-    assert "PY-AST-IMPORT-001" in fallback_ids
+    assert "GIT-001" in fallback_ids, f"Fallback build lost regex rules: {fallback_ids}"
+    assert "PY-CODE-008" not in fallback_ids, f"Fallback should skip AST rules: {fallback_ids}"
+    assert "PY-IMPORT-001" not in fallback_ids, f"Fallback should skip import AST rules: {fallback_ids}"
+    assert "PY-AST-IMPORT-001" in fallback_ids, f"Missing import-error sentinel: {fallback_ids}"
 
 
 def test_python_ast_parse_failure_is_reported(pretool_write: WriteBuilder) -> None:
@@ -2696,10 +2761,11 @@ class TestSensitiveDataRegexPatterns:
 
     def test_key_extension_pattern_does_not_match_key_prefix(self) -> None:
         compiled = self._compile_sensitive_patterns()([".key"])
-        assert compiled[0].search("certs/server.key")
-        assert compiled[0].search("certs/server.key.txt")
-        assert not compiled[0].search("src.keys")
-        assert not compiled[0].search("src/keys.py")
+        pattern = compiled[0]
+        assert pattern.search("certs/server.key"), "Expected .key suffix to match"
+        assert pattern.search("certs/server.key.txt"), "Expected .key path segment to match"
+        assert not pattern.search("src.keys"), "Should not match .keys extension"
+        assert not pattern.search("src/keys.py"), "Should not match keys.py prefix"
 
     def test_safe_suffixes_constant(self) -> None:
         """Verify the safe suffixes list includes expected entries."""

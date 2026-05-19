@@ -62,7 +62,9 @@ def test_enroll_repo_propagates_to_existing_worktrees(tmp_path: Path) -> None:
 
     repo_root, written_roots = enroll_repo(worktree)
 
-    assert repo_root == repo
-    assert set(written_roots) == {repo, worktree}
-    assert (repo / "quality_gate.toml").exists()
-    assert (worktree / "quality_gate.toml").exists()
+    assert repo_root == repo, f"Expected root repo {repo}, got {repo_root}"
+    assert set(written_roots) == {repo, worktree}, (
+        f"Expected enrollment in repo and worktree, got {written_roots}"
+    )
+    assert (repo / "quality_gate.toml").exists(), "Expected repo quality_gate.toml"
+    assert (worktree / "quality_gate.toml").exists(), "Expected worktree quality_gate.toml"

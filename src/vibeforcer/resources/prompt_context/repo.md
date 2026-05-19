@@ -29,7 +29,7 @@
 ## Protected Paths (read-only unless explicitly approved)
 - `Makefile`, `Dockerfile`, `docker-compose.yml`
 - `.claude/hooks/*`, `.claude/hook-layer/config.json`
-- Linter configs: `.eslintrc*`, `.flake8`, `.pylintrc`, `ruff.toml`, `pyrightconfig*`, `biome.json`
+- Linter configs: `pytest.ini`, `.eslintrc*`, `.flake8`, `.pylintrc`, `ruff.toml`, `pyrightconfig*`, `biome.json`
 - Quality tests: `src/test/code-quality.test.ts`, `tests/quality/`
 - Staging hook-rule authoring surfaces: `src/vibeforcer/rules/python_ast/_staging/`
 
@@ -51,7 +51,12 @@
 ## Hot Hook Preflight
 - `PY-CODE-013`: do not add pass-through wrappers. Inline unless the wrapper validates/normalizes inputs, names a real domain boundary, centralizes policy/caching/permission/logging, adapts one interface to another, or hides unstable third-party API details.
 - `PY-CODE-009`: group parameters by semantic meaning. In tests, prefer a named `Case` dataclass or builder defaults; do not make helpers that simply forward every arg to a constructor.
+- `PY-CODE-018`: oversized modules need a cohesive split before more behavior. Prefer `module/` packages with `__init__.py` re-export facades, not line shaving or flat sibling sprawl.
+- `PY-LOG-002`: event publishers/handlers and package-boundary adapters/clients/gateways must log with the project logger/telemetry abstraction before crossing the boundary; include event/service/correlation fields, never raw secrets/payloads.
+- `PY-IMPORT-002`: use canonical aliases only (`np`, `pd`, project-established shorthands). Do not invent aliases to dodge duplicate-code or long-import findings.
 - `QUALITY-LINT-001`: PostToolUse means the edit may already exist. Reread the touched file, fix only the reported collector/hit, and verify with the smallest repo-root quality command before continuing feature work.
+- `SHELL-001`: do not hide failures with `2>/dev/null`, `set +e`, `|| true`, or `|| :`; rerun unsuppressed or capture stderr explicitly.
+- `ERRORS-BASH-001` / `ERRORS-FAIL-001`: treat error output or non-zero exits as active repair work. Inspect stdout/stderr, fix the smallest failing command, then rerun it.
 - `PY-CODE-012` and `PY-IMPORT-001` are context-only advisory signals. Do not retry solely for those unless the boundary is already in scope.
 
 ## Baselines

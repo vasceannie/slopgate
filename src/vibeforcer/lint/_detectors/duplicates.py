@@ -32,6 +32,7 @@ from vibeforcer.quality.constant_index import (
     set_session_constant_index,
     suggest_constant_name,
 )
+from .declarative import should_skip_block_window as _skip_block_window
 from .wrappers import call_name
 
 
@@ -184,7 +185,6 @@ def _is_import_stmt(stmt: ast.stmt) -> TypeGuard[ast.Import | ast.ImportFrom]:
 def _is_future_import(stmt: ast.stmt) -> bool:
     """Return True when *stmt* is ``from __future__ import ...``."""
     return isinstance(stmt, ast.ImportFrom) and stmt.module == "__future__"
-
 
 
 
@@ -486,9 +486,9 @@ def _collect_block_windows(
             norms = [_normalize_ast(stmt) for stmt in body]
             for i in range(len(norms) - _MIN_BLOCK_SIZE + 1):
                 window_indices = range(i, i + _MIN_BLOCK_SIZE)
-                if any(j in canonical_import_indices for j in window_indices):
-                    continue
-                if all(_is_import_stmt(body[j]) for j in window_indices):
+                if _skip_block_window(
+                    body, window_indices, scope, canonical_import_indices
+                ):
                     continue
                 h = _structure_hash("|".join(norms[i : i + _MIN_BLOCK_SIZE]))
                 end = _end_lineno(body[i + _MIN_BLOCK_SIZE - 1], body[i].lineno)

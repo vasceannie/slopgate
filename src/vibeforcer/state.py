@@ -306,7 +306,8 @@ class HookStateStore:
         return string_value(parsed.get("attempt_fingerprint")) == attempt_fingerprint
 
     def _session_key(self, session_id: str) -> str:
-        return session_id.strip()
+        key = session_id.strip()
+        return key
 
     def _normalize_path(self, path: str) -> str:
         try:

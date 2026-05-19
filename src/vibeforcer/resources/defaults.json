@@ -6,9 +6,11 @@
   ],
   "search_reminder_message": "Remember you also have Grep, Read, Glob, prompt hooks, and agent hooks available. Prefer deterministic search before spawning a verifier agent.",
   "protected_paths": [
+    "*/.config/vibeforcer/config.json",
     ".claude/",
     "Makefile",
     "pyproject.toml",
+    "pytest.ini",
     "tsconfig.json",
     "biome.json",
     ".eslintrc*",
@@ -112,6 +114,7 @@
     "PY-TEST-002": true,
     "PY-TEST-003": true,
     "PY-TEST-004": true,
+    "PY-TEST-005": true,
     "PY-LINTER-001": true,
     "PY-LINTER-002": true,
     "FE-LINTER-001": true,
@@ -145,6 +148,7 @@
     "PY-CODE-016": true,
     "PY-EXC-002": true,
     "PY-CODE-017": true,
+    "PY-LOG-002": true,
     "PY-IMPORT-002": true,
     "PY-IMPORT-003": true
   },
@@ -655,9 +659,21 @@
         "PreToolUse",
         "PermissionRequest"
       ],
+      "tool_matchers": [
+        "Write",
+        "CreateFile",
+        "Edit",
+        "MultiEdit",
+        "Patch",
+        "(?i).*create.*",
+        "(?i).*edit.*",
+        "(?i).*patch.*",
+        "(?i).*replace.*",
+        "(?i).*write.*"
+      ],
       "target": "path",
       "patterns": [
-        "(^|/)(\\.flake8|\\.pylintrc|pyrightconfig\\.json|mypy\\.ini|\\.mypy\\.ini|ruff\\.toml|\\.ruff\\.toml|setup\\.cfg)$"
+        "(^|/)(\\.flake8|\\.pylintrc|pyrightconfig\\.json|pytest\\.ini|mypy\\.ini|\\.mypy\\.ini|ruff\\.toml|\\.ruff\\.toml|setup\\.cfg)$"
       ],
       "action": "deny",
       "message": "Edits to Python linter configuration files are blocked. Modify configuration only with explicit approval.",
@@ -674,7 +690,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*(\\.flake8|\\.pylintrc|pyrightconfig|mypy\\.ini|ruff\\.toml|setup\\.cfg)"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*(\\.flake8|\\.pylintrc|pyrightconfig|pytest\\.ini|mypy\\.ini|ruff\\.toml|setup\\.cfg)"
       ],
       "action": "deny",
       "message": "Shell edits to Python linter config files are blocked.",
@@ -762,7 +778,7 @@
         "tests/quality/(?!baselines\\.json$)"
       ],
       "action": "deny",
-      "message": "Edits to tests/quality/ (except baselines.json) are blocked.",
+      "message": "Edits to tests/quality/ (except baselines.json) are blocked. Fix the source rule implementation under `src/vibeforcer/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
       "case_sensitive": false,
       "multiline": false
     },
@@ -779,7 +795,7 @@
         "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*tests/quality/"
       ],
       "action": "deny",
-      "message": "Shell edits to tests/quality/ are blocked.",
+      "message": "Shell edits to tests/quality/ are blocked. Fix source under `src/vibeforcer/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
       "case_sensitive": false,
       "multiline": false
     },

@@ -94,9 +94,9 @@ def test_enroll_allows_disabling_worktree_propagation() -> None:
 
 
 def test_self_test_smoke_passes_all_cases(capsys: pytest.CaptureFixture[str]) -> None:
-    assert cmd_test(argparse.Namespace()) == 0
+    assert cmd_test(argparse.Namespace()) == 0, "self-test smoke command should pass"
     captured = capsys.readouterr()
-    assert "All tests passed." in captured.out
-    assert "git --no-verify → deny" in captured.out
-    assert "codex adapter → deny" in captured.out
-    assert "opencode adapter → deny" in captured.out
+    assert "All tests passed." in captured.out, captured.out
+    assert "git --no-verify → deny" in captured.out, captured.out
+    assert "codex adapter → deny" in captured.out, captured.out
+    assert "opencode adapter → deny" in captured.out, captured.out

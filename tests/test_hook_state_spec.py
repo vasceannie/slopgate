@@ -97,6 +97,16 @@ def _config_with_enabled_rules(
     monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
 
 
+def _enable_thin_wrapper_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013")
+
+
+def _enable_loop_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013", "PY-CODE-009")
+
+
 def _ensure_enrolled(cwd: str) -> None:
     root = Path(cwd)
     marker = root / "quality_gate.toml"
@@ -736,13 +746,10 @@ class TestSecurityRuleBoundarySpec:
 
 
 class TestRepeatedDebtEscalationSpec:
-    @pytest.fixture(autouse=True)
-    def _enable_rule(
+    def test_second_thin_wrapper_hit_tracks_repeat_count(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013")
-
-    def test_second_thin_wrapper_hit_tracks_repeat_count(self, tmp_path: Path) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         first = evaluate_payload(
             _posttool_payload(
@@ -768,7 +775,10 @@ class TestRepeatedDebtEscalationSpec:
         assert first_finding.metadata.get("repeat_count") == 1
         assert second_finding.metadata.get("repeat_count") == 2
 
-    def test_third_thin_wrapper_hit_escalates(self, tmp_path: Path) -> None:
+    def test_third_thin_wrapper_hit_escalates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         _ = evaluate_payload(
             _posttool_payload(
@@ -800,7 +810,10 @@ class TestRepeatedDebtEscalationSpec:
         assert finding.metadata.get("repeat_count") == 3
         assert finding.severity >= Severity.HIGH or finding.decision in {"deny", "block"}
 
-    def test_repeat_tracking_is_scoped_per_path(self, tmp_path: Path) -> None:
+    def test_repeat_tracking_is_scoped_per_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         _ = evaluate_payload(
             _posttool_payload(
@@ -824,8 +837,9 @@ class TestRepeatedDebtEscalationSpec:
         assert finding.metadata.get("repeat_count") == 1
 
     def test_repeat_tracking_resets_after_clean_repair_write(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         repaired, repeated_after_repair = _repeat_tracking_repair_sequence(tmp_path)
 
         repaired_finding = _finding("PY-CODE-013", repaired.findings)
@@ -840,7 +854,10 @@ class TestRepeatedDebtEscalationSpec:
             "Repeat counter should reset after the path is repaired cleanly"
         )
 
-    def test_new_session_resets_repeat_counter(self, tmp_path: Path) -> None:
+    def test_new_session_resets_repeat_counter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         _ = evaluate_payload(
             _posttool_payload(
@@ -863,7 +880,10 @@ class TestRepeatedDebtEscalationSpec:
         assert finding is not None
         assert finding.metadata.get("repeat_count") == 1
 
-    def test_repeat_count_must_survive_subprocess_boundary(self, tmp_path: Path) -> None:
+    def test_repeat_count_must_survive_subprocess_boundary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         first = _run_payload_in_subprocess(
             _posttool_payload(
@@ -897,15 +917,10 @@ class TestRepeatedDebtEscalationSpec:
 
 
 class TestLoopAwareDenialSteering:
-    @pytest.fixture(autouse=True)
-    def _enable_rules(
+    def test_second_hit_adds_failure_class_and_repeat_metadata(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013", "PY-CODE-009")
-
-    def test_second_hit_adds_failure_class_and_repeat_metadata(
-        self, tmp_path: Path
-    ) -> None:
+        _enable_loop_rules(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         first = evaluate_payload(
             _posttool_payload(
@@ -933,8 +948,10 @@ class TestLoopAwareDenialSteering:
             second_finding.additional_context
         )
 
-    def test_third_write_is_blocked_after_repeat_lock(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+    def test_third_write_is_blocked_after_repeat_lock(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_loop_rules(tmp_path, monkeypatch)
         payload = {
             "session_id": "budget-session",
             "cwd": str(tmp_path),
@@ -950,8 +967,10 @@ class TestLoopAwareDenialSteering:
         third = evaluate_payload(payload)
         assert "RETRY-BUDGET-001" in finding_ids(third)
 
-    def test_third_write_is_not_blocked_when_code_changes(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+    def test_third_write_is_not_blocked_when_code_changes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _enable_loop_rules(tmp_path, monkeypatch)
         repeated_payload = {
             "session_id": "budget-session",
             "cwd": str(tmp_path),
@@ -980,9 +999,9 @@ class TestLoopAwareDenialSteering:
         assert "RETRY-BUDGET-001" not in finding_ids(third)
 
     def test_third_write_is_not_blocked_when_triggered_rule_changes(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _ensure_enrolled(str(tmp_path))
+        _enable_loop_rules(tmp_path, monkeypatch)
         repeated_payload = {
             "session_id": "budget-session",
             "cwd": str(tmp_path),
@@ -1012,8 +1031,9 @@ class TestLoopAwareDenialSteering:
         assert "PY-CODE-013" in finding_ids(third)
 
     def test_session_start_includes_recent_repeated_failures(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        _enable_loop_rules(tmp_path, monkeypatch)
         code = "def get_all_users():\n    return UserRepository.find_all()\n"
         _ = evaluate_payload(
             _posttool_payload(

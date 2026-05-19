@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from ._pytest_asyncio import PythonPytestAsyncioRule
 from ._rules import (
     PythonAstHealthRule,
+    PythonBoundaryLoggingRule,
     PythonBroadExceptLoggerRule,
     PythonCyclomaticComplexityRule,
     PythonDeadCodeRule,
@@ -23,6 +25,7 @@ from ._rules import (
 __all__ = [
     "PythonCyclomaticComplexityRule",
     "PythonAstHealthRule",
+    "PythonBoundaryLoggingRule",
     "PythonBroadExceptLoggerRule",
     "PythonDeadCodeRule",
     "PythonDeepNestingRule",
@@ -36,6 +39,7 @@ __all__ = [
     "PythonLongParameterRule",
     "PythonModuleSizeRule",
     "PythonPrivateImportChainRule",
+    "PythonPytestAsyncioRule",
     "PythonSilentExceptRule",
     "PythonThinWrapperRule",
 ]

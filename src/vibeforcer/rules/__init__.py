@@ -96,6 +96,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
     try:
         from vibeforcer.rules.python_ast import (
             PythonAstHealthRule,
+            PythonBoundaryLoggingRule,
             PythonBroadExceptLoggerRule,
             PythonCyclomaticComplexityRule,
             PythonDeadCodeRule,
@@ -110,6 +111,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
             PythonLongParameterRule,
             PythonModuleSizeRule,
             PythonPrivateImportChainRule,
+            PythonPytestAsyncioRule,
             PythonSilentExceptRule,
             PythonThinWrapperRule,
         )
@@ -119,6 +121,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
 
     python_ast_rules: list[Rule] = [
         PythonAstHealthRule(),
+        PythonBoundaryLoggingRule(),
         PythonBroadExceptLoggerRule(),
         PythonSilentExceptRule(),
         PythonLongMethodRule(),
@@ -134,6 +137,7 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
         PythonFlatFileSiblingsRule(),
         PythonImportAliasRule(),
         PythonPrivateImportChainRule(),
+        PythonPytestAsyncioRule(),
         PythonImportFanoutRule(),
     ]
     return python_ast_rules

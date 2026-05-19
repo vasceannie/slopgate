@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from vibeforcer.lint._detectors.duplicates import _collect_block_windows
+from vibeforcer.lint._detectors.duplicates import detect_repeated_blocks
 from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
 from vibeforcer.lint._config import load_config, set_config
 from vibeforcer.lint._helpers import (
@@ -69,6 +70,61 @@ class TestCollectBlockWindowsImportExclusion:
         )
         groups = _collect_block_windows([_make_parsed(source)])
         assert len(groups) == 0
+
+
+class TestCollectBlockWindowsDeclarativeConstants:
+    def test_module_constant_window_not_hashed(self) -> None:
+        """Uppercase module constants are declarative data, not copied behavior."""
+        source = (
+            '_DOCUMENT_DETAIL_KEYS = ("resume_file", "cover_letter_file")\n'
+            '_TAILORING_DECISION_KEY = "tailoring_decision"\n'
+            '_TAILORING_SIGNALS_KEY = "tailoring_signals"\n'
+        )
+
+        groups = _collect_block_windows([_make_parsed(source)])
+
+        assert groups == {}
+
+    def test_same_module_constant_shape_in_two_files_no_violation(self) -> None:
+        """Readable separate constants should not need tuple-assignment workarounds."""
+        submit_preview = (
+            '_DOCUMENT_DETAIL_KEYS = ("resume_file", "cover_letter_file")\n'
+            '_TAILORING_DECISION_KEY = "tailoring_decision"\n'
+            '_TAILORING_SIGNALS_KEY = "tailoring_signals"\n'
+        )
+        document_preview = (
+            '_COVER_TERMS = ("cover", "letter")\n'
+            '_DOCUMENT_LOADING_BODY = "Loading…"\n'
+            '_DOCUMENT_BODY_ID = "document-preview-body"\n'
+        )
+
+        violations = detect_repeated_blocks(
+            [
+                _make_parsed(submit_preview, rel="submit_preview.py"),
+                _make_parsed(document_preview, rel="document_preview.py"),
+            ]
+        )
+
+        assert [v for v in violations if v.rule == "repeated-code-block"] == []
+
+    def test_side_effectful_module_duplicate_still_fires(self) -> None:
+        """Only declarative constants are skipped; module behavior remains guarded."""
+        source_a = (
+            'register("resume")\n'
+            "configure(client)\n"
+            "connect(client)\n"
+        )
+        source_b = (
+            'register("cover")\n'
+            "configure(adapter)\n"
+            "connect(adapter)\n"
+        )
+
+        violations = detect_repeated_blocks(
+            [_make_parsed(source_a, rel="a.py"), _make_parsed(source_b, rel="b.py")]
+        )
+
+        assert len([v for v in violations if v.rule == "repeated-code-block"]) == 2
 
 
 class TestCollectBlockWindowsImportCanonicalization:

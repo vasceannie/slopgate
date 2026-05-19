@@ -662,7 +662,8 @@ _QUALITY_GATE_DISABLE_RE = re.compile(r"\benabled\s*=\s*false\b", re.IGNORECASE)
 
 
 def _enrollment_basename(path_value: str) -> str:
-    return Path(path_value).name.lower()
+    basename = Path(path_value).name
+    return basename.lower()
 
 
 def _is_delete_like_tool(tool_name: str) -> bool:
