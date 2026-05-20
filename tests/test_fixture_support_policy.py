@@ -38,6 +38,22 @@ def _write_project_file(root: Path, relative_path: str, content: str) -> Path:
     return path
 
 
+def _write_virtualenv_discovery_project(root: Path) -> Path:
+    source_file = _write_project_file(root, "src/app.py", "x = 1\n")
+    for relative_path in (
+        "src/.venv/lib/nope.py",
+        "src/venv/lib/nope.py",
+        "src/env/lib/nope.py",
+        "src/environment/app.py",
+    ):
+        _write_project_file(root, relative_path, "x = 1\n")
+    return source_file
+
+
+def _discovered_source_paths(root: Path) -> set[str]:
+    return {path.relative_to(root).as_posix() for path in find_source_files()}
+
+
 def test_default_lint_excludes_include_common_virtualenv_dirs() -> None:
     exclude_dirs = LINT_PATH_DEFAULTS["exclude_dirs"]
 
@@ -62,13 +78,8 @@ def test_quality_gate_template_excludes_common_virtualenv_dirs() -> None:
 def test_linter_file_discovery_skips_common_virtualenv_dirs(tmp_path: Path) -> None:
     load_config(tmp_path)
     try:
-        source_file = _write_project_file(tmp_path, "src/app.py", "x = 1\n")
-        _ = _write_project_file(tmp_path, "src/.venv/lib/nope.py", "x = 1\n")
-        _ = _write_project_file(tmp_path, "src/venv/lib/nope.py", "x = 1\n")
-        _ = _write_project_file(tmp_path, "src/env/lib/nope.py", "x = 1\n")
-        _ = _write_project_file(tmp_path, "src/environment/app.py", "x = 1\n")
-
-        discovered = {path.relative_to(tmp_path).as_posix() for path in find_source_files()}
+        source_file = _write_virtualenv_discovery_project(tmp_path)
+        discovered = _discovered_source_paths(tmp_path)
 
         assert source_file.relative_to(tmp_path).as_posix() in discovered
         assert "src/environment/app.py" in discovered
@@ -82,8 +93,8 @@ def test_linter_file_discovery_skips_common_virtualenv_dirs(tmp_path: Path) -> N
 @pytest.mark.parametrize(
     "relative_path",
     [
-        pytest.param("tests/unit/_fixtures/app.py", id="area-fixtures-dir"),
-        pytest.param("tests/unit/support/app.py", id="area-support-dir"),
+        "tests/unit/_fixtures/app.py",
+        "tests/unit/support/app.py",
     ],
 )
 def test_linter_allows_dedicated_fixture_support_modules(
@@ -176,7 +187,9 @@ def test_hook_fixture_rule_config_keeps_support_modules_out_of_block_globs(
     )
 
     joined_globs = "\n".join(fixture_rule.get("path_globs", []))
-    assert "_fixtures" not in joined_globs
-    assert "support" not in joined_globs
-    assert "test_*.py" in joined_globs
-    assert "support" in fixture_rule["message"].lower()
+    assert "_fixtures" not in joined_globs, "support fixture directories should not be blocked"
+    assert "support" not in joined_globs, "generic support directories should not be blocked"
+    assert "test_*.py" in joined_globs, "inline test-module fixtures should remain blocked"
+    assert "support" in fixture_rule["message"].lower(), (
+        "denial text should steer agents toward support modules"
+    )

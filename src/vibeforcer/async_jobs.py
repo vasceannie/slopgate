@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE
 from vibeforcer.context import build_context
 from vibeforcer.util.subprocesses import run_shell
 
@@ -9,7 +10,7 @@ from vibeforcer.util.subprocesses import run_shell
 def run_async_jobs(payload_dict: Mapping[str, object]) -> tuple[str, list[str]]:
     ctx = build_context(payload_dict)
     if (
-        ctx.event_name != "PostToolUse"
+        ctx.event_name != POST_TOOL_USE
         or not ctx.config.async_jobs_enabled
         or not ctx.languages
     ):
@@ -31,7 +32,7 @@ def run_async_jobs(payload_dict: Mapping[str, object]) -> tuple[str, list[str]]:
             {
                 "event_name": ctx.event_name,
                 "session_id": ctx.session_id,
-                "command": result.command,
+                METADATA_COMMAND: result.command,
                 "cwd": result.cwd,
                 "returncode": result.returncode,
                 "stdout": result.stdout,

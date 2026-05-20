@@ -21,37 +21,15 @@ from vibeforcer.adapters.opencode import OPENCODE_EVENT_MAP, OpenCodeAdapter
 from vibeforcer.installer import _CLAUDE_EVENTS
 from vibeforcer.models import RuleFinding, Severity
 
-EXPECTED_CLAUDE_OFFICIAL_EVENTS = {
-    "SessionStart",
-    "Setup",
-    "CwdChanged",
-    "UserPromptSubmit",
-    "UserPromptExpansion",
-    "PreToolUse",
-    "PermissionRequest",
-    "PermissionDenied",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "PostToolBatch",
-    "SubagentStart",
-    "SubagentStop",
-    "TaskCreated",
-    "TaskCompleted",
-    "Stop",
-    "StopFailure",
-    "TeammateIdle",
-    "PreCompact",
-    "PostCompact",
-    "SessionEnd",
-    "Elicitation",
-    "ElicitationResult",
-    "InstructionsLoaded",
-    "ConfigChange",
-    "WorktreeCreate",
-    "WorktreeRemove",
-    "Notification",
-    "FileChanged",
-}
+EXPECTED_CLAUDE_OFFICIAL_EVENTS = set(
+    """
+    SessionStart Setup CwdChanged UserPromptSubmit UserPromptExpansion PreToolUse
+    PermissionRequest PermissionDenied PostToolUse PostToolUseFailure PostToolBatch
+    SubagentStart SubagentStop TaskCreated TaskCompleted Stop StopFailure TeammateIdle
+    PreCompact PostCompact SessionEnd Elicitation ElicitationResult InstructionsLoaded
+    ConfigChange WorktreeCreate WorktreeRemove Notification FileChanged
+    """.split()
+)
 
 REQUIRED_SOURCES = {
     "claude_hooks": ("claude", "hooks_doc"),
@@ -66,21 +44,11 @@ REQUIRED_SOURCES = {
 
 REQUIRED_SOURCE_KEYWORDS = {
     "claude_hooks": {"PreToolUse", "PermissionRequest", "hookSpecificOutput"},
-    "opencode_plugin_docs": {
-        "tool.execute.before",
-        "tool.execute.after",
-        "permission.asked",
-        "session.idle",
-    },
+    "opencode_plugin_docs": {"tool.execute.before", "tool.execute.after", "permission.asked", "session.idle"},
     "codex_hooks": {"codex_hooks", "PreToolUse", "PermissionRequest"},
 }
 
-EXPECTED_OPENCODE_SCHEMA_DEFS = {
-    "Config",
-    "PermissionActionConfig",
-    "PermissionConfig",
-    "PermissionRuleConfig",
-}
+EXPECTED_OPENCODE_SCHEMA_DEFS = {"Config", "PermissionActionConfig", "PermissionConfig", "PermissionRuleConfig"}
 
 LOCAL_PATH_FRAGMENTS = ("/home/", "/Users/", "\\Users\\")
 
@@ -106,6 +74,12 @@ def _hook_specific(output: dict[str, Any]) -> dict[str, Any]:
     return specific
 
 
+def _render_denied_output(adapter: Any, event_name: str, finding: RuleFinding) -> dict[str, Any]:
+    output = adapter.render_output(event_name, [finding], decision="deny")
+    assert output is not None
+    return output
+
+
 def _strings(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
@@ -116,35 +90,47 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
+def _assert_official_source(
+    source_id: str, source: dict[str, Any], harness: str, kind: str
+) -> None:
+    assert source["harness"] == harness
+    assert source["kind"] == kind
+    assert source["status_code"] == 200
+    assert source["content_type"]
+    assert "text/html" not in source["content_type"].lower(), source_id
+    assert source["url"].startswith((
+        "https://docs.anthropic.com/",
+        "https://opencode.ai/",
+        "https://developers.openai.com/",
+    )), source_id
+    assert len(source["sha256"]) == 64, source_id
+    assert source["bytes"] > 1000, source_id
+    assert source["retrieved_at_utc"].endswith("+00:00"), source_id
+
+
 def test_harness_schema_context_sources_are_official_available_and_parsable() -> None:
     data = _fixture()
-    assert data["schema_version"] == 1
-    assert data["source_snapshot_policy"] == "manual-regeneration-required"
-    assert data["errors"] == {}
-    assert set(data["sources"]) == set(REQUIRED_SOURCES)
+    assert data["schema_version"] == 1, "fixture schema_version should stay at v1"
+    assert (
+        data["source_snapshot_policy"] == "manual-regeneration-required"
+    ), "source snapshots must be regenerated manually"
+    assert data["errors"] == {}, "checked-in harness schema fixture should be error-free"
+    assert set(data["sources"]) == set(REQUIRED_SOURCES), (
+        "fixture sources must match the required official source ids"
+    )
 
     for source_id, (harness, kind) in REQUIRED_SOURCES.items():
         source = data["sources"][source_id]
-        assert source["harness"] == harness
-        assert source["kind"] == kind
-        assert source["status_code"] == 200
-        assert source["content_type"]
-        assert "text/html" not in source["content_type"].lower(), source_id
-        assert source["url"].startswith((
-            "https://docs.anthropic.com/",
-            "https://opencode.ai/",
-            "https://developers.openai.com/",
-        )), source_id
-        assert len(source["sha256"]) == 64, source_id
-        assert source["bytes"] > 1000, source_id
-        assert source["retrieved_at_utc"].endswith("+00:00"), source_id
+        _assert_official_source(source_id, source, harness, kind)
 
 
 def test_checked_in_fixture_omits_machine_local_cache_paths() -> None:
     data = _fixture()
     assert "cache_dir" not in data
-    for source_id, source in data["sources"].items():
-        assert "cache_path" not in source, source_id
+    sources_with_cache_paths = [
+        source_id for source_id, source in data["sources"].items() if "cache_path" in source
+    ]
+    assert sources_with_cache_paths == []
 
     strings = _strings(data)
     leaked = [text for text in strings if any(part in text for part in LOCAL_PATH_FRAGMENTS)]
@@ -154,29 +140,49 @@ def test_checked_in_fixture_omits_machine_local_cache_paths() -> None:
 def test_opencode_schema_summary_contains_relevant_permission_contract_defs() -> None:
     data = _fixture()
     schema_summary = data["sources"]["opencode_config_schema"]["schema_summary"]
-    assert schema_summary["schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert schema_summary["ref"] == "#/$defs/Config"
-    assert {"$schema", "$ref", "$defs"} <= set(schema_summary["root_keys"])
-    assert EXPECTED_OPENCODE_SCHEMA_DEFS <= set(schema_summary["defs_keys"])
+    assert schema_summary["schema"] == "https://json-schema.org/draft/2020-12/schema", (
+        "OpenCode config schema should declare draft 2020-12"
+    )
+    assert schema_summary["ref"] == "#/$defs/Config", (
+        "OpenCode config schema should root at $defs/Config"
+    )
+    assert {"$schema", "$ref", "$defs"} <= set(schema_summary["root_keys"]), (
+        "OpenCode schema summary should include schema, ref, and defs root keys"
+    )
+    assert EXPECTED_OPENCODE_SCHEMA_DEFS <= set(schema_summary["defs_keys"]), (
+        "OpenCode schema summary should retain permission contract definitions"
+    )
 
 
 def test_expected_contract_is_human_authored_and_source_cross_checked() -> None:
     data = _fixture()
     basis = data["contract_basis"]
-    for harness in data["expected_contract"]:
-        harness_basis = basis[harness]
-        assert harness_basis["authority"] == "human-authored-source-cross-checked"
-        assert harness_basis["source_ids"]
-        for source_id in harness_basis["source_ids"]:
-            assert source_id in data["sources"]
+    harness_basis = {harness: basis[harness] for harness in data["expected_contract"]}
+    authorities = {harness: contract_basis["authority"] for harness, contract_basis in harness_basis.items()}
+    source_ids = {harness: contract_basis["source_ids"] for harness, contract_basis in harness_basis.items()}
+    missing_source_ids = [harness for harness, ids in source_ids.items() if not ids]
+    unknown_source_ids = {
+        harness: [source_id for source_id in ids if source_id not in data["sources"]]
+        for harness, ids in source_ids.items()
+    }
+
+    assert authorities == {
+        harness: "human-authored-source-cross-checked"
+        for harness in data["expected_contract"]
+    }
+    assert missing_source_ids == []
+    assert unknown_source_ids == {harness: [] for harness in data["expected_contract"]}
 
 
 def test_source_specific_doc_keywords_support_key_contract_claims() -> None:
     data = _fixture()
     source_keyword_hits = data["source_keyword_hits"]
-    for source_id, required_keywords in REQUIRED_SOURCE_KEYWORDS.items():
-        observed = set(source_keyword_hits[source_id])
-        assert required_keywords <= observed, (source_id, required_keywords - observed)
+    missing_keywords = {
+        source_id: sorted(required_keywords - set(source_keyword_hits[source_id]))
+        for source_id, required_keywords in REQUIRED_SOURCE_KEYWORDS.items()
+    }
+
+    assert missing_keywords == {source_id: [] for source_id in REQUIRED_SOURCE_KEYWORDS}
 
 
 def test_schema_contract_harnesses_match_registered_adapters() -> None:
@@ -184,108 +190,157 @@ def test_schema_contract_harnesses_match_registered_adapters() -> None:
     assert set(data["expected_contract"]) <= set(ADAPTERS)
 
 
-def test_claude_official_event_surface_is_recorded_separately_from_installed_subset() -> None:
-    data = _fixture()
+def _assert_claude_event_surface_matches_contract(data: dict[str, Any]) -> None:
     claude_surface = data["harness_event_surfaces"]["claude"]
 
     official_events = set(claude_surface["official_events"])
     installed_events = set(claude_surface["vibeforcer_installed_events"])
     intentionally_not_installed = set(claude_surface["intentionally_not_installed_events"])
 
-    assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS
-    assert installed_events == set(_CLAUDE_EVENTS)
-    assert installed_events < official_events
-    assert intentionally_not_installed == official_events - installed_events
-    assert set(data["expected_contract"]["claude"]["native_events"]) == installed_events
-    assert claude_surface["coverage_decision"] == "install-supported-subset-not-full-official-surface"
-    assert claude_surface["authority"] == "official-docs-plus-local-installer"
-    assert claude_surface["extraction_method"] == "claude-hooks-table"
-    assert claude_surface["unknown_official_events"] == []
+    assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS, (
+        "recorded Claude official event surface should match the docs snapshot"
+    )
+    assert installed_events == set(_CLAUDE_EVENTS), (
+        "recorded Claude installed events should match installer _CLAUDE_EVENTS"
+    )
+    assert installed_events < official_events, (
+        "Vibeforcer should record Claude install coverage as a subset, not parity"
+    )
+    assert intentionally_not_installed == official_events - installed_events, (
+        "intentionally_not_installed should be exactly official minus installed events"
+    )
+    assert set(data["expected_contract"]["claude"]["native_events"]) == installed_events, (
+        "Claude expected contract native events should reflect installed events"
+    )
+    assert (
+        claude_surface["coverage_decision"]
+        == "install-supported-subset-not-full-official-surface"
+    ), "Claude coverage decision should preserve degraded/subset wording"
+    assert claude_surface["authority"] == "official-docs-plus-local-installer", (
+        "Claude event surface authority should cite docs plus local installer"
+    )
+    assert claude_surface["extraction_method"] == "claude-hooks-table", (
+        "Claude official event extraction should remain tied to the hooks table"
+    )
+    assert claude_surface["unknown_official_events"] == [], (
+        "Claude docs snapshot should not contain unknown official events"
+    )
     assert claude_surface["installed_source"] == {
         "path": "src/vibeforcer/installer.py",
         "symbol": "_CLAUDE_EVENTS",
         "load_method": "ast-literal",
-    }
+    }, "Claude installed event source should point at installer _CLAUDE_EVENTS"
+
+
+def test_claude_official_event_surface_is_recorded_separately_from_installed_subset() -> None:
+    data = _fixture()
+    _assert_claude_event_surface_matches_contract(data)
+    assert "claude" in data["harness_event_surfaces"], (
+        "Claude event surface should be present in the fixture"
+    )
 
 
 def test_schema_contract_event_maps_match_adapter_normalization() -> None:
     data = _fixture()
     contracts = data["expected_contract"]
 
-    assert set(contracts["opencode"]["native_events"]) == set(OPENCODE_EVENT_MAP)
-    assert set(OPENCODE_EVENT_MAP.values()) == set(contracts["opencode"]["canonical_events"])
-    assert set(contracts["codex"]["native_events"]) == CODEX_EVENTS
-    assert contracts["opencode"]["native_events"] != contracts["claude"]["native_events"]
+    assert set(contracts["opencode"]["native_events"]) == set(OPENCODE_EVENT_MAP), (
+        "OpenCode contract native events should match adapter event map keys"
+    )
+    assert set(OPENCODE_EVENT_MAP.values()) == set(
+        contracts["opencode"]["canonical_events"]
+    ), "OpenCode contract canonical events should match adapter normalized values"
+    assert set(contracts["codex"]["native_events"]) == CODEX_EVENTS, (
+        "Codex contract native events should match adapter CODEX_EVENTS"
+    )
+    assert contracts["opencode"]["native_events"] != contracts["claude"]["native_events"], (
+        "OpenCode native events should stay distinct from Claude native events"
+    )
 
     adapter = OpenCodeAdapter()
-    for native_event, canonical_event in OPENCODE_EVENT_MAP.items():
-        payload = adapter.normalize_payload({"hook_event_name": native_event})
-        assert payload["hook_event_name"] == canonical_event
+    normalized_events = {
+        native_event: adapter.normalize_payload({"hook_event_name": native_event})[
+            "hook_event_name"
+        ]
+        for native_event in OPENCODE_EVENT_MAP
+    }
+
+    assert normalized_events == OPENCODE_EVENT_MAP, (
+        "OpenCode adapter should normalize every native event through OPENCODE_EVENT_MAP"
+    )
+
+
+def _pretool_output_summary(finding: RuleFinding) -> dict[str, dict[str, object]]:
+    claude_output = _render_denied_output(ClaudeAdapter(), "PreToolUse", finding)
+    codex_output = _render_denied_output(CodexAdapter(), "PreToolUse", finding)
+    opencode_output = _render_denied_output(OpenCodeAdapter(), "PreToolUse", finding)
+    return {
+        "claude": {
+            "event": _hook_specific(claude_output)["hookEventName"],
+            "decision": _hook_specific(claude_output)["permissionDecision"],
+            "has_action": "action" in claude_output,
+        },
+        "codex": {
+            "event": _hook_specific(codex_output)["hookEventName"],
+            "decision": _hook_specific(codex_output)["permissionDecision"],
+            "has_updated_input": "updatedInput" in _hook_specific(codex_output),
+        },
+        "opencode": {
+            "action": opencode_output["action"],
+            "has_hook_specific": "hookSpecificOutput" in opencode_output,
+        },
+    }
+
+
+def _permission_request_output_summary(finding: RuleFinding) -> dict[str, dict[str, object]]:
+    claude_output = _render_denied_output(ClaudeAdapter(), "PermissionRequest", finding)
+    codex_output = _render_denied_output(CodexAdapter(), "PermissionRequest", finding)
+    opencode_output = _render_denied_output(OpenCodeAdapter(), "PermissionRequest", finding)
+    return {
+        "claude": _permission_decision_summary(_hook_specific(claude_output)["decision"]),
+        "codex": _permission_decision_summary(_hook_specific(codex_output)["decision"])
+        | {"has_updated_input": "updatedInput" in _hook_specific(codex_output)["decision"]},
+        "opencode": {
+            "action": opencode_output["action"],
+            "has_hook_specific": "hookSpecificOutput" in opencode_output,
+        },
+    }
+
+
+def _permission_decision_summary(decision: dict[str, Any]) -> dict[str, object]:
+    return {"behavior": decision["behavior"], "has_message": "message" in decision}
 
 
 def test_schema_contract_pretool_output_shapes_are_harness_specific() -> None:
-    finding = _finding()
-
-    claude_output = ClaudeAdapter().render_output(
-        "PreToolUse", [finding], decision="deny"
-    )
-    assert claude_output is not None
-    claude_specific = _hook_specific(claude_output)
-    assert claude_specific["hookEventName"] == "PreToolUse"
-    assert claude_specific["permissionDecision"] == "deny"
-    assert "action" not in claude_output
-
-    codex_output = CodexAdapter().render_output("PreToolUse", [finding], decision="deny")
-    assert codex_output is not None
-    codex_specific = _hook_specific(codex_output)
-    assert codex_specific["hookEventName"] == "PreToolUse"
-    assert codex_specific["permissionDecision"] == "deny"
-    assert "updatedInput" not in codex_specific
-
-    opencode_output = OpenCodeAdapter().render_output(
-        "PreToolUse", [finding], decision="deny"
-    )
-    assert opencode_output is not None
-    assert opencode_output["action"] == "block"
-    assert "hookSpecificOutput" not in opencode_output
+    assert _pretool_output_summary(_finding()) == {
+        "claude": {"event": "PreToolUse", "decision": "deny", "has_action": False},
+        "codex": {"event": "PreToolUse", "decision": "deny", "has_updated_input": False},
+        "opencode": {"action": "block", "has_hook_specific": False},
+    }
 
 
 def test_schema_contract_permission_request_output_shapes_are_harness_specific() -> None:
-    finding = _finding()
-
-    claude_output = ClaudeAdapter().render_output(
-        "PermissionRequest", [finding], decision="deny"
-    )
-    assert claude_output is not None
-    claude_decision = _hook_specific(claude_output)["decision"]
-    assert claude_decision["behavior"] == "deny"
-    assert "message" in claude_decision
-
-    codex_output = CodexAdapter().render_output(
-        "PermissionRequest", [finding], decision="deny"
-    )
-    assert codex_output is not None
-    codex_decision = _hook_specific(codex_output)["decision"]
-    assert codex_decision["behavior"] == "deny"
-    assert "message" in codex_decision
-    assert "updatedInput" not in codex_decision
-
-    opencode_output = OpenCodeAdapter().render_output(
-        "PermissionRequest", [finding], decision="deny"
-    )
-    assert opencode_output is not None
-    assert opencode_output["action"] == "block"
-    assert "hookSpecificOutput" not in opencode_output
+    assert _permission_request_output_summary(_finding()) == {
+        "claude": {"behavior": "deny", "has_message": True},
+        "codex": {"behavior": "deny", "has_message": True, "has_updated_input": False},
+        "opencode": {"action": "block", "has_hook_specific": False},
+    }
 
 
 def test_opencode_stop_output_is_degraded_advisory_not_claude_style_blocking() -> None:
     adapter = OpenCodeAdapter()
     payload = adapter.normalize_payload({"hook_event_name": "session.idle"})
-    assert payload["hook_event_name"] == "Stop"
+    assert payload["hook_event_name"] == "Stop", (
+        "OpenCode session.idle should normalize to canonical Stop"
+    )
 
     output = adapter.render_output("Stop", [_finding()], decision="deny")
-    assert output is not None
-    assert output["action"] == "continue"
-    assert "reason" in output
-    assert "hookSpecificOutput" not in output
-    assert output["action"] != "block"
+    assert output is not None, "OpenCode Stop render should produce advisory output"
+    assert output["action"] == "continue", (
+        "OpenCode Stop output should continue because stop blocking is degraded/advisory"
+    )
+    assert "reason" in output, "OpenCode advisory Stop output should explain the denial"
+    assert "hookSpecificOutput" not in output, (
+        "OpenCode output should not use Claude-style hookSpecificOutput"
+    )
+    assert output["action"] != "block", "OpenCode Stop advisory output must not block"

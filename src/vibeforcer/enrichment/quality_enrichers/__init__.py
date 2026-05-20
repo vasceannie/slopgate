@@ -1,0 +1,8 @@
+"""Local enrichment helpers for quality-related rule IDs."""
+
+from __future__ import annotations
+
+from vibeforcer.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
+from vibeforcer.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
+
+__all__ = ["enrich_hardcoded_paths", "enrich_magic_numbers"]

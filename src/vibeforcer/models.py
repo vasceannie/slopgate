@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
+
+from .constants import DENY, PRE_TOOL_USE
 from .policy_defaults import RUNTIME_POLICY_DEFAULTS
 from ._types import ObjectDict
 
@@ -53,9 +55,9 @@ class RegexRuleConfig:
     rule_id: str
     title: str
     severity: str = "MEDIUM"
-    events: list[str] = field(default_factory=lambda: ["PreToolUse"])
+    events: list[str] = field(default_factory=lambda: [PRE_TOOL_USE])
     target: str = "content"
-    action: str = "deny"
+    action: str = DENY
     message: str = ""
     additional_context: str | None = None
     patterns: list[str] = field(default_factory=list)

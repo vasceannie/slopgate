@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 from vibeforcer._argparse_types import SubparserRegistry
 
@@ -24,6 +25,39 @@ from vibeforcer.cli.commands import (
 from vibeforcer.cli.lint import cmd_lint
 
 
+@dataclass(frozen=True)
+class LintAnalysisParserSpec:
+    name: str
+    help_text: str
+    description: str
+    details_help: str
+    lint_command: str
+
+
+def _add_platform_argument(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument(
+        "--platform", choices=VALID_PLATFORMS, default="claude", help=PLATFORM_HELP
+    )
+
+
+def _add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("path", nargs="?", default=".")
+
+
+def _add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--dry-run", action="store_true")
+
+
+def _add_details_argument(parser: argparse.ArgumentParser, *, help_text: str) -> None:
+    _ = parser.add_argument(
+        "--details",
+        "--verbose",
+        dest="details",
+        action="store_true",
+        help=help_text,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vibeforcer",
@@ -45,127 +79,182 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_command_parser(
+    sub: SubparserRegistry,
+    name: str,
+    *,
+    help_text: str,
+    func: object,
+) -> argparse.ArgumentParser:
+    parser = sub.add_parser(name, help=help_text)
+    parser.set_defaults(func=func)
+    return parser
+
+
+def _add_path_command_parser(
+    sub: SubparserRegistry,
+    name: str,
+    *,
+    help_text: str,
+    func: object,
+) -> argparse.ArgumentParser:
+    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    _add_optional_path_argument(parser)
+    return parser
+
+
+def _add_platform_install_parser(
+    sub: SubparserRegistry,
+    name: str,
+    *,
+    help_text: str,
+    func: object,
+) -> None:
+    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    _ = parser.add_argument("platform", choices=VALID_PLATFORMS)
+    _add_dry_run_argument(parser)
+
+
 def _add_core_parsers(sub: SubparserRegistry) -> None:
-    handle = sub.add_parser("handle", help="Read hook payload from stdin")
-    _ = handle.add_argument(
-        "--platform", choices=VALID_PLATFORMS, default="claude", help=PLATFORM_HELP
+    handle = _add_command_parser(
+        sub, "handle", help_text="Read hook payload from stdin", func=cmd_handle
     )
-    handle.set_defaults(func=cmd_handle)
+    _add_platform_argument(handle)
 
-    handle_async = sub.add_parser("handle-async", help="Run async post-edit jobs")
-    handle_async.set_defaults(func=cmd_handle_async)
+    _add_command_parser(
+        sub, "handle-async", help_text="Run async post-edit jobs", func=cmd_handle_async
+    )
+    _add_path_command_parser(
+        sub, "check", help_text="Check quality gate for a repo", func=cmd_check
+    )
 
-    check = sub.add_parser("check", help="Check quality gate for a repo")
-    _ = check.add_argument("path", nargs="?", default=".")
-    check.set_defaults(func=cmd_check)
-
-    enroll = sub.add_parser("enroll", help="Enroll a repo in quality gate enforcement")
-    _ = enroll.add_argument("path", nargs="?", default=".")
+    enroll = _add_path_command_parser(
+        sub, "enroll", help_text="Enroll a repo in quality gate enforcement", func=cmd_enroll
+    )
     _ = enroll.add_argument(
         "--no-worktrees",
         action="store_true",
         help="Only enroll the main repo root",
     )
-    enroll.set_defaults(func=cmd_enroll)
 
-    replay = sub.add_parser("replay", help="Replay a saved payload")
+    replay = _add_command_parser(
+        sub, "replay", help_text="Replay a saved payload", func=cmd_replay
+    )
     _ = replay.add_argument("--payload", required=True)
     _ = replay.add_argument("--pretty", action="store_true")
-    _ = replay.add_argument(
-        "--platform", choices=VALID_PLATFORMS, default="claude", help=PLATFORM_HELP
+    _add_platform_argument(replay)
+
+    _add_platform_install_parser(
+        sub, "install", help_text="Install hooks for a platform", func=cmd_install
     )
-    replay.set_defaults(func=cmd_replay)
+    _add_platform_install_parser(
+        sub, "uninstall", help_text="Remove hooks from a platform", func=cmd_uninstall
+    )
 
-    install = sub.add_parser("install", help="Install hooks for a platform")
-    _ = install.add_argument("platform", choices=VALID_PLATFORMS)
-    _ = install.add_argument("--dry-run", action="store_true")
-    install.set_defaults(func=cmd_install)
-
-    uninstall = sub.add_parser("uninstall", help="Remove hooks from a platform")
-    _ = uninstall.add_argument("platform", choices=VALID_PLATFORMS)
-    _ = uninstall.add_argument("--dry-run", action="store_true")
-    uninstall.set_defaults(func=cmd_uninstall)
-
-    stats = sub.add_parser("stats", help="Analyze hook activity logs")
+    stats = _add_command_parser(
+        sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
+    )
     _ = stats.add_argument("--log")
     _ = stats.add_argument("--days", type=int)
     _ = stats.add_argument("--json", action="store_true")
-    stats.set_defaults(func=cmd_stats)
 
-    test = sub.add_parser("test", help="Run self-test / smoke test")
-    test.set_defaults(func=cmd_test)
+    _add_command_parser(sub, "test", help_text="Run self-test / smoke test", func=cmd_test)
 
 
 def _add_config_parsers(sub: SubparserRegistry) -> None:
     config_parser = sub.add_parser("config", help="Configuration management")
     config_sub = config_parser.add_subparsers(dest="config_command")
 
-    show = config_sub.add_parser("show", help="Show effective configuration")
-    show.set_defaults(func=cmd_config_show)
-
-    init = config_sub.add_parser("init", help="Create config from defaults")
+    _add_command_parser(
+        config_sub, "show", help_text="Show effective configuration", func=cmd_config_show
+    )
+    init = _add_command_parser(
+        config_sub, "init", help_text="Create config from defaults", func=cmd_config_init
+    )
     _ = init.add_argument("--force", action="store_true")
-    init.set_defaults(func=cmd_config_init)
+    _add_command_parser(
+        config_sub, "path", help_text="Print config file path", func=cmd_config_path
+    )
 
-    path = config_sub.add_parser("path", help="Print config file path")
-    path.set_defaults(func=cmd_config_path)
+
+def _add_lint_analysis_parser(
+    lint_sub: SubparserRegistry,
+    spec: LintAnalysisParserSpec,
+) -> None:
+    parser = lint_sub.add_parser(
+        spec.name,
+        help=spec.help_text,
+        description=spec.description,
+    )
+    _add_details_argument(parser, help_text=spec.details_help)
+    parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
+
+
+def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
+    _add_lint_analysis_parser(
+        lint_sub,
+        LintAnalysisParserSpec(
+            name="check",
+            help_text="Lint the current project root",
+            description=(
+                "Lint the current project root. This command intentionally accepts no "
+                "file or directory argument so agents cannot bypass full-project checks."
+            ),
+            details_help=(
+                "Show extended violation locations, signatures, and repair prognosis"
+            ),
+            lint_command="check",
+        ),
+    )
+    _add_lint_analysis_parser(
+        lint_sub,
+        LintAnalysisParserSpec(
+            name="test-integrity",
+            help_text=(
+                "Scan tests for weak assertions, mock theater, and schema-bypass fakes"
+            ),
+            description=(
+                "Scan the current project tests for bad-test-efficacy indicators: weak "
+                "presence assertions, mock-only proofs, schema bypasses, hand-built "
+                "payload drift, over-mocked integration tests, untested production code, "
+                "missing integration seams, Hypothesis candidates, and obsolete tests."
+            ),
+            details_help="Show contextual repair guidance for each suspicious test",
+            lint_command="test-integrity",
+        ),
+    )
+
+
+def _add_lint_baseline_parser(lint_sub: SubparserRegistry) -> None:
+    baseline = lint_sub.add_parser(
+        "baseline",
+        help="Disabled: repo-wide rebaselining is not allowed",
+        description="Disabled: repo-wide rebaselining is not allowed",
+    )
+    _add_optional_path_argument(baseline)
+    baseline.set_defaults(func=cmd_lint, lint_command="baseline")
+
+
+def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
+    init = lint_sub.add_parser("init", help="Scaffold quality_gate.toml")
+    _add_optional_path_argument(init)
+    init.set_defaults(func=cmd_lint, lint_command="init")
+
+
+def _add_lint_update_parser(lint_sub: SubparserRegistry) -> None:
+    update = lint_sub.add_parser("update", help="Add missing config keys")
+    _add_optional_path_argument(update)
+    _add_dry_run_argument(update)
+    update.set_defaults(func=cmd_lint, lint_command="update")
 
 
 def _add_lint_parsers(sub: SubparserRegistry) -> None:
     lint = sub.add_parser("lint", help="Batch code quality analysis")
     lint_sub = lint.add_subparsers(dest="lint_command")
 
-    check = lint_sub.add_parser(
-        "check",
-        help="Lint the current project root",
-        description=(
-            "Lint the current project root. This command intentionally accepts no "
-            "file or directory argument so agents cannot bypass full-project checks."
-        ),
-    )
-    _ = check.add_argument(
-        "--details",
-        "--verbose",
-        dest="details",
-        action="store_true",
-        help="Show extended violation locations, signatures, and repair prognosis",
-    )
-    check.set_defaults(func=cmd_lint, lint_command="check")
-
-    test_integrity = lint_sub.add_parser(
-        "test-integrity",
-        help="Scan tests for weak assertions, mock theater, and schema-bypass fakes",
-        description=(
-            "Scan the current project tests for bad-test-efficacy indicators: weak "
-            "presence assertions, mock-only proofs, schema bypasses, hand-built "
-            "payload drift, over-mocked integration tests, untested production code, "
-            "missing integration seams, Hypothesis candidates, and obsolete tests."
-        ),
-    )
-    _ = test_integrity.add_argument(
-        "--details",
-        "--verbose",
-        dest="details",
-        action="store_true",
-        help="Show contextual repair guidance for each suspicious test",
-    )
-    test_integrity.set_defaults(func=cmd_lint, lint_command="test-integrity")
-
-    baseline = lint_sub.add_parser(
-        "baseline",
-        help="Disabled: repo-wide rebaselining is not allowed",
-        description="Disabled: repo-wide rebaselining is not allowed",
-    )
-    _ = baseline.add_argument("path", nargs="?", default=".")
-    baseline.set_defaults(func=cmd_lint, lint_command="baseline")
-
-    init = lint_sub.add_parser("init", help="Scaffold quality_gate.toml")
-    _ = init.add_argument("path", nargs="?", default=".")
-    init.set_defaults(func=cmd_lint, lint_command="init")
-
-    update = lint_sub.add_parser("update", help="Add missing config keys")
-    _ = update.add_argument("path", nargs="?", default=".")
-    _ = update.add_argument("--dry-run", action="store_true")
-    update.set_defaults(func=cmd_lint, lint_command="update")
+    _add_lint_analysis_parsers(lint_sub)
+    _add_lint_baseline_parser(lint_sub)
+    _add_lint_init_parser(lint_sub)
+    _add_lint_update_parser(lint_sub)
 
     lint.set_defaults(func=cmd_lint, lint_command="check")

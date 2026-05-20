@@ -51,6 +51,84 @@ def _is_auto_mode(ctx: HookContext) -> bool:
     return pytest_asyncio_mode(ctx) == "auto"
 
 
+def _unknown_fixture_scope_message(target: FixtureCheckTarget, scope: str | None) -> str:
+    return (
+        f"Unknown pytest-asyncio fixture scope `{scope}` on async fixture "
+        f"`{target.node.name}` in `{target.path_value}`. Valid fixture `scope` "
+        f"values are {valid_fixture_scope_text()}."
+    )
+
+
+def _unknown_loop_scope_message(
+    target: FixtureCheckTarget,
+    scope_source: str,
+    effective_loop_scope: str | None,
+) -> str:
+    return (
+        f"Unknown pytest-asyncio fixture {scope_source} `{effective_loop_scope}` "
+        f"for async fixture `{target.node.name}` in `{target.path_value}`. Valid "
+        f"fixture loop scope values are {valid_fixture_scope_text()}."
+    )
+
+
+def _configured_loop_scope_note(
+    *,
+    configured_loop_scope: str | None,
+    loop_scope: str | None,
+    fixture_scope: str,
+) -> str:
+    if loop_scope is not None or configured_loop_scope is None:
+        return ""
+    return (
+        f" Current pytest config sets `asyncio_default_fixture_loop_scope = {configured_loop_scope}`, "
+        f"which is narrower than the fixture's `{fixture_scope}` cache scope."
+    )
+
+
+def _resource_scope_note(node: ast.AsyncFunctionDef) -> str:
+    if has_async_yield(node):
+        return " For async-yield resource fixtures, match loop scope to fixture lifetime."
+    return ""
+
+
+def _plain_auto_fixture_scope_message(
+    target: FixtureCheckTarget,
+    *,
+    fixture_scope: str,
+    configured_note: str,
+    resource_note: str,
+) -> str:
+    return (
+        f"{fixture_scope_fragment(fixture_scope).title()} async fixture `{target.node.name}` "
+        f"in `{target.path_value}` is handled by `asyncio_mode = auto`, but broader "
+        "fixture cache scope should declare an explicit pytest-asyncio loop scope "
+        "so behavior is stable across pytest-asyncio versions. "
+        f"Use `@pytest_asyncio.fixture(scope=\"{fixture_scope}\", "
+        f"loop_scope=\"{fixture_scope}\")` or set "
+        f"`asyncio_default_fixture_loop_scope = {fixture_scope}` in pytest config."
+        f"{configured_note}{resource_note}"
+    )
+
+
+def _explicit_fixture_loop_scope_message(
+    target: FixtureCheckTarget,
+    *,
+    fixture_scope: str,
+    configured_note: str,
+    resource_note: str,
+) -> str:
+    return (
+        f"{fixture_scope_fragment(fixture_scope).title()} async fixture `{target.node.name}` "
+        f"in `{target.path_value}` should declare `loop_scope=\"{fixture_scope}\"` "
+        "or broader so the event-loop lifetime is explicit. pytest-asyncio "
+        "requires any configured fixture event-loop scope to be the same as "
+        "or broader than its fixture cache scope; an explicit "
+        "`asyncio_default_fixture_loop_scope` pytest config value can satisfy "
+        "this too."
+        f"{configured_note}{resource_note}"
+    )
+
+
 @final
 class PythonPytestAsyncioRule(Rule):
     """Guide agent-generated async pytest code toward config-aware pytest-asyncio patterns."""
@@ -141,71 +219,35 @@ class PythonPytestAsyncioRule(Rule):
         configured_loop_scope = pytest_asyncio_default_fixture_loop_scope(ctx)
         effective_loop_scope = loop_scope or configured_loop_scope
         if is_unknown_fixture_scope(scope):
-            return self._finding(
-                ctx,
-                target.path_value,
-                node,
-                (
-                    f"Unknown pytest-asyncio fixture scope `{scope}` on async fixture "
-                    f"`{node.name}` in `{target.path_value}`. Valid fixture `scope` "
-                    f"values are {valid_fixture_scope_text()}."
-                ),
-            )
+            return self._finding(ctx, target.path_value, node, _unknown_fixture_scope_message(target, scope))
         if is_unknown_fixture_scope(effective_loop_scope):
             scope_source = "loop_scope" if loop_scope is not None else "asyncio_default_fixture_loop_scope"
-            return self._finding(
-                ctx,
-                target.path_value,
-                node,
-                (
-                    f"Unknown pytest-asyncio fixture {scope_source} `{effective_loop_scope}` "
-                    f"for async fixture `{node.name}` in `{target.path_value}`. Valid "
-                    f"fixture loop scope values are {valid_fixture_scope_text()}."
-                ),
-            )
+            message = _unknown_loop_scope_message(target, scope_source, effective_loop_scope)
+            return self._finding(ctx, target.path_value, node, message)
         if is_valid_fixture_loop_scope(scope, effective_loop_scope):
             return None
         fixture_scope = scope or "function"
-        resource_note = ""
-        if has_async_yield(node):
-            resource_note = " For async-yield resource fixtures, match loop scope to fixture lifetime."
-        configured_note = ""
-        if loop_scope is None and configured_loop_scope is not None:
-            configured_note = (
-                f" Current pytest config sets `asyncio_default_fixture_loop_scope = {configured_loop_scope}`, "
-                f"which is narrower than the fixture's `{fixture_scope}` cache scope."
-            )
-        if fixture_name == "pytest.fixture":
-            return self._finding(
-                ctx,
-                target.path_value,
-                node,
-                (
-                    f"{fixture_scope_fragment(scope).title()} async fixture `{node.name}` "
-                    f"in `{target.path_value}` is handled by `asyncio_mode = auto`, but broader "
-                    "fixture cache scope should declare an explicit pytest-asyncio loop scope "
-                    "so behavior is stable across pytest-asyncio versions. "
-                    f"Use `@pytest_asyncio.fixture(scope=\"{fixture_scope}\", "
-                    f"loop_scope=\"{fixture_scope}\")` or set "
-                    f"`asyncio_default_fixture_loop_scope = {fixture_scope}` in pytest config."
-                    f"{configured_note}{resource_note}"
-                ),
-            )
-        return self._finding(
-            ctx,
-            target.path_value,
-            node,
-            (
-                f"{fixture_scope_fragment(scope).title()} async fixture `{node.name}` "
-                f"in `{target.path_value}` should declare `loop_scope=\"{fixture_scope}\"` "
-                "or broader so the event-loop lifetime is explicit. pytest-asyncio "
-                "requires any configured fixture event-loop scope to be the same as "
-                "or broader than its fixture cache scope; an explicit "
-                "`asyncio_default_fixture_loop_scope` pytest config value can satisfy "
-                "this too."
-                f"{configured_note}{resource_note}"
-            ),
+        configured_note = _configured_loop_scope_note(
+            configured_loop_scope=configured_loop_scope,
+            loop_scope=loop_scope,
+            fixture_scope=fixture_scope,
         )
+        resource_note = _resource_scope_note(node)
+        if fixture_name == "pytest.fixture":
+            message = _plain_auto_fixture_scope_message(
+                target,
+                fixture_scope=fixture_scope,
+                configured_note=configured_note,
+                resource_note=resource_note,
+            )
+            return self._finding(ctx, target.path_value, node, message)
+        message = _explicit_fixture_loop_scope_message(
+            target,
+            fixture_scope=fixture_scope,
+            configured_note=configured_note,
+            resource_note=resource_note,
+        )
+        return self._finding(ctx, target.path_value, node, message)
 
     def _check_async_fixtures(
         self,

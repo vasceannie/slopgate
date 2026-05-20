@@ -21,11 +21,20 @@ def test_codex_hooks_cover_current_tool_events() -> None:
     pre_matcher = str(pre.get("matcher", ""))
     post_matcher = str(post.get("matcher", ""))
     permission_matcher = str(permission.get("matcher", ""))
-    for matcher in (pre_matcher, post_matcher, permission_matcher):
-        assert "Bash" in matcher
-        assert "apply_patch" in matcher
-        assert "Edit" in matcher
-        assert "Write" in matcher
+    required_tools = {"Bash", "apply_patch", "Edit", "Write"}
+    missing_tools_by_matcher = {
+        "PreToolUse": sorted(tool for tool in required_tools if tool not in pre_matcher),
+        "PostToolUse": sorted(tool for tool in required_tools if tool not in post_matcher),
+        "PermissionRequest": sorted(
+            tool for tool in required_tools if tool not in permission_matcher
+        ),
+    }
+
+    assert missing_tools_by_matcher == {
+        "PreToolUse": [],
+        "PostToolUse": [],
+        "PermissionRequest": [],
+    }
 
 
 def test_codex_installer_enables_current_toml_feature(tmp_path: Path) -> None:
@@ -78,44 +87,80 @@ def test_codex_install_writes_hooks_and_toml_feature(
     assert config["features"]["codex_hooks"] is True
 
 
+def _existing_claude_settings() -> dict[str, object]:
+    return {
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": "other-gate"}]},
+                {"hooks": [{"type": "command", "command": "old-vibeforcer handle"}]},
+            ]
+        }
+    }
+
+
+def _existing_codex_hooks() -> dict[str, object]:
+    return {
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": "other-gate"}]},
+                {
+                    "matcher": "Bash",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "old-vibeforcer handle --platform codex",
+                        }
+                    ],
+                },
+            ]
+        }
+    }
+
+
+def _hook_commands(hooks: dict[str, object], event_name: str = "PreToolUse") -> list[str]:
+    entries = hooks[event_name]
+    assert isinstance(entries, list)
+    return [
+        hook["command"]
+        for entry in entries
+        if isinstance(entry, dict)
+        for hook in entry.get("hooks", [])
+    ]
+
+
+def _install_with_existing_hooks(
+    tmp_path: Path,
+    monkeypatch: Any,
+    harness_dir: str,
+    file_name: str,
+    existing_hooks: dict[str, object],
+) -> Path:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
+    hooks_path = tmp_path / harness_dir / file_name
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(json.dumps(existing_hooks), encoding="utf-8")
+    return hooks_path
+
+
+def _installed_hook_commands(hooks_path: Path) -> list[str]:
+    return _hook_commands(json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"])
+
+
 def test_claude_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Bash",
-                            "hooks": [
-                                {"type": "command", "command": "other-gate"}
-                            ],
-                        },
-                        {
-                            "hooks": [
-                                {"type": "command", "command": "old-vibeforcer handle"}
-                            ],
-                        },
-                    ]
-                }
-            }
-        ),
-        encoding="utf-8",
+    settings_path = _install_with_existing_hooks(
+        tmp_path,
+        monkeypatch,
+        ".claude",
+        "settings.json",
+        _existing_claude_settings(),
     )
 
     assert installer_module._install_claude(dry_run=False) == 0
 
-    hooks = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]
-    commands = [
-        hook["command"]
-        for entry in hooks["PreToolUse"]
-        for hook in entry.get("hooks", [])
-    ]
+    commands = _installed_hook_commands(settings_path)
     assert "other-gate" in commands
     assert "old-vibeforcer handle" not in commands
     assert commands.count("vibeforcer handle") == 1
@@ -164,45 +209,17 @@ def test_claude_uninstall_removes_only_vibeforcer_hooks(
 def test_codex_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
-    hooks_path = tmp_path / ".codex" / "hooks.json"
-    hooks_path.parent.mkdir(parents=True)
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Bash",
-                            "hooks": [
-                                {"type": "command", "command": "other-gate"}
-                            ],
-                        },
-                        {
-                            "matcher": "Bash",
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "old-vibeforcer handle --platform codex",
-                                }
-                            ],
-                        },
-                    ]
-                }
-            }
-        ),
-        encoding="utf-8",
+    hooks_path = _install_with_existing_hooks(
+        tmp_path,
+        monkeypatch,
+        ".codex",
+        "hooks.json",
+        _existing_codex_hooks(),
     )
 
     assert installer_module._install_codex(dry_run=False) == 0
 
-    hooks = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
-    commands = [
-        hook["command"]
-        for entry in hooks["PreToolUse"]
-        for hook in entry.get("hooks", [])
-    ]
+    commands = _installed_hook_commands(hooks_path)
     assert "other-gate" in commands
     assert "old-vibeforcer handle --platform codex" not in commands
     assert commands.count("vibeforcer handle --platform codex") == 1
@@ -222,25 +239,43 @@ def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
     assert "exits 0 with no stdout" in plugin
 
 
+def _assert_posttool_arg_cache_contract(plugin: str) -> None:
+    expected_cache_contract = [
+        "const postToolArgCache: ToolArgsCacheEntry[] = []",
+        "function rememberToolArgs(",
+        "function takeRememberedToolArgs(",
+        "tool_input: preToolArgs",
+        "rememberToolArgs(input.tool, currentDirectory, preToolArgs)",
+        "const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)",
+        "const postToolArgs = { ...rememberedArgs, ...cloneArgs(output.args) }",
+        "tool_input: postToolArgs",
+    ]
+    missing_contract = [line for line in expected_cache_contract if line not in plugin]
+    assert missing_contract == [], "OpenCode plugin lost pretool/posttool arg cache contract"
+
+
+def _assert_posttool_arg_cache_policy(plugin: str) -> None:
+    expected_policy = [
+        "POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000",
+        "POST_TOOL_ARG_CACHE_MAX_ENTRIES = 50",
+        "entry.tool === toolName && entry.cwd === cwd",
+        "postToolArgCache.splice(index, 1)",
+    ]
+    missing_policy = [line for line in expected_policy if line not in plugin]
+    assert missing_policy == [], "OpenCode plugin cache should stay TTL-bounded, scoped, and consumed"
+
+
 def test_opencode_plugin_caches_pretool_args_for_posttool_backstops() -> None:
     from vibeforcer.resources import resource_path
 
     plugin = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
-    assert "const postToolArgCache: ToolArgsCacheEntry[] = []" in plugin
-    assert "function rememberToolArgs(" in plugin
-    assert "function takeRememberedToolArgs(" in plugin
     assert "tool_input: preToolArgs" in plugin
-    assert "rememberToolArgs(input.tool, currentDirectory, preToolArgs)" in plugin
-    assert "const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)" in plugin
-    assert "const postToolArgs = { ...rememberedArgs, ...cloneArgs(output.args) }" in plugin
-    assert "tool_input: postToolArgs" in plugin
+    _assert_posttool_arg_cache_contract(plugin)
 
 
 def test_opencode_plugin_cache_is_bounded_ttl_scoped_and_consumed() -> None:
     from vibeforcer.resources import resource_path
 
     plugin = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
-    assert "POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000" in plugin
-    assert "POST_TOOL_ARG_CACHE_MAX_ENTRIES = 50" in plugin
-    assert "entry.tool === toolName && entry.cwd === cwd" in plugin
-    assert "postToolArgCache.splice(index, 1)" in plugin
+    assert "POST_TOOL_ARG_CACHE_TTL_MS" in plugin
+    _assert_posttool_arg_cache_policy(plugin)

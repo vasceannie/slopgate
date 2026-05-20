@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
+from vibeforcer.constants import (
+    METADATA_PATH,
+)
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
 from vibeforcer.util.payloads import is_edit_like_tool, is_bash_tool
@@ -189,7 +192,7 @@ def _find_reducer_findings(
                 metadata={
                     "class": node.name,
                     "fields": bare,
-                    "path": path_value,
+                    METADATA_PATH: path_value,
                 },
             )
         )
@@ -265,7 +268,7 @@ def _mutation_finding(
             f"cause checkpoint corruption and non-deterministic behavior."
         ),
         metadata={
-            "path": path_value,
+            METADATA_PATH: path_value,
             "mutation_count": len(mutations),
             "examples": [m[1] for m in examples],
         },
@@ -335,7 +338,7 @@ class LangGraphDeprecatedAPIRule(Rule):
                                 f"instead."
                             ),
                             metadata={
-                                "path": path_value,
+                                METADATA_PATH: path_value,
                                 "old_api": old_api,
                                 "new_api": new_api,
                             },

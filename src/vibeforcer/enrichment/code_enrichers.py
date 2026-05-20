@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-
+from vibeforcer.constants import METADATA_PATH, PRODUCTION_SYMBOL_PREVIEW_LIMIT
 from vibeforcer.enrichment._helpers import (
     append_enrichment_message,
     resolve_path,
@@ -39,6 +39,12 @@ class _ComplexityBreakdown:
     boolops: int
 
 
+@dataclass(frozen=True)
+class _PathSource:
+    path: Path
+    source: str
+
+
 def _metadata_str(metadata: dict[str, object], key: str) -> str | None:
     value = metadata.get(key)
     return value if isinstance(value, str) and value else None
@@ -58,7 +64,7 @@ def _load_target_function(
     finding: RuleFinding,
     ctx: HookContext,
 ) -> _TargetFunction | None:
-    path_str = _metadata_str(finding.metadata, "path")
+    path_str = _metadata_str(finding.metadata, METADATA_PATH)
     func_name = _metadata_str(finding.metadata, "function")
     if path_str is None or func_name is None:
         return None
@@ -73,6 +79,18 @@ def _load_target_function(
     if node is None:
         return None
     return _TargetFunction(path=full_path, tree=tree, node=node)
+
+
+def _path_source_from_metadata(
+    finding: RuleFinding,
+    ctx: HookContext,
+) -> _PathSource | None:
+    path_str = _metadata_str(finding.metadata, METADATA_PATH)
+    if path_str is None:
+        return None
+    full_path = resolve_path(path_str, ctx.config.root)
+    source = safe_read(full_path)
+    return _PathSource(path=full_path, source=source) if source else None
 
 
 def _block_description(node: ast.stmt) -> str | None:
@@ -111,7 +129,7 @@ def _build_long_method_extras(node: FunctionNode) -> list[str]:
     extras: list[str] = []
     if blocks:
         extras.append("\nFunction structure (potential extraction points):")
-        extras.extend(blocks[:8])
+        extras.extend(blocks[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])
     if nested:
         names = ", ".join(f"`{name}`" for name in nested[:5])
         extras.append(f"\nNested functions: {names}")
@@ -136,11 +154,9 @@ def _decorator_is_dataclass(decorator: ast.expr) -> bool:
 
 
 def _base_name(base: ast.expr) -> str:
-    if isinstance(base, ast.Name):
-        return base.id
-    if isinstance(base, ast.Attribute):
-        return base.attr
-    return ""
+    names = {ast.Name: "id", ast.Attribute: "attr"}
+    attr = names.get(type(base))
+    return getattr(base, attr, "") if attr is not None else ""
 
 
 def _grouped_type_hints(tree: ast.Module) -> list[str]:
@@ -197,17 +213,16 @@ def _complexity_delta(node: ast.AST) -> _ComplexityBreakdown:
 
 
 def _count_complexity_sources(node: FunctionNode) -> _ComplexityBreakdown:
-    ifs = 0
-    loops = 0
-    excepts = 0
-    boolops = 0
+    counts = _ComplexityBreakdown(ifs=0, loops=0, excepts=0, boolops=0)
     for child in ast.walk(node):
         delta = _complexity_delta(child)
-        ifs += delta.ifs
-        loops += delta.loops
-        excepts += delta.excepts
-        boolops += delta.boolops
-    return _ComplexityBreakdown(ifs=ifs, loops=loops, excepts=excepts, boolops=boolops)
+        counts = _ComplexityBreakdown(
+            ifs=counts.ifs + delta.ifs,
+            loops=counts.loops + delta.loops,
+            excepts=counts.excepts + delta.excepts,
+            boolops=counts.boolops + delta.boolops,
+        )
+    return counts
 
 
 def _complexity_breakdown_lines(breakdown: _ComplexityBreakdown) -> list[str]:
@@ -273,13 +288,10 @@ def enrich_cyclomatic_complexity(finding: RuleFinding, ctx: HookContext) -> None
 def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich feature-envy findings with local class/import clues."""
     envied = _metadata_str(finding.metadata, "envied_object")
-    path_str = _metadata_str(finding.metadata, "path")
-    if envied is None or path_str is None:
+    path_source = _path_source_from_metadata(finding, ctx)
+    if envied is None or path_source is None:
         return
-    full_path = resolve_path(path_str, ctx.config.root)
-    source = safe_read(full_path)
-    if not source:
-        return
+    source = path_source.source
     extras: list[str] = []
     tree = safe_parse(source)
     if tree is not None:
@@ -307,15 +319,13 @@ def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
 def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich thin-wrapper findings with inlining guidance."""
     func_name = _metadata_str(finding.metadata, "function")
-    path_str = _metadata_str(finding.metadata, "path")
     wrapped = _metadata_str(finding.metadata, "wraps")
-    if func_name is None or path_str is None:
+    loaded_source = _path_source_from_metadata(finding, ctx)
+    if loaded_source is None:
         return
-    full_path = resolve_path(path_str, ctx.config.root)
-    source = safe_read(full_path)
-    if not source:
+    if func_name is None:
         return
-    call_count = source.count(f"{func_name}(")
+    call_count = loaded_source.source.count(f"{func_name}(")
     extras: list[str] = []
     if call_count > 1:
         extras.append(
@@ -327,7 +337,7 @@ def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
             "the wrapper."
         )
     else:
-        call_sites = find_local_call_sites(func_name, ctx, full_path)
+        call_sites = find_local_call_sites(func_name, ctx, loaded_source.path)
         if call_sites:
             extras.append("\nLocal call sites to update before removing this wrapper:")
             extras.extend(f"- {site}" for site in call_sites)

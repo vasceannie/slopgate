@@ -114,3 +114,31 @@ def total_cents(amounts: list[int]) -> int:
     )
 
     assert "PY-LOG-002" not in _rule_ids(result)
+
+
+def test_test_module_event_fixture_does_not_require_runtime_boundary_log(
+    tmp_path: Path,
+) -> None:
+    repo = _enrolled_repo(tmp_path)
+    result = evaluate_payload(
+        _write_payload(
+            repo,
+            "tests/test_order_events.py",
+            """
+class FakeEventBus:
+    def publish(self, event_name: str, payload: dict[str, str]) -> None:
+        self.last_event = (event_name, payload)
+
+
+def test_publish_order_fixture() -> None:
+    bus = FakeEventBus()
+    bus.publish("order.created", {"order_id": "ord_123"})
+""".lstrip(),
+        )
+    )
+
+    rule_ids = _rule_ids(result)
+    assert "PY-LOG-002" not in rule_ids, (
+        "Test fixtures/examples are not production runtime boundaries and should "
+        f"not require operational logging; got {rule_ids}"
+    )

@@ -3,10 +3,15 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from vibeforcer.constants import MAX_LINT_VIOLATIONS_SHOWN
 from vibeforcer.lint._baseline import Violation
+
+if TYPE_CHECKING:
+    from vibeforcer.lint._config import QualityConfig
 
 BASELINE_DISABLED_MESSAGE = (
     "`vibeforcer lint baseline` is disabled. Repo-wide rebaselining hides technical debt. "
@@ -105,51 +110,81 @@ def _discover_project_root(start: Path) -> Path:
     return current
 
 
-def _lint_check(root: Path, *, details: bool = False) -> int:
-    from vibeforcer.lint import __version__ as lint_version
-    from vibeforcer.lint._baseline import load_baseline
-    from vibeforcer.lint._collectors import run_all_collectors
+@dataclass(frozen=True, slots=True)
+class _LintFiles:
+    cfg: "QualityConfig"
+    src_files: list[Path]
+    test_files: list[Path]
+
+
+def _restore_quality_scope(old_quality_scope: str | None) -> None:
+    if old_quality_scope is None:
+        os.environ.pop("QUALITY_SCOPE", None)
+    else:
+        os.environ["QUALITY_SCOPE"] = old_quality_scope
+
+
+def _configured_lint_files(
+    root: Path,
+    *,
+    force_all_scope: bool,
+) -> _LintFiles:
     from vibeforcer.lint._config import load_config as load_qg_config
     from vibeforcer.lint._config import set_config as set_qg_config
     from vibeforcer.lint._helpers import find_source_files, find_test_files
 
     root = _discover_project_root(root)
     old_quality_scope = os.environ.get("QUALITY_SCOPE")
-    os.environ["QUALITY_SCOPE"] = "all"
+    if force_all_scope:
+        os.environ["QUALITY_SCOPE"] = "all"
     cfg = load_qg_config(root)
     set_qg_config(cfg)
     try:
-        src_files = find_source_files()
-        test_files = find_test_files()
+        return _LintFiles(cfg, find_source_files(), find_test_files())
     finally:
-        if old_quality_scope is None:
-            os.environ.pop("QUALITY_SCOPE", None)
-        else:
-            os.environ["QUALITY_SCOPE"] = old_quality_scope
+        if force_all_scope:
+            _restore_quality_scope(old_quality_scope)
 
-    print(f"vibeforcer lint {lint_version}")
-    print(f"  project: {cfg.project_root}")
-    print(f"  src:     {cfg.src_root}  ({len(src_files)} files)")
-    print(f"  tests:   {cfg.tests_root}  ({len(test_files)} files)")
+
+def _print_lint_header(
+    lint_version: str,
+    label: str,
+    files: _LintFiles,
+) -> None:
+    suffix = f" {label}" if label else ""
+    print(f"vibeforcer lint {lint_version}{suffix}")
+    print(f"  project: {files.cfg.project_root}")
+    print(f"  src:     {files.cfg.src_root}  ({len(files.src_files)} files)")
+    print(f"  tests:   {files.cfg.tests_root}  ({len(files.test_files)} files)")
     print()
 
-    baseline = load_baseline()
-    collectors = run_all_collectors(src_files, test_files)
-    color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
 
+def _print_collector_results(
+    collectors: list[tuple[str, list[Violation]]],
+    baseline: dict[str, set[str]],
+    *,
+    details: bool,
+) -> int:
+    color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     totals = [0, 0, 0]
     for rule_name, violations in collectors:
         if not violations:
             continue
-        counts = _tally_rule(
-            rule_name,
-            violations,
-            baseline,
-            details=details,
-        )
+        counts = _tally_rule(rule_name, violations, baseline, details=details)
         for index, count in enumerate(counts):
             totals[index] += count
     return _print_lint_summary(totals[0], totals[1], totals[2], color)
+
+
+def _lint_check(root: Path, *, details: bool = False) -> int:
+    from vibeforcer.lint import __version__ as lint_version
+    from vibeforcer.lint._baseline import load_baseline
+    from vibeforcer.lint._collectors import run_all_collectors
+
+    files = _configured_lint_files(root, force_all_scope=True)
+    _print_lint_header(lint_version, "", files)
+    collectors = run_all_collectors(files.src_files, files.test_files)
+    return _print_collector_results(collectors, load_baseline(), details=details)
 
 
 def _lint_baseline(_root: Path) -> int:
@@ -161,39 +196,11 @@ def _lint_test_integrity(root: Path, *, details: bool = False) -> int:
     from vibeforcer.lint import __version__ as lint_version
     from vibeforcer.lint._baseline import load_baseline
     from vibeforcer.lint._collectors import run_test_integrity_collectors
-    from vibeforcer.lint._config import load_config as load_qg_config
-    from vibeforcer.lint._config import set_config as set_qg_config
-    from vibeforcer.lint._helpers import find_source_files, find_test_files
 
-    root = _discover_project_root(root)
-    cfg = load_qg_config(root)
-    set_qg_config(cfg)
-    src_files = find_source_files()
-    test_files = find_test_files()
-
-    print(f"vibeforcer lint {lint_version} test-integrity")
-    print(f"  project: {cfg.project_root}")
-    print(f"  src:     {cfg.src_root}  ({len(src_files)} files)")
-    print(f"  tests:   {cfg.tests_root}  ({len(test_files)} files)")
-    print()
-
-    baseline = load_baseline()
-    collectors = run_test_integrity_collectors(src_files, test_files)
-    color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
-
-    totals = [0, 0, 0]
-    for rule_name, violations in collectors:
-        if not violations:
-            continue
-        counts = _tally_rule(
-            rule_name,
-            violations,
-            baseline,
-            details=details,
-        )
-        for index, count in enumerate(counts):
-            totals[index] += count
-    return _print_lint_summary(totals[0], totals[1], totals[2], color)
+    files = _configured_lint_files(root, force_all_scope=False)
+    _print_lint_header(lint_version, "test-integrity", files)
+    collectors = run_test_integrity_collectors(files.src_files, files.test_files)
+    return _print_collector_results(collectors, load_baseline(), details=details)
 
 
 def _lint_init(root: Path) -> int:

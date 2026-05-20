@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import override
 
 from vibeforcer._types import object_dict, string_value
+from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
 
@@ -213,37 +214,32 @@ def _safe_command_excerpt(command: str) -> str:
     return redacted[:200]
 
 
-def _error_context(command: str) -> str:
-    excerpt = _safe_command_excerpt(command)
-    return (
-        "⚠️ ERRORS-BASH-001 — Bash produced error-like output even though the "
-        "command exited 0.\n"
-        f"Command: `{excerpt}`\n"
-        "Next action: Rerun the smallest failing command, inspect the reported "
-        "failure, and repair it before continuing feature work.\n"
-        "Rules:\n"
-        "1. Do NOT run git blame, git log, or any investigation into whether "
-        "these errors are 'pre-existing' or 'introduced by your changes'.\n"
-        "2. Do NOT dismiss errors as 'out of scope', 'unrelated', or "
-        "'for a separate PR'.\n"
-        "3. Fix them now, or spawn a subagent to fix them if it would "
-        "derail your current task.\n"
-        "4. If you genuinely cannot fix something (e.g., missing credentials, "
-        "external service down), say so explicitly and add a TODO comment."
-    )
+_ERROR_CONTEXT = (
+    "⚠️ ERRORS-BASH-001 — Bash produced error-like output even though the command exited 0.\n"
+    "Next action: Rerun the smallest failing command, inspect the reported failure, "
+    "and repair it before continuing feature work.",
+    "these errors are 'pre-existing' or 'introduced by your changes'.",
+    "Do NOT dismiss errors as 'out of scope', 'unrelated', or 'for a separate PR'.",
+)
+_FAILURE_CONTEXT = (
+    "⚠️ ERRORS-FAIL-001 — Bash command exited non-zero.\n"
+    "Next action: Inspect stdout/stderr, fix the root cause, then rerun the same "
+    "smallest command to verify.",
+    "this failure is 'pre-existing' or 'introduced by your changes'.",
+    "Do NOT dismiss as 'out of scope' or 'unrelated to my changes'.",
+)
 
 
-def _failure_context(command: str) -> str:
+def _command_error_context(command: str, template: tuple[str, str, str]) -> str:
+    heading_and_next_action, provenance_excuse, scope_excuse = template
     excerpt = _safe_command_excerpt(command)
     return (
-        "⚠️ ERRORS-FAIL-001 — Bash command exited non-zero.\n"
+        f"{heading_and_next_action}\n"
         f"Command: `{excerpt}`\n"
-        "Next action: Inspect stdout/stderr, fix the root cause, then rerun the "
-        "same smallest command to verify.\n"
         "Rules:\n"
         "1. Do NOT run git blame, git log, or any investigation into whether "
-        "this failure is 'pre-existing' or 'introduced by your changes'.\n"
-        "2. Do NOT dismiss as 'out of scope' or 'unrelated to my changes'.\n"
+        f"{provenance_excuse}\n"
+        f"2. {scope_excuse}\n"
         "3. Fix the underlying issue now, or spawn a subagent if the fix "
         "would derail your current task.\n"
         "4. If you genuinely cannot fix it (e.g., missing credentials, "
@@ -264,6 +260,15 @@ def _extract_bash_output(ctx: HookContext) -> str:
     return f"{stdout}\n{stderr}".strip()
 
 
+def _active_bash_command(ctx: HookContext, rule_id: str) -> str | None:
+    enabled = ctx.config.enabled_rules.get(rule_id)
+    if enabled is not None and not enabled:
+        return None
+    if ctx.tool_name != "Bash":
+        return None
+    return ctx.bash_command or None
+
+
 class BashOutputErrorRule(Rule):
     """Detect errors in Bash output even when exit code is 0.
 
@@ -273,17 +278,12 @@ class BashOutputErrorRule(Rule):
 
     rule_id: str = "ERRORS-BASH-001"
     title: str = "Bash output error interceptor"
-    events: tuple[str, ...] = ("PostToolUse",)
+    events: tuple[str, ...] = (POST_TOOL_USE,)
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        enabled = ctx.config.enabled_rules.get(self.rule_id)
-        if enabled is not None and not enabled:
-            return []
-        if not ctx.tool_name or ctx.tool_name != "Bash":
-            return []
-        command = ctx.bash_command
-        if not command or _is_read_only_command(command):
+        command = _active_bash_command(ctx, self.rule_id)
+        if command is None or _is_read_only_command(command):
             return []
         output = _extract_bash_output(ctx)
         if not output or not _has_error_signals(output):
@@ -293,8 +293,8 @@ class BashOutputErrorRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                additional_context=_error_context(command),
-                metadata={"command": _safe_command_excerpt(command)},
+                additional_context=_command_error_context(command, _ERROR_CONTEXT),
+                metadata={METADATA_COMMAND: _safe_command_excerpt(command)},
             )
         ]
 
@@ -312,16 +312,8 @@ class BashFailureReinforcementRule(Rule):
 
     @override
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
-        enabled = ctx.config.enabled_rules.get(self.rule_id)
-        if enabled is not None and not enabled:
-            return []
-
-        # Only Bash tool
-        if not ctx.tool_name or ctx.tool_name != "Bash":
-            return []
-
-        command = ctx.bash_command
-        if not command:
+        command = _active_bash_command(ctx, self.rule_id)
+        if command is None:
             return []
 
         # Skip commands where non-zero exit is expected behavior
@@ -341,7 +333,7 @@ class BashFailureReinforcementRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                additional_context=_failure_context(command),
-                metadata={"command": _safe_command_excerpt(command)},
+                additional_context=_command_error_context(command, _FAILURE_CONTEXT),
+                metadata={METADATA_COMMAND: _safe_command_excerpt(command)},
             )
         ]

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-_KNOWN_CONSTANT_GLOBS: tuple[str, ...] = (
+KNOWN_CONSTANT_GLOBS: tuple[str, ...] = (
     "constants.py",
     "config.py",
     "settings.py",
@@ -61,11 +61,15 @@ def get_session_constant_index() -> ConstantIndex | None:
     return _session_index
 
 
-def _iter_constant_candidates(root: Path) -> list[Path]:
+def iter_constant_candidate_paths(
+    root: Path, patterns: tuple[str, ...] = KNOWN_CONSTANT_GLOBS
+) -> list[Path]:
+    """Return sorted, de-duplicated constant/config module candidates."""
+
     found: list[Path] = []
     seen: set[Path] = set()
-    for glob in _KNOWN_CONSTANT_GLOBS:
-        for candidate in root.rglob(glob):
+    for pattern in patterns:
+        for candidate in root.rglob(pattern):
             if not candidate.is_file() or candidate in seen:
                 continue
             seen.add(candidate)
@@ -114,6 +118,53 @@ def _merge_constants(
         target.setdefault(value, []).extend(matches)
 
 
+def _cached_constants_for(
+    candidate: Path,
+    *,
+    stat_size: int,
+    stat_mtime_ns: int,
+    use_mtime_cache: bool,
+) -> dict[str, list[StringConstantMatch]] | None:
+    if not use_mtime_cache:
+        return None
+    cache_entry = _FILE_CACHE.get(candidate)
+    if cache_entry is None:
+        return None
+    cached_mtime, cached_size, cached_values = cache_entry
+    if cached_mtime == stat_mtime_ns and cached_size == stat_size:
+        return cached_values
+    return None
+
+
+def _extract_constants_with_cache(
+    candidate: Path,
+    *,
+    stat_size: int,
+    stat_mtime_ns: int,
+    use_mtime_cache: bool,
+) -> dict[str, list[StringConstantMatch]] | None:
+    cached = _cached_constants_for(
+        candidate,
+        stat_size=stat_size,
+        stat_mtime_ns=stat_mtime_ns,
+        use_mtime_cache=use_mtime_cache,
+    )
+    if cached is not None:
+        return cached
+    try:
+        extracted = _extract_string_constants(candidate)
+    except (OSError, SyntaxError, UnicodeError):
+        return None
+    if use_mtime_cache:
+        _FILE_CACHE[candidate] = (stat_mtime_ns, stat_size, extracted)
+    return extracted
+
+
+def _sort_constant_matches(collected: dict[str, list[StringConstantMatch]]) -> None:
+    for matches in collected.values():
+        matches.sort(key=lambda m: (str(m.path), m.lineno, m.name))
+
+
 def build_project_constant_index(
     root: Path,
     *,
@@ -130,37 +181,25 @@ def build_project_constant_index(
     root = root.resolve()
     collected: dict[str, list[StringConstantMatch]] = {}
     files: list[Path] = []
-    for candidate in _iter_constant_candidates(root):
+    for candidate in iter_constant_candidate_paths(root):
         try:
             stat = candidate.stat()
         except OSError:
             continue
         if max_file_size is not None and stat.st_size > max_file_size:
             continue
-
-        extracted: dict[str, list[StringConstantMatch]]
-        cache_entry = _FILE_CACHE.get(candidate)
-        if use_mtime_cache and cache_entry is not None:
-            cached_mtime, cached_size, cached_values = cache_entry
-            if cached_mtime == stat.st_mtime_ns and cached_size == stat.st_size:
-                extracted = cached_values
-            else:
-                extracted = {}
-        else:
-            extracted = {}
-
-        if not extracted:
-            try:
-                extracted = _extract_string_constants(candidate)
-            except (OSError, SyntaxError, UnicodeError):
-                continue
-            if use_mtime_cache:
-                _FILE_CACHE[candidate] = (stat.st_mtime_ns, stat.st_size, extracted)
+        extracted = _extract_constants_with_cache(
+            candidate,
+            stat_size=stat.st_size,
+            stat_mtime_ns=stat.st_mtime_ns,
+            use_mtime_cache=use_mtime_cache,
+        )
+        if extracted is None:
+            continue
         _merge_constants(collected, extracted)
         files.append(candidate)
 
-    for matches in collected.values():
-        matches.sort(key=lambda m: (str(m.path), m.lineno, m.name))
+    _sort_constant_matches(collected)
     return ConstantIndex(root=root, string_constants=collected, files=tuple(files))
 
 

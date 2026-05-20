@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from typing_extensions import override
 
 from vibeforcer._types import ObjectDict, ObjectMapping, object_dict, string_value
 from vibeforcer.adapters.base import PlatformAdapter
 from vibeforcer.models import RuleFinding
 
+from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
 OPENCODE_EVENT_MAP: dict[str, str] = {
-    "tool.execute.before": "PreToolUse",
-    "tool.execute.after": "PostToolUse",
+    "tool.execute.before": PRE_TOOL_USE,
+    "tool.execute.after": POST_TOOL_USE,
     "session.created": "SessionStart",
     "session.idle": "Stop",
-    "permission.asked": "PermissionRequest",
+    "permission.asked": PERMISSION_REQUEST,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class _OpenCodeRenderRequest:
+    event_name: str
+    findings: list[RuleFinding]
+    context: str | None
+    updated_input: ObjectDict
+    decision: str | None
 
 
 class OpenCodeAdapter(PlatformAdapter):
@@ -35,8 +47,69 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["tool_result"] = canonical["tool_response"]
         elif "tool_result" in canonical and "tool_response" not in canonical:
             canonical["tool_response"] = canonical["tool_result"]
-
         return canonical
+
+    def _decision_reason(self, request: _OpenCodeRenderRequest) -> str:
+        return self.join_messages(
+            self.decision_findings(request.findings, request.decision)
+        )
+
+    def _block_output(self, request: _OpenCodeRenderRequest, action: str = BLOCK) -> ObjectDict:
+        return {"action": action, "reason": self._decision_reason(request)}
+
+    @staticmethod
+    def _context_output(context: str) -> ObjectDict:
+        return {"action": "context", "context": context}
+
+    def _render_pre_tool_use(
+        self, request: _OpenCodeRenderRequest
+    ) -> ObjectDict | None:
+        if request.decision in {DENY, BLOCK, "ask"}:
+            result = self._block_output(request)
+            if request.context:
+                result["context"] = request.context
+            return result
+        if request.decision == "allow" and request.updated_input:
+            result: ObjectDict = {"action": "allow", "updated_args": request.updated_input}
+            if request.context:
+                result["context"] = request.context
+            return result
+        if request.context:
+            return self._context_output(request.context)
+        return None
+
+    def _render_permission_request(
+        self, request: _OpenCodeRenderRequest
+    ) -> ObjectDict | None:
+        if request.decision in {DENY, BLOCK, "ask"}:
+            return self._block_output(request)
+        if request.decision == "allow" and request.updated_input:
+            return {"action": "allow", "updated_args": request.updated_input}
+        return None
+
+    def _render_post_tool_use(
+        self, request: _OpenCodeRenderRequest
+    ) -> ObjectDict | None:
+        payload: ObjectDict = {}
+        if request.decision in {BLOCK, DENY}:
+            payload.update(self._block_output(request))
+        if request.context:
+            payload["context"] = request.context
+        return payload or None
+
+    def _render_session_start(
+        self, request: _OpenCodeRenderRequest
+    ) -> ObjectDict | None:
+        if request.context:
+            return self._context_output(request.context)
+        return None
+
+    def _render_stop(self, request: _OpenCodeRenderRequest) -> ObjectDict | None:
+        if request.decision in {BLOCK, DENY}:
+            return self._block_output(request, action="continue")
+        if request.context:
+            return self._context_output(request.context)
+        return None
 
     @override
     def render_output(
@@ -51,74 +124,27 @@ class OpenCodeAdapter(PlatformAdapter):
         if not findings:
             return None
 
-        updated_input = updated_input or {}
+        request = _OpenCodeRenderRequest(
+            event_name=event_name,
+            findings=findings,
+            context=context,
+            updated_input=updated_input or {},
+            decision=decision,
+        )
 
-        if event_name == "PreToolUse":
-            if decision in {"deny", "block"}:
-                blocked_result: ObjectDict = {
-                    "action": "block",
-                    "reason": self.join_messages(
-                        self.decision_findings(findings, decision)
-                    ),
-                }
-                if context:
-                    blocked_result["context"] = context
-                return blocked_result
-            if decision == "ask":
-                return {
-                    "action": "block",
-                    "reason": self.join_messages(
-                        self.decision_findings(findings, decision)
-                    ),
-                }
-            if decision == "allow" and updated_input:
-                allowed_result: ObjectDict = {"action": "allow"}
-                allowed_result["updated_args"] = updated_input
-                if context:
-                    allowed_result["context"] = context
-                return allowed_result
-            if context:
-                return {"action": "context", "context": context}
-            return None
+        if event_name == PRE_TOOL_USE:
+            return self._render_pre_tool_use(request)
 
-        if event_name == "PermissionRequest":
-            if decision in {"deny", "block", "ask"}:
-                return {
-                    "action": "block",
-                    "reason": self.join_messages(
-                        self.decision_findings(findings, decision)
-                    ),
-                }
-            if decision == "allow" and updated_input:
-                return {"action": "allow", "updated_args": updated_input}
-            return None
+        if event_name == PERMISSION_REQUEST:
+            return self._render_permission_request(request)
 
-        if event_name == "PostToolUse":
-            payload: ObjectDict = {}
-            if decision in {"block", "deny"}:
-                payload["action"] = "block"
-                payload["reason"] = self.join_messages(
-                    self.decision_findings(findings, decision)
-                )
-            if context:
-                payload["context"] = context
-            return payload or None
+        if event_name == POST_TOOL_USE:
+            return self._render_post_tool_use(request)
 
         if event_name == "SessionStart":
-            if context:
-                return {"action": "context", "context": context}
-            return None
+            return self._render_session_start(request)
 
         if event_name == "Stop":
-            if decision in {"block", "deny"}:
-                return {
-                    "action": "continue",
-                    "reason": self.join_messages(
-                        self.decision_findings(findings, decision)
-                    ),
-                }
-            if context:
-                return {"action": "context", "context": context}
-            return None
+            return self._render_stop(request)
 
         return None

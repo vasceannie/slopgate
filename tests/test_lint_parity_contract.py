@@ -83,6 +83,41 @@ def _assert_unique_category_membership(categories: Mapping[str, frozenset[str]])
     assert duplicates == {}
 
 
+def _assert_python_parse_error_report(output: str, result: int) -> None:
+    assert result == 1, "syntax-broken Python file should fail lint check"
+    expected_report_lines = [
+        "[NEW] python-parse-error",
+        "src/pkg/broken.py:line-1",
+        "invalid syntax",
+    ]
+    missing_lines = [line for line in expected_report_lines if line not in output]
+    assert missing_lines == [], "lint check should report parse-error location and reason"
+
+
+def _write_parse_error_project(root: Path) -> None:
+    (root / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    src = root / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "broken.py").write_text("def broken(:\n    return 1\n", encoding="utf-8")
+    (root / "tests").mkdir()
+
+
+def _run_lint_check_details(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], cwd: Path
+) -> tuple[int, str]:
+    monkeypatch.chdir(cwd)
+    reset_config()
+    try:
+        result = cmd_lint(argparse.Namespace(lint_command="check", details=True))
+    finally:
+        reset_config()
+    captured = capsys.readouterr()
+    return result, captured.out
+
+
 def test_lint_collectors_are_baselined_or_classified() -> None:
     lint_check_collectors = _collector_names(
         {"_structure_src_collectors", "_ast_src_collectors", "_test_collectors", "run_all_collectors"}
@@ -121,24 +156,11 @@ def test_lint_check_reports_python_parse_errors(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
-        encoding="utf-8",
+    _write_parse_error_project(tmp_path)
+
+    result, output = _run_lint_check_details(monkeypatch, capsys, tmp_path)
+
+    _assert_python_parse_error_report(output, result)
+    assert "python-parse-error|src/pkg/broken.py|line-1" in output, (
+        "lint output should include the stable parse-error id for the broken file"
     )
-    src = tmp_path / "src" / "pkg"
-    src.mkdir(parents=True)
-    (src / "broken.py").write_text("def broken(:\n    return 1\n", encoding="utf-8")
-    (tmp_path / "tests").mkdir()
-
-    monkeypatch.chdir(tmp_path)
-    reset_config()
-    try:
-        result = cmd_lint(argparse.Namespace(lint_command="check", details=True))
-    finally:
-        reset_config()
-
-    captured = capsys.readouterr()
-    assert result == 1
-    assert "[NEW] python-parse-error" in captured.out
-    assert "src/pkg/broken.py:line-1" in captured.out
-    assert "invalid syntax" in captured.out

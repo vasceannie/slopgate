@@ -46,6 +46,9 @@ class TestPrivateImportChainRule(unittest.TestCase):
         )
 
         _assert_denied_by(result, "PY-IMPORT-003")
+        assert "PY-IMPORT-003" in _rule_ids(result), (
+            "stacked private import chains should be denied"
+        )
 
     def test_stacked_private_module_path_is_denied(self) -> None:
         result = evaluate_payload(
@@ -53,6 +56,9 @@ class TestPrivateImportChainRule(unittest.TestCase):
         )
 
         _assert_denied_by(result, "PY-IMPORT-003")
+        assert "PY-IMPORT-003" in _rule_ids(result), (
+            "stacked private package paths should be denied"
+        )
 
     def test_single_private_segment_remains_allowed(self) -> None:
         result = evaluate_payload(

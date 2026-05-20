@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import json
 import os
 import subprocess
@@ -8,53 +7,38 @@ from collections.abc import Mapping
 from pathlib import Path
 from time import time
 from typing import TypedDict
-
 import pytest
-
 from vibeforcer._types import ObjectDict, object_dict, object_list, string_value
 from vibeforcer.adapters import get_adapter
 from vibeforcer.engine import evaluate_payload
 from vibeforcer.models import EngineResult, RuleFinding, Severity
 from vibeforcer.state import HookStateStore
 from tests.support import BUNDLE_ROOT, assert_denied_by, assert_not_denied, finding_ids
-
 _RESOURCES = BUNDLE_ROOT / "src" / "vibeforcer" / "resources"
-
-
 class _SubprocessFinding(TypedDict):
     rule_id: str
     decision: str | None
     severity: str
     message: str | None
     metadata: ObjectDict
-
-
 class _SubprocessResult(TypedDict):
     finding_ids: list[str]
     findings: list[_SubprocessFinding]
     output: ObjectDict | None
-
-
 class _InspectableHookStateStore(HookStateStore):
     def full_read_key(self, session_id: str, path: str) -> str:
         return self._full_read_key(session_id, path)
-
     def save_state_for_test(self, state: Mapping[str, object]) -> None:
         self._save_state(state)
-
     @property
     def ttl_seconds(self) -> int:
         return self._TTL_SECONDS
-
     def load_state_for_test(self) -> ObjectDict:
         return object_dict(self._load_state())
-
-
 def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
     payload = object_dict(raw)
     raw_finding_ids = object_list(payload.get("finding_ids"))
     finding_ids_result = [item for item in raw_finding_ids if isinstance(item, str)]
-
     findings_result: list[_SubprocessFinding] = []
     for raw_finding in object_list(payload.get("findings")):
         finding = object_dict(raw_finding)
@@ -73,7 +57,6 @@ def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
                 "metadata": object_dict(finding.get("metadata")),
             }
         )
-
     raw_output = payload.get("output")
     output = object_dict(raw_output) if raw_output is not None else None
     return {
@@ -81,8 +64,6 @@ def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
         "findings": findings_result,
         "output": output,
     }
-
-
 def _config_with_enabled_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *rule_ids: str
 ) -> None:
@@ -95,25 +76,17 @@ def _config_with_enabled_rules(
     config_path = tmp_path / "spec-config.json"
     config_path.write_text(json.dumps(raw), encoding="utf-8")
     monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
-
-
 def _enable_thin_wrapper_rule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013")
-
-
 def _enable_loop_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013", "PY-CODE-009")
-
-
 def _ensure_enrolled(cwd: str) -> None:
     root = Path(cwd)
     marker = root / "quality_gate.toml"
     if not marker.exists():
         marker.write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
-
-
 def _read_payload(
     file_path: str,
     *,
@@ -135,8 +108,6 @@ def _read_payload(
         "tool_name": "Read",
         "tool_input": tool_input,
     }
-
-
 def _bash_payload(
     command: str,
     *,
@@ -151,8 +122,6 @@ def _bash_payload(
         "tool_name": "Bash",
         "tool_input": {"command": command},
     }
-
-
 def _grep_payload(
     query: str,
     *,
@@ -167,8 +136,6 @@ def _grep_payload(
         "tool_name": "Grep",
         "tool_input": {"query": query, "path": "src"},
     }
-
-
 def _posttool_payload(
     *,
     cwd: Path,
@@ -188,8 +155,26 @@ def _posttool_payload(
         "tool_input": {"file_path": rel_path, "content": code},
         "tool_response": {"filePath": rel_path, "success": True},
     }
-
-
+_THIN_WRAPPER_CODE = "def get_all_users():\n    return UserRepository.find_all()\n"
+def _thin_wrapper_payload(cwd: Path, session_id: str = "repeat-session") -> dict[str, object]:
+    return _posttool_payload(
+        cwd=cwd,
+        rel_path="src/thin.py",
+        code=_THIN_WRAPPER_CODE,
+        session_id=session_id,
+    )
+def _evaluate_thin_wrapper_hit(cwd: Path, session_id: str = "repeat-session") -> EngineResult:
+    return evaluate_payload(_thin_wrapper_payload(cwd, session_id))
+def _evaluate_thin_wrapper_hits(cwd: Path, count: int, session_id: str = "repeat-session") -> list[EngineResult]:
+    return [_evaluate_thin_wrapper_hit(cwd, session_id) for _ in range(count)]
+def _run_thin_wrapper_subprocess_hit(
+    cwd: Path, session_id: str = "repeat-session"
+) -> _SubprocessResult:
+    return _run_payload_in_subprocess(_thin_wrapper_payload(cwd, session_id))
+def _require_subprocess_finding(
+    rule_id: str, result: _SubprocessResult
+) -> _SubprocessFinding:
+    return next(item for item in result["findings"] if item["rule_id"] == rule_id)
 def _repeat_tracking_repair_sequence(cwd: Path) -> tuple[EngineResult, EngineResult]:
     thin_wrapper = "def get_all_users():\n    return UserRepository.find_all()\n"
     repaired_code = (
@@ -232,8 +217,6 @@ def _repeat_tracking_repair_sequence(cwd: Path) -> tuple[EngineResult, EngineRes
         )
     )
     return repaired, repeated_after_repair
-
-
 def _python_subprocess_env() -> dict[str, str]:
     env = os.environ.copy()
     src_path = str(BUNDLE_ROOT / "src")
@@ -242,24 +225,19 @@ def _python_subprocess_env() -> dict[str, str]:
         src_path if not current_pythonpath else src_path + os.pathsep + current_pythonpath
     )
     return env
-
-
 def _run_payload_in_subprocess(
     payload: dict[str, object],
     *,
     platform: str = "claude",
 ) -> _SubprocessResult:
     """Run one hook evaluation in a fresh Python process.
-
     Vibeforcer hooks are invoked as subprocesses in production, so this helper keeps
     the spec honest about persistence requirements.
     """
-
     script = """
 import json
 import sys
 from vibeforcer.engine import evaluate_payload
-
 payload = json.loads(sys.argv[1])
 platform = sys.argv[2]
 result = evaluate_payload(payload, platform=platform)
@@ -286,8 +264,6 @@ print(json.dumps({
         env=_python_subprocess_env(),
     )
     return _normalize_subprocess_result(json.loads(completed.stdout))
-
-
 def _start_full_read_record_subprocess(
     trace_dir: Path, session_id: str, file_path: Path
 ) -> subprocess.Popen[str]:
@@ -295,7 +271,6 @@ def _start_full_read_record_subprocess(
 import sys
 from pathlib import Path
 from vibeforcer.state import HookStateStore
-
 store = HookStateStore(Path(sys.argv[1]))
 store.record_full_read(sys.argv[2], sys.argv[3])
 """.strip()
@@ -306,758 +281,70 @@ store.record_full_read(sys.argv[2], sys.argv[3])
         text=True,
         env=_python_subprocess_env(),
     )
-
-
+def _start_full_read_record_processes(
+    trace_dir: Path, count: int
+) -> tuple[list[Path], list[subprocess.Popen[str]]]:
+    targets: list[Path] = []
+    processes: list[subprocess.Popen[str]] = []
+    for idx in range(count):
+        target = trace_dir / f"module_{idx}.py"
+        target.write_text(f"value = {idx}\n", encoding="utf-8")
+        targets.append(target)
+        processes.append(_start_full_read_record_subprocess(trace_dir, f"session-{idx}", target))
+    return targets, processes
+def _collect_process_failures(
+    processes: list[subprocess.Popen[str]], timeout: int = 10
+) -> tuple[list[str], list[tuple[int | None, str]]]:
+    timed_out: list[str] = []
+    failed: list[tuple[int | None, str]] = []
+    for process in processes:
+        try:
+            _, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            timed_out.append(str(process.args))
+        else:
+            if process.returncode != 0:
+                failed.append((process.returncode, stderr))
+    return timed_out, failed
+def _missing_full_read_records(
+    store: _InspectableHookStateStore, targets: list[Path]
+) -> list[str]:
+    return [
+        str(target)
+        for idx, target in enumerate(targets)
+        if not store.has_full_read(f"session-{idx}", str(target))
+    ]
 def _finding(result_rule_id: str, findings: list[RuleFinding]) -> RuleFinding | None:
     return next((item for item in findings if item.rule_id == result_rule_id), None)
-
-
-class TestFullReadCurrentGuards:
-    def test_partial_python_read_is_denied_when_rule_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "sample.py"
-        target.write_text("print('hi')\n", encoding="utf-8")
-
-        result = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), offset=1, limit=1)
-        )
-
-        assert_denied_by(result, "BUILTIN-ENFORCE-FULL-READ", "full first")
-
-    def test_partial_json_read_is_allowed_when_rule_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "data.json"
-        target.write_text('{"ok": true}\n', encoding="utf-8")
-
-        result = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), offset=1, limit=1)
-        )
-
-        assert_not_denied(result)
-
-    def test_large_python_read_is_exempt_when_rule_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "large.py"
-        target.write_text("x = 1\n" * 10000, encoding="utf-8")
-
-        result = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), offset=1, limit=20)
-        )
-
-        assert_not_denied(result)
-
-    def test_other_session_still_denied_without_stateful_unlock(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "module.py"
-        target.write_text("a = 1\nb = 2\n", encoding="utf-8")
-
-        _ = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), session_id="session-a")
-        )
-        result = evaluate_payload(
-            _read_payload(
-                str(target),
-                cwd=str(tmp_path),
-                session_id="session-b",
-                offset=1,
-                limit=1,
-            )
-        )
-
-        assert_denied_by(result, "BUILTIN-ENFORCE-FULL-READ")
-
-    def test_other_file_still_denied_without_stateful_unlock(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        file_a = tmp_path / "a.py"
-        file_b = tmp_path / "b.py"
-        file_a.write_text("a = 1\n", encoding="utf-8")
-        file_b.write_text("b = 2\n", encoding="utf-8")
-
-        _ = evaluate_payload(
-            _read_payload(str(file_a), cwd=str(tmp_path), session_id="session-a")
-        )
-        result = evaluate_payload(
-            _read_payload(
-                str(file_b),
-                cwd=str(tmp_path),
-                session_id="session-a",
-                offset=1,
-                limit=1,
-            )
-        )
-
-        assert_denied_by(result, "BUILTIN-ENFORCE-FULL-READ")
-
-
-class TestFullReadStatefulSpec:
-    def test_partial_jsonl_read_is_allowed_when_rule_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "events.jsonl"
-        target.write_text('{"event": 1}\n{"event": 2}\n', encoding="utf-8")
-
-        result = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), offset=2, limit=1)
-        )
-
-        assert_not_denied(result)
-
-    def test_full_read_unlocks_follow_up_partial_read_in_same_session(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "module.py"
-        target.write_text("a = 1\nb = 2\nc = 3\n", encoding="utf-8")
-        session_id = "same-session"
-
-        first = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), session_id=session_id)
-        )
-        second = evaluate_payload(
-            _read_payload(
-                str(target),
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=2,
-                limit=1,
-            )
-        )
-
-        assert first.output is None or "deny" not in json.dumps(first.output)
-        assert_not_denied(second)
-
-    def test_absolute_and_relative_paths_share_unlock_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "pkg" / "module.py"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("a = 1\nb = 2\n", encoding="utf-8")
-        session_id = "same-session"
-
-        _ = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), session_id=session_id)
-        )
-        result = evaluate_payload(
-            _read_payload(
-                "pkg/module.py",
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=1,
-                limit=1,
-            )
-        )
-
-        assert_not_denied(result)
-
-    def test_same_session_unlock_must_survive_subprocess_boundary(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "module.py"
-        target.write_text("a = 1\nb = 2\nc = 3\n", encoding="utf-8")
-        session_id = "same-session"
-
-        first = _run_payload_in_subprocess(
-            _read_payload(str(target), cwd=str(tmp_path), session_id=session_id)
-        )
-        second = _run_payload_in_subprocess(
-            _read_payload(
-                str(target),
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=2,
-                limit=1,
-            )
-        )
-
-        assert "BUILTIN-ENFORCE-FULL-READ" not in first["finding_ids"]
-        assert "BUILTIN-ENFORCE-FULL-READ" not in second["finding_ids"]
-
-    def test_subprocess_unlock_survives_absolute_to_relative_path_flow(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "pkg" / "module.py"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("a = 1\nb = 2\nc = 3\n", encoding="utf-8")
-        session_id = "same-session"
-
-        first = _run_payload_in_subprocess(
-            _read_payload(str(target), cwd=str(tmp_path), session_id=session_id)
-        )
-        second = _run_payload_in_subprocess(
-            _read_payload(
-                "pkg/module.py",
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=2,
-                limit=1,
-            )
-        )
-
-        assert "BUILTIN-ENFORCE-FULL-READ" not in first["finding_ids"]
-        assert "BUILTIN-ENFORCE-FULL-READ" not in second["finding_ids"]
-
-    def test_symlinked_paths_share_unlock_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        target = tmp_path / "module.py"
-        link_path = tmp_path / "alias.py"
-        target.write_text("a = 1\nb = 2\n", encoding="utf-8")
-        link_path.symlink_to(target)
-        session_id = "same-session"
-
-        _ = evaluate_payload(
-            _read_payload(str(target), cwd=str(tmp_path), session_id=session_id)
-        )
-        result = evaluate_payload(
-            _read_payload(
-                str(link_path),
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=1,
-                limit=1,
-            )
-        )
-
-        assert_not_denied(result)
-
-    def test_missing_files_do_not_create_unlock_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
-        missing = tmp_path / "missing.py"
-        session_id = "same-session"
-
-        _ = evaluate_payload(
-            _read_payload(str(missing), cwd=str(tmp_path), session_id=session_id)
-        )
-        result = evaluate_payload(
-            _read_payload(
-                str(missing),
-                cwd=str(tmp_path),
-                session_id=session_id,
-                offset=1,
-                limit=1,
-            )
-        )
-
-        assert_denied_by(result, "BUILTIN-ENFORCE-FULL-READ")
-
-
-class TestHookStateStore:
-    def test_ttl_expiry_filters_stale_full_reads(self, tmp_path: Path) -> None:
-        store = _InspectableHookStateStore(tmp_path)
-        key = store.full_read_key("session-a", str(tmp_path / "module.py"))
-        store.save_state_for_test(
-            {"full_reads": {key: int(time()) - store.ttl_seconds - 5}}
-        )
-
-        assert not store.has_full_read("session-a", str(tmp_path / "module.py"))
-
-    def test_parallel_subprocess_writes_complete_without_losing_entries(
-        self, tmp_path: Path
-    ) -> None:
-        store = _InspectableHookStateStore(tmp_path)
-        targets: list[Path] = []
-        processes: list[subprocess.Popen[str]] = []
-        for idx in range(8):
-            target = tmp_path / f"module_{idx}.py"
-            target.write_text(f"value = {idx}\n", encoding="utf-8")
-            targets.append(target)
-            processes.append(
-                _start_full_read_record_subprocess(tmp_path, f"session-{idx}", target)
-            )
-
-        for process in processes:
-            try:
-                _, stderr = process.communicate(timeout=10)
-            except subprocess.TimeoutExpired as exc:
-                process.kill()
-                raise AssertionError("hook-state write subprocess timed out") from exc
-            assert process.returncode == 0, stderr
-
-        state = store.load_state_for_test()
-        assert len(object_dict(state.get("full_reads"))) == len(targets)
-        for idx, target in enumerate(targets):
-            assert store.has_full_read(f"session-{idx}", str(target))
-
-
-class TestSearchReminderCurrentGuards:
-    def test_bash_grep_still_triggers_reminder(self, tmp_path: Path) -> None:
-        result = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path))
-        )
-        assert "REMIND-SEARCH-001" in finding_ids(result)
-
-    def test_ripgrep_does_not_trigger_reminder(self, tmp_path: Path) -> None:
-        result = evaluate_payload(_bash_payload("rg 'TODO' src/", cwd=str(tmp_path)))
-        assert "REMIND-SEARCH-001" not in finding_ids(result)
-
-    def test_embedded_grep_token_does_not_trigger_reminder(self, tmp_path: Path) -> None:
-        result = evaluate_payload(
-            _bash_payload("egrep 'TODO' src/", cwd=str(tmp_path))
-        )
-        assert "REMIND-SEARCH-001" not in finding_ids(result)
-
-    def test_new_session_still_gets_search_reminder(self, tmp_path: Path) -> None:
-        _ = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
-        )
-        result = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s2")
-        )
-
-        assert "REMIND-SEARCH-001" in finding_ids(result)
-
-
-class TestSearchReminderStatefulSpec:
-    def test_native_grep_tool_does_not_self_remind(self, tmp_path: Path) -> None:
-        result = evaluate_payload(_grep_payload("TODO", cwd=str(tmp_path)))
-        assert "REMIND-SEARCH-001" not in finding_ids(result)
-
-    def test_second_shell_grep_same_session_is_deduped(self, tmp_path: Path) -> None:
-        first = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
-        )
-        second = evaluate_payload(
-            _bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
-        )
-
-        assert "REMIND-SEARCH-001" in finding_ids(first)
-        assert "REMIND-SEARCH-001" not in finding_ids(second)
-
-    def test_same_session_dedupe_must_survive_subprocess_boundary(
-        self, tmp_path: Path
-    ) -> None:
-        first = _run_payload_in_subprocess(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
-        )
-        second = _run_payload_in_subprocess(
-            _bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
-        )
-
-        assert "REMIND-SEARCH-001" in first["finding_ids"]
-        assert "REMIND-SEARCH-001" not in second["finding_ids"]
-
-
-class TestCrossPlatformSessionIdentityCurrentGuards:
-    def test_codex_adapter_preserves_session_id(self) -> None:
-        payload = {
-            "session_id": "codex-session",
-            "cwd": str(BUNDLE_ROOT),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": "src/example.py"},
-        }
-        normalized = get_adapter("codex").normalize_payload(payload)
-        assert normalized["session_id"] == "codex-session"
-        assert normalized["hook_event_name"] == "PreToolUse"
-
-    def test_opencode_session_idle_maps_to_stop_and_preserves_session_id(self) -> None:
-        payload = {
-            "session_id": "oc-session",
-            "cwd": str(BUNDLE_ROOT),
-            "hook_event_name": "session.idle",
-            "tool_name": "bash",
-            "tool_input": {"command": "echo hi"},
-        }
-        normalized = get_adapter("opencode").normalize_payload(payload)
-        assert normalized["session_id"] == "oc-session"
-        assert normalized["hook_event_name"] == "Stop"
-        assert normalized["tool_name"] == "Bash"
-
-
-class TestSecurityRuleCurrentGuards:
-    def test_real_source_bypass_still_denied(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
-        payload = {
-            "session_id": "spec-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/settings.py",
-                "content": "BYPASS_PERMISSIONS = True\n",
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_denied_by(result, "BUILTIN-RULEBOOK-SECURITY", "bypass")
-
-    def test_fixture_like_paths_remain_allowed(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
-        payload = {
-            "session_id": "spec-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "tests/fixtures/security_fixture.json",
-                "content": '{"allowManagedHooksOnly": true}\n',
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_not_denied(result)
-
-
-class TestSecurityRuleBoundarySpec:
-    def test_markdown_docs_can_describe_bypass_settings(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
-        payload = {
-            "session_id": "spec-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "docs/security.md",
-                "content": "Use `bypass_permissions` only in emergency rollback guidance.\n",
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_not_denied(result)
-
-    def test_json_examples_can_show_guardrail_settings(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
-        payload = {
-            "session_id": "spec-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "docs/examples/hooks.json",
-                "content": '{"allowManagedHooksOnly": true}\n',
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_not_denied(result)
-
-
-class TestRepeatedDebtEscalationSpec:
-    def test_second_thin_wrapper_hit_tracks_repeat_count(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        first = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-        second = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-
-        first_finding = _finding("PY-CODE-013", first.findings)
-        second_finding = _finding("PY-CODE-013", second.findings)
-        assert first_finding is not None
-        assert second_finding is not None
-        assert first_finding.metadata.get("repeat_count") == 1
-        assert second_finding.metadata.get("repeat_count") == 2
-
-    def test_third_thin_wrapper_hit_escalates(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-        third = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-
-        finding = _finding("PY-CODE-013", third.findings)
-        assert finding is not None
-        assert finding.metadata.get("repeat_count") == 3
-        assert finding.severity >= Severity.HIGH or finding.decision in {"deny", "block"}
-
-    def test_repeat_tracking_is_scoped_per_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/one.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-        second_path = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/two.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-
-        finding = _finding("PY-CODE-013", second_path.findings)
-        assert finding is not None
-        assert finding.metadata.get("repeat_count") == 1
-
-    def test_repeat_tracking_resets_after_clean_repair_write(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        repaired, repeated_after_repair = _repeat_tracking_repair_sequence(tmp_path)
-
-        repaired_finding = _finding("PY-CODE-013", repaired.findings)
-        repeated_finding = _finding("PY-CODE-013", repeated_after_repair.findings)
-        assert repaired_finding is None, (
-            "Clean repair write should not keep the thin-wrapper finding active"
-        )
-        assert repeated_finding is not None, (
-            "Reintroduced thin wrapper should produce a new PY-CODE-013 finding"
-        )
-        assert repeated_finding.metadata.get("repeat_count") == 1, (
-            "Repeat counter should reset after the path is repaired cleanly"
-        )
-
-    def test_new_session_resets_repeat_counter(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="session-a",
-            )
-        )
-        result = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="session-b",
-            )
-        )
-
-        finding = _finding("PY-CODE-013", result.findings)
-        assert finding is not None
-        assert finding.metadata.get("repeat_count") == 1
-
-    def test_repeat_count_must_survive_subprocess_boundary(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_thin_wrapper_rule(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        first = _run_payload_in_subprocess(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-        second = _run_payload_in_subprocess(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="repeat-session",
-            )
-        )
-
-        first_finding = next(
-            item
-            for item in first["findings"]
-            if item["rule_id"] == "PY-CODE-013"
-        )
-        second_finding = next(
-            item
-            for item in second["findings"]
-            if item["rule_id"] == "PY-CODE-013"
-        )
-        assert first_finding["metadata"].get("repeat_count") == 1
-        assert second_finding["metadata"].get("repeat_count") == 2
-
-
-class TestLoopAwareDenialSteering:
-    def test_second_hit_adds_failure_class_and_repeat_metadata(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_loop_rules(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        first = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="loop-session",
-            )
-        )
-        second = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="loop-session",
-            )
-        )
-        first_finding = _finding("PY-CODE-013", first.findings)
-        second_finding = _finding("PY-CODE-013", second.findings)
-        assert first_finding is not None
-        assert second_finding is not None
-        assert first_finding.metadata.get("failure_class") == "structural"
-        assert second_finding.metadata.get("repeat_hit") is True
-        assert second_finding.additional_context and "Classify the failure first" in (
-            second_finding.additional_context
-        )
-
-    def test_third_write_is_blocked_after_repeat_lock(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_loop_rules(tmp_path, monkeypatch)
-        payload = {
-            "session_id": "budget-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/api.py",
-                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
-            },
-        }
-        _ = evaluate_payload(payload)
-        _ = evaluate_payload(payload)
-        third = evaluate_payload(payload)
-        assert "RETRY-BUDGET-001" in finding_ids(third)
-
-    def test_third_write_is_not_blocked_when_code_changes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_loop_rules(tmp_path, monkeypatch)
-        repeated_payload = {
-            "session_id": "budget-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/api.py",
-                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
-            },
-        }
-        changed_payload = {
-            "session_id": "budget-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/api.py",
-                "content": "def f(params):\n    return params\n",
-            },
-        }
-
-        _ = evaluate_payload(repeated_payload)
-        _ = evaluate_payload(repeated_payload)
-        third = evaluate_payload(changed_payload)
-
-        assert "RETRY-BUDGET-001" not in finding_ids(third)
-
-    def test_third_write_is_not_blocked_when_triggered_rule_changes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_loop_rules(tmp_path, monkeypatch)
-        repeated_payload = {
-            "session_id": "budget-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/api.py",
-                "content": "def f(a,b,c,d,e,f,g,h):\n    return 1\n",
-            },
-        }
-        changed_rule_payload = {
-            "session_id": "budget-session",
-            "cwd": str(tmp_path),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "src/api.py",
-                "content": "def get_all_users():\n    return UserRepository.find_all()\n",
-            },
-        }
-
-        _ = evaluate_payload(repeated_payload)
-        _ = evaluate_payload(repeated_payload)
-        third = evaluate_payload(changed_rule_payload)
-
-        assert "RETRY-BUDGET-001" not in finding_ids(third)
-        assert "PY-CODE-013" in finding_ids(third)
-
-    def test_session_start_includes_recent_repeated_failures(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _enable_loop_rules(tmp_path, monkeypatch)
-        code = "def get_all_users():\n    return UserRepository.find_all()\n"
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="memory-session",
-            )
-        )
-        _ = evaluate_payload(
-            _posttool_payload(
-                cwd=tmp_path,
-                rel_path="src/thin.py",
-                code=code,
-                session_id="memory-session",
-            )
-        )
-        session_start = evaluate_payload(
-            {
-                "session_id": "memory-session",
-                "cwd": str(tmp_path),
-                "hook_event_name": "SessionStart",
-                "tool_name": "",
-                "tool_input": {},
-            }
-        )
-        assert "SESSION-RECENT-FAILURES" in finding_ids(session_start)
+def _require_finding(result_rule_id: str, findings: list[RuleFinding]) -> RuleFinding:
+    finding = _finding(result_rule_id, findings)
+    assert finding is not None, f"expected {result_rule_id} finding to be emitted"
+    return finding
+def _assert_repeat_counts(
+    first_finding: RuleFinding,
+    second_finding: RuleFinding,
+    *,
+    expected_first: int,
+    expected_second: int,
+) -> None:
+    assert first_finding.metadata.get("repeat_count") == expected_first, (
+        "first repeated-debt hit should initialize repeat_count"
+    )
+    assert second_finding.metadata.get("repeat_count") == expected_second, (
+        "second repeated-debt hit should increment repeat_count"
+    )
+def _assert_loop_steering_metadata(
+    first_finding: RuleFinding, second_finding: RuleFinding
+) -> None:
+    assert first_finding.metadata.get("failure_class") == "structural", (
+        "loop-aware steering should classify thin-wrapper debt as structural"
+    )
+    assert second_finding.metadata.get("repeat_hit") is True, (
+        "second matching hit should be marked as repeat_hit"
+    )
+    assert second_finding.additional_context and "Classify the failure first" in (
+        second_finding.additional_context
+    ), "repeat denial should instruct the agent to classify before retrying"
+# Exported test support used by split test modules.
+__all__ = ('BUNDLE_ROOT', 'EngineResult', 'HookStateStore', 'Mapping', 'ObjectDict', 'Path', 'RuleFinding', 'Severity', 'TypedDict', '_InspectableHookStateStore', '_RESOURCES', '_SubprocessFinding', '_SubprocessResult', '_THIN_WRAPPER_CODE', '_assert_loop_steering_metadata', '_assert_repeat_counts', '_bash_payload', '_collect_process_failures', '_config_with_enabled_rules', '_enable_loop_rules', '_enable_thin_wrapper_rule', '_ensure_enrolled', '_evaluate_thin_wrapper_hit', '_evaluate_thin_wrapper_hits', '_finding', '_grep_payload', '_missing_full_read_records', '_normalize_subprocess_result', '_posttool_payload', '_python_subprocess_env', '_read_payload', '_repeat_tracking_repair_sequence', '_require_finding', '_require_subprocess_finding', '_run_payload_in_subprocess', '_run_thin_wrapper_subprocess_hit', '_start_full_read_record_processes', '_start_full_read_record_subprocess', '_thin_wrapper_payload', 'assert_denied_by', 'assert_not_denied', 'evaluate_payload', 'finding_ids', 'get_adapter', 'json', 'object_dict', 'object_list', 'os', 'pytest', 'string_value', 'subprocess', 'sys', 'time')

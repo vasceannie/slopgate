@@ -204,20 +204,23 @@ HOOK_RULE_BASELINE_COUNTERPARTS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _classified_names(
+    categories: dict[ParityCategory, frozenset[str]]
+) -> set[str]:
+    names: set[str] = set()
+    for category_names in categories.values():
+        names.update(category_names)
+    return names
+
+
 def classified_collector_keys() -> set[str]:
     """Return every lint collector key declared in the parity contract."""
-    keys: set[str] = set()
-    for names in COLLECTOR_CATEGORIES.values():
-        keys.update(names)
-    return keys
+    return _classified_names(COLLECTOR_CATEGORIES)
 
 
 def classified_hook_rule_ids() -> set[str]:
     """Return every hook/runtime rule id declared in the parity contract."""
-    ids: set[str] = set()
-    for names in HOOK_RULE_CATEGORIES.values():
-        ids.update(names)
-    return ids
+    return _classified_names(HOOK_RULE_CATEGORIES)
 
 
 def collector_category(rule_name: str) -> ParityCategory | None:

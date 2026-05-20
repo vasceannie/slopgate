@@ -11,9 +11,22 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, final
 from typing_extensions import TypeGuard, override
 
+from vibeforcer.constants import (
+    METADATA_FUNCTION,
+    METADATA_PATH,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
+from vibeforcer.lint._detectors.test_smells import (
+    _count_sut_calls,
+    _is_pytest_fixture_decorator,
+    _max_bare_assert_run,
+)
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
 
@@ -25,6 +38,8 @@ from .._helpers import (
 
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
+
+_TEST_RULE_EVENTS = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -38,15 +53,6 @@ _ASSERT_PATTERNS = frozenset({
     "assert_called", "assert_called_once", "assert_called_with",
     "assert_called_once_with", "assert_not_called",
     "assert_any_call", "assert_has_calls",
-})
-
-_IGNORED_SUT_CALLS = frozenset({
-    "mock", "patch", "fixture", "print", "len", "list", "dict",
-    "set", "str", "int", "float", "tuple", "bool", "bytes",
-    "isinstance", "type", "getattr", "setattr", "hasattr",
-    "sorted", "reversed", "enumerate", "range", "zip", "map",
-    "filter", "any", "all", "min", "max", "sum", "round",
-    "repr", "id", "vars", "dir", "super",
 })
 
 
@@ -65,63 +71,6 @@ def _is_test_file(path: str) -> bool:
     p = path.replace("\\", "/").lower()
     return "test" in p.split("/")[-1].split(".")[0].split("_") or "test_" in p
 
-
-def _is_pytest_fixture_decorator(dec: ast.expr) -> bool:
-    """True if dec looks like @pytest.fixture, @fixture, or variants."""
-    if isinstance(dec, ast.Attribute):
-        return (
-            dec.attr == "fixture"
-            and isinstance(dec.value, ast.Name)
-            and dec.value.id == "pytest"
-        )
-    if isinstance(dec, ast.Name):
-        return dec.id == "fixture"
-    if isinstance(dec, ast.Call):
-        return _is_pytest_fixture_decorator(dec.func)
-    return False
-
-
-def _count_sut_calls(node: ast.AST) -> int:
-    """Count non-assert, non-setup function calls in a test body."""
-    count = 0
-    for child in ast.walk(node):
-        if not isinstance(child, ast.Call):
-            continue
-        func = child.func
-        name = ""
-        if isinstance(func, ast.Name):
-            name = func.id
-        elif isinstance(func, ast.Attribute):
-            name = func.attr
-        if name.startswith("assert"):
-            continue
-        if name.lower() in _IGNORED_SUT_CALLS:
-            continue
-        count += 1
-    return count
-
-
-def _is_bare_assert(node: ast.stmt) -> bool:
-    """True when node is an assert statement without a message."""
-    return isinstance(node, ast.Assert) and node.msg is None
-
-
-def _max_bare_assert_run(stmts: list[ast.stmt]) -> int:
-    """Return the longest run of consecutive bare asserts."""
-    run = 0
-    best = 0
-    for stmt in stmts:
-        if _is_bare_assert(stmt):
-            run += 1
-            if run > best:
-                best = run
-        else:
-            run = 0
-            if isinstance(stmt, ast.With):
-                nested = _max_bare_assert_run(stmt.body)
-                if nested > best:
-                    best = nested
-    return best
 
 
 def _contains_assertion(node: ast.AST) -> bool:
@@ -155,17 +104,28 @@ def _walk_skip_nested_funcs(node: ast.AST) -> Iterator[ast.AST]:
 
 def _is_type_checking_block(node: ast.AST) -> bool:
     """True if node is `if TYPE_CHECKING:` or `if typing.TYPE_CHECKING:`."""
-    if not isinstance(node, ast.If):
-        return False
-    test = node.test
-    if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
-        return True
-    if (isinstance(test, ast.Attribute)
-            and test.attr == "TYPE_CHECKING"
-            and isinstance(test.value, ast.Name)
-            and test.value.id == "typing"):
-        return True
-    return False
+    match node:
+        case ast.If(test=ast.Name(id="TYPE_CHECKING")):
+            return True
+        case ast.If(test=ast.Attribute(attr="TYPE_CHECKING", value=ast.Name(id="typing"))):
+            return True
+        case _:
+            return False
+
+
+def _parse_test_module(source: str, path_value: str, ctx: HookContext) -> ast.Module | None:
+    if not _is_test_file(path_value):
+        return None
+    return parse_module(source, ctx.config.python_ast_max_parse_chars)
+
+
+def _iter_test_module_nodes(
+    source: str, path_value: str, ctx: HookContext
+) -> Iterator[ast.AST]:
+    module = _parse_test_module(source, path_value, ctx)
+    if module is None:
+        return
+    yield from ast.walk(module)
 
 
 # ---------------------------------------------------------------------------
@@ -182,21 +142,15 @@ class PythonEagerTestRule(Rule):
 
     rule_id = "PY-TEST-001"
     title = "Block eager tests"
-    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+    events = _TEST_RULE_EVENTS
 
     _MAX_SUT_CALLS = 5  # threshold
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        if not _is_test_file(path_value):
-            return []
-        module = parse_module(source, ctx.config.python_ast_max_parse_chars)
-        if module is None:
-            return []
-
         findings: list[RuleFinding] = []
-        for node in ast.walk(module):
+        for node in _iter_test_module_nodes(source, path_value, ctx):
             if not _is_test_function(node):
                 continue
             calls = _count_sut_calls(node)
@@ -212,8 +166,8 @@ class PythonEagerTestRule(Rule):
                         f"Split into focused single-behaviour tests."
                     ),
                     metadata={
-                        "path": path_value,
-                        "function": node.name,
+                        METADATA_PATH: path_value,
+                        METADATA_FUNCTION: node.name,
                         "sut_calls": calls,
                     },
                 ))
@@ -240,21 +194,15 @@ class PythonAssertionRouletteRule(Rule):
 
     rule_id = "PY-TEST-002"
     title = "Block assertion roulette"
-    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+    events = _TEST_RULE_EVENTS
 
     _MAX_CONSECUTIVE = 3  # flag if more than this many bare asserts in a row
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        if not _is_test_file(path_value):
-            return []
-        module = parse_module(source, ctx.config.python_ast_max_parse_chars)
-        if module is None:
-            return []
-
         findings: list[RuleFinding] = []
-        for node in ast.walk(module):
+        for node in _iter_test_module_nodes(source, path_value, ctx):
             if not _is_test_function(node):
                 continue
             max_run = _max_bare_assert_run(node.body)
@@ -270,8 +218,8 @@ class PythonAssertionRouletteRule(Rule):
                         f"Add descriptive messages or use named matchers."
                     ),
                     metadata={
-                        "path": path_value,
-                        "function": node.name,
+                        METADATA_PATH: path_value,
+                        METADATA_FUNCTION: node.name,
                         "consecutive_bare_asserts": max_run,
                     },
                 ))
@@ -298,24 +246,16 @@ class PythonFixtureOutsideConftestRule(Rule):
 
     rule_id = "PY-TEST-003"
     title = "Block fixtures outside conftest"
-    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+    events = _TEST_RULE_EVENTS
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        from pathlib import Path as _Path
-
         # Skip conftest.py itself (exact basename match)
-        if _Path(path_value).name == "conftest.py":
+        if Path(path_value).name == "conftest.py":
             return []
-        if not _is_test_file(path_value):
-            return []
-        module = parse_module(source, ctx.config.python_ast_max_parse_chars)
-        if module is None:
-            return []
-
         findings: list[RuleFinding] = []
-        for node in ast.walk(module):
+        for node in _iter_test_module_nodes(source, path_value, ctx):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for dec in node.decorator_list:
@@ -331,8 +271,8 @@ class PythonFixtureOutsideConftestRule(Rule):
                             f"Move to the nearest conftest.py for discoverability."
                         ),
                         metadata={
-                            "path": path_value,
-                            "function": node.name,
+                            METADATA_PATH: path_value,
+                            METADATA_FUNCTION: node.name,
                             "line": node.lineno,
                         },
                     ))
@@ -360,19 +300,13 @@ class PythonConditionalAssertionRule(Rule):
 
     rule_id = "PY-TEST-004"
     title = "Block conditional assertions"
-    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+    events = _TEST_RULE_EVENTS
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        if not _is_test_file(path_value):
-            return []
-        module = parse_module(source, ctx.config.python_ast_max_parse_chars)
-        if module is None:
-            return []
-
         findings: list[RuleFinding] = []
-        for node in ast.walk(module):
+        for node in _iter_test_module_nodes(source, path_value, ctx):
             if not _is_test_function(node):
                 continue
             for child in _walk_skip_nested_funcs(node):
@@ -392,8 +326,8 @@ class PythonConditionalAssertionRule(Rule):
                                 f"Extract into a separate focused test."
                             ),
                             metadata={
-                                "path": path_value,
-                                "function": node.name,
+                                METADATA_PATH: path_value,
+                                METADATA_FUNCTION: node.name,
                                 "control_flow": type(child).__name__,
                                 "line": child.lineno,
                             },

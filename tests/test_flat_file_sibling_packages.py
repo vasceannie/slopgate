@@ -44,6 +44,32 @@ def _patch_payload(tmp_project: Path, patch: str) -> ObjectDict:
     }
 
 
+def _bash_package_move_command() -> str:
+    return " && ".join(
+        [
+            "mkdir -p src/agents/result",
+            "mv src/agents/result_models.py src/agents/result/models.py",
+            "mv src/agents/result_runner.py src/agents/result/runner.py",
+            "mv src/agents/result_reconciliation.py src/agents/result/reconciliation.py",
+        ]
+    )
+
+
+def _write_completed_package_move(tmp_project: Path) -> None:
+    pkg = tmp_project / "src" / "agents"
+    target = pkg / "result"
+    target.mkdir(parents=True, exist_ok=True)
+    for old_name, new_name in (
+        ("result_models.py", "models.py"),
+        ("result_runner.py", "runner.py"),
+        ("result_reconciliation.py", "reconciliation.py"),
+    ):
+        old_path = pkg / old_name
+        _ = old_path.write_text("pass\n", encoding="utf-8")
+        old_path.rename(target / new_name)
+    _ = (target / "__init__.py").write_text("", encoding="utf-8")
+
+
 def test_pretool_blocks_third_plain_prefix_sibling(
     tmp_project: Path, pretool_write: WriteBuilder
 ) -> None:
@@ -58,10 +84,16 @@ def test_pretool_blocks_third_plain_prefix_sibling(
 
     assert_denied_by(result, "PY-CODE-017", "sub-package")
     findings = [finding for finding in result.findings if finding.rule_id == "PY-CODE-017"]
-    assert len(findings) == 1
-    assert "code-hygiene-refactor" in (findings[0].additional_context or "")
-    assert "python/project-structure" in (findings[0].additional_context or "")
-    assert str(findings[0].metadata.get("path", "")).endswith("result_models.py")
+    assert len(findings) == 1, f"expected one PY-CODE-017 finding, got {findings!r}"
+    assert "code-hygiene-refactor" in (findings[0].additional_context or ""), (
+        "finding should route agents to the hygiene recovery skill"
+    )
+    assert "python/project-structure" in (findings[0].additional_context or ""), (
+        "finding should cite the project-structure rule shard"
+    )
+    assert str(findings[0].metadata.get("path", "")).endswith("result_models.py"), (
+        f"finding path should point at an existing sibling, got {findings[0].metadata!r}"
+    )
 
 
 def test_posttool_blocks_existing_plain_prefix_cluster(tmp_project: Path) -> None:
@@ -98,28 +130,11 @@ def test_pretool_allows_mechanical_bash_move_into_package(tmp_project: Path) -> 
 
 
 def test_posttool_allows_completed_bash_move_into_package(tmp_project: Path) -> None:
-    pkg = tmp_project / "src" / "agents"
-    target = pkg / "result"
-    target.mkdir(parents=True, exist_ok=True)
-    for old_name, new_name in (
-        ("result_models.py", "models.py"),
-        ("result_runner.py", "runner.py"),
-        ("result_reconciliation.py", "reconciliation.py"),
-    ):
-        old_path = pkg / old_name
-        _ = old_path.write_text("pass\n", encoding="utf-8")
-        old_path.rename(target / new_name)
-    _ = (target / "__init__.py").write_text("", encoding="utf-8")
+    _write_completed_package_move(tmp_project)
 
-    command = " && ".join(
-        [
-            "mkdir -p src/agents/result",
-            "mv src/agents/result_models.py src/agents/result/models.py",
-            "mv src/agents/result_runner.py src/agents/result/runner.py",
-            "mv src/agents/result_reconciliation.py src/agents/result/reconciliation.py",
-        ]
+    result = evaluate_payload(
+        _bash_payload(tmp_project, _bash_package_move_command(), event="PostToolUse")
     )
-    result = evaluate_payload(_bash_payload(tmp_project, command, event="PostToolUse"))
 
     assert "PY-CODE-017" not in finding_ids(result)
 
@@ -216,8 +231,10 @@ def test_pretool_blocks_prefix_file_next_to_same_named_package(
     result = evaluate_payload(
         pretool_write("src/agents/context_models.py", "pass\n", str(tmp_project))
     )
-
     assert_denied_by(result, "PY-CODE-017", "context/")
+    assert "PY-CODE-017" in finding_ids(result), (
+        "prefix module next to same-named package should trigger flat-package guard"
+    )
 
 
 def test_pretool_allows_common_single_underscore_module_without_cluster(
@@ -231,6 +248,9 @@ def test_pretool_allows_common_single_underscore_module_without_cluster(
     )
 
     assert_not_denied(result)
+    assert "PY-CODE-017" not in finding_ids(result), (
+        "single common underscore module should not be mistaken for a flat cluster"
+    )
 
 
 def test_pretool_allows_test_file_convention(
@@ -246,3 +266,6 @@ def test_pretool_allows_test_file_convention(
     )
 
     assert_not_denied(result)
+    assert "PY-CODE-017" not in finding_ids(result), (
+        "test_<name>.py naming convention should not be blocked as a package split"
+    )

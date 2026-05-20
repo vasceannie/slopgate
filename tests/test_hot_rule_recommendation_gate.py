@@ -6,9 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from vibeforcer import engine
 from vibeforcer.context import build_context
 from vibeforcer.engine import evaluate_payload, render_output
+from vibeforcer.engine import _retry as engine_retry
 from vibeforcer.models import EngineResult, RuleFinding, Severity
 
 from tests import support as test_support
@@ -76,7 +76,7 @@ def _pathless_quality_output(repo: Path) -> dict[str, object]:
     ]
     apply_loop_aware_steering = cast(
         Callable[[object, list[RuleFinding]], None],
-        getattr(engine, "_apply_loop_aware_steering"),
+        getattr(engine_retry, "_apply_loop_aware_steering"),
     )
     apply_loop_aware_steering(ctx, findings)
     output = render_output(ctx, findings)
@@ -93,6 +93,65 @@ def _assert_context_only_advisory(result: EngineResult, rule_id: str) -> None:
     assert "do not retry the write solely for this" in message
 
 
+def _assert_quality_lint_repair_context(context: str, output_text: str) -> None:
+    required_context = [
+        "already-mutated",
+        "Do not continue feature work",
+        "reread the touched file",
+        "smallest repo-root quality command",
+        "fix only the reported collector",
+    ]
+    missing_context = [phrase for phrase in required_context if phrase not in context]
+    assert missing_context == [], "QUALITY-LINT-001 repair context lost guidance"
+    assert "First lint violation detail" in output_text, (
+        "QUALITY-LINT-001 output should name the first lint violation detail"
+    )
+    assert "scaffold:" in output_text, (
+        "QUALITY-LINT-001 output should include prescriptive scaffold text"
+    )
+
+
+def _assert_pathless_quality_fallback(reason: str, context: str) -> None:
+    assert "QUALITY-LINT-001" in reason, "pathless fallback should name lint rule"
+    required_context = [
+        "Path was not extracted",
+        "file you just wrote/edited",
+        "do not blindly rerun",
+    ]
+    missing_context = [phrase for phrase in required_context if phrase not in context]
+    assert missing_context == [], "pathless lint fallback should steer recovery"
+
+
+def _assert_boundary_allowlist_context(context: str) -> None:
+    expected_boundary_roles = [
+        "validates/normalizes",
+        "centralizes policy",
+        "adapts one interface",
+        "hides unstable third-party API",
+    ]
+    missing_roles = [role for role in expected_boundary_roles if role not in context]
+    assert missing_roles == [], "thin-wrapper context lost boundary allowlist roles"
+
+
+def _assert_hot_prompt_preflight(prompt_context: str) -> None:
+    expected_preflight_anchors = [
+        "Hot Hook Preflight",
+        "PY-CODE-013",
+        "validates/normalizes",
+        "PY-CODE-009",
+        "Case` dataclass",
+        "QUALITY-LINT-001",
+        "smallest repo-root quality command",
+        "PY-CODE-012",
+        "PY-IMPORT-001",
+        "Do not retry solely",
+    ]
+    missing_anchors = [
+        anchor for anchor in expected_preflight_anchors if anchor not in prompt_context
+    ]
+    assert missing_anchors == [], "repo prompt context lost hot-rule preflight anchors"
+
+
 def test_quality_lint_posttool_reason_marks_already_mutated_repair(
     tmp_path: Path,
 ) -> None:
@@ -103,14 +162,8 @@ def test_quality_lint_posttool_reason_marks_already_mutated_repair(
 
     test_support.assert_blocked(result, "QUALITY-LINT-001")
     context = _additional_context(result)
-    assert "already-mutated" in context
-    assert "Do not continue feature work" in context
-    assert "reread the touched file" in context
-    assert "smallest repo-root quality command" in context
-    assert "fix only the reported collector" in context
-    output_text = str(result.output)
-    assert "First lint violation detail" in output_text
-    assert "scaffold:" in output_text
+    assert "First lint violation detail" in str(result.output)
+    _assert_quality_lint_repair_context(context, str(result.output))
 
 
 def test_quality_lint_pathless_reason_names_last_edit_fallback(tmp_path: Path) -> None:
@@ -121,9 +174,7 @@ def test_quality_lint_pathless_reason_names_last_edit_fallback(tmp_path: Path) -
         test_support.nested_output(output, "hookSpecificOutput"), "additionalContext"
     )
     assert "QUALITY-LINT-001" in reason
-    assert "Path was not extracted" in context
-    assert "file you just wrote/edited" in context
-    assert "do not blindly rerun" in context
+    _assert_pathless_quality_fallback(reason, context)
 
 
 def test_thin_wrapper_reason_lists_real_boundary_allowlist(tmp_path: Path) -> None:
@@ -141,9 +192,7 @@ def wrap(value):
     test_support.assert_denied_by(result, "PY-CODE-013")
     context = _additional_context(result)
     assert "validates/normalizes" in context
-    assert "centralizes policy" in context
-    assert "adapts one interface" in context
-    assert "hides unstable third-party API" in context
+    _assert_boundary_allowlist_context(context)
 
 
 def test_long_params_reason_is_role_aware_for_test_helpers(tmp_path: Path) -> None:
@@ -181,15 +230,7 @@ def test_repo_prompt_context_preflights_hot_rules(bundle_root: Path) -> None:
     ).read_text(encoding="utf-8")
 
     assert "Hot Hook Preflight" in prompt_context
-    assert "PY-CODE-013" in prompt_context
-    assert "validates/normalizes" in prompt_context
-    assert "PY-CODE-009" in prompt_context
-    assert "Case` dataclass" in prompt_context
-    assert "QUALITY-LINT-001" in prompt_context
-    assert "smallest repo-root quality command" in prompt_context
-    assert "PY-CODE-012" in prompt_context
-    assert "PY-IMPORT-001" in prompt_context
-    assert "Do not retry solely" in prompt_context
+    _assert_hot_prompt_preflight(prompt_context)
 
 
 def test_context_only_hot_rules_say_advisory_not_retry_now(tmp_path: Path) -> None:
@@ -212,5 +253,7 @@ def render():
     import_result = evaluate_payload(_write_payload(tmp_path, "src/imports.py", import_fanout))
     envy_result = evaluate_payload(_write_payload(tmp_path, "src/envy.py", feature_envy))
 
+    assert any(item.rule_id == "PY-IMPORT-001" for item in import_result.findings)
+    assert any(item.rule_id == "PY-CODE-012" for item in envy_result.findings)
     _assert_context_only_advisory(import_result, "PY-IMPORT-001")
     _assert_context_only_advisory(envy_result, "PY-CODE-012")

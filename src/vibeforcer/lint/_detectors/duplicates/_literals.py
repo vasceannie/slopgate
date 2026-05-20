@@ -1,0 +1,171 @@
+"""Detectors for code duplication."""
+
+from __future__ import annotations
+
+import ast
+from collections import defaultdict
+from collections.abc import Set
+from pathlib import Path
+from typing import TYPE_CHECKING
+from vibeforcer.constants import (
+    METADATA_PATH,
+)
+from vibeforcer.lint._baseline import Violation
+from vibeforcer.lint._config import get_config
+from vibeforcer.lint._helpers import (
+    ParsedFile,
+    ensure_parsed,
+    find_source_files,
+)
+from vibeforcer.quality.constant_index import (
+    ConstantIndex,
+    StringConstantMatch,
+    build_project_constant_index,
+    set_session_constant_index,
+    suggest_constant_name,
+)
+if TYPE_CHECKING:
+    from vibeforcer.lint._config import QualityConfig
+
+from ._semantic import _is_docstring_node as _is_docstring_node
+
+
+def _collect_literals(
+    parsed: list[ParsedFile],
+    allowed_nums: Set[int | float],
+    allowed_strs: set[str],
+) -> tuple[dict[int | float, set[str]], dict[str, set[str]]]:
+    """Walk ASTs and count non-allowed literal occurrences per file."""
+    num_counts: dict[int | float, set[str]] = defaultdict(set)
+    str_counts: dict[str, set[str]] = defaultdict(set)
+
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
+            if not isinstance(node, ast.Constant):
+                continue
+            if isinstance(node.value, bool) or _is_docstring_node(node, pf.parent_map):
+                continue
+            val = node.value
+            if isinstance(val, (int, float)) and val not in allowed_nums:
+                num_counts[val].add(pf.rel)
+            elif (
+                isinstance(val, str)
+                and val not in allowed_strs
+                and _is_semantic_string_literal(val)
+            ):
+                str_counts[val].add(pf.rel)
+
+    return num_counts, str_counts
+
+
+def _is_semantic_string_literal(value: str) -> bool:
+    """Return True when a string literal is worth extracting to a named owner."""
+
+    stripped = value.strip()
+    if not stripped:
+        return False
+    return any(char.isalnum() for char in stripped)
+
+
+def _constant_location(
+    constant_match: StringConstantMatch,
+    project_root: Path,
+) -> tuple[str, int]:
+    path = constant_match.path
+    try:
+        path = constant_match.path.relative_to(project_root)
+    except ValueError:
+        pass
+    return str(path), constant_match.lineno
+
+
+def _string_literal_metadata(
+    value: str,
+    constant_index: ConstantIndex,
+    project_root: Path,
+) -> tuple[dict[str, object], str]:
+    constant_match = constant_index.find_string_constant(value)
+    if constant_match is None:
+        candidate = suggest_constant_name(value)
+        return {"candidate_constant_name": candidate}, f"; consider `{candidate}`"
+
+    relative, lineno = _constant_location(constant_match, project_root)
+    already_defined: dict[str, object] = {
+        "name": constant_match.name,
+        METADATA_PATH: relative,
+        "line": lineno,
+    }
+    suffix = f"; already defined as {constant_match.name} in {relative}:{lineno}"
+    return {"already_defined": already_defined}, suffix
+
+
+def _magic_number_violation(
+    value: int | float,
+    files_seen: set[str],
+    max_files: int,
+) -> Violation | None:
+    if len(files_seen) <= max_files:
+        return None
+    return Violation(
+        rule="repeated-magic-number",
+        relative_path="<project>",
+        identifier=repr(value),
+        detail=f"appears in {len(files_seen)} files (max: {max_files})",
+    )
+
+
+def _string_literal_violation(
+    value: str,
+    files_seen: set[str],
+    cfg: "QualityConfig",
+    constant_index: ConstantIndex,
+) -> Violation | None:
+    max_files = cfg.max_repeated_string_literals
+    if len(files_seen) <= max_files:
+        return None
+    metadata, detail_suffix = _string_literal_metadata(
+        value, constant_index, cfg.project_root
+    )
+    return Violation(
+        rule="repeated-string-literal",
+        relative_path="<project>",
+        identifier=repr(value)[:40],
+        detail=f"appears in {len(files_seen)} files (max: {max_files}){detail_suffix}",
+        metadata=metadata,
+    )
+
+
+def detect_repeated_literals(
+    files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    constant_index: ConstantIndex | None = None,
+) -> list[Violation]:
+    """Flag magic numbers and string literals used excessively."""
+    cfg = get_config()
+    parsed = ensure_parsed(files, fallback=find_source_files())
+    if constant_index is None:
+        constant_index = build_project_constant_index(cfg.project_root)
+    set_session_constant_index(constant_index)
+    num_counts, str_counts = _collect_literals(
+        parsed, cfg.allowed_numbers, cfg.allowed_strings
+    )
+
+    violations: list[Violation] = []
+    for value, files_seen in num_counts.items():
+        violation = _magic_number_violation(
+            value,
+            files_seen,
+            cfg.max_repeated_magic_numbers,
+        )
+        if violation is not None:
+            violations.append(violation)
+    for value, files_seen in str_counts.items():
+        violation = _string_literal_violation(
+            value,
+            files_seen,
+            cfg,
+            constant_index,
+        )
+        if violation is not None:
+            violations.append(violation)
+    return violations

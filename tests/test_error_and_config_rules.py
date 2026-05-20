@@ -55,10 +55,14 @@ class TestBashOutputError:
         )
         result = evaluate_payload(payload)
         message = required_string(hook_output(result), "additionalContext")
-        assert "ERRORS-BASH-001" in message
-        assert "pytest tests/" in message
-        assert "error-like output even though the command exited 0" in message
-        assert "Rerun the smallest failing command" in message
+        assert "ERRORS-BASH-001" in message, "context should name the bash-output rule"
+        assert "pytest tests/" in message, "context should echo the failing command"
+        assert "error-like output even though the command exited 0" in message, (
+            "context should explain the exit-0 failure shape"
+        )
+        assert "Rerun the smallest failing command" in message, (
+            "context should include the next repair action"
+        )
 
     def test_read_only_command_skipped(self) -> None:
         payload = self._post_bash(
@@ -101,10 +105,10 @@ class TestBashFailureReinforcement:
     def test_build_failure_context_names_trigger_and_next_action(self) -> None:
         result = evaluate_payload(self._failure_bash("make build"))
         message = required_string(result.output or {}, "systemMessage")
-        assert "ERRORS-FAIL-001" in message
-        assert "make build" in message
-        assert "exited non-zero" in message
-        assert "Inspect stdout/stderr" in message
+        assert "ERRORS-FAIL-001" in message, "system message should name the failure rule"
+        assert "make build" in message, "system message should echo the failing command"
+        assert "exited non-zero" in message, "system message should explain the failure trigger"
+        assert "Inspect stdout/stderr" in message, "system message should include the next action"
 
     def test_grep_failure_skipped(self) -> None:
         result = evaluate_payload(self._failure_bash("grep pattern file.txt"))
@@ -211,15 +215,11 @@ class TestConfigChangeGuard:
     def test_non_security_change_allowed(self) -> None:
         payload = self._config_change("project_settings", {"theme": "dark"})
         result = evaluate_payload(payload)
-        if result.output is not None:
-            assert result.output.get("decision") != "block", (
-                "non-security changes must not be blocked"
-            )
+        decision = result.output.get("decision") if result.output is not None else None
+        assert decision != "block", "non-security changes must not be blocked"
 
     def test_unknown_source_allowed(self) -> None:
         payload = self._config_change("policy_settings", {"disableAllHooks": True})
         result = evaluate_payload(payload)
-        if result.output is not None:
-            assert result.output.get("decision") != "block", (
-                "policy source must not be guarded"
-            )
+        decision = result.output.get("decision") if result.output is not None else None
+        assert decision != "block", "policy source must not be guarded"

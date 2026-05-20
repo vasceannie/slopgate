@@ -16,17 +16,27 @@ class FixtureCheckTarget(NamedTuple):
     aliases: dict[str, str]
 
 
+def _add_module_import_aliases(statement: ast.Import, aliases: dict[str, str]) -> None:
+    for alias in statement.names:
+        if alias.name in {"pytest", "pytest_asyncio"}:
+            aliases[alias.asname or alias.name] = alias.name
+
+
+def _add_from_import_aliases(statement: ast.ImportFrom, aliases: dict[str, str]) -> None:
+    if statement.module not in {"pytest", "pytest_asyncio"}:
+        return
+    for alias in statement.names:
+        if alias.name in {"mark", "fixture"}:
+            aliases[alias.asname or alias.name] = f"{statement.module}.{alias.name}"
+
+
 def pytest_aliases(module: ast.Module) -> dict[str, str]:
     aliases: dict[str, str] = {}
     for statement in module.body:
         if isinstance(statement, ast.Import):
-            for alias in statement.names:
-                if alias.name in {"pytest", "pytest_asyncio"}:
-                    aliases[alias.asname or alias.name] = alias.name
-        elif isinstance(statement, ast.ImportFrom) and statement.module in {"pytest", "pytest_asyncio"}:
-            for alias in statement.names:
-                if alias.name in {"mark", "fixture"}:
-                    aliases[alias.asname or alias.name] = f"{statement.module}.{alias.name}"
+            _add_module_import_aliases(statement, aliases)
+        elif isinstance(statement, ast.ImportFrom):
+            _add_from_import_aliases(statement, aliases)
     return aliases
 
 
@@ -37,13 +47,8 @@ def _decorator_call(decorator: ast.AST) -> ast.AST:
 
 
 def _dotted_name(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        prefix = _dotted_name(node.value)
-        if prefix is None:
-            return node.attr
-        return f"{prefix}.{node.attr}"
+    if isinstance(node, (ast.Attribute, ast.Name)):
+        return ast.unparse(node)
     return None
 
 
@@ -65,7 +70,7 @@ _ASYNC_TEST_MARKS = {"pytest.mark.asyncio", "pytest.mark.anyio", "pytest.mark.tr
 
 
 def _is_async_backend_mark(node: ast.AST, aliases: dict[str, str]) -> bool:
-    return _resolve_alias(_dotted_name(_decorator_call(node)), aliases) in _ASYNC_TEST_MARKS
+    return _decorator_name(node, aliases) in _ASYNC_TEST_MARKS
 
 
 def has_async_backend_mark(decorators: list[ast.expr], aliases: dict[str, str]) -> bool:
@@ -100,24 +105,47 @@ def _is_collected_pytest_class(node: ast.ClassDef) -> bool:
     )
 
 
+def _async_test_candidate(
+    node: ast.AST,
+    aliases: dict[str, str],
+    *,
+    has_context_mark: bool,
+) -> _AsyncTestCandidate | None:
+    if not isinstance(node, ast.AsyncFunctionDef) or not node.name.startswith("test_"):
+        return None
+    if fixture_decorator_name(node, aliases) is not None:
+        return None
+    return _AsyncTestCandidate(node, has_context_mark)
+
+
+def _iter_class_async_tests(
+    statement: ast.stmt,
+    aliases: dict[str, str],
+    *,
+    module_mark: bool,
+) -> list[_AsyncTestCandidate]:
+    if not isinstance(statement, ast.ClassDef) or not _is_collected_pytest_class(statement):
+        return []
+    class_mark = has_async_backend_mark(
+        statement.decorator_list, aliases
+    ) or _body_has_asyncio_pytestmark(statement.body, aliases)
+    candidates: list[_AsyncTestCandidate] = []
+    for child in statement.body:
+        candidate = _async_test_candidate(child, aliases, has_context_mark=module_mark or class_mark)
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates
+
+
 def iter_async_tests(module: ast.Module) -> list[_AsyncTestCandidate]:
     candidates: list[_AsyncTestCandidate] = []
     aliases = pytest_aliases(module)
     module_mark = _body_has_asyncio_pytestmark(module.body, aliases)
     for statement in module.body:
-        if isinstance(statement, ast.AsyncFunctionDef) and statement.name.startswith("test_"):
-            if fixture_decorator_name(statement, aliases) is None:
-                candidates.append(_AsyncTestCandidate(statement, module_mark))
-        if not isinstance(statement, ast.ClassDef) or not _is_collected_pytest_class(statement):
-            continue
-        class_mark = has_async_backend_mark(
-            statement.decorator_list, aliases
-        ) or _body_has_asyncio_pytestmark(statement.body, aliases)
-        for child in statement.body:
-            if not isinstance(child, ast.AsyncFunctionDef) or not child.name.startswith("test_"):
-                continue
-            if fixture_decorator_name(child, aliases) is None:
-                candidates.append(_AsyncTestCandidate(child, module_mark or class_mark))
+        candidate = _async_test_candidate(statement, aliases, has_context_mark=module_mark)
+        if candidate is not None:
+            candidates.append(candidate)
+        candidates.extend(_iter_class_async_tests(statement, aliases, module_mark=module_mark))
     return candidates
 
 

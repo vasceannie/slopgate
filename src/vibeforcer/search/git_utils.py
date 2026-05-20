@@ -9,6 +9,15 @@ from pathlib import Path
 from vibeforcer.search.config import IsxError
 
 
+def _host_path_from_match(pattern: str, raw: str) -> str | None:
+    match = re.match(pattern, raw, re.IGNORECASE)
+    if match is None:
+        return None
+    host = match.group(1).lower()
+    path = match.group(2).strip("/")
+    return f"{host}/{path}"
+
+
 def normalize_clone_url(url: str) -> str:
     """Normalize a clone URL for comparison.
 
@@ -23,17 +32,13 @@ def normalize_clone_url(url: str) -> str:
         raw = raw[:-4]
     raw = raw.rstrip("/")
 
-    ssh_match = re.match(r"^git@([^:]+):(.+)$", raw)
-    if ssh_match:
-        host = ssh_match.group(1).lower()
-        path = ssh_match.group(2).strip("/")
-        return f"{host}/{path}"
+    ssh_url = _host_path_from_match(r"^git@([^:]+):(.+)$", raw)
+    if ssh_url is not None:
+        return ssh_url
 
-    proto_match = re.match(r"^[a-z]+://([^/]+)/(.+)$", raw, re.IGNORECASE)
-    if proto_match:
-        host = proto_match.group(1).lower()
-        path = proto_match.group(2).strip("/")
-        return f"{host}/{path}"
+    protocol_url = _host_path_from_match(r"^[a-z]+://([^/]+)/(.+)$", raw)
+    if protocol_url is not None:
+        return protocol_url
 
     return raw.lower()
 

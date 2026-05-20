@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from vibeforcer.context import HookContext
+from vibeforcer.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
 from vibeforcer.rules.common import (
@@ -48,13 +49,13 @@ _python_ast_import_reported = False
 class PythonAstImportFailureRule(Rule):
     rule_id = "PY-AST-IMPORT-001"
     title = "Python AST engine unavailable"
-    events = ("PreToolUse", "PermissionRequest", "PostToolUse")
+    events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
     def __init__(self, error: Exception) -> None:
         self._error = error
 
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        decision = "deny" if ctx.event_name in ("PreToolUse", "PermissionRequest") else "block"
+        decision = DENY if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) else "block"
         return [
             RuleFinding(
                 rule_id=self.rule_id,
@@ -68,79 +69,95 @@ class PythonAstImportFailureRule(Rule):
         ]
 
 
-def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
-    global _python_ast_import_error, _python_ast_import_reported
+def _trace_python_ast_import_error(ctx: HookContext, error: Exception) -> None:
+    ctx.trace.rule(
+        {
+            "platform": "any",
+            "event_name": ctx.event_name,
+            "session_id": ctx.session_id,
+            "tool_name": ctx.tool_name,
+            "rule_id": "PY-AST-IMPORT-001",
+            "severity": "high",
+            "decision": None,
+            "message": "Python AST rules disabled due to import error",
+            "additional_context": repr(error),
+            "metadata": {"kind": "import_error"},
+        }
+    )
+
+
+def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
+    global _python_ast_import_reported
 
     current_error = _PYTHON_AST_IMPORT_ERROR or _python_ast_import_error
     already_reported = _PYTHON_AST_IMPORT_REPORTED or _python_ast_import_reported
+    if current_error is None:
+        return None
+    if not already_reported:
+        _python_ast_import_reported = True
+        _trace_python_ast_import_error(ctx, current_error)
+    return [PythonAstImportFailureRule(current_error)]
 
-    if current_error is not None:
-        if not already_reported:
-            _python_ast_import_reported = True
-            ctx.trace.rule(
-                {
-                    "platform": "any",
-                    "event_name": ctx.event_name,
-                    "session_id": ctx.session_id,
-                    "tool_name": ctx.tool_name,
-                    "rule_id": "PY-AST-IMPORT-001",
-                    "severity": "high",
-                    "decision": None,
-                    "message": "Python AST rules disabled due to import error",
-                    "additional_context": repr(current_error),
-                    "metadata": {"kind": "import_error"},
-                }
-            )
-        return [PythonAstImportFailureRule(current_error)]
+
+def _import_python_ast_rule_classes() -> tuple[type[Rule], ...]:
+    from vibeforcer.rules.python_ast import (
+        PythonAstHealthRule,
+        PythonBoundaryLoggingRule,
+        PythonBroadExceptLoggerRule,
+        PythonCyclomaticComplexityRule,
+        PythonDeadCodeRule,
+        PythonDeepNestingRule,
+        PythonFeatureEnvyRule,
+        PythonFlatFileSiblingsRule,
+        PythonGodClassRule,
+        PythonImportAliasRule,
+        PythonImportFanoutRule,
+        PythonLongLineRule,
+        PythonLongMethodRule,
+        PythonLongParameterRule,
+        PythonModuleSizeRule,
+        PythonPrivateImportChainRule,
+        PythonPytestAsyncioRule,
+        PythonSilentExceptRule,
+        PythonThinWrapperRule,
+    )
+
+    return (
+        PythonAstHealthRule,
+        PythonBoundaryLoggingRule,
+        PythonBroadExceptLoggerRule,
+        PythonSilentExceptRule,
+        PythonLongMethodRule,
+        PythonLongParameterRule,
+        PythonLongLineRule,
+        PythonModuleSizeRule,
+        PythonDeepNestingRule,
+        PythonFeatureEnvyRule,
+        PythonThinWrapperRule,
+        PythonGodClassRule,
+        PythonCyclomaticComplexityRule,
+        PythonDeadCodeRule,
+        PythonFlatFileSiblingsRule,
+        PythonImportAliasRule,
+        PythonPrivateImportChainRule,
+        PythonPytestAsyncioRule,
+        PythonImportFanoutRule,
+    )
+
+
+def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
+    global _python_ast_import_error
+
+    import_failure = _python_ast_import_failure_rules(ctx)
+    if import_failure is not None:
+        return import_failure
 
     try:
-        from vibeforcer.rules.python_ast import (
-            PythonAstHealthRule,
-            PythonBoundaryLoggingRule,
-            PythonBroadExceptLoggerRule,
-            PythonCyclomaticComplexityRule,
-            PythonDeadCodeRule,
-            PythonDeepNestingRule,
-            PythonFeatureEnvyRule,
-            PythonFlatFileSiblingsRule,
-            PythonGodClassRule,
-            PythonImportAliasRule,
-            PythonImportFanoutRule,
-            PythonLongLineRule,
-            PythonLongMethodRule,
-            PythonLongParameterRule,
-            PythonModuleSizeRule,
-            PythonPrivateImportChainRule,
-            PythonPytestAsyncioRule,
-            PythonSilentExceptRule,
-            PythonThinWrapperRule,
-        )
+        rule_classes = _import_python_ast_rule_classes()
     except Exception as exc:  # pragma: no cover - exercised in import-failure test
         _python_ast_import_error = exc
         return _build_python_ast_rules(ctx)
-
-    python_ast_rules: list[Rule] = [
-        PythonAstHealthRule(),
-        PythonBoundaryLoggingRule(),
-        PythonBroadExceptLoggerRule(),
-        PythonSilentExceptRule(),
-        PythonLongMethodRule(),
-        PythonLongParameterRule(),
-        PythonLongLineRule(),
-        PythonModuleSizeRule(),
-        PythonDeepNestingRule(),
-        PythonFeatureEnvyRule(),
-        PythonThinWrapperRule(),
-        PythonGodClassRule(),
-        PythonCyclomaticComplexityRule(),
-        PythonDeadCodeRule(),
-        PythonFlatFileSiblingsRule(),
-        PythonImportAliasRule(),
-        PythonPrivateImportChainRule(),
-        PythonPytestAsyncioRule(),
-        PythonImportFanoutRule(),
-    ]
-    return python_ast_rules
+    return [rule_class() for rule_class in rule_classes]
 
 
 def build_always_on_rules(ctx: HookContext) -> list[Rule]:

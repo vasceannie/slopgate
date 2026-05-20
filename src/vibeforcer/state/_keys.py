@@ -1,0 +1,209 @@
+"""Persistent hook-state store."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from time import time
+from vibeforcer.constants import (
+    METADATA_PATH,
+)
+from vibeforcer._types import (
+    ObjectDict,
+    ObjectMapping,
+    object_dict,
+    string_value,
+)
+
+from ._files import _StateSnapshotMixin as _StateSnapshotMixin
+from ._models import _DenyKeyPattern as _DenyKeyPattern, _HookStateSnapshot as _HookStateSnapshot, _IntStateSection as _IntStateSection, _ObjectStateSection as _ObjectStateSection
+
+
+def _failure_count(item: ObjectDict) -> int:
+    count = item.get("count")
+    return count if isinstance(count, int) else 0
+
+
+class _StateKeyMixin:
+    def _full_read_key(self, session_id: str, path: str) -> str:
+        return json.dumps(
+            {"session_id": session_id.strip(), METADATA_PATH: self._normalize_path(path.strip())},
+            sort_keys=True,
+        )
+
+    def _deny_key(
+        self,
+        session_id: str,
+        rule_id: str,
+        path: str | None,
+        attempt_fingerprint: str | None,
+    ) -> str:
+        normalized_path = self._normalize_path(path) if path else "__pathless__"
+        return json.dumps(
+            {
+                "session_id": session_id.strip(),
+                "rule_id": rule_id.strip(),
+                METADATA_PATH: normalized_path,
+                "attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__",
+            },
+            sort_keys=True,
+        )
+
+    def _deny_key_matches(
+        self,
+        key: str,
+        pattern: _DenyKeyPattern,
+    ) -> bool:
+        try:
+            parsed = object_dict(json.loads(key))
+        except json.JSONDecodeError:
+            return False
+        if string_value(parsed.get("session_id")) != pattern.session_id.strip():
+            return False
+        if string_value(parsed.get("rule_id")) != pattern.rule_id.strip():
+            return False
+        expected_path = self._normalize_path(pattern.path) if pattern.path else "__pathless__"
+        if string_value(parsed.get(METADATA_PATH)) != expected_path:
+            return False
+        if pattern.attempt_fingerprint is None:
+            return True
+        return string_value(parsed.get("attempt_fingerprint")) == pattern.attempt_fingerprint
+
+    def _object_state_entry(
+        self,
+        state: _HookStateSnapshot,
+        section: _ObjectStateSection,
+        session_id: str,
+    ) -> ObjectDict | None:
+        return state[section].get(session_id.strip())
+
+    def _mark_recent_int_entry(
+        self,
+        state: _HookStateSnapshot,
+        section: _IntStateSection,
+        session_id: str,
+    ) -> None:
+        state[section][session_id.strip()] = int(time())
+
+    def _normalize_path(self, path: str) -> str:
+        try:
+            return str(Path(path).resolve(strict=False))
+        except OSError:
+            return str(Path(path).absolute())
+
+
+class _SessionStateMutationMixin(_StateKeyMixin, _StateSnapshotMixin):
+    def _write_object_state_entry(
+        self,
+        section: _ObjectStateSection,
+        session_id: str,
+        values: ObjectMapping,
+    ) -> None:
+        with self._locked_state():
+            state = self._load_state()
+            state[section][session_id.strip()] = {
+                **object_dict(values),
+                "timestamp": int(time()),
+            }
+            self._save_state(state)
+
+
+class _FullReadStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+    def has_full_read(self, session_id: str, path: str) -> bool:
+        key = self._full_read_key(session_id, path)
+        state = self._load_state()
+        return key in state["full_reads"]
+
+    def record_full_read(self, session_id: str, path: str) -> None:
+        normalized_path = self._normalize_path(path)
+        if not Path(normalized_path).exists():
+            return
+        key = self._full_read_key(session_id, normalized_path)
+        with self._locked_state():
+            state = self._load_state()
+            state["full_reads"][key] = int(time())
+            self._save_state(state)
+
+
+class _SearchReminderStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+    def should_emit_search_reminder(self, session_id: str) -> bool:
+        key = session_id.strip()
+        state = self._load_state()
+        return key not in state["search_reminders"]
+
+    def record_search_reminder(self, session_id: str) -> None:
+        with self._locked_state():
+            state = self._load_state()
+            self._mark_recent_int_entry(state, "search_reminders", session_id)
+            self._save_state(state)
+
+
+class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+    def record_deny_hit(
+        self,
+        session_id: str,
+        rule_id: str,
+        path: str | None = None,
+        attempt_fingerprint: str | None = None,
+    ) -> int:
+        key = self._deny_key(session_id, rule_id, path, attempt_fingerprint)
+        with self._locked_state():
+            state = self._load_state()
+            deny_hits = state["deny_hits"]
+            count = deny_hits.get(key, 0) + 1
+            deny_hits[key] = count
+            self._save_state(state)
+        return count
+
+    def clear_deny_hit(
+        self,
+        session_id: str,
+        rule_id: str,
+        path: str | None = None,
+        attempt_fingerprint: str | None = None,
+    ) -> None:
+        with self._locked_state():
+            state = self._load_state()
+            deny_hits = state["deny_hits"]
+            keys_to_clear = [
+                key
+                for key in deny_hits
+                if self._deny_key_matches(
+                    key,
+                    _DenyKeyPattern(
+                        session_id=session_id,
+                        rule_id=rule_id,
+                        path=path,
+                        attempt_fingerprint=attempt_fingerprint,
+                    ),
+                )
+            ]
+            for key in keys_to_clear:
+                _ = deny_hits.pop(key, None)
+            self._save_state(state)
+
+    def recent_repeated_failures(
+        self,
+        session_id: str,
+        limit: int = 5,
+    ) -> list[ObjectDict]:
+        key_prefix = session_id.strip()
+        state = self._load_state()
+        deny_hits = state["deny_hits"]
+        pairs: list[ObjectDict] = []
+        for key, count in deny_hits.items():
+            if count < 2:
+                continue
+            try:
+                parsed = object_dict(json.loads(key))
+            except json.JSONDecodeError:
+                continue
+            if string_value(parsed.get("session_id")) != key_prefix:
+                continue
+            rule_id = string_value(parsed.get("rule_id"))
+            if rule_id is None:
+                continue
+            path = string_value(parsed.get(METADATA_PATH)) or "__pathless__"
+            pairs.append({"rule_id": rule_id, METADATA_PATH: path, "count": count})
+        pairs.sort(key=_failure_count, reverse=True)
+        return pairs[:limit]

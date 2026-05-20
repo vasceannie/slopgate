@@ -25,25 +25,95 @@ def _write_clean_project(root: Path) -> Path:
     return src_pkg
 
 
+def _assert_lint_check_forces_repo_root_scope(
+    output: str, project_root: Path, result: int
+) -> None:
+    assert result == 0, "clean nested lint check should return success"
+    expected_lines = [
+        f"project: {project_root}",
+        f"src:     {project_root / 'src'}  (1 files)",
+        "✓ No new violations",
+    ]
+    missing_lines = [line for line in expected_lines if line not in output]
+    assert missing_lines == [], "lint check should ignore changed scope and scan repo root"
+
+
+def _assert_prescriptive_details_for_oversized_module(output: str, result: int) -> None:
+    assert result == 1, "oversized module should fail lint check"
+    expected_details = [
+        "[NEW] oversized-module-soft",
+        "file: src/large.py",
+        "signature: module `large.py`",
+        "src/large/__init__.py",
+        "prognosis: one module owns multiple responsibilities",
+    ]
+    missing_details = [detail for detail in expected_details if detail not in output]
+    assert missing_details == [], "--details should emit prescriptive oversized-module block"
+
+
+def _assert_oversized_module_scaffold(block: str) -> None:
+    expected_scaffold = [
+        "[NEW] oversized-module",
+        "file: src/example/large.py",
+        "signature: module `large.py`",
+        "stable-id: oversized-module|src/example/large.py|large.py",
+        "src/example/large/__init__.py",
+        "models.py, parsing.py, services.py",
+    ]
+    missing_scaffold = [entry for entry in expected_scaffold if entry not in block]
+    assert missing_scaffold == [], "oversized module detail block should name split scaffold"
+
+
+def _assert_type_suppression_detail_block(block: str) -> None:
+    expected_details = [
+        "[BASELINED] type-suppression",
+        "location: src/example/types.py:12",
+        "metadata.related_files: src/example/protocols.py",
+        "Protocol, TypedDict, overload, local stub",
+    ]
+    missing_details = [detail for detail in expected_details if detail not in block]
+    assert missing_details == [], "type suppression detail block should include metadata and prognosis"
+
+
+def _write_lint_project_with_file(root: Path, rel_path: str, content: str) -> None:
+    (root / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    target = root / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    (root / "tests").mkdir(exist_ok=True)
+
+
+def _run_lint_check(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    cwd: Path,
+    *,
+    details: bool,
+) -> tuple[int, str]:
+    monkeypatch.chdir(cwd)
+    reset_config()
+    try:
+        result = cmd_lint(argparse.Namespace(lint_command="check", details=details))
+    finally:
+        reset_config()
+    captured = capsys.readouterr()
+    return result, captured.out
+
+
 def test_lint_check_discovers_project_root_and_forces_all_scope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     nested_cwd = _write_clean_project(tmp_path)
-    monkeypatch.chdir(nested_cwd)
     monkeypatch.setenv("QUALITY_SCOPE", "changed")
-    reset_config()
-    try:
-        result = cmd_lint(argparse.Namespace(lint_command="check", details=False))
-    finally:
-        reset_config()
+    result, output = _run_lint_check(monkeypatch, capsys, nested_cwd, details=False)
 
-    captured = capsys.readouterr()
     assert result == 0
-    assert f"project: {tmp_path}" in captured.out
-    assert f"src:     {tmp_path / 'src'}  (1 files)" in captured.out
-    assert "✓ No new violations" in captured.out
+    _assert_lint_check_forces_repo_root_scope(output, tmp_path, result)
 
 
 def test_lint_check_details_outputs_prescriptive_blocks(
@@ -51,31 +121,15 @@ def test_lint_check_details_outputs_prescriptive_blocks(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
-        encoding="utf-8",
-    )
-    src = tmp_path / "src"
-    src.mkdir()
-    (src / "large.py").write_text(
+    _write_lint_project_with_file(
+        tmp_path,
+        "src/large.py",
         "from __future__ import annotations\n" + "# filler\n" * 370,
-        encoding="utf-8",
     )
-    (tmp_path / "tests").mkdir()
-    monkeypatch.chdir(tmp_path)
-    reset_config()
-    try:
-        result = cmd_lint(argparse.Namespace(lint_command="check", details=True))
-    finally:
-        reset_config()
+    result, output = _run_lint_check(monkeypatch, capsys, tmp_path, details=True)
 
-    captured = capsys.readouterr()
     assert result == 1
-    assert "[NEW] oversized-module-soft" in captured.out
-    assert "file: src/large.py" in captured.out
-    assert "signature: module `large.py`" in captured.out
-    assert "src/large/__init__.py" in captured.out
-    assert "prognosis: one module owns multiple responsibilities" in captured.out
+    _assert_prescriptive_details_for_oversized_module(output, result)
 
 
 def test_lint_check_flags_ty_ignore_as_type_suppression(
@@ -83,30 +137,18 @@ def test_lint_check_flags_ty_ignore_as_type_suppression(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
-        encoding="utf-8",
-    )
-    src = tmp_path / "src"
-    src.mkdir()
-    (src / "types.py").write_text(
+    _write_lint_project_with_file(
+        tmp_path,
+        "src/types.py",
         "from __future__ import annotations\n\n"
         "def identity(value: object) -> object:\n"
         "    return value  # ty: ignore[possibly-unbound]\n",
-        encoding="utf-8",
     )
-    (tmp_path / "tests").mkdir()
-    monkeypatch.chdir(tmp_path)
-    reset_config()
-    try:
-        result = cmd_lint(argparse.Namespace(lint_command="check", details=True))
-    finally:
-        reset_config()
+    result, output = _run_lint_check(monkeypatch, capsys, tmp_path, details=True)
 
-    captured = capsys.readouterr()
     assert result == 1
-    assert "[NEW] type-suppression" in captured.out
-    assert "# ty: ignore[possibly-unbound]" in captured.out
+    assert "[NEW] type-suppression" in output
+    assert "# ty: ignore[possibly-unbound]" in output
 
 
 def test_lint_details_formatter_includes_prescriptive_scaffold() -> None:
@@ -122,11 +164,7 @@ def test_lint_details_formatter_includes_prescriptive_scaffold() -> None:
     )
 
     assert "[NEW] oversized-module" in block
-    assert "file: src/example/large.py" in block
-    assert "signature: module `large.py`" in block
-    assert "stable-id: oversized-module|src/example/large.py|large.py" in block
-    assert "src/example/large/__init__.py" in block
-    assert "models.py, parsing.py, services.py" in block
+    _assert_oversized_module_scaffold(block)
 
 
 def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
@@ -142,7 +180,5 @@ def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
         format_violation_details("type-suppression", violation, status="BASELINED")
     )
 
-    assert "[BASELINED] type-suppression" in block
-    assert "location: src/example/types.py:12" in block
-    assert "metadata.related_files: src/example/protocols.py" in block
-    assert "Protocol, TypedDict, overload, local stub" in block
+    assert "metadata.related_files" in block
+    _assert_type_suppression_detail_block(block)

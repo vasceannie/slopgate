@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
+from vibeforcer.constants import (
+    METADATA_PATH,
+)
 from vibeforcer.models import RegexRuleConfig, RuleFinding, Severity
 from vibeforcer.rules.base import Rule
 from vibeforcer.util.payloads import any_path_matches
@@ -120,7 +123,7 @@ class RegexRule(Rule):
         collectors = {
             "content": self._collect_content_hits,
             "command": self._collect_command_hits,
-            "path": self._collect_path_hits,
+            METADATA_PATH: self._collect_path_hits,
             "prompt": self._collect_prompt_hits,
         }
         collector = collectors.get(self.config.target)
