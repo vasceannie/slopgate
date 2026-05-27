@@ -379,7 +379,10 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>)\\s*.*src/.*\\.py"
+        "\\b(?:sed\\s+-i\\b|perl\\s+[^|;&\\n]*-p?i\\b)[^|;&\\n]*\\bsrc/[^\\s|;&]*\\.py\\b",
+        "\\btee\\b[^|;&\\n]*\\bsrc/[^\\s|;&]*\\.py\\b",
+        "(?:^|[\\s;|&])(?:[0-9]*>>?|&>)\\s*src/[^\\s|;&]*\\.py\\b",
+        "\\b(?:rg|grep)\\b[^|;&\\n]*(?:\\bsrc/|(?:-g|--glob|--include=?)\\s*['\"]?\\*\\.py)[^|;&\\n]*\\|[^\\n]*(?:xargs\\b[^|;&\\n]*?\\s+)?(?:sed\\s+-i\\b|perl\\s+[^|;&\\n]*-p?i\\b|tee\\b[^|;&\\n]*\\bsrc/[^\\s|;&]*\\.py\\b|(?:[0-9]*>>?|&>)\\s*src/)"
       ],
       "action": "deny",
       "message": "Shell edits to Python source files under src/ are blocked. Use the Edit or Write tool so size and quality guards apply."
@@ -667,7 +670,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*(\\.flake8|\\.pylintrc|pyrightconfig|mypy\\.ini|ruff\\.toml|setup\\.cfg)"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*(\\.flake8|\\.pylintrc|pyrightconfig|mypy\\.ini|ruff\\.toml|setup\\.cfg)"
       ],
       "action": "deny",
       "message": "Shell edits to Python linter config files are blocked.",
@@ -701,7 +704,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*(eslintrc|eslint\\.config|prettierrc|prettier\\.config|biome\\.json|tsconfig)"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*(eslintrc|eslint\\.config|prettierrc|prettier\\.config|biome\\.json|tsconfig)"
       ],
       "action": "deny",
       "message": "Shell edits to frontend linter/formatter config files are blocked.",
@@ -735,7 +738,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*src/test/code-quality\\.test\\.ts"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*src/test/code-quality\\.test\\.ts"
       ],
       "action": "deny",
       "message": "Shell edits to src/test/code-quality.test.ts are blocked.",
@@ -769,7 +772,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*tests/quality/"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*tests/quality/"
       ],
       "action": "deny",
       "message": "Shell edits to tests/quality/ are blocked.",
@@ -866,6 +869,10 @@
       "patterns": [
         "\\bset\\s+\\+e\\b",
         "2>\\s*/dev/null(?!\\s*\\|)",
+        "[-]ErrorAction\\s+SilentlyContinue\\b",
+        "\\$ErrorActionPreference\\s*=\\s*['\\\"]SilentlyContinue['\\\"]",
+        "(?:\\*|\\d+)?\\s*>\\s*\\$null\\b",
+        "\\|\\s*Out-Null\\b",
         "\\|\\|\\s*true\\s*$",
         "\\|\\|\\s*:\\s*$"
       ],
@@ -918,7 +925,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>).*baselines?\\.json"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*baselines?\\.json"
       ],
       "action": "context",
       "additional_context": "WARNING: You are editing baseline files via shell. Verify changes reflect intentional behavior updates.",
@@ -950,7 +957,7 @@
       ],
       "target": "command",
       "patterns": [
-        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|cp\\s|mv\\s).*hook-layer/config\\.json"
+        "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|cp\\s|mv\\s|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*hook-layer/config\\.json"
       ],
       "action": "deny",
       "message": "Shell edits to enforcer configuration are blocked. Config changes require human approval.",

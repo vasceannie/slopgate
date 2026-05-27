@@ -253,9 +253,9 @@ class BashOutputErrorRule(Rule):
         enabled = ctx.config.enabled_rules.get(self.rule_id)
         if enabled is not None and not enabled:
             return []
-        if not ctx.tool_name or ctx.tool_name != "Bash":
+        if not ctx.shell_command:
             return []
-        command = ctx.bash_command
+        command = ctx.shell_command
         if not command or _is_read_only_command(command):
             return []
         output = _extract_bash_output(ctx)
@@ -290,10 +290,10 @@ class BashFailureReinforcementRule(Rule):
             return []
 
         # Only Bash tool
-        if not ctx.tool_name or ctx.tool_name != "Bash":
+        if not ctx.shell_command:
             return []
 
-        command = ctx.bash_command
+        command = ctx.shell_command
         if not command:
             return []
 

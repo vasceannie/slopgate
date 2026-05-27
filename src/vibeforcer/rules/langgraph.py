@@ -17,7 +17,7 @@ from typing_extensions import override
 
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_edit_like_tool, is_bash_tool
+from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
@@ -85,7 +85,7 @@ def _read_source(path_value: str, ctx: HookContext) -> str | None:
 
 def _is_applicable_tool(ctx: HookContext) -> bool:
     """Return True if the tool is an edit or bash tool."""
-    return is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)
+    return is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)
 
 
 def _iter_langgraph_sources(

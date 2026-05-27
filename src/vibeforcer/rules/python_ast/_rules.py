@@ -17,8 +17,8 @@ from vibeforcer.rules.base import Rule, is_rule_enabled
 from vibeforcer.util.payloads import (
     extract_path_from_mapping,
     first_present,
-    is_bash_tool,
     is_edit_like_tool,
+    is_shell_tool,
 )
 
 from ._helpers import (
@@ -297,7 +297,7 @@ def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
                 continue
             sources.append((ct.path, ct.content))
     else:
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):
@@ -419,7 +419,7 @@ class PythonAstHealthRule(Rule):
                 if failure is not None:
                     findings.append(self._finding(ctx, ct.path, failure))
         else:
-            if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+            if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
                 return []
             for path_value in ctx.candidate_paths:
                 if not path_value.lower().endswith((".py", ".pyi")):
@@ -1414,7 +1414,7 @@ class PythonFlatFileSiblingsRule(Rule):
             return []
         if ctx.event_name not in self.events:
             return []
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
         findings: list[RuleFinding] = []
         for parent in self._resolve_candidate_dirs(ctx):

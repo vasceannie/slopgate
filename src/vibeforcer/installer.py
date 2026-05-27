@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import json
 import shutil
+import shlex
+import subprocess
+import sys
 from pathlib import Path
 from typing import cast
 
 from vibeforcer._types import object_dict
+from vibeforcer.util.platform import is_windows, user_config_dir
 
 
 def _find_binary() -> str:
@@ -21,8 +25,36 @@ def _find_binary() -> str:
     binary = shutil.which("vibeforcer")
     if binary:
         return binary
-    # Fallback: python -m vibeforcer.cli handle
-    return "vibeforcer"
+    return sys.executable
+
+
+def _base_invocation(binary: str) -> list[str]:
+    if Path(binary).resolve() == Path(sys.executable).resolve():
+        return [binary, "-m", "vibeforcer"]
+    return [binary]
+
+
+def _shell_command(argv: list[str], *, windows: bool | None = None) -> str:
+    use_windows = is_windows() if windows is None else windows
+    if not use_windows:
+        return shlex.join(argv)
+    ps_args = ["'" + arg.replace("'", "''") + "'" for arg in argv]
+    ps_script = "& " + " ".join(ps_args)
+    return subprocess.list2cmdline(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            ps_script,
+        ]
+    )
+
+
+def _hook_command(binary: str, *args: str, windows: bool | None = None) -> str:
+    return _shell_command([*_base_invocation(binary), *args], windows=windows)
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +89,7 @@ def _claude_hooks_block(binary: str) -> _ClaudeHooks:
     for event in _CLAUDE_EVENTS:
         command_entry: _ClaudeHookCommand = {
             "type": "command",
-            "command": f"{binary} handle",
+            "command": _hook_command(binary, "handle"),
         }
         entry: _ClaudeHookEntry = {"hooks": [command_entry]}
         if event == "SessionStart":
@@ -159,7 +191,7 @@ def _codex_hooks_block(binary: str) -> _CodeHooks:
     for event, meta in _CODEX_EVENTS.items():
         command_entry: _CodeHookCommand = {
             "type": "command",
-            "command": f"{binary} handle --platform codex",
+            "command": _hook_command(binary, "handle", "--platform", "codex"),
         }
         entry: _CodeHookEntry = {"hooks": [command_entry]}
         matcher = meta.get("matcher")
@@ -251,12 +283,13 @@ def _install_opencode(dry_run: bool = False) -> int:
         return 1
 
     binary = _find_binary()
-    target_dir = Path.home() / ".config" / "opencode" / "plugins"
+    target_dir = user_config_dir("opencode") / "plugins"
     target = target_dir / "vibeforcer-plugin.ts"
 
     content = template.read_text(encoding="utf-8")
-    # Bake in the binary path
-    content = content.replace("__VIBEFORCER_BIN__", binary)
+    # Bake in the binary path. Replace the entire quoted placeholder with a JSON
+    # string literal so Windows backslashes/spaces/quotes survive TypeScript.
+    content = content.replace('"__VIBEFORCER_BIN__"', json.dumps(binary))
 
     if dry_run:
         print(f"Would write: {target}")
@@ -272,7 +305,7 @@ def _install_opencode(dry_run: bool = False) -> int:
 
 
 def _uninstall_opencode(dry_run: bool = False) -> int:
-    target = Path.home() / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target = user_config_dir("opencode") / "plugins" / "vibeforcer-plugin.ts"
     if not target.exists():
         print("No OpenCode vibeforcer plugin found.")
         return 0

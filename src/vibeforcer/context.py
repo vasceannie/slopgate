@@ -35,6 +35,14 @@ class HookContext:
         return self.payload.bash_command
 
     @property
+    def shell_command(self) -> str:
+        return self.payload.shell_command
+
+    @property
+    def shell_kind(self) -> str | None:
+        return self.payload.shell_kind
+
+    @property
     def user_prompt(self) -> str:
         return self.payload.user_prompt
 

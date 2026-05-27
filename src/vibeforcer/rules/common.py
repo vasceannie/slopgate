@@ -10,7 +10,8 @@ from typing_extensions import override
 from vibeforcer.constants import SAFE_READ_SHELL_VERBS
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_bash_tool, is_edit_like_tool, lower_path, path_matches_glob
+from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool, lower_path, path_matches_glob
+from vibeforcer.util.platform import resolve_path_for_match
 from vibeforcer.util.subprocesses import run_shell
 
 if TYPE_CHECKING:
@@ -42,11 +43,27 @@ def _is_safe_read_shell(command: str) -> bool:
     lowered = command.lower()
     if "sed -i" in lowered or "tee " in lowered:
         return False
+    if any(
+        token in lowered
+        for token in (
+            "set-content",
+            "add-content",
+            "out-file",
+            "remove-item",
+            "copy-item",
+            "move-item",
+            "new-item",
+        )
+    ):
+        return False
     if re.search(r">>?\s*\S", lowered):
         return False
     if _find_command_has_mutation(_shell_tokens(lowered)):
         return False
-    return any(_command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
+    return any(_command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS) or any(
+        _command_has_word(lowered, verb)
+        for verb in ("get-content", "select-string", "test-path")
+    )
 
 
 def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
@@ -183,12 +200,12 @@ def _is_readonly_tool(tool_name: str | None) -> bool:
     return bool(tool_name and tool_name.lower() in READ_TOOL_NAMES)
 
 
-def _is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
+def _is_safe_shell_read(tool_name: str | None, shell_command: str | None) -> bool:
     return (
         tool_name is not None
-        and tool_name.lower() == "bash"
-        and bash_command is not None
-        and _is_safe_read_shell(bash_command)
+        and is_shell_tool(tool_name)
+        and shell_command is not None
+        and _is_safe_read_shell(shell_command)
     )
 
 
@@ -219,7 +236,7 @@ class ProtectedPathsRule(Rule):
         matched_path = _find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:
             return []
-        if _is_safe_bash_read(ctx.tool_name, ctx.bash_command):
+        if _is_safe_shell_read(ctx.tool_name, ctx.shell_command):
             return []
         return [
             RuleFinding(
@@ -339,8 +356,8 @@ class SensitiveDataRule(Rule):
         if not compiled:
             return []
         matched = self._match_in_paths(ctx.candidate_paths, compiled)
-        if not matched and ctx.bash_command:
-            matched = self._match_in_command(ctx.bash_command, compiled)
+        if not matched and ctx.shell_command:
+            matched = self._match_in_command(ctx.shell_command, compiled)
         if not matched:
             return []
         return [
@@ -356,10 +373,7 @@ class SensitiveDataRule(Rule):
 
 
 def _resolve_candidate_path(path_value: str, cwd: Path) -> str:
-    path = Path(path_value).expanduser()
-    if not path.is_absolute():
-        path = cwd / path
-    return lower_path(str(path.resolve(strict=False)))
+    return resolve_path_for_match(path_value, cwd)
 
 
 def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str | None:
@@ -375,11 +389,12 @@ def _match_system_command(command: str, prefixes: list[str]) -> str | None:
     """Return '[command]' if command references a system path."""
     lowered = command.lower()
     for prefix in prefixes:
-        if not prefix.startswith("/"):
+        normalized_prefix = prefix.replace("\\", "/")
+        if not normalized_prefix.startswith("/") and not re.match(r"^[a-z]:/", normalized_prefix):
             if prefix in lowered:
                 return "[command]"
             continue
-        pat = r"(?:^|[\s;|&(])" + re.escape(prefix)
+        pat = r"(?:^|[\s;|&(])" + re.escape(normalized_prefix)
         if re.search(pat, lowered):
             return "[command]"
     return None
@@ -394,12 +409,12 @@ class SystemProtectionRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        prefixes = [i.lower() for i in ctx.config.system_path_prefixes]
+        prefixes = [i.replace("\\", "/").lower() for i in ctx.config.system_path_prefixes]
         if not prefixes:
             return []
         matched = _match_system_path(ctx.candidate_paths, prefixes, ctx.cwd)
-        if not matched and ctx.bash_command:
-            matched = _match_system_command(ctx.bash_command, prefixes)
+        if not matched and ctx.shell_command:
+            matched = _match_system_command(ctx.shell_command, prefixes)
         if not matched:
             return []
         return [
@@ -437,8 +452,8 @@ def _detect_git_bypass(command: str) -> str | None:
         _is_git_no_verify_shortcut(token) for token in tokens[2:]
     ):
         return _GIT_NO_VERIFY_SHORTCUT
-    if "core.hookspath" in lowered and "/dev/null" in lowered:
-        return "core.hookspath=/dev/null"
+    if "core.hookspath" in lowered and ("/dev/null" in lowered or "nul" in lowered):
+        return "core.hookspath disabled"
     return None
 
 
@@ -451,9 +466,9 @@ class GitNoVerifyRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if not ctx.bash_command:
+        if not ctx.shell_command:
             return []
-        bypass = _detect_git_bypass(ctx.bash_command)
+        bypass = _detect_git_bypass(ctx.shell_command)
         if not bypass:
             return []
         msg = (
@@ -472,7 +487,7 @@ class GitNoVerifyRule(Rule):
                 message=msg,
                 metadata={
                     "bypass_type": bypass,
-                    "command": ctx.bash_command[:200],
+                    "command": ctx.shell_command[:200],
                 },
             )
         ]
@@ -489,7 +504,7 @@ class SearchReminderRule(Rule):
             return []
         if ctx.tool_name in {"Grep", "WebSearch", "Read"}:
             return []
-        if ctx.bash_command and _command_has_word(ctx.bash_command.lower(), "grep"):
+        if ctx.shell_command and _command_has_word(ctx.shell_command.lower(), "grep"):
             return [
                 RuleFinding(
                     rule_id=self.rule_id,
@@ -723,7 +738,7 @@ class PostEditLintRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
         failures = _collect_touched_lint_failures(ctx)
         if not failures:

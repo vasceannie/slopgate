@@ -385,7 +385,7 @@ def _is_safe_bash_for_path(ctx: HookContext) -> bool:
     """Return True if the bash command is a safe read-only operation."""
     if not ctx.tool_name or ctx.tool_name.lower() != "bash":
         return False
-    return _is_safe_read_shell(ctx.bash_command.lower())
+    return _is_safe_read_shell(ctx.shell_command.lower())
 
 
 def _is_modifying_tool(ctx: HookContext) -> bool:

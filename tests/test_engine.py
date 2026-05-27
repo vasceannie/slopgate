@@ -340,6 +340,67 @@ def test_shell_command_paths_still_captures_path_option_values() -> None:
     assert "src/app.py" in paths
 
 
+def test_powershell_git_no_verify_denied(tmp_path: Path) -> None:
+    _ = (tmp_path / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    payload = {
+        "session_id": "ps-git",
+        "cwd": str(tmp_path),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "PowerShell",
+        "tool_input": {"command": "git commit --no-verify -m 'skip'"},
+    }
+    result = evaluate_payload(payload)
+    assert_denied_by(result, "GIT-001")
+
+
+def test_powershell_windows_system_path_denied(tmp_path: Path) -> None:
+    payload = {
+        "session_id": "ps-system",
+        "cwd": str(tmp_path),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "PowerShell",
+        "tool_input": {"command": r"Get-Content C:\Windows\System32\drivers\etc\hosts"},
+    }
+    result = evaluate_payload(payload)
+    assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
+
+
+@pytest.mark.parametrize(
+    ("command", "rule_id"),
+    (
+        ("Set-Content -Path pyproject.toml -Value x", "BUILTIN-PROTECTED-PATHS"),
+        (r"Set-Content -Path .\pyproject.toml -Value x", "BUILTIN-PROTECTED-PATHS"),
+        (
+            r"Out-File -FilePath C:\Windows\System32\drivers\etc\hosts",
+            "GLOBAL-BUILTIN-SYSTEM-PROTECTION",
+        ),
+        (
+            r"Remove-Item -LiteralPath .\tests\quality\policy.py",
+            "BUILTIN-PROTECTED-PATHS",
+        ),
+    ),
+)
+def test_powershell_path_commands_are_evaluated_through_rules(
+    tmp_path: Path, command: str, rule_id: str
+) -> None:
+    _ = (tmp_path / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    payload = {
+        "session_id": "ps-protected",
+        "cwd": str(tmp_path),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "PowerShell",
+        "tool_input": {"command": command},
+    }
+    result = evaluate_payload(payload)
+    assert_denied_by(result, rule_id)
+
+
 def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

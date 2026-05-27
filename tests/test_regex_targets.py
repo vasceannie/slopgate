@@ -32,6 +32,37 @@ class TestCommandTarget:
             "sed -i on .py must trigger PY-SHELL-001"
         )
 
+    def test_py_shell_redirect_edit_denied(self) -> None:
+        result = evaluate_payload(self._bash_payload("python gen.py > src/main.py"))
+        assert "PY-SHELL-001" in finding_ids(result), (
+            "redirecting output to src/*.py must trigger PY-SHELL-001"
+        )
+
+    def test_rg_search_with_fallback_not_py_shell_edit(self) -> None:
+        command = (
+            "rg -n 'compensation_result' src/autopilot/graph/ -g '*.py' -l "
+            "2>/dev/null || grep -rn 'compensation_result' "
+            "src/autopilot/graph/ --include='*.py' -l"
+        )
+        result = evaluate_payload(self._bash_payload(command))
+        assert "PY-SHELL-001" not in finding_ids(result), (
+            "rg/grep searches over src/*.py are not shell edits"
+        )
+
+    def test_rg_output_redirect_to_results_not_py_shell_edit(self) -> None:
+        command = "rg foo src/main.py > matches.txt"
+        result = evaluate_payload(self._bash_payload(command))
+        assert "PY-SHELL-001" not in finding_ids(result), (
+            "redirecting search output away from src/*.py is not a source edit"
+        )
+
+    def test_rg_pipeline_to_shell_edit_denied(self) -> None:
+        command = "rg -l foo src/ -g '*.py' | xargs sed -i 's/foo/bar/'"
+        result = evaluate_payload(self._bash_payload(command))
+        assert "PY-SHELL-001" in finding_ids(result), (
+            "search pipelines feeding shell edit commands must trigger PY-SHELL-001"
+        )
+
     def test_git_commit_gets_context(self) -> None:
         result = evaluate_payload(self._bash_payload("git commit -m 'fix: thing'"))
         assert "GIT-002" in finding_ids(result), (

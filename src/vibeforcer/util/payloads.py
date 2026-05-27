@@ -11,14 +11,15 @@ from typing import final
 from vibeforcer._types import ObjectDict, ObjectMapping, object_dict, object_list
 from vibeforcer.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX
 from vibeforcer.models import ContentTarget, RuntimeConfig
+from vibeforcer.util.platform import lower_path_for_match, normalize_path_for_match
 
 
 def normalize_path(value: str) -> str:
-    return value.replace("\\", "/").strip()
+    return normalize_path_for_match(value)
 
 
 def lower_path(value: str) -> str:
-    return normalize_path(value).lower()
+    return lower_path_for_match(value)
 
 
 def first_present(
@@ -122,7 +123,24 @@ def is_edit_like_tool(tool_name: str) -> bool:
 
 
 def is_bash_tool(tool_name: str) -> bool:
-    return tool_name.lower() == "bash"
+    return shell_kind_for_tool(tool_name) == "bash"
+
+
+def shell_kind_for_tool(tool_name: str) -> str | None:
+    lowered = tool_name.strip().lower().replace("-", "_")
+    if lowered in {"bash", "sh", "zsh"}:
+        return "bash"
+    if lowered in {"powershell", "pwsh", "power_shell"}:
+        return "powershell"
+    if lowered in {"cmd", "cmd.exe", "command_prompt"}:
+        return "cmd"
+    if lowered in {"shell", "local_shell", "terminal"}:
+        return "unknown"
+    return None
+
+
+def is_shell_tool(tool_name: str) -> bool:
+    return shell_kind_for_tool(tool_name) is not None
 
 
 def detect_language(path_value: str) -> str | None:
@@ -135,7 +153,10 @@ def path_matches_glob(path_value: str, pattern: str) -> bool:
     normalized_pattern = lower_path(pattern)
     basename = Path(normalized_path).name
     if normalized_pattern.endswith("/") and "*" not in normalized_pattern:
-        return normalized_path.startswith(normalized_pattern)
+        relative_path = normalized_path.removeprefix("./")
+        return relative_path.startswith(normalized_pattern) or (
+            f"/{normalized_pattern}" in normalized_path
+        )
     if "/" not in normalized_pattern:
         return fnmatch.fnmatch(basename, normalized_pattern)
     return fnmatch.fnmatch(normalized_path, normalized_pattern)
@@ -152,9 +173,44 @@ def _is_shell_glob_token(value: str) -> bool:
     return any(char in value for char in "*?[")
 
 
-def shell_command_paths(command: str) -> list[str]:
+def _append_unique_path(seen: list[str], value: str) -> None:
+    cleaned_value = value.strip("\"'`")
+    if not cleaned_value or _is_shell_glob_token(cleaned_value):
+        return
+    if cleaned_value.lower() in {"/dev/null", "$null", "nul", "nul:"}:
+        return
+    if cleaned_value not in seen:
+        seen.append(cleaned_value)
+
+
+def _powershell_candidate_paths(command: str) -> list[str]:
+    seen: list[str] = []
+    path_value = r"(?P<quote>['\"]?)(?P<path>[^'\"\s;|]+)(?P=quote)"
+    parameter_pattern = re.compile(
+        rf"(?i)(?:^|\s)-(?:literalpath|path|filepath|destination|outfilepath|outfile)\s+{path_value}"
+    )
+    cmdlet_pattern = re.compile(
+        rf"(?i)\b(?:set-content|add-content|out-file|remove-item|copy-item|move-item|new-item|get-content|test-path)\b\s+{path_value}"
+    )
+    windows_path_pattern = re.compile(
+        r"(?:[A-Za-z]:[\\/][^\s;|&]+|\.{1,2}[\\/][^\s;|&]+|[A-Za-z0-9_.-]+[\\/][^\s;|&]+\.[A-Za-z0-9]+)"
+    )
+    redirection_pattern = re.compile(r"(?:\*|\d+)?>>?\s*([^\s;|&]+)")
+    for pattern in (parameter_pattern, cmdlet_pattern):
+        for match in pattern.finditer(command):
+            _append_unique_path(seen, match.group("path"))
+    for match in windows_path_pattern.finditer(command):
+        _append_unique_path(seen, match.group(0))
+    for match in redirection_pattern.finditer(command):
+        _append_unique_path(seen, match.group(1))
+    return seen
+
+
+def shell_command_paths(command: str, shell_kind: str | None = None) -> list[str]:
     redirection_pattern = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
-    pathish_pattern = re.compile(r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
+    pathish_pattern = re.compile(
+        r"(?:[A-Za-z]:[\\/])?(?:[~./\\A-Za-z0-9_-]+[/\\])*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+"
+    )
     known_filenames = {
         "makefile",
         "dockerfile",
@@ -164,14 +220,7 @@ def shell_command_paths(command: str) -> list[str]:
         "package.json",
         "tsconfig.json",
     }
-    seen: list[str] = []
-
-    def append_path(value: str) -> None:
-        cleaned_value = value.strip("\"'")
-        if not cleaned_value or _is_shell_glob_token(cleaned_value):
-            return
-        if cleaned_value not in seen:
-            seen.append(cleaned_value)
+    seen = _powershell_candidate_paths(command) if shell_kind == "powershell" else []
 
     try:
         tokens = shlex.split(command, posix=True)
@@ -207,22 +256,21 @@ def shell_command_paths(command: str) -> list[str]:
         matches = [match.group(0) for match in pathish_pattern.finditer(cleaned)]
         if matches:
             for value in matches:
-                append_path(value)
+                _append_unique_path(seen, value)
             continue
         lower_cleaned = cleaned.lower()
         if (
             "/" in token
+            or "\\" in token
             or token.startswith(("~", "./", "../"))
             or cleaned[:1].isupper()
             or lower_cleaned in known_filenames
         ):
-            append_path(cleaned)
+            _append_unique_path(seen, cleaned)
 
     for match in redirection_pattern.finditer(command):
         redirection_target = match.group(1).strip("\"'")
-        if redirection_target == "/dev/null":
-            continue
-        append_path(redirection_target)
+        _append_unique_path(seen, redirection_target)
     return seen
 
 
@@ -269,10 +317,21 @@ class HookPayload:
 
     @cached_property
     def bash_command(self) -> str:
-        if not is_bash_tool(self.tool_name):
+        return self.shell_command
+
+    @cached_property
+    def shell_kind(self) -> str | None:
+        return shell_kind_for_tool(self.tool_name)
+
+    @cached_property
+    def shell_command(self) -> str:
+        if self.shell_kind is None:
             return ""
-        value = self.tool_input.get("command")
-        return str(value) if isinstance(value, str) else ""
+        return first_present(
+            self.tool_input,
+            ("command", "script", "cmd", "powershell_command", "pwsh_command"),
+            strip=False,
+        )
 
     @cached_property
     def content_targets(self) -> list[ContentTarget]:
@@ -360,8 +419,8 @@ class HookPayload:
             path_value = extract_path_from_mapping(tool_response)
             if path_value:
                 values.append(path_value)
-        if self.bash_command:
-            values.extend(shell_command_paths(self.bash_command))
+        if self.shell_command:
+            values.extend(shell_command_paths(self.shell_command, self.shell_kind))
         result: list[str] = []
         for item in values:
             if item and item not in result:

@@ -85,8 +85,8 @@ class BaselineGuardRule(Rule):
             return self._check_baseline_change(target.path, target.content, ctx)
 
         # Catch CLI commands that regenerate the baseline
-        if ctx.bash_command:
-            cmd = ctx.bash_command.strip()
+        if ctx.shell_command:
+            cmd = ctx.shell_command.strip()
             if any(
                 token in cmd
                 for token in (
