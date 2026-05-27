@@ -22,6 +22,92 @@ def _colorize(code: str, text: str, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if enabled else text
 
 
+def _existing_location_lines(violation: Violation, *, color: bool) -> list[str]:
+    raw_locations = violation.metadata.get("existing_locations")
+    if not isinstance(raw_locations, list):
+        return []
+    locations = [item for item in raw_locations if isinstance(item, str)]
+    if not locations:
+        return []
+    location_text = ", ".join(locations)
+    raw_more = violation.metadata.get("existing_locations_more")
+    if isinstance(raw_more, int) and raw_more > 0:
+        location_text += f", ... +{raw_more} more"
+    marker = _colorize("2", "↳", color)
+    return [f"      {marker} existing locations: {location_text}"]
+
+
+@dataclass(frozen=True, slots=True)
+class _RuleCounts:
+    allowed: set[str]
+    new_ids: set[str]
+    fixed_ids: set[str]
+    new_violations: list[Violation]
+
+
+def _rule_counts(
+    rule_name: str,
+    violations: list[Violation],
+    baseline: dict[str, set[str]],
+) -> _RuleCounts:
+    allowed = baseline.get(rule_name, set())
+    current_ids = {getattr(v, "stable_id") for v in violations}
+    new_ids = current_ids - allowed
+    return _RuleCounts(
+        allowed=allowed,
+        new_ids=new_ids,
+        fixed_ids=allowed - current_ids,
+        new_violations=[v for v in violations if getattr(v, "stable_id") in new_ids],
+    )
+
+
+def _rule_status(rule_name: str, *, has_new: bool, color: bool) -> str:
+    code = "31" if has_new else "32"
+    marker = "✗" if has_new else "✓"
+    return _colorize(code, f"{marker} {rule_name}", color)
+
+
+def _rule_count_text(
+    total: int,
+    counts: _RuleCounts,
+    *,
+    color: bool,
+) -> str:
+    parts = [f"{total} total"]
+    if counts.new_violations:
+        parts.append(_colorize("31", f"{len(counts.new_violations)} NEW", color))
+    if counts.fixed_ids:
+        parts.append(_colorize("32", f"{len(counts.fixed_ids)} fixed", color))
+    text = ", ".join(parts)
+    if counts.allowed:
+        text += f" {_colorize('2', f'(baseline: {len(counts.allowed)})', color)}"
+    return text
+
+
+def _print_new_violations(violations: list[Violation], *, color: bool) -> None:
+    for violation in violations[:MAX_LINT_VIOLATIONS_SHOWN]:
+        print(f"    {_colorize('31', '+', color)} {violation}")
+        for line in _existing_location_lines(violation, color=color):
+            print(line)
+    if len(violations) > MAX_LINT_VIOLATIONS_SHOWN:
+        remaining = len(violations) - MAX_LINT_VIOLATIONS_SHOWN
+        print(f"    {_colorize('2', f'... and {remaining} more', color)}")
+
+
+def _print_detailed_violations(
+    rule_name: str,
+    violations: list[Violation],
+    counts: _RuleCounts,
+) -> None:
+    from vibeforcer.lint._details import format_violation_details
+
+    for violation in violations:
+        status = "NEW" if getattr(violation, "stable_id") in counts.new_ids else "BASELINED"
+        print()
+        for line in format_violation_details(rule_name, violation, status=status):
+            print(line)
+
+
 def _tally_rule(
     rule_name: str,
     violations: list[Violation],
@@ -29,45 +115,14 @@ def _tally_rule(
     *,
     details: bool = False,
 ) -> tuple[int, int, int]:
-    from vibeforcer.lint._details import format_violation_details
-
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
-    allowed = baseline.get(rule_name, set())
-    current_ids = {getattr(v, "stable_id") for v in violations}
-    new_ids = current_ids - allowed
-    fixed_ids = allowed - current_ids
-    new_violations = [v for v in violations if getattr(v, "stable_id") in new_ids]
-
-    status = (
-        _colorize("31", f"✗ {rule_name}", color)
-        if new_violations
-        else _colorize("32", f"✓ {rule_name}", color)
-    )
-    counts = f"{len(violations)} total"
-    if new_violations:
-        counts += f", {_colorize('31', f'{len(new_violations)} NEW', color)}"
-    if fixed_ids:
-        counts += f", {_colorize('32', f'{len(fixed_ids)} fixed', color)}"
-    if allowed:
-        counts += f" {_colorize('2', f'(baseline: {len(allowed)})', color)}"
-
-    print(f"  {status}  {counts}")
-    for violation in new_violations[:MAX_LINT_VIOLATIONS_SHOWN]:
-        print(f"    {_colorize('31', '+', color)} {violation}")
-    if len(new_violations) > MAX_LINT_VIOLATIONS_SHOWN:
-        remaining = len(new_violations) - MAX_LINT_VIOLATIONS_SHOWN
-        print(f"    {_colorize('2', f'... and {remaining} more', color)}")
+    counts = _rule_counts(rule_name, violations, baseline)
+    status = _rule_status(rule_name, has_new=bool(counts.new_violations), color=color)
+    print(f"  {status}  {_rule_count_text(len(violations), counts, color=color)}")
+    _print_new_violations(counts.new_violations, color=color)
     if details:
-        for violation in violations:
-            status = "NEW" if getattr(violation, "stable_id") in new_ids else "BASELINED"
-            print()
-            for line in format_violation_details(
-                rule_name,
-                violation,
-                status=status,
-            ):
-                print(line)
-    return len(violations), len(new_violations), len(fixed_ids)
+        _print_detailed_violations(rule_name, violations, counts)
+    return len(violations), len(counts.new_violations), len(counts.fixed_ids)
 
 
 def _print_lint_summary(
@@ -278,7 +333,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
     if lint_command == "update":
         raw_dry_run = getattr(args, "dry_run", False)
         return _lint_update(
-            root,
+            _discover_project_root(root),
             dry_run=raw_dry_run if isinstance(raw_dry_run, bool) else False,
         )
     return 1

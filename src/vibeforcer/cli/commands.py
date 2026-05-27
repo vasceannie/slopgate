@@ -3,28 +3,37 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
-from vibeforcer.constants import SELFTEST_SEPARATOR_WIDTH
-from vibeforcer.models import EngineResult
+from vibeforcer.cli._claude_retry import claude_team_event_feedback
 
 VALID_PLATFORMS = ("claude", "codex", "opencode")
-PlatformName = str
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(VALID_PLATFORMS)} (default: claude)"
 )
+
+
+class CliInputError(ValueError):
+    """Clean user-facing CLI input error."""
 
 
 def _load_stdin_json() -> ObjectDict:
     raw = sys.stdin.read()
     if not raw.strip():
         return {}
-    parsed = cast(object, json.loads(raw))
+    try:
+        parsed = cast(object, json.loads(raw))
+    except json.JSONDecodeError as exc:
+        raise CliInputError(f"Invalid JSON on stdin: {exc.msg}") from None
     return object_dict(parsed)
+
+
+def _report_cli_input_error(exc: CliInputError) -> int:
+    print(str(exc), file=sys.stderr)
+    return 1
 
 
 def _string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
@@ -51,18 +60,29 @@ def _dump_output(output: ObjectMapping | None) -> int:
 def cmd_handle(args: argparse.Namespace) -> int:
     from vibeforcer.engine import evaluate_payload
 
-    payload = _load_stdin_json()
+    try:
+        payload = _load_stdin_json()
+    except CliInputError as exc:
+        return _report_cli_input_error(exc)
     if not payload:
         return 0
     platform = _string_arg(args, "platform", "claude")
     result = evaluate_payload(payload, platform=platform)
+    if platform.strip().lower() == "claude":
+        feedback = claude_team_event_feedback(result)
+        if feedback:
+            _ = sys.stderr.write(feedback.rstrip() + "\n")
+            return 2
     return _dump_output(result.output)
 
 
 def cmd_handle_async(_args: argparse.Namespace) -> int:
     from vibeforcer.async_jobs import run_async_jobs
 
-    payload = _load_stdin_json()
+    try:
+        payload = _load_stdin_json()
+    except CliInputError as exc:
+        return _report_cli_input_error(exc)
     summary, _errors = run_async_jobs(payload)
     if summary:
         _ = sys.stdout.write(summary + "\n")
@@ -80,7 +100,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     )
 
     target = Path(_string_arg(args, "path", ".")).resolve()
-    config = load_config(repo_root=target)
+    config = load_config(
+        repo_root=target,
+        ensure_enrollment=False,
+        ensure_trace=False,
+    )
     resolved_repo_root = resolve_repo_root(target)
     git_root = resolve_git_root(target)
     main_repo_root = resolve_main_git_repo_root(target)
@@ -233,6 +257,7 @@ def _copy_prompt_context(base_dir: Path, resource_path: Callable[[str], Path]) -
 
 def cmd_config_init(args: argparse.Namespace) -> int:
     from vibeforcer.config import config_dir
+    from vibeforcer.installer._shared import backup_existing_file_and_report
     from vibeforcer.resources import resource_path
 
     target = config_dir() / "config.json"
@@ -243,6 +268,7 @@ def cmd_config_init(args: argparse.Namespace) -> int:
 
     defaults_path = resource_path("defaults.json")
     target.parent.mkdir(parents=True, exist_ok=True)
+    backup_existing_file_and_report(target, "config")
     _ = target.write_text(defaults_path.read_text(encoding="utf-8"), encoding="utf-8")
     print(f"Created: {target}")
 
@@ -261,77 +287,10 @@ def cmd_config_path(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_one_test(
-    evaluate_payload: Callable[[Mapping[str, object], PlatformName], EngineResult],
-    case: tuple[str, str, str, ObjectDict, PlatformName, bool, str],
-) -> str:
-    label, event, tool, tool_input, platform, expect_deny, cwd = case
-    payload = {
-        "hook_event_name": event,
-        "tool_name": tool,
-        "tool_input": tool_input,
-        "cwd": cwd,
-        "session_id": f"self-test-{platform}-{label}",
-    }
-    result = evaluate_payload(payload, platform)
-    deny_count = sum(1 for f in result.findings if f.decision in {"deny", "block"})
-    passed = (deny_count > 0) if bool(expect_deny) else (deny_count == 0)
-    status = "PASS" if passed else "FAIL"
-    print(f"  [{status}] {label} ({deny_count} finding(s))")
-    return status
+def cmd_test(args: argparse.Namespace) -> int:
+    from vibeforcer.cli._self_test import cmd_test as _cmd_test
 
-
-def cmd_test(_args: argparse.Namespace) -> int:
-    from vibeforcer.engine import evaluate_payload
-
-    print("vibeforcer self-test")
-    print("=" * SELFTEST_SEPARATOR_WIDTH)
-    env_path = str(Path.home() / ".env")
-    noverify: ObjectDict = {"command": "git commit --no-verify -m 'test'"}
-    with tempfile.TemporaryDirectory(prefix="vibeforcer-self-test-") as tmpdir:
-        strict_repo = Path(tmpdir)
-        (strict_repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n",
-            encoding="utf-8",
-        )
-        strict_cwd = str(strict_repo)
-        outside_cwd = tempfile.gettempdir()
-        cases: list[tuple[str, str, str, ObjectDict, PlatformName, bool, str]] = [
-            ("git --no-verify → deny", "PreToolUse", "Bash", noverify, "claude", True, strict_cwd),
-            (
-                ".env write → deny",
-                "PreToolUse",
-                "Write",
-                {"file_path": env_path, "content": "SECRET=***"},
-                "claude",
-                True,
-                outside_cwd,
-            ),
-            (
-                "echo hello → allow",
-                "PreToolUse",
-                "Bash",
-                {"command": "echo hello"},
-                "claude",
-                False,
-                strict_cwd,
-            ),
-            ("codex adapter → deny", "PreToolUse", "Bash", noverify, "codex", True, strict_cwd),
-            (
-                "opencode adapter → deny",
-                "tool.execute.before",
-                "bash",
-                noverify,
-                "opencode",
-                True,
-                strict_cwd,
-            ),
-        ]
-        statuses = [_run_one_test(evaluate_payload, case) for case in cases]
-    all_pass = all(status == "PASS" for status in statuses)
-    print()
-    print("All tests passed." if all_pass else "SOME TESTS FAILED.")
-    return 0 if all_pass else 1
+    return _cmd_test(args)
 
 
 def cmd_version(_args: argparse.Namespace) -> int:

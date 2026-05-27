@@ -19,8 +19,9 @@ _RULE_HINTS: dict[str, str] = {
     ),
     "PY-CODE-008": "Next step: extract one helper first; avoid full-file rewrites.",
     "PY-CODE-010": (
-        "Next step: break the expression or extract an intermediate variable; "
-        "do not hide long lines with comments."
+        "Next step: break the executable expression or extract an intermediate variable. "
+        "The line-length hook ignores docstrings/string literals and whitespace-only "
+        "padding, so do not mangle docs or spacing to appease it."
     ),
     "PY-CODE-011": (
         "Next step: use guard clauses or extract the inner branch before "

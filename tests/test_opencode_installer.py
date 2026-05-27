@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from vibeforcer.installer import _opencode as opencode_installer
+from vibeforcer.resources import resource_path
+
+
+def _opencode_plugin_source() -> str:
+    return resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
+
+
+def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
+    plugin = _opencode_plugin_source()
+    assert "empty enforcer response" not in plugin
+    assert "if (!trimmed) return null" in plugin
+    assert "exits 0 with no stdout" in plugin
+
+
+def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    appdata = tmp_path / "AppData" / "Roaming"
+    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("APPDATA", str(appdata))
+
+    assert opencode_installer._opencode_plugin_path() == (
+        appdata / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    )
+
+
+def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
+    binary = 'C:\\Users\\Trav App\\bin\\vibeforcer "quoted".exe'
+    template = _opencode_plugin_source()
+
+    rendered = opencode_installer._render_opencode_plugin(template, binary)
+
+    assert f"Bun.env.VIBEFORCER_BIN || {json.dumps(binary)}" in rendered
+    assert '"__VIBEFORCER_BIN__"' not in rendered
+
+
+def test_opencode_install_backs_up_existing_plugin_before_overwrite(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(
+        opencode_installer,
+        "find_binary",
+        lambda: "/tmp/Vibeforcer Bin/vibeforcer",
+    )
+    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text("custom plugin\n", encoding="utf-8")
+
+    assert opencode_installer._install_opencode(dry_run=False) == 0
+
+    backups = sorted(target.parent.glob("vibeforcer-plugin.ts.vibeforcer-bak-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == "custom plugin\n"
+    installed = target.read_text(encoding="utf-8")
+    assert 'Bun.env.VIBEFORCER_BIN || "/tmp/Vibeforcer Bin/vibeforcer"' in installed
+
+
+def test_opencode_uninstall_refuses_unrecognized_plugin(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text("custom plugin\n", encoding="utf-8")
+
+    assert opencode_installer._uninstall_opencode(dry_run=False) == 1
+    assert target.read_text(encoding="utf-8") == "custom plugin\n"
+
+
+def test_opencode_plugin_logs_posttool_context_actions() -> None:
+    plugin = _opencode_plugin_source()
+    assert 'result.action === "warn" || result.action === "context"' in plugin
+    assert "const message = result.reason || result.context" in plugin
+    assert 'level: "warn"' in plugin
+
+
+def _assert_posttool_arg_cache_contract(plugin: str) -> None:
+    expected_cache_contract = [
+        "const postToolArgCache: ToolArgsCacheEntry[] = []",
+        "function rememberToolArgs(",
+        "function takeRememberedToolArgs(",
+        "tool_input: preToolArgs",
+        "rememberToolArgs(input.tool, currentDirectory, preToolArgs)",
+        "const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)",
+        "const postToolArgs = { ...rememberedArgs, ...cloneArgs(output.args) }",
+        "tool_input: postToolArgs",
+    ]
+    missing_contract = [line for line in expected_cache_contract if line not in plugin]
+    assert missing_contract == [], "OpenCode plugin lost pretool/posttool arg cache contract"
+
+
+def _assert_posttool_arg_cache_policy(plugin: str) -> None:
+    expected_policy = [
+        "POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000",
+        "POST_TOOL_ARG_CACHE_MAX_ENTRIES = 50",
+        "entry.tool === toolName && entry.cwd === cwd",
+        "postToolArgCache.splice(index, 1)",
+    ]
+    missing_policy = [line for line in expected_policy if line not in plugin]
+    assert missing_policy == [], "OpenCode plugin cache should stay TTL-bounded, scoped, and consumed"
+
+
+def test_opencode_plugin_caches_pretool_args_for_posttool_backstops() -> None:
+    plugin = _opencode_plugin_source()
+    assert "tool_input: preToolArgs" in plugin
+    _assert_posttool_arg_cache_contract(plugin)
+
+
+def test_opencode_plugin_cache_is_bounded_ttl_scoped_and_consumed() -> None:
+    plugin = _opencode_plugin_source()
+    assert "POST_TOOL_ARG_CACHE_TTL_MS" in plugin
+    _assert_posttool_arg_cache_policy(plugin)

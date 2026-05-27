@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
+import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -58,6 +58,47 @@ def _find_increases(
     return increases
 
 
+def _looks_like_env_assignment(token: str) -> bool:
+    """Return True for shell VAR=value assignment tokens."""
+    name, sep, _value = token.partition("=")
+    return bool(sep and name and name.replace("_", "").isalnum() and not name[0].isdigit())
+
+
+def _command_name(token: str) -> str:
+    """Normalize a shell command token to its executable basename."""
+    return Path(token).name
+
+
+def _is_repo_wide_baseline_command(command: str) -> bool:
+    """Detect baseline-generation commands despite spacing/path/env wrappers."""
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        tokens = command.split()
+
+    for idx, token in enumerate(tokens):
+        name = _command_name(token)
+        if name == "env":
+            continue
+        if _looks_like_env_assignment(token):
+            continue
+        if name == "quality-gate" and tokens[idx + 1 : idx + 2] == ["baseline"]:
+            return True
+        if name in {"vibeforcer", "vfc"} and tokens[idx + 1 : idx + 3] == [
+            "lint",
+            "baseline",
+        ]:
+            return True
+        if name.startswith("python") and tokens[idx + 1 : idx + 5] == [
+            "-m",
+            "vibeforcer",
+            "lint",
+            "baseline",
+        ]:
+            return True
+    return False
+
+
 class BaselineGuardRule(Rule):
     """Block writes to baselines.json that increase violation counts.
 
@@ -85,30 +126,21 @@ class BaselineGuardRule(Rule):
             return self._check_baseline_change(target.path, target.content, ctx)
 
         # Catch CLI commands that regenerate the baseline
-        if ctx.bash_command:
-            cmd = ctx.bash_command.strip()
-            if any(
-                token in cmd
-                for token in (
-                    "quality-gate baseline",
-                    "vibeforcer lint baseline",
-                    "vfc lint baseline",
+        if ctx.bash_command and _is_repo_wide_baseline_command(ctx.bash_command):
+            return [
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.HIGH,
+                    decision="deny",
+                    message=(
+                        "Running repo-wide baseline generation is blocked. "
+                        "`quality-gate baseline`, `vibeforcer lint baseline`, and `vfc lint baseline` "
+                        "all hide technical debt by normalizing existing violations. "
+                        "Fix the violations instead of inflating the baseline."
+                    ),
                 )
-            ):
-                return [
-                    RuleFinding(
-                        rule_id=self.rule_id,
-                        title=self.title,
-                        severity=Severity.HIGH,
-                        decision="deny",
-                        message=(
-                            "Running repo-wide baseline generation is blocked. "
-                            "`quality-gate baseline`, `vibeforcer lint baseline`, and `vfc lint baseline` "
-                            "all hide technical debt by normalizing existing violations. "
-                            "Fix the violations instead of inflating the baseline."
-                        ),
-                    )
-                ]
+            ]
 
         return []
 
@@ -118,16 +150,19 @@ class BaselineGuardRule(Rule):
         if p.is_absolute() and p.exists():
             return p
 
-        # Claude Code sets CLAUDE_PROJECT_DIR when running hooks
-        project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
-        if project_dir:
-            candidate = Path(project_dir) / path_str
-            if candidate.exists():
-                return candidate
-
-        # Try relative to config root and cwd
-        for base in (ctx.config.root, Path.cwd()):
+        # Relative hook targets belong to the payload/project root. Do not fall
+        # through to the hook process cwd; that can point at the vibeforcer repo
+        # and mask brand-new baseline creation in the target project.
+        seen: set[Path] = set()
+        for base in (ctx.cwd, ctx.config.repo_root):
             candidate = base / path_str
+            try:
+                resolved = candidate.resolve()
+            except OSError:
+                resolved = candidate.absolute()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             if candidate.exists():
                 return candidate
 
@@ -146,6 +181,20 @@ class BaselineGuardRule(Rule):
 
         existing = self._resolve_existing_path(path_str, ctx)
         if existing is None:
+            if any(new_rules.values()):
+                return [
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.HIGH,
+                        decision="deny",
+                        message=(
+                            "Creating a populated baseline is blocked. "
+                            "New detector enrollment must use a reviewed migration, "
+                            "not an agent-written baselines.json file."
+                        ),
+                    )
+                ]
             return []
         old_data = _parse_json_dict(existing.read_text(encoding="utf-8"))
         if old_data is None:

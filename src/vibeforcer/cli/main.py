@@ -41,6 +41,37 @@ def _string_list_attr(args: argparse.Namespace, name: str) -> list[str] | None:
     return values or None
 
 
+def _search_subcommands() -> set[str]:
+    from vibeforcer.search._cli_parser import SEARCH_SUBCOMMANDS
+
+    return set(SEARCH_SUBCOMMANDS)
+
+
+def _normalize_search_argv(argv: list[str]) -> list[str]:
+    """Rewrite bare search queries to the explicit query subcommand."""
+    if not argv or argv[0] != "search":
+        return argv
+    rest = argv[1:]
+    if not rest:
+        return ["search", "--help"]
+    first = rest[0]
+    if first.startswith("-") or first in _search_subcommands():
+        return argv
+    return ["search", "query", *rest]
+
+
+def _normalize_isx_argv(argv: list[str] | None) -> list[str] | None:
+    """Rewrite bare ``isx`` queries to the explicit query subcommand."""
+    if argv is None:
+        return None
+    if not argv:
+        return argv
+    first = argv[0]
+    if first.startswith("-") or first in _search_subcommands():
+        return argv
+    return ["query", *argv]
+
+
 def _run_search_func(args: argparse.Namespace) -> int:
     from vibeforcer.search.config import IsxError
 
@@ -54,35 +85,43 @@ def _run_search_func(args: argparse.Namespace) -> int:
         return 2
 
 
-def _dispatch_search(args: argparse.Namespace) -> int:
+def _run_search_command(args: argparse.Namespace) -> int | None:
     search_cmd = _string_attr(args, "search_command")
     if search_cmd and _callable_attr(args, "func") is not None:
         return _run_search_func(args)
+    return None
 
+
+def _run_default_search_query(args: argparse.Namespace) -> int | None:
     query_args = _string_list_attr(args, "query_args")
-    if query_args:
-        from vibeforcer.search.cli import cmd_search
+    if not query_args:
+        return None
+    from vibeforcer.search.cli import cmd_search
 
-        args.query = query_args
-        args.func = cmd_search
-        return _run_search_func(args)
-    return 0
+    args.query = query_args
+    args.func = cmd_search
+    return _run_search_func(args)
+
+
+def _dispatch_search(args: argparse.Namespace) -> int:
+    result = _run_search_command(args)
+    if result is not None:
+        return result
+    return _run_default_search_query(args) or 0
 
 
 def _isx_main(argv: list[str] | None = None) -> int:
-    from vibeforcer.search.cli import build_search_parser, cmd_search
+    from vibeforcer.search.cli import build_search_parser
 
     parser = build_search_parser(subparsers=None)
-    args = parser.parse_args(argv)
-    search_cmd = _string_attr(args, "search_command")
-    if search_cmd and _callable_attr(args, "func") is not None:
-        return _run_search_func(args)
+    args = parser.parse_args(_normalize_isx_argv(argv))
+    result = _run_search_command(args)
+    if result is not None:
+        return result
 
-    query_args = _string_list_attr(args, "query_args")
-    if query_args:
-        args.query = query_args
-        args.func = cmd_search
-        return _run_search_func(args)
+    default_result = _run_default_search_query(args)
+    if default_result is not None:
+        return default_result
 
     parser.print_help()
     return 0
@@ -93,8 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     if prog_name == "isx":
         return _isx_main(argv)
 
+    raw_argv = sys.argv[1:] if argv is None else argv
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_normalize_search_argv(raw_argv))
     if _bool_attr(args, "version"):
         from vibeforcer.cli.commands import cmd_version
 

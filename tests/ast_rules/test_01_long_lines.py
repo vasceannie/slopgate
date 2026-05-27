@@ -60,3 +60,51 @@ class TestLongLines(unittest.TestCase):
         result = evaluate_payload(payload)
         _assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings)
+
+    def test_docstring_long_line_exempt(self) -> None:
+        long_doc = '"""' + ("doc " * 40) + '"""' + chr(10)
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/main.py", "new_string": long_doc},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings)
+
+    def test_multiline_docstring_closing_line_exempt(self) -> None:
+        source = '"""\n' + ("closing doc line " * 12) + '"""\nprint("ok")\n'
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/main.py", "new_string": source},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings)
+
+    def test_whitespace_only_line_exempt(self) -> None:
+        source = "def ok():\n" + (" " * 180) + "\n    return 1\n"
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/main.py", "new_string": source},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings)
+
+    def test_trailing_spaces_do_not_count_toward_line_length(self) -> None:
+        source = "value = 1" + (" " * 180) + "\n"
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/main.py", "new_string": source},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        _assert_not_denied(result)
+        assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings)

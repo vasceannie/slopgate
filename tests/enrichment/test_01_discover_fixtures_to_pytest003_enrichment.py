@@ -51,8 +51,18 @@ class TestDiscoverFixtures:
 
         fixtures = discover_fixtures(test_file, tmp_path)
         by_name = {f["name"]: f for f in fixtures}
-        assert by_name["normal"]["has_params"] is False
-        assert by_name["data_driven"]["has_params"] is True
+        assert by_name == {
+            "normal": {
+                "name": "normal",
+                "conftest": "tests/conftest.py",
+                "has_params": False,
+            },
+            "data_driven": {
+                "name": "data_driven",
+                "conftest": "tests/conftest.py",
+                "has_params": True,
+            },
+        }
 
     def test_no_conftest_returns_empty(self, tmp_path: Path) -> None:
         tests_dir = tmp_path / "tests"

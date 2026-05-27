@@ -113,14 +113,14 @@ class TestCrossPlatform:
         _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
         target = tmp_path / "module.py"
         target.write_text("print('hi')\nprint('bye')\n", encoding="utf-8")
-        initial_payload = {
+        initial_payload: dict[str, object] = {
             "session_id": "adapter-cross-read",
             "cwd": str(tmp_path),
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": str(target)},
         }
-        follow_up_payload = {
+        follow_up_payload: dict[str, object] = {
             "session_id": "adapter-cross-read",
             "cwd": str(tmp_path),
             "hook_event_name": "PreToolUse",

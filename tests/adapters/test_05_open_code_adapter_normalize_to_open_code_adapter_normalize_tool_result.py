@@ -35,7 +35,7 @@ class TestOpenCodeAdapterNormalize:
         assert canonical["hook_event_name"] == "PreToolUse", "canonical event changed"
         assert canonical["tool_name"] == "Write", "canonical tool name changed"
 
-    def test_normalize_capitalizes_tool_name(self) -> None:
+    def test_normalize_maps_known_lowercase_tool_alias(self) -> None:
         adapter = OpenCodeAdapter()
         raw: ObjectDict = {
             "hook_event_name": "tool.execute.before",
@@ -45,7 +45,21 @@ class TestOpenCodeAdapterNormalize:
             "session_id": "oc3",
         }
         canonical = adapter.normalize_payload(raw)
-        assert canonical["tool_name"] == "Write", "lowercase tool name not capitalized"
+        assert canonical["tool_name"] == "Write", "known lowercase alias not mapped"
+
+    def test_normalize_preserves_unknown_lowercase_tool_name(self) -> None:
+        adapter = OpenCodeAdapter()
+        raw: ObjectDict = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "apply_patch",
+            "tool_input": {},
+            "cwd": "/tmp",
+            "session_id": "oc3b",
+        }
+        canonical = adapter.normalize_payload(raw)
+        assert canonical["tool_name"] == "apply_patch", (
+            "unknown or structured tool names should not be title-cased"
+        )
 
     def test_normalize_session_idle_maps_to_stop(self) -> None:
         """session.idle → Stop."""

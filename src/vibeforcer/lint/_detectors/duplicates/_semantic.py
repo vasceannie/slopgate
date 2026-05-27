@@ -64,7 +64,7 @@ class _Normalizer(ast.NodeTransformer):
         visited = self.generic_visit(node)
         if not isinstance(visited, type(node)):
             raise TypeError(f"expected {type(node).__name__} from generic_visit")
-        return cast(_ASTNodeT, visited)
+        return visited
 
     def _normalize_callable_signature(
         self,

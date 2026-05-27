@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.cli.lint import cmd_lint
-from vibeforcer.lint._baseline import Violation
+from vibeforcer.cli.lint import _tally_rule, cmd_lint
+from vibeforcer.lint._baseline import Violation, assert_no_new_violations
 from vibeforcer.lint._config import reset_config
 from vibeforcer.lint._details import format_violation_details
 
@@ -151,6 +151,28 @@ def test_lint_check_flags_ty_ignore_as_type_suppression(
     assert "# ty: ignore[possibly-unbound]" in output
 
 
+def test_quality_generate_baseline_env_does_not_hide_new_violations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_lint_project_with_file(
+        tmp_path,
+        "src/example.py",
+        "from __future__ import annotations\n\ndef answer() -> int:\n    return 1\n",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("QUALITY_GENERATE_BASELINE", "1")
+    reset_config()
+    try:
+        with pytest.raises(AssertionError, match="1 NEW violation"):
+            assert_no_new_violations(
+                "manual-rule",
+                [Violation("manual-rule", "src/example.py", "answer")],
+            )
+    finally:
+        reset_config()
+
+
 def test_lint_details_formatter_includes_prescriptive_scaffold() -> None:
     violation = Violation(
         rule="oversized-module",
@@ -182,3 +204,21 @@ def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
 
     assert "metadata.related_files" in block
     _assert_type_suppression_detail_block(block)
+
+
+def test_lint_summary_prints_existing_literal_locations(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    violation = Violation(
+        rule="repeated-string-literal",
+        relative_path="<project>",
+        identifier="'skipped'",
+        detail="appears in 11 files (max: 10); consider `SKIPPED`",
+        metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
+    )
+
+    _ = _tally_rule("repeated-string-literal", [violation], {}, details=False)
+
+    output = capsys.readouterr().out
+    assert "+ <project>:'skipped'" in output
+    assert "existing locations: src/a.py:5, src/b.py:8" in output

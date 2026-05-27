@@ -156,11 +156,10 @@ class TestClaudeAdapterBasic:
             context=None,
             updated_input={},
         )
-        rendered = require_rendered(output)
-        assert rendered["continue"] is False, (
-            "TaskCompleted block must set continue=False"
+        assert output is None, (
+            "TaskCompleted quality-gate blocks must use Claude retry feedback "
+            "via CLI exit 2 + stderr, not JSON continue:false"
         )
-        assert "TC-001" in test_support.required_string(rendered, "stopReason")
 
     def test_pretool_block_maps_to_deny(self) -> None:
         """Engine uses 'block' internally; Claude Code expects 'deny' for PreToolUse."""

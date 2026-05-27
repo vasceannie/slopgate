@@ -14,6 +14,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from tests.harness_schema_support import (
+    assert_installed_sources_are_extractable,
+    assert_official_source,
+    strings,
+)
 from vibeforcer.adapters import ADAPTERS
 from vibeforcer.adapters.claude import ClaudeAdapter
 from vibeforcer.adapters.codex import CODEX_EVENTS, CodexAdapter
@@ -51,6 +56,7 @@ REQUIRED_SOURCE_KEYWORDS = {
 EXPECTED_OPENCODE_SCHEMA_DEFS = {"Config", "PermissionActionConfig", "PermissionConfig", "PermissionRuleConfig"}
 
 LOCAL_PATH_FRAGMENTS = ("/home/", "/Users/", "\\Users\\")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fixture() -> dict[str, Any]:
@@ -80,48 +86,24 @@ def _render_denied_output(adapter: Any, event_name: str, finding: RuleFinding) -
     return output
 
 
-def _strings(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        return [item for nested in value.values() for item in _strings(nested)]
-    if isinstance(value, list):
-        return [item for nested in value for item in _strings(nested)]
-    return []
-
-
-def _assert_official_source(
-    source_id: str, source: dict[str, Any], harness: str, kind: str
-) -> None:
-    assert source["harness"] == harness
-    assert source["kind"] == kind
-    assert source["status_code"] == 200
-    assert source["content_type"]
-    assert "text/html" not in source["content_type"].lower(), source_id
-    assert source["url"].startswith((
-        "https://docs.anthropic.com/",
-        "https://opencode.ai/",
-        "https://developers.openai.com/",
-    )), source_id
-    assert len(source["sha256"]) == 64, source_id
-    assert source["bytes"] > 1000, source_id
-    assert source["retrieved_at_utc"].endswith("+00:00"), source_id
-
-
 def test_harness_schema_context_sources_are_official_available_and_parsable() -> None:
     data = _fixture()
-    assert data["schema_version"] == 1, "fixture schema_version should stay at v1"
-    assert (
-        data["source_snapshot_policy"] == "manual-regeneration-required"
-    ), "source snapshots must be regenerated manually"
-    assert data["errors"] == {}, "checked-in harness schema fixture should be error-free"
-    assert set(data["sources"]) == set(REQUIRED_SOURCES), (
-        "fixture sources must match the required official source ids"
-    )
+    fixture_summary = {
+        "schema_version": data["schema_version"],
+        "source_snapshot_policy": data["source_snapshot_policy"],
+        "errors": data["errors"],
+        "sources": set(data["sources"]),
+    }
+    assert fixture_summary == {
+        "schema_version": 1,
+        "source_snapshot_policy": "manual-regeneration-required",
+        "errors": {},
+        "sources": set(REQUIRED_SOURCES),
+    }
 
     for source_id, (harness, kind) in REQUIRED_SOURCES.items():
         source = data["sources"][source_id]
-        _assert_official_source(source_id, source, harness, kind)
+        assert_official_source(source_id, source, harness, kind)
 
 
 def test_checked_in_fixture_omits_machine_local_cache_paths() -> None:
@@ -132,26 +114,26 @@ def test_checked_in_fixture_omits_machine_local_cache_paths() -> None:
     ]
     assert sources_with_cache_paths == []
 
-    strings = _strings(data)
-    leaked = [text for text in strings if any(part in text for part in LOCAL_PATH_FRAGMENTS)]
+    fixture_strings = strings(data)
+    leaked = [text for text in fixture_strings if any(part in text for part in LOCAL_PATH_FRAGMENTS)]
     assert leaked == []
 
 
 def test_opencode_schema_summary_contains_relevant_permission_contract_defs() -> None:
     data = _fixture()
     schema_summary = data["sources"]["opencode_config_schema"]["schema_summary"]
-    assert schema_summary["schema"] == "https://json-schema.org/draft/2020-12/schema", (
-        "OpenCode config schema should declare draft 2020-12"
-    )
-    assert schema_summary["ref"] == "#/$defs/Config", (
-        "OpenCode config schema should root at $defs/Config"
-    )
-    assert {"$schema", "$ref", "$defs"} <= set(schema_summary["root_keys"]), (
-        "OpenCode schema summary should include schema, ref, and defs root keys"
-    )
-    assert EXPECTED_OPENCODE_SCHEMA_DEFS <= set(schema_summary["defs_keys"]), (
-        "OpenCode schema summary should retain permission contract definitions"
-    )
+    observed = {
+        "schema": schema_summary["schema"],
+        "ref": schema_summary["ref"],
+        "has_root_keys": {"$schema", "$ref", "$defs"} <= set(schema_summary["root_keys"]),
+        "has_permission_defs": EXPECTED_OPENCODE_SCHEMA_DEFS <= set(schema_summary["defs_keys"]),
+    }
+    assert observed == {
+        "schema": "https://json-schema.org/draft/2020-12/schema",
+        "ref": "#/$defs/Config",
+        "has_root_keys": True,
+        "has_permission_defs": True,
+    }
 
 
 def test_expected_contract_is_human_authored_and_source_cross_checked() -> None:
@@ -166,12 +148,25 @@ def test_expected_contract_is_human_authored_and_source_cross_checked() -> None:
         for harness, ids in source_ids.items()
     }
 
-    assert authorities == {
-        harness: "human-authored-source-cross-checked"
-        for harness in data["expected_contract"]
-    }
+    assert authorities == {harness: "human-authored-source-cross-checked" for harness in data["expected_contract"]}
     assert missing_source_ids == []
     assert unknown_source_ids == {harness: [] for harness in data["expected_contract"]}
+    notes = {harness: contract["blocking_notes"] for harness, contract in data["expected_contract"].items()}
+    assert "Richest direct hook surface" in notes["claude"]
+    assert "Partial hooks" in notes["codex"]
+    assert "Plugin-mediated" in notes["opencode"]
+
+
+def test_fixture_installed_source_paths_exist_and_symbols_are_extractable() -> None:
+    data = _fixture()
+    installed_sources = [
+        surface["installed_source"]
+        for surface in data["harness_event_surfaces"].values()
+        if "installed_source" in surface
+    ]
+    assert installed_sources, "fixture should record local installer provenance"
+
+    assert_installed_sources_are_extractable(REPO_ROOT, installed_sources)
 
 
 def test_source_specific_doc_keywords_support_key_contract_claims() -> None:
@@ -197,65 +192,45 @@ def _assert_claude_event_surface_matches_contract(data: dict[str, Any]) -> None:
     installed_events = set(claude_surface["vibeforcer_installed_events"])
     intentionally_not_installed = set(claude_surface["intentionally_not_installed_events"])
 
-    assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS, (
-        "recorded Claude official event surface should match the docs snapshot"
-    )
-    assert installed_events == set(_CLAUDE_EVENTS), (
-        "recorded Claude installed events should match installer _CLAUDE_EVENTS"
-    )
-    assert installed_events < official_events, (
-        "Vibeforcer should record Claude install coverage as a subset, not parity"
-    )
-    assert intentionally_not_installed == official_events - installed_events, (
-        "intentionally_not_installed should be exactly official minus installed events"
-    )
-    assert set(data["expected_contract"]["claude"]["native_events"]) == installed_events, (
-        "Claude expected contract native events should reflect installed events"
-    )
-    assert (
-        claude_surface["coverage_decision"]
-        == "install-supported-subset-not-full-official-surface"
-    ), "Claude coverage decision should preserve degraded/subset wording"
-    assert claude_surface["authority"] == "official-docs-plus-local-installer", (
-        "Claude event surface authority should cite docs plus local installer"
-    )
-    assert claude_surface["extraction_method"] == "claude-hooks-table", (
-        "Claude official event extraction should remain tied to the hooks table"
-    )
-    assert claude_surface["unknown_official_events"] == [], (
-        "Claude docs snapshot should not contain unknown official events"
-    )
+    assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS
+    assert installed_events == set(_CLAUDE_EVENTS)
+    assert installed_events < official_events
+    assert intentionally_not_installed == official_events - installed_events
+    assert set(data["expected_contract"]["claude"]["native_events"]) == installed_events
+    assert claude_surface["coverage_decision"] == "install-supported-subset-not-full-official-surface"
+    assert claude_surface["authority"] == "official-docs-plus-local-installer"
+    assert claude_surface["extraction_method"] == "claude-hooks-table"
+    assert claude_surface["unknown_official_events"] == []
     assert claude_surface["installed_source"] == {
-        "path": "src/vibeforcer/installer.py",
+        "path": "src/vibeforcer/installer/_claude.py",
         "symbol": "_CLAUDE_EVENTS",
         "load_method": "ast-literal",
-    }, "Claude installed event source should point at installer _CLAUDE_EVENTS"
+    }
 
 
 def test_claude_official_event_surface_is_recorded_separately_from_installed_subset() -> None:
     data = _fixture()
     _assert_claude_event_surface_matches_contract(data)
-    assert "claude" in data["harness_event_surfaces"], (
-        "Claude event surface should be present in the fixture"
-    )
+    assert "claude" in data["harness_event_surfaces"]
 
 
 def test_schema_contract_event_maps_match_adapter_normalization() -> None:
     data = _fixture()
     contracts = data["expected_contract"]
 
-    assert set(contracts["opencode"]["native_events"]) == set(OPENCODE_EVENT_MAP), (
-        "OpenCode contract native events should match adapter event map keys"
-    )
-    assert set(OPENCODE_EVENT_MAP.values()) == set(
-        contracts["opencode"]["canonical_events"]
-    ), "OpenCode contract canonical events should match adapter normalized values"
-    assert set(contracts["codex"]["native_events"]) == CODEX_EVENTS, (
-        "Codex contract native events should match adapter CODEX_EVENTS"
-    )
-    assert contracts["opencode"]["native_events"] != contracts["claude"]["native_events"], (
-        "OpenCode native events should stay distinct from Claude native events"
-    )
+    contract_summary = {
+        "opencode_native": set(contracts["opencode"]["native_events"]),
+        "opencode_canonical": set(contracts["opencode"]["canonical_events"]),
+        "codex_native": set(contracts["codex"]["native_events"]),
+        "opencode_differs_from_claude": contracts["opencode"]["native_events"]
+        != contracts["claude"]["native_events"],
+    }
+    assert contract_summary == {
+        "opencode_native": set(OPENCODE_EVENT_MAP),
+        "opencode_canonical": set(OPENCODE_EVENT_MAP.values()),
+        "codex_native": CODEX_EVENTS,
+        "opencode_differs_from_claude": True,
+    }
 
     adapter = OpenCodeAdapter()
     normalized_events = {
@@ -265,9 +240,7 @@ def test_schema_contract_event_maps_match_adapter_normalization() -> None:
         for native_event in OPENCODE_EVENT_MAP
     }
 
-    assert normalized_events == OPENCODE_EVENT_MAP, (
-        "OpenCode adapter should normalize every native event through OPENCODE_EVENT_MAP"
-    )
+    assert normalized_events == OPENCODE_EVENT_MAP
 
 
 def _pretool_output_summary(finding: RuleFinding) -> dict[str, dict[str, object]]:
@@ -330,17 +303,18 @@ def test_schema_contract_permission_request_output_shapes_are_harness_specific()
 def test_opencode_stop_output_is_degraded_advisory_not_claude_style_blocking() -> None:
     adapter = OpenCodeAdapter()
     payload = adapter.normalize_payload({"hook_event_name": "session.idle"})
-    assert payload["hook_event_name"] == "Stop", (
-        "OpenCode session.idle should normalize to canonical Stop"
-    )
+    assert payload["hook_event_name"] == "Stop"
 
     output = adapter.render_output("Stop", [_finding()], decision="deny")
-    assert output is not None, "OpenCode Stop render should produce advisory output"
-    assert output["action"] == "continue", (
-        "OpenCode Stop output should continue because stop blocking is degraded/advisory"
-    )
-    assert "reason" in output, "OpenCode advisory Stop output should explain the denial"
-    assert "hookSpecificOutput" not in output, (
-        "OpenCode output should not use Claude-style hookSpecificOutput"
-    )
-    assert output["action"] != "block", "OpenCode Stop advisory output must not block"
+    output_summary = {
+        "is_present": output is not None,
+        "action": output["action"] if output else None,
+        "has_reason": bool(output and "reason" in output),
+        "has_hook_specific": bool(output and "hookSpecificOutput" in output),
+    }
+    assert output_summary == {
+        "is_present": True,
+        "action": "continue",
+        "has_reason": True,
+        "has_hook_specific": False,
+    }

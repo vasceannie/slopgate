@@ -94,7 +94,7 @@
       ]
     }
   },
-  "generated_at_utc": "2026-05-15T09:46:06+00:00",
+  "generated_at_utc": "2026-05-20T09:35:21+00:00",
   "harness_event_surfaces": {
     "claude": {
       "authority": "official-docs-plus-local-installer",
@@ -102,7 +102,7 @@
       "extraction_method": "claude-hooks-table",
       "installed_source": {
         "load_method": "ast-literal",
-        "path": "src/vibeforcer/installer.py",
+        "path": "src/vibeforcer/installer/_claude.py",
         "symbol": "_CLAUDE_EVENTS"
       },
       "intentionally_not_installed_events": [
@@ -567,9 +567,17 @@
       },
       {
         "keywords": [
+          "ConfigChange"
+        ],
+        "line": 159,
+        "source_id": "claude_settings",
+        "text": "### When edits take effect\n\nClaude Code watches your settings files and reloads them when they change, so edits to most keys apply to the running session without a restart. This includes `permissions`, `hooks`, and credential helpers like `apiKeyHelper`. The reload covers user, project, local, and managed settings, and the [`ConfigChange` hook](/en/hooks#configchange) fires for each detected change.\n\nA few keys are read once at session start and apply on the next restart instead:"
+      },
+      {
+        "keywords": [
           "Setup"
         ],
-        "line": 177,
+        "line": 186,
         "source_id": "claude_settings",
         "text": "| `autoMemoryEnabled`               | Enable [auto memory](/en/memory#enable-or-disable-auto-memory). When `false`, Claude does not read from or write to the auto memory directory. Default: `true`. You can also toggle this with `/memory` during a session. To disable via environment variable, set [`CLAUDE_CODE_DISABLE_AUTO_MEMORY`](/en/env-vars) in `env`                                                                                                                                                                                                                                                          | `false`                                                                                                                        |\n| `autoMode`                        | Customize what the [auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) classifier blocks and allows. Contains `environment`, `allow`, `soft_deny`, and `hard_deny` arrays of prose rules. Include the literal string `\"$defaults\"` in an array to inherit the built-in rules at that position. See [Configure auto mode](/en/auto-mode-config). Not read from shared project settings                                                                                                                                                                                   | `{\"soft_deny\": [\"$defaults\", \"Never run terraform apply\"]}`                                                                    |\n| `autoScrollEnabled`               | In [fullscreen rendering](/en/fullscreen), follow new output to the bottom of the conversation. Default: `true`. Appears in `/config` as **Auto-scroll**. Permission prompts still scroll into view when this is off                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                                                                                        |\n| `autoUpdatesChannel`              | Release channel to follow for updates. Use `\"stable\"` for a version that is typically about one week old and skips versions with major regressions, or `\"latest\"` (default) for the most recent release. To disable auto-updates entirely, set [`DISABLE_AUTOUPDATER`](/en/setup#disable-auto-updates) in `env`                                                                                                                                                                                                                                                                        | `\"stable\"`                                                                                                                     |\n| `availableModels`                 | Restrict which models users can select via `/model`, `--model`, or `ANTHROPIC_MODEL`. Does not affect the Default option. See [Restrict model selection](/en/model-config#restrict-model-selection)                                                                                                                                                                                                                                                                                                                                                                                    | `[\"sonnet\", \"haiku\"]`                                                                                                          |\n| `awaySummaryEnabled`              | Show a one-line session recap when you return to the terminal after a few minutes away. Set to `false` or turn off Session recap in `/config` to disable. Same as [`CLAUDE_CODE_ENABLE_AWAY_SUMMARY`](/en/env-vars)                                                                                                                                                                                                                                                                                                                                                                    | `true`                                                                                                                         |\n| `awsAuthRefresh`                  | Custom script that modifies the `.aws` directory (see [advanced credential configuration](/en/amazon-bedrock#advanced-credential-configuration))                                                                                                                                                                                                                                                                                                                                                                                                                                       | `aws sso login --profile myprofile`                                                                                            |"
       },
@@ -577,7 +585,7 @@
         "keywords": [
           "continue"
         ],
-        "line": 207,
+        "line": 216,
         "source_id": "claude_settings",
         "text": "| `fileSuggestion`                  | Configure a custom script for `@` file autocomplete. See [File suggestion settings](#file-suggestion-settings)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{\"type\": \"command\", \"command\": \"~/.claude/file-suggestion.sh\"}`                                                               |\n| `forceLoginMethod`                | Use `claudeai` to restrict login to Claude.ai accounts, `console` to restrict login to Claude Console (API usage billing) accounts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `claudeai`                                                                                                                     |\n| `forceLoginOrgUUID`               | Require login to belong to a specific organization. Accepts a single UUID string, which also pre-selects that organization during login, or an array of UUIDs where any listed organization is accepted without pre-selection. When set in managed settings, login fails if the authenticated account does not belong to a listed organization; an empty array fails closed and blocks login with a misconfiguration message                                                                                                                                                           | `\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"` or `[\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\", \"yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\"]` |\n| `forceRemoteSettingsRefresh`      | (Managed settings only) Block CLI startup until remote managed settings are freshly fetched from the server. If the fetch fails, the CLI exits rather than continuing with cached or no settings. When not set, startup continues without waiting for remote settings. See [fail-closed enforcement](/en/server-managed-settings#enforce-fail-closed-startup)                                                                                                                                                                                                                          | `true`                                                                                                                         |\n| `gcpAuthRefresh`                  | Custom script that refreshes GCP Application Default Credentials when they expire or cannot be loaded. See [advanced credential configuration](/en/google-vertex-ai#advanced-credential-configuration)                                                                                                                                                                                                                                                                                                                                                                                 | `gcloud auth application-default login`                                                                                        |\n| `hooks`                           | Configure custom commands to run at lifecycle events. See [hooks documentation](/en/hooks) for format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | See [hooks](/en/hooks)                                                                                                         |\n| `httpHookAllowedEnvVars`          | Allowlist of environment variable names HTTP hooks may interpolate into headers. When set, each hook's effective `allowedEnvVars` is the intersection with this list. Undefined = no restriction. Arrays merge across settings sources. See [Hook configuration](#hook-configuration)                                                                                                                                                                                                                                                                                                  | `[\"MY_TOKEN\", \"HOOK_SECRET\"]`                                                                                                  |"
       },
@@ -585,7 +593,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 225,
+        "line": 234,
         "source_id": "claude_settings",
         "text": "| `plansDirectory`                  | Customize where plan files are stored. Path is relative to project root. Default: `~/.claude/plans`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `\"./plans\"`                                                                                                                    |\n| `pluginTrustMessage`              | (Managed settings only) Custom message appended to the plugin trust warning shown before installation. Use this to add organization-specific context, for example to confirm that plugins from your internal marketplace are vetted.                                                                                                                                                                                                                                                                                                                                                   | `\"All plugins from our marketplace are approved by IT\"`                                                                        |\n| `policyHelper`                    | {/* min-version: 2.1.136 */}Admin-deployed executable that computes managed settings dynamically at startup. Only honored from MDM or a system `managed-settings.json` file. See [Compute managed settings with a policy helper](#compute-managed-settings-with-a-policy-helper). Requires Claude Code v2.1.136 or later                                                                                                                                                                                                                                                               | `{\"path\": \"/usr/local/bin/claude-policy\"}`                                                                                     |\n| `preferredNotifChannel`           | Method for task-complete and permission-prompt notifications: `\"auto\"`, `\"terminal_bell\"`, `\"iterm2\"`, `\"iterm2_with_bell\"`, `\"kitty\"`, `\"ghostty\"`, or `\"notifications_disabled\"`. Default: `\"auto\"`, which sends a desktop notification in iTerm2, Ghostty, and Kitty and does nothing in other terminals. Set `\"terminal_bell\"` to ring the bell character in any terminal. Appears in `/config` as **Notifications**. See [Get a terminal bell or notification](/en/terminal-config#get-a-terminal-bell-or-notification)                                                           | `\"terminal_bell\"`                                                                                                              |\n| `prefersReducedMotion`            | Reduce or disable UI animations (spinners, shimmer, flash effects) for accessibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                                                                                         |\n| `prUrlTemplate`                   | URL template for the PR badge shown in the footer and in tool-result summaries. Substitutes `{host}`, `{owner}`, `{repo}`, `{number}`, and `{url}` from the `gh`-reported PR URL. Use to point PR links at an internal code-review tool instead of `github.com`. Does not affect `#123` autolinks in Claude's prose                                                                                                                                                                                                                                                                    | `\"https://reviews.example.com/{owner}/{repo}/pull/{number}\"`                                                                   |\n| `respectGitignore`                | Control whether the `@` file picker respects `.gitignore` patterns. When `true` (default), files matching `.gitignore` patterns are excluded from suggestions                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                                                                                        |"
       }
@@ -804,7 +812,7 @@
         ],
         "line": 286,
         "source_id": "codex_hooks",
-        "text": "| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, matchers can also use `Edit` or `Write`."
+        "text": "| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
       },
       {
         "keywords": [
@@ -813,7 +821,7 @@
         ],
         "line": 287,
         "source_id": "codex_hooks",
-        "text": "| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, matchers can also use `Edit` or `Write`."
+        "text": "| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
       },
       {
         "keywords": [
@@ -922,7 +930,7 @@
         ],
         "line": 350,
         "source_id": "codex_hooks",
-        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`."
+        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\nIf a `PreToolUse` hook returns one of those unsupported fields, Codex marks\nthat hook run as failed, reports the error, and continues the tool call."
       },
       {
         "keywords": [
@@ -932,7 +940,24 @@
         ],
         "line": 351,
         "source_id": "codex_hooks",
-        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event."
+        "text": "Exit `0` with no output is treated as success and Codex continues.\n\n`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\nIf a `PreToolUse` hook returns one of those unsupported fields, Codex marks\nthat hook run as failed, reports the error, and continues the tool call."
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PreToolUse"
+        ],
+        "line": 352,
+        "source_id": "codex_hooks",
+        "text": "`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\nIf a `PreToolUse` hook returns one of those unsupported fields, Codex marks\nthat hook run as failed, reports the error, and continues the tool call.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`."
+      },
+      {
+        "keywords": [
+          "continue"
+        ],
+        "line": 353,
+        "source_id": "codex_hooks",
+        "text": "`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\nIf a `PreToolUse` hook returns one of those unsupported fields, Codex marks\nthat hook run as failed, reports the error, and continues the tool call.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event."
       },
       {
         "keywords": [
@@ -942,39 +967,31 @@
           "Stop",
           "continue"
         ],
-        "line": 353,
+        "line": 355,
         "source_id": "codex_hooks",
-        "text": "`PreToolUse` and `PermissionRequest` support `systemMessage`, but `continue`,\n`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
+        "text": "If a `PreToolUse` hook returns one of those unsupported fields, Codex marks\nthat hook run as failed, reports the error, and continues the tool call.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
       },
       {
         "keywords": [
           "suppressOutput"
         ],
-        "line": 354,
+        "line": 356,
         "source_id": "codex_hooks",
-        "text": "`stopReason`, and `suppressOutput` aren't currently supported for those events.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
+        "text": "that hook run as failed, reports the error, and continues the tool call.\n\n`PostToolUse` supports `systemMessage`, `continue: false`, and `stopReason`.\n`suppressOutput` is parsed but not currently supported for that event.\n\n## Hooks"
       },
       {
         "keywords": [
-          "SessionStart"
+          "Notification"
         ],
-        "line": 358,
-        "source_id": "codex_hooks",
-        "text": "## Hooks\n\n### SessionStart\n\n`matcher` is applied to `source` for this event."
-      },
-      {
-        "keywords": [
-          "hookSpecificOutput"
-        ],
-        "line": 375,
-        "source_id": "codex_hooks",
-        "text": "```json\n{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"Load the workspace conventions before editing.\"\n  }"
+        "line": 10,
+        "source_id": "codex_config_reference",
+        "text": "User-level configuration lives in `~/.codex/config.toml`. You can also add project-scoped overrides in `.codex/config.toml` files. Codex loads project-scoped config files only when you trust the project.\n\nProject-scoped config can't override machine-local provider, auth,\nnotification, profile, or telemetry routing keys. Codex ignores\n`openai_base_url`, `chatgpt_base_url`, `model_provider`, `model_providers`,\n`notify`, `profile`, `profiles`, `experimental_realtime_ws_base_url`, and\n`otel` when they appear in a project-local `.codex/config.toml`; put those in"
       },
       {
         "keywords": [
           "Elicitation"
         ],
-        "line": 60,
+        "line": 67,
         "source_id": "codex_config_reference",
         "text": "},\n    {\n      key: \"approval_policy\",\n      type: \"untrusted | on-request | never | { granular = { sandbox_approval = bool, rules = bool, mcp_elicitations = bool, request_permissions = bool, skill_approval = bool } }\",\n      description:\n        \"Controls when Codex pauses for approval before executing commands. You can also use `approval_policy = { granular = { ... } }` to allow or auto-reject specific prompt categories while keeping other prompts interactive. `on-failure` is deprecated; use `on-request` for interactive runs or `never` for non-interactive runs.\",\n    },"
       },
@@ -982,7 +999,7 @@
         "keywords": [
           "Elicitation"
         ],
-        "line": 77,
+        "line": 84,
         "source_id": "codex_config_reference",
         "text": "\"When `true`, approvals triggered by execpolicy `prompt` rules are allowed to surface.\",\n    },\n    {\n      key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\","
       },
@@ -990,7 +1007,7 @@
         "keywords": [
           "Elicitation"
         ],
-        "line": 80,
+        "line": 87,
         "source_id": "codex_config_reference",
         "text": "key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\",\n    },\n    {\n      key: \"approval_policy.granular.request_permissions\","
       },
@@ -998,7 +1015,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 158,
+        "line": 165,
         "source_id": "codex_config_reference",
         "text": "key: \"notify\",\n      type: \"array<string>\",\n      description:\n        \"Command invoked for notifications; receives a JSON payload from Codex.\",\n    },\n    {\n      key: \"check_for_update_on_startup\","
       },
@@ -1006,7 +1023,7 @@
         "keywords": [
           "codex_hooks"
         ],
-        "line": 331,
+        "line": 339,
         "source_id": "codex_config_reference",
         "text": "key: \"features.hooks\",\n      type: \"boolean\",\n      description:\n        \"Enable lifecycle hooks loaded from `hooks.json` or inline `[hooks]` config. `features.codex_hooks` is a deprecated alias.\",\n    },\n    {\n      key: \"features.codex_git_commit\","
       },
@@ -1014,7 +1031,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 668,
+        "line": 757,
         "source_id": "codex_config_reference",
         "text": "{\n      key: \"model_providers.<id>.env_key_instructions\",\n      type: \"string\",\n      description: \"Optional setup guidance for the provider API key.\",\n    },\n    {\n      key: \"model_providers.<id>.experimental_bearer_token\","
       },
@@ -1022,7 +1039,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1049,
+        "line": 1138,
         "source_id": "codex_config_reference",
         "text": "key: \"tui\",\n      type: \"table\",\n      description:\n        \"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\","
       },
@@ -1030,7 +1047,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1052,
+        "line": 1141,
         "source_id": "codex_config_reference",
         "text": "\"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\","
       },
@@ -1038,7 +1055,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1055,
+        "line": 1144,
         "source_id": "codex_config_reference",
         "text": "key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\",\n    },\n    {\n      key: \"tui.notification_method\","
       },
@@ -1046,7 +1063,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1058,
+        "line": 1147,
         "source_id": "codex_config_reference",
         "text": "\"Enable TUI notifications; optionally restrict to specific event types.\",\n    },\n    {\n      key: \"tui.notification_method\",\n      type: \"auto | osc9 | bel\",\n      description:\n        \"Notification method for terminal notifications (default: auto).\","
       },
@@ -1054,7 +1071,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1061,
+        "line": 1150,
         "source_id": "codex_config_reference",
         "text": "key: \"tui.notification_method\",\n      type: \"auto | osc9 | bel\",\n      description:\n        \"Notification method for terminal notifications (default: auto).\",\n    },\n    {\n      key: \"tui.notification_condition\","
       },
@@ -1062,7 +1079,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1064,
+        "line": 1153,
         "source_id": "codex_config_reference",
         "text": "\"Notification method for terminal notifications (default: auto).\",\n    },\n    {\n      key: \"tui.notification_condition\",\n      type: \"unfocused | always\",\n      description:\n        \"Control whether TUI notifications fire only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`.\","
       },
@@ -1070,7 +1087,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 1067,
+        "line": 1156,
         "source_id": "codex_config_reference",
         "text": "key: \"tui.notification_condition\",\n      type: \"unfocused | always\",\n      description:\n        \"Control whether TUI notifications fire only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`.\",\n    },\n    {\n      key: \"tui.animations\","
       },
@@ -1078,9 +1095,17 @@
         "keywords": [
           "Setup"
         ],
-        "line": 1140,
+        "line": 1271,
         "source_id": "codex_config_reference",
         "text": "description: \"Disable burst-paste detection in the TUI.\",\n    },\n    {\n      key: \"windows_wsl_setup_acknowledged\",\n      type: \"boolean\",\n      description: \"Track Windows onboarding acknowledgement (Windows only).\",\n    },"
+      },
+      {
+        "keywords": [
+          "decision"
+        ],
+        "line": 1441,
+        "source_id": "codex_config_reference",
+        "text": "key: \"permissions.<name>.network.unix_sockets.<path>\",\n      type: \"allow | none\",\n      description:\n        \"Add an absolute Unix socket path to the effective allowlist with `allow`, or clear an inherited allow entry with `none`. `none` is not a separate deny-list decision.\",\n    },\n    {\n      key: \"permissions.<name>.network.allow_local_binding\","
       },
       {
         "keywords": [
@@ -1096,7 +1121,7 @@
           "PostToolUse",
           "Stop"
         ],
-        "line": 1466,
+        "line": 1700,
         "source_id": "codex_config_reference",
         "text": "key: \"hooks.<Event>\",\n      type: \"array<table>\",\n      description:\n        \"Matcher groups for a hook event such as `PreToolUse`, `PermissionRequest`, `PostToolUse`, `SessionStart`, `UserPromptSubmit`, or `Stop`.\",\n    },\n    {\n      key: \"hooks.<Event>[].hooks\","
       },
@@ -1104,7 +1129,7 @@
         "keywords": [
           "decision"
         ],
-        "line": 1514,
+        "line": 1748,
         "source_id": "codex_config_reference",
         "text": "key: \"rules.prefix_rules\",\n      type: \"array<table>\",\n      description:\n        \"List of enforced prefix rules. Each rule must include `pattern` and `decision`.\",\n    },\n    {\n      key: \"rules.prefix_rules[].pattern\","
       },
@@ -1112,7 +1137,7 @@
         "keywords": [
           "decision"
         ],
-        "line": 1533,
+        "line": 1767,
         "source_id": "codex_config_reference",
         "text": "description: \"A list of allowed alternative tokens at this position.\",\n    },\n    {\n      key: \"rules.prefix_rules[].decision\",\n      type: \"prompt | forbidden\",\n      description:\n        \"Required. Requirements rules can only prompt or forbid (not allow).\","
       },
@@ -1126,10 +1151,18 @@
       },
       {
         "keywords": [
+          "Notification"
+        ],
+        "line": 92,
+        "source_id": "codex_config_advanced",
+        "text": "Relative paths inside a project config (for example, `model_instructions_file`) are resolved relative to the `.codex/` folder that contains the `config.toml`.\n\nProject config files can't override settings that redirect credentials, change\nprovider auth, or run machine-local notification/telemetry commands.\nCodex ignores the following keys in project-local `.codex/config.toml` and\nprints a startup warning when it sees them: `openai_base_url`,\n`chatgpt_base_url`, `model_provider`, `model_providers`, `notify`, `profile`,"
+      },
+      {
+        "keywords": [
           "PreToolUse",
           "PreToolUse"
         ],
-        "line": 109,
+        "line": 117,
         "source_id": "codex_config_advanced",
         "text": "Inline TOML hooks use the same event structure as `hooks.json`:\n\n```toml\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
       },
@@ -1138,7 +1171,7 @@
           "PreToolUse",
           "PreToolUse"
         ],
-        "line": 112,
+        "line": 120,
         "source_id": "codex_config_advanced",
         "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_policy.py\"'\ntimeout = 30"
       },
@@ -1146,7 +1179,7 @@
         "keywords": [
           "Elicitation"
         ],
-        "line": 282,
+        "line": 292,
         "source_id": "codex_config_advanced",
         "text": "# approval_policy = { granular = {\n#   sandbox_approval = true,\n#   rules = true,\n#   mcp_elicitations = true,\n#   request_permissions = false,\n#   skill_approval = false\n# } }"
       },
@@ -1154,7 +1187,7 @@
         "keywords": [
           "decision"
         ],
-        "line": 404,
+        "line": 391,
         "source_id": "codex_config_advanced",
         "text": "- `codex.sse_event` (stream event kind, success/failure, duration, plus token counts on `response.completed`)\n- `codex.websocket_request` and `codex.websocket_event` (request duration plus per-message kind/success/error)\n- `codex.user_prompt` (length; content redacted unless explicitly enabled)\n- `codex.tool_decision` (approved/denied and whether the decision came from config vs user)\n- `codex.tool_result` (duration, success, output snippet)\n\n### OTel metrics emitted"
       },
@@ -1162,7 +1195,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 563,
+        "line": 550,
         "source_id": "codex_config_advanced",
         "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |"
       },
@@ -1170,7 +1203,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 564,
+        "line": 551,
         "source_id": "codex_config_advanced",
         "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |"
       },
@@ -1178,7 +1211,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 565,
+        "line": 552,
         "source_id": "codex_config_advanced",
         "text": "| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |"
       },
@@ -1186,7 +1219,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 566,
+        "line": 553,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |"
       },
@@ -1194,7 +1227,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 567,
+        "line": 554,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |"
       },
@@ -1202,7 +1235,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 568,
+        "line": 555,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |"
       },
@@ -1210,7 +1243,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 569,
+        "line": 556,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |"
       },
@@ -1218,7 +1251,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 570,
+        "line": 557,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |"
       },
@@ -1226,7 +1259,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 571,
+        "line": 558,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |\n| `windows_sandbox.elevated_setup_duration_ms`     | histogram | `result`                                  | Elevated Windows sandbox setup duration.              |\n| `windows_sandbox.elevated_prompt_shown`          | counter   |                                           | Elevated sandbox setup prompt shown.                  |\n| `windows_sandbox.elevated_prompt_accept`         | counter   |                                           | Elevated sandbox setup prompt accepted.               |\n| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |\n| `windows_sandbox.fallback_prompt_shown`          | counter   |                                           | Fallback sandbox prompt shown.                        |"
       },
@@ -1234,7 +1267,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 575,
+        "line": 562,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.elevated_prompt_use_legacy`     | counter   |                                           | User chose legacy sandbox from the elevated prompt.   |\n| `windows_sandbox.elevated_prompt_quit`           | counter   |                                           | User quit from the elevated prompt.                   |\n| `windows_sandbox.fallback_prompt_shown`          | counter   |                                           | Fallback sandbox prompt shown.                        |\n| `windows_sandbox.fallback_retry_elevated`        | counter   |                                           | User retried elevated setup from the fallback prompt. |\n| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |"
       },
@@ -1242,7 +1275,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 578,
+        "line": 565,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.fallback_retry_elevated`        | counter   |                                           | User retried elevated setup from the fallback prompt. |\n| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |\n| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |"
       },
@@ -1250,7 +1283,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 579,
+        "line": 566,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.fallback_use_legacy`            | counter   |                                           | User chose legacy sandbox from the fallback prompt.   |\n| `windows_sandbox.fallback_prompt_quit`           | counter   |                                           | User quit from the fallback prompt.                   |\n| `windows_sandbox.legacy_setup_preflight_failed`  | counter   | See note                                  | Legacy Windows sandbox setup preflight failure.       |\n| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |\n\nThe elevated setup failure metrics include `code` and `message` when Windows setup failure details are available, and may include `originator` when emitted from the shared setup path. The `windows_sandbox.legacy_setup_preflight_failed` metric includes `originator` when emitted from the shared setup path, but fallback-prompt preflight failures may not include any fields."
       },
@@ -1258,7 +1291,7 @@
         "keywords": [
           "Setup"
         ],
-        "line": 582,
+        "line": 569,
         "source_id": "codex_config_advanced",
         "text": "| `windows_sandbox.setup_elevated_sandbox_command` | counter   |                                           | Elevated sandbox setup command invoked.               |\n| `windows_sandbox.createprocessasuserw_failed`    | counter   | `error_code`, `path_kind`, `exe`, `level` | Windows `CreateProcessAsUserW` failures.              |\n\nThe elevated setup failure metrics include `code` and `message` when Windows setup failure details are available, and may include `originator` when emitted from the shared setup path. The `windows_sandbox.legacy_setup_preflight_failed` metric includes `originator` when emitted from the shared setup path, but fallback-prompt preflight failures may not include any fields.\n\n### Feedback controls"
       },
@@ -1266,7 +1299,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 611,
+        "line": 598,
         "source_id": "codex_config_advanced",
         "text": "Enable raw reasoning only if it's acceptable for your workflow. Some models/providers (like `gpt-oss`) don't emit raw reasoning; in that case, this setting has no visible effect.\n\n## Notifications\n\nUse `notify` to trigger an external program whenever Codex emits supported events (currently only `agent-turn-complete`). This is handy for desktop toasts, chat webhooks, CI updates, or any side-channel alerting that the built-in TUI notifications don't cover."
       },
@@ -1274,7 +1307,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 613,
+        "line": 600,
         "source_id": "codex_config_advanced",
         "text": "## Notifications\n\nUse `notify` to trigger an external program whenever Codex emits supported events (currently only `agent-turn-complete`). This is handy for desktop toasts, chat webhooks, CI updates, or any side-channel alerting that the built-in TUI notifications don't cover.\n\n```toml\nnotify = [\"python3\", \"/path/to/notify.py\"]"
       },
@@ -1282,7 +1315,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 626,
+        "line": 613,
         "source_id": "codex_config_advanced",
         "text": "import json, subprocess, sys\n\ndef main() -> int:\n    notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\""
       },
@@ -1290,7 +1323,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 627,
+        "line": 614,
         "source_id": "codex_config_advanced",
         "text": "def main() -> int:\n    notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))"
       },
@@ -1298,7 +1331,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 629,
+        "line": 616,
         "source_id": "codex_config_advanced",
         "text": "notification = json.loads(sys.argv[1])\n    if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))\n    subprocess.check_output([\n        \"terminal-notifier\","
       },
@@ -1306,7 +1339,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 630,
+        "line": 617,
         "source_id": "codex_config_advanced",
         "text": "if notification.get(\"type\") != \"agent-turn-complete\":\n        return 0\n    title = f\"Codex: {notification.get('last-assistant-message', 'Turn Complete!')}\"\n    message = \" \".join(notification.get(\"input-messages\", []))\n    subprocess.check_output([\n        \"terminal-notifier\",\n        \"-title\", title,"
       },
@@ -1314,7 +1347,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 635,
+        "line": 622,
         "source_id": "codex_config_advanced",
         "text": "\"terminal-notifier\",\n        \"-title\", title,\n        \"-message\", message,\n        \"-group\", \"codex-\" + notification.get(\"thread-id\", \"\"),\n        \"-activate\", \"com.googlecode.iterm2\",\n    ])\n    return 0"
       },
@@ -1322,7 +1355,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 655,
+        "line": 642,
         "source_id": "codex_config_advanced",
         "text": "Place the script somewhere on disk and point `notify` to it.\n\n#### `notify` vs `tui.notifications`\n\n- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`)."
       },
@@ -1330,7 +1363,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 658,
+        "line": 645,
         "source_id": "codex_config_advanced",
         "text": "#### `notify` vs `tui.notifications`\n\n- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`."
       },
@@ -1338,7 +1371,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 659,
+        "line": 646,
         "source_id": "codex_config_advanced",
         "text": "- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`."
       },
@@ -1346,7 +1379,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 660,
+        "line": 647,
         "source_id": "codex_config_advanced",
         "text": "- `notify` runs an external program (good for webhooks, desktop notifiers, CI hooks).\n- `tui.notifications` is built in to the TUI and can optionally filter by event type (for example, `agent-turn-complete` and `approval-requested`).\n- `tui.notification_method` controls how the TUI emits terminal notifications (`auto`, `osc9`, or `bel`).\n- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`.\n\nIn `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) and falls back to BEL (`\\x07`) otherwise."
       },
@@ -1354,7 +1387,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 663,
+        "line": 650,
         "source_id": "codex_config_advanced",
         "text": "- `tui.notification_condition` controls whether TUI notifications fire only when\n  the terminal is `unfocused` or `always`.\n\nIn `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) and falls back to BEL (`\\x07`) otherwise.\n\nSee [Configuration Reference](https://developers.openai.com/codex/config-reference) for the exact keys."
       },
@@ -1362,7 +1395,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 706,
+        "line": 693,
         "source_id": "codex_config_advanced",
         "text": "Running `codex` with no subcommand launches the interactive terminal UI (TUI). Codex exposes some TUI-specific configuration under `[tui]`, including:\n\n- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire"
       },
@@ -1370,7 +1403,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 707,
+        "line": 694,
         "source_id": "codex_config_advanced",
         "text": "Running `codex` with no subcommand launches the interactive terminal UI (TUI). Codex exposes some TUI-specific configuration under `[tui]`, including:\n\n- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects"
       },
@@ -1378,7 +1411,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 708,
+        "line": 695,
         "source_id": "codex_config_advanced",
         "text": "- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects\n- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)"
       },
@@ -1386,7 +1419,7 @@
         "keywords": [
           "Notification"
         ],
-        "line": 709,
+        "line": 696,
         "source_id": "codex_config_advanced",
         "text": "- `tui.notifications`: enable/disable notifications (or restrict to specific types)\n- `tui.notification_method`: choose `auto`, `osc9`, or `bel` for terminal notifications\n- `tui.notification_condition`: choose `unfocused` or `always` for when\n  notifications fire\n- `tui.animations`: enable/disable ASCII animations and shimmer effects\n- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)\n- `tui.show_tooltips`: show or hide onboarding tooltips on the welcome screen"
       },
@@ -1394,12 +1427,28 @@
         "keywords": [
           "Notification"
         ],
-        "line": 714,
+        "line": 701,
         "source_id": "codex_config_advanced",
         "text": "- `tui.alternate_screen`: control alternate screen usage (set to `never` to keep terminal scrollback)\n- `tui.show_tooltips`: show or hide onboarding tooltips on the welcome screen\n\n`tui.notification_method` defaults to `auto`. In `auto` mode, Codex prefers OSC 9 notifications (a terminal escape sequence some terminals interpret as a desktop notification) when the terminal appears to support them, and falls back to BEL (`\\x07`) otherwise.\n\nSee [Configuration Reference](https://developers.openai.com/codex/config-reference) for the full key list."
       }
     ],
     "opencode": [
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 274,
+        "source_id": "opencode_config_docs",
+        "text": "\"mouse\": true,\n  \"attention\": {\n    \"enabled\": true,\n    \"notifications\": true,\n    \"sound\": true,\n    \"volume\": 0.4\n  }"
+      },
+      {
+        "keywords": [
+          "Notification"
+        ],
+        "line": 283,
+        "source_id": "opencode_config_docs",
+        "text": "Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.\n\nSet `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).\n\nLegacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible."
+      },
       {
         "keywords": [
           "tool.execute.before"
@@ -1579,6 +1628,7 @@
       "updatedInput"
     ],
     "claude_settings": [
+      "ConfigChange",
       "Notification",
       "Setup",
       "continue"
@@ -1619,7 +1669,9 @@
       "suppressOutput",
       "updatedInput"
     ],
-    "opencode_config_docs": [],
+    "opencode_config_docs": [
+      "Notification"
+    ],
     "opencode_config_schema": [],
     "opencode_plugin_docs": [
       "Notification",
@@ -1634,12 +1686,12 @@
   "source_snapshot_policy": "manual-regeneration-required",
   "sources": {
     "claude_hooks": {
-      "bytes": 185996,
+      "bytes": 191447,
       "content_type": "text/markdown; charset=utf-8",
       "harness": "claude",
       "kind": "hooks_doc",
-      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
-      "sha256": "30ef74af06b38e300ce12058aa62be03c80c1d0e217227b60bef6222e87ca99c",
+      "retrieved_at_utc": "2026-05-20T09:35:19+00:00",
+      "sha256": "33894d23c55e2230404d959089f35d5b53692e517c2ef31f0e1e8f4f6b21836b",
       "snippets": [
         {
           "keywords": [
@@ -1750,32 +1802,39 @@
       "url": "https://docs.anthropic.com/en/docs/claude-code/hooks.md"
     },
     "claude_settings": {
-      "bytes": 124414,
+      "bytes": 127489,
       "content_type": "text/markdown; charset=utf-8",
       "harness": "claude",
       "kind": "settings_doc",
-      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
-      "sha256": "26dd5c1f0db22f20c753b04203da67cd3989522b90d206461a5537faf136ce80",
+      "retrieved_at_utc": "2026-05-20T09:35:19+00:00",
+      "sha256": "9732de9e4eb6200c439e2e4aaa34f7db919d2168a5077634dd51a8ec55b3d937",
       "snippets": [
+        {
+          "keywords": [
+            "ConfigChange"
+          ],
+          "line": 159,
+          "text": "### When edits take effect\n\nClaude Code watches your settings files and reloads them when they change, so edits to most keys apply to the running session without a restart. This includes `permissions`, `hooks`, and credential helpers like `apiKeyHelper`. The reload covers user, project, local, and managed settings, and the [`ConfigChange` hook](/en/hooks#configchange) fires for each detected change.\n\nA few keys are read once at session start and apply on the next restart instead:"
+        },
         {
           "keywords": [
             "Setup"
           ],
-          "line": 177,
+          "line": 186,
           "text": "| `autoMemoryEnabled`               | Enable [auto memory](/en/memory#enable-or-disable-auto-memory). When `false`, Claude does not read from or write to the auto memory directory. Default: `true`. You can also toggle this with `/memory` during a session. To disable via environment variable, set [`CLAUDE_CODE_DISABLE_AUTO_MEMORY`](/en/env-vars) in `env`                                                                                                                                                                                                                                                          | `false`                                                                                                                        |\n| `autoMode`                        | Customize what the [auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) classifier blocks and allows. Contains `environment`, `allow`, `soft_deny`, and `hard_deny` arrays of prose rules. Include the literal string `\"$defaults\"` in an array to inherit the built-in rules at that position. See [Configure auto mode](/en/auto-mode-config). Not read from shared project settings                                                                                                                                                                                   | `{\"soft_deny\": [\"$defaults\", \"Never run terraform apply\"]}`                                                                    |\n| `autoScrollEnabled`               | In [fullscreen rendering](/en/fullscreen), follow new output to the bottom of the conversation. Default: `true`. Appears in `/config` as **Auto-scroll**. Permission prompts still scroll into view when this is off                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                                                                                        |\n| `autoUpdatesChannel`              | Release channel to follow for updates. Use `\"stable\"` for a version that is typically about one week old and skips versions with major regressions, or `\"latest\"` (default) for the most recent release. To disable auto-updates entirely, set [`DISABLE_AUTOUPDATER`](/en/setup#disable-auto-updates) in `env`                                                                                                                                                                                                                                                                        | `\"stable\"`                                                                                                                     |\n| `availableModels`                 | Restrict which models users can select via `/model`, `--model`, or `ANTHROPIC_MODEL`. Does not affect the Default option. See [Restrict model selection](/en/model-config#restrict-model-selection)                                                                                                                                                                                                                                                                                                                                                                                    | `[\"sonnet\", \"haiku\"]`                                                                                                          |\n| `awaySummaryEnabled`              | Show a one-line session recap when you return to the terminal after a few minutes away. Set to `false` or turn off Session recap in `/config` to disable. Same as [`CLAUDE_CODE_ENABLE_AWAY_SUMMARY`](/en/env-vars)                                                                                                                                                                                                                                                                                                                                                                    | `true`                                                                                                                         |\n| `awsAuthRefresh`                  | Custom script that modifies the `.aws` directory (see [advanced credential configuration](/en/amazon-bedrock#advanced-credential-configuration))                                                                                                                                                                                                                                                                                                                                                                                                                                       | `aws sso login --profile myprofile`                                                                                            |"
         },
         {
           "keywords": [
             "continue"
           ],
-          "line": 207,
+          "line": 216,
           "text": "| `fileSuggestion`                  | Configure a custom script for `@` file autocomplete. See [File suggestion settings](#file-suggestion-settings)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{\"type\": \"command\", \"command\": \"~/.claude/file-suggestion.sh\"}`                                                               |\n| `forceLoginMethod`                | Use `claudeai` to restrict login to Claude.ai accounts, `console` to restrict login to Claude Console (API usage billing) accounts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `claudeai`                                                                                                                     |\n| `forceLoginOrgUUID`               | Require login to belong to a specific organization. Accepts a single UUID string, which also pre-selects that organization during login, or an array of UUIDs where any listed organization is accepted without pre-selection. When set in managed settings, login fails if the authenticated account does not belong to a listed organization; an empty array fails closed and blocks login with a misconfiguration message                                                                                                                                                           | `\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"` or `[\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\", \"yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\"]` |\n| `forceRemoteSettingsRefresh`      | (Managed settings only) Block CLI startup until remote managed settings are freshly fetched from the server. If the fetch fails, the CLI exits rather than continuing with cached or no settings. When not set, startup continues without waiting for remote settings. See [fail-closed enforcement](/en/server-managed-settings#enforce-fail-closed-startup)                                                                                                                                                                                                                          | `true`                                                                                                                         |\n| `gcpAuthRefresh`                  | Custom script that refreshes GCP Application Default Credentials when they expire or cannot be loaded. See [advanced credential configuration](/en/google-vertex-ai#advanced-credential-configuration)                                                                                                                                                                                                                                                                                                                                                                                 | `gcloud auth application-default login`                                                                                        |\n| `hooks`                           | Configure custom commands to run at lifecycle events. See [hooks documentation](/en/hooks) for format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | See [hooks](/en/hooks)                                                                                                         |\n| `httpHookAllowedEnvVars`          | Allowlist of environment variable names HTTP hooks may interpolate into headers. When set, each hook's effective `allowedEnvVars` is the intersection with this list. Undefined = no restriction. Arrays merge across settings sources. See [Hook configuration](#hook-configuration)                                                                                                                                                                                                                                                                                                  | `[\"MY_TOKEN\", \"HOOK_SECRET\"]`                                                                                                  |"
         },
         {
           "keywords": [
             "Notification"
           ],
-          "line": 225,
+          "line": 234,
           "text": "| `plansDirectory`                  | Customize where plan files are stored. Path is relative to project root. Default: `~/.claude/plans`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `\"./plans\"`                                                                                                                    |\n| `pluginTrustMessage`              | (Managed settings only) Custom message appended to the plugin trust warning shown before installation. Use this to add organization-specific context, for example to confirm that plugins from your internal marketplace are vetted.                                                                                                                                                                                                                                                                                                                                                   | `\"All plugins from our marketplace are approved by IT\"`                                                                        |\n| `policyHelper`                    | {/* min-version: 2.1.136 */}Admin-deployed executable that computes managed settings dynamically at startup. Only honored from MDM or a system `managed-settings.json` file. See [Compute managed settings with a policy helper](#compute-managed-settings-with-a-policy-helper). Requires Claude Code v2.1.136 or later                                                                                                                                                                                                                                                               | `{\"path\": \"/usr/local/bin/claude-policy\"}`                                                                                     |\n| `preferredNotifChannel`           | Method for task-complete and permission-prompt notifications: `\"auto\"`, `\"terminal_bell\"`, `\"iterm2\"`, `\"iterm2_with_bell\"`, `\"kitty\"`, `\"ghostty\"`, or `\"notifications_disabled\"`. Default: `\"auto\"`, which sends a desktop notification in iTerm2, Ghostty, and Kitty and does nothing in other terminals. Set `\"terminal_bell\"` to ring the bell character in any terminal. Appears in `/config` as **Notifications**. See [Get a terminal bell or notification](/en/terminal-config#get-a-terminal-bell-or-notification)                                                           | `\"terminal_bell\"`                                                                                                              |\n| `prefersReducedMotion`            | Reduce or disable UI animations (spinners, shimmer, flash effects) for accessibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                                                                                         |\n| `prUrlTemplate`                   | URL template for the PR badge shown in the footer and in tool-result summaries. Substitutes `{host}`, `{owner}`, `{repo}`, `{number}`, and `{url}` from the `gh`-reported PR URL. Use to point PR links at an internal code-review tool instead of `github.com`. Does not affect `#123` autolinks in Claude's prose                                                                                                                                                                                                                                                                    | `\"https://reviews.example.com/{owner}/{repo}/pull/{number}\"`                                                                   |\n| `respectGitignore`                | Control whether the `@` file picker respects `.gitignore` patterns. When `true` (default), files matching `.gitignore` patterns are excluded from suggestions                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                                                                                        |"
         }
       ],
@@ -1783,12 +1842,12 @@
       "url": "https://docs.anthropic.com/en/docs/claude-code/settings.md"
     },
     "codex_config_advanced": {
-      "bytes": 44746,
+      "bytes": 44834,
       "content_type": "text/markdown; charset=utf-8",
       "harness": "codex",
       "kind": "config_advanced",
-      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
-      "sha256": "ccf9a868f8b596650275aee483df4643992eb18f65867f07b5e2794fdef4c1dd",
+      "retrieved_at_utc": "2026-05-20T09:35:21+00:00",
+      "sha256": "cbd96700d7d183f98f8c858de782834a4205e0f3f9fcb5e30963800dd045c749",
       "snippets": [
         {
           "keywords": [
@@ -1799,10 +1858,17 @@
         },
         {
           "keywords": [
+            "Notification"
+          ],
+          "line": 92,
+          "text": "Relative paths inside a project config (for example, `model_instructions_file`) are resolved relative to the `.codex/` folder that contains the `config.toml`.\n\nProject config files can't override settings that redirect credentials, change\nprovider auth, or run machine-local notification/telemetry commands.\nCodex ignores the following keys in project-local `.codex/config.toml` and\nprints a startup warning when it sees them: `openai_base_url`,\n`chatgpt_base_url`, `model_provider`, `model_providers`, `notify`, `profile`,"
+        },
+        {
+          "keywords": [
             "PreToolUse",
             "PreToolUse"
           ],
-          "line": 109,
+          "line": 117,
           "text": "Inline TOML hooks use the same event structure as `hooks.json`:\n\n```toml\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]"
         },
         {
@@ -1810,123 +1876,116 @@
             "PreToolUse",
             "PreToolUse"
           ],
-          "line": 112,
+          "line": 120,
           "text": "[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = '/usr/bin/python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_use_policy.py\"'\ntimeout = 30"
         },
         {
           "keywords": [
             "Elicitation"
           ],
-          "line": 282,
+          "line": 292,
           "text": "# approval_policy = { granular = {\n#   sandbox_approval = true,\n#   rules = true,\n#   mcp_elicitations = true,\n#   request_permissions = false,\n#   skill_approval = false\n# } }"
         },
         {
           "keywords": [
             "decision"
           ],
-          "line": 404,
+          "line": 391,
           "text": "- `codex.sse_event` (stream event kind, success/failure, duration, plus token counts on `response.completed`)\n- `codex.websocket_request` and `codex.websocket_event` (request duration plus per-message kind/success/error)\n- `codex.user_prompt` (length; content redacted unless explicitly enabled)\n- `codex.tool_decision` (approved/denied and whether the decision came from config vs user)\n- `codex.tool_result` (duration, success, output snippet)\n\n### OTel metrics emitted"
         },
         {
           "keywords": [
             "Setup"
           ],
-          "line": 563,
+          "line": 550,
           "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |"
         },
         {
           "keywords": [
             "Setup"
           ],
-          "line": 564,
+          "line": 551,
           "text": "| Metric                                           | Type      | Fields                                    | Description                                           |\n| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |"
-        },
-        {
-          "keywords": [
-            "Setup"
-          ],
-          "line": 565,
-          "text": "| ------------------------------------------------ | --------- | ----------------------------------------- | ----------------------------------------------------- |\n| `windows_sandbox.setup_success`                  | counter   | `originator`, `mode`                      | Windows sandbox setup successes.                      |\n| `windows_sandbox.setup_failure`                  | counter   | `originator`, `mode`                      | Windows sandbox setup failures.                       |\n| `windows_sandbox.setup_duration_ms`              | histogram | `result`, `originator`, `mode`            | Windows sandbox setup duration.                       |\n| `windows_sandbox.elevated_setup_success`         | counter   |                                           | Elevated Windows sandbox setup successes.             |\n| `windows_sandbox.elevated_setup_failure`         | counter   | See note                                  | Elevated Windows sandbox setup failures.              |\n| `windows_sandbox.elevated_setup_canceled`        | counter   | See note                                  | Canceled elevated Windows sandbox setup attempts.     |"
         }
       ],
       "status_code": 200,
       "url": "https://developers.openai.com/codex/config-advanced.md"
     },
     "codex_config_reference": {
-      "bytes": 54245,
+      "bytes": 64780,
       "content_type": "text/markdown; charset=utf-8",
       "harness": "codex",
       "kind": "config_reference",
-      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
-      "sha256": "b1b6e9aa995c4cfd8fba205740ee1568bf945408918a793dfcec2e5e5e930580",
+      "retrieved_at_utc": "2026-05-20T09:35:21+00:00",
+      "sha256": "9c0db8eb0dbb2e5c543b2dc1a52d503db3e936dc0d12749fcb15b2e02dea6f96",
       "snippets": [
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 10,
+          "text": "User-level configuration lives in `~/.codex/config.toml`. You can also add project-scoped overrides in `.codex/config.toml` files. Codex loads project-scoped config files only when you trust the project.\n\nProject-scoped config can't override machine-local provider, auth,\nnotification, profile, or telemetry routing keys. Codex ignores\n`openai_base_url`, `chatgpt_base_url`, `model_provider`, `model_providers`,\n`notify`, `profile`, `profiles`, `experimental_realtime_ws_base_url`, and\n`otel` when they appear in a project-local `.codex/config.toml`; put those in"
+        },
         {
           "keywords": [
             "Elicitation"
           ],
-          "line": 60,
+          "line": 67,
           "text": "},\n    {\n      key: \"approval_policy\",\n      type: \"untrusted | on-request | never | { granular = { sandbox_approval = bool, rules = bool, mcp_elicitations = bool, request_permissions = bool, skill_approval = bool } }\",\n      description:\n        \"Controls when Codex pauses for approval before executing commands. You can also use `approval_policy = { granular = { ... } }` to allow or auto-reject specific prompt categories while keeping other prompts interactive. `on-failure` is deprecated; use `on-request` for interactive runs or `never` for non-interactive runs.\",\n    },"
         },
         {
           "keywords": [
             "Elicitation"
           ],
-          "line": 77,
+          "line": 84,
           "text": "\"When `true`, approvals triggered by execpolicy `prompt` rules are allowed to surface.\",\n    },\n    {\n      key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\","
         },
         {
           "keywords": [
             "Elicitation"
           ],
-          "line": 80,
+          "line": 87,
           "text": "key: \"approval_policy.granular.mcp_elicitations\",\n      type: \"boolean\",\n      description:\n        \"When `true`, MCP elicitation prompts are allowed to surface instead of being auto-rejected.\",\n    },\n    {\n      key: \"approval_policy.granular.request_permissions\","
         },
         {
           "keywords": [
             "Notification"
           ],
-          "line": 158,
+          "line": 165,
           "text": "key: \"notify\",\n      type: \"array<string>\",\n      description:\n        \"Command invoked for notifications; receives a JSON payload from Codex.\",\n    },\n    {\n      key: \"check_for_update_on_startup\","
         },
         {
           "keywords": [
             "codex_hooks"
           ],
-          "line": 331,
+          "line": 339,
           "text": "key: \"features.hooks\",\n      type: \"boolean\",\n      description:\n        \"Enable lifecycle hooks loaded from `hooks.json` or inline `[hooks]` config. `features.codex_hooks` is a deprecated alias.\",\n    },\n    {\n      key: \"features.codex_git_commit\","
         },
         {
           "keywords": [
             "Setup"
           ],
-          "line": 668,
+          "line": 757,
           "text": "{\n      key: \"model_providers.<id>.env_key_instructions\",\n      type: \"string\",\n      description: \"Optional setup guidance for the provider API key.\",\n    },\n    {\n      key: \"model_providers.<id>.experimental_bearer_token\","
         },
         {
           "keywords": [
             "Notification"
           ],
-          "line": 1049,
+          "line": 1138,
           "text": "key: \"tui\",\n      type: \"table\",\n      description:\n        \"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\","
-        },
-        {
-          "keywords": [
-            "Notification"
-          ],
-          "line": 1052,
-          "text": "\"TUI-specific options such as enabling inline desktop notifications.\",\n    },\n    {\n      key: \"tui.notifications\",\n      type: \"boolean | array<string>\",\n      description:\n        \"Enable TUI notifications; optionally restrict to specific event types.\","
         }
       ],
       "status_code": 200,
       "url": "https://developers.openai.com/codex/config-reference.md"
     },
     "codex_hooks": {
-      "bytes": 23438,
+      "bytes": 24557,
       "content_type": "text/markdown; charset=utf-8",
       "harness": "codex",
       "kind": "hooks_doc",
-      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
-      "sha256": "3eba4bd501574b14eeb00d052436b8b227d425f472a45d99196c562be6bc798e",
+      "retrieved_at_utc": "2026-05-20T09:35:21+00:00",
+      "sha256": "7193759940fa4496484ee0fbcbf3571579f8c7b7ae734f5830c333fe494f5fbe",
       "snippets": [
         {
           "keywords": [
@@ -2005,13 +2064,28 @@
       "url": "https://developers.openai.com/codex/hooks.md"
     },
     "opencode_config_docs": {
-      "bytes": 23818,
+      "bytes": 25123,
       "content_type": "text/plain; charset=utf-8",
       "harness": "opencode",
       "kind": "config_doc",
-      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
-      "sha256": "f64b743f28907fae76e14726809072e9e97e5057fc8e803fd85f7493edb006ae",
-      "snippets": [],
+      "retrieved_at_utc": "2026-05-20T09:35:20+00:00",
+      "sha256": "a55eefaae09dbadd924d82f13519f45ffdc2425a7c381a2454bfc2aaf666a73a",
+      "snippets": [
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 274,
+          "text": "\"mouse\": true,\n  \"attention\": {\n    \"enabled\": true,\n    \"notifications\": true,\n    \"sound\": true,\n    \"volume\": 0.4\n  }"
+        },
+        {
+          "keywords": [
+            "Notification"
+          ],
+          "line": 283,
+          "text": "Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.\n\nSet `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).\n\nLegacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible."
+        }
+      ],
       "status_code": 200,
       "url": "https://opencode.ai/docs/config.md"
     },
@@ -2020,7 +2094,7 @@
       "content_type": "application/json",
       "harness": "opencode",
       "kind": "json_schema",
-      "retrieved_at_utc": "2026-05-15T09:46:05+00:00",
+      "retrieved_at_utc": "2026-05-20T09:35:19+00:00",
       "schema_summary": {
         "defs_keys": [
           "AgentConfig",
@@ -2051,7 +2125,7 @@
         ],
         "schema": "https://json-schema.org/draft/2020-12/schema"
       },
-      "sha256": "4c0631894603321831a28f7e92741671bc0a02af8032540d7eb6b1f68e320250",
+      "sha256": "0e024330782acddb0b2dd5e5c62a042ddc7d7ef69b053b916f933886505d8a39",
       "snippets": [],
       "status_code": 200,
       "url": "https://opencode.ai/config.json"
@@ -2061,7 +2135,7 @@
       "content_type": "text/plain; charset=utf-8",
       "harness": "opencode",
       "kind": "plugin_doc",
-      "retrieved_at_utc": "2026-05-15T09:46:06+00:00",
+      "retrieved_at_utc": "2026-05-20T09:35:21+00:00",
       "sha256": "ab99892a03931c7d7cb36f93beba067346492cb9adae0f263fb6ac83f83391bb",
       "snippets": [
         {

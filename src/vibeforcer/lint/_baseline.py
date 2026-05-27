@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,14 +115,6 @@ def assert_no_new_violations(
     max_new_allowed: int = 0,
 ) -> BaselineResult:
     """Fail if any violations are *new* relative to the baseline."""
-    if os.environ.get("QUALITY_GENERATE_BASELINE") == "1":
-        return BaselineResult(
-            new_violations=[],
-            fixed_violations=[],
-            current_count=len(current_violations),
-            baseline_count=0,
-        )
-
     baseline = load_baseline()
     allowed_ids = baseline.get(rule, set())
     current_ids = {v.stable_id for v in current_violations}

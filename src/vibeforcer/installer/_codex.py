@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 from typing import cast
 
@@ -11,10 +12,12 @@ from vibeforcer._types import object_dict
 from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.installer._shared import (
     HOOK_TYPE_COMMAND,
+    backup_existing_file_and_report,
     find_binary,
-    merge_owned_hooks,
+    merge_owned_hooks_into,
     print_binary_install_summary,
     remove_owned_hooks,
+    write_json_with_backup,
 )
 
 _CodeHookMeta = dict[str, str | int]
@@ -24,7 +27,7 @@ _CodeHooks = dict[str, list[_CodeHookEntry]]
 
 _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
     "SessionStart": {
-        "matcher": "startup|resume",
+        "matcher": "startup|resume|clear",
         "timeout": 10,
         "statusMessage": "Loading vibeforcer context",
     },
@@ -50,10 +53,11 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
 
 def _codex_hooks_block(binary: str) -> _CodeHooks:
     hooks: _CodeHooks = {}
+    command = f"{shlex.quote(binary)} handle --platform codex"
     for event, meta in _CODEX_EVENTS.items():
         command_entry: _CodeHookCommand = {
             "type": HOOK_TYPE_COMMAND,
-            METADATA_COMMAND: f"{binary} handle --platform codex",
+            METADATA_COMMAND: command,
         }
         entry: _CodeHookEntry = {"hooks": [command_entry]}
         matcher = meta.get("matcher")
@@ -70,40 +74,96 @@ def _codex_hooks_block(binary: str) -> _CodeHooks:
 
 
 _SECTION_RE = re.compile(r"^\s*\[[^\]]+\]")
-_CODEX_HOOKS_RE = re.compile(r"^(\s*codex_hooks\s*=\s*)[^#\n]*(\s*(?:#.*)?)$")
+_HOOKS_RE = re.compile(r"^(\s*hooks\s*=\s*)[^#\n]*(\s*(?:#.*)?)$")
+_CODEX_HOOKS_RE = re.compile(r"^(\s*)codex_hooks(\s*=\s*)[^#\n]*(\s*(?:#.*)?)$")
+
+
+def _feature_section_bounds(lines: list[str]) -> tuple[int | None, int]:
+    features_index = next(
+        (index for index, line in enumerate(lines) if line.strip() == "[features]"),
+        None,
+    )
+    if features_index is None:
+        return None, len(lines)
+    next_section_index = next(
+        (
+            index
+            for index in range(features_index + 1, len(lines))
+            if _SECTION_RE.match(lines[index])
+        ),
+        len(lines),
+    )
+    return features_index, next_section_index
+
+
+def _find_codex_feature_flags(
+    lines: list[str], start_index: int, end_index: int
+) -> tuple[int | None, list[int]]:
+    hooks_index: int | None = None
+    codex_hooks_indexes: list[int] = []
+    for index in range(start_index, end_index):
+        if _HOOKS_RE.match(lines[index]):
+            hooks_index = index
+        elif _CODEX_HOOKS_RE.match(lines[index]):
+            codex_hooks_indexes.append(index)
+    return hooks_index, codex_hooks_indexes
+
+
+def _write_codex_toml_lines(config_path: Path, lines: list[str]) -> None:
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _drop_lines(lines: list[str], indexes: list[int]) -> None:
+    for index in reversed(indexes):
+        del lines[index]
+
+
+def _set_existing_hooks_flag(
+    config_path: Path, lines: list[str], hooks_index: int, codex_hooks_indexes: list[int]
+) -> None:
+    match = _HOOKS_RE.match(lines[hooks_index])
+    if match:
+        lines[hooks_index] = f"{match.group(1)}true{match.group(2)}"
+    _drop_lines(lines, codex_hooks_indexes)
+    _write_codex_toml_lines(config_path, lines)
+
+
+def _replace_legacy_codex_hooks_flag(
+    config_path: Path, lines: list[str], codex_hooks_indexes: list[int]
+) -> None:
+    first_index = codex_hooks_indexes[0]
+    match = _CODEX_HOOKS_RE.match(lines[first_index])
+    if match:
+        lines[first_index] = f"{match.group(1)}hooks{match.group(2)}true{match.group(3)}"
+    _drop_lines(lines, codex_hooks_indexes[1:])
+    _write_codex_toml_lines(config_path, lines)
 
 
 def _enable_codex_hooks_toml(config_path: Path) -> None:
     """Enable the current Codex hooks feature flag without rewriting config.toml."""
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     lines = text.splitlines()
-    features_index: int | None = None
-    next_section_index = len(lines)
-    for index, line in enumerate(lines):
-        if line.strip() == "[features]":
-            features_index = index
-            break
-    if features_index is not None:
-        for index in range(features_index + 1, len(lines)):
-            if _SECTION_RE.match(lines[index]):
-                next_section_index = index
-                break
-        for index in range(features_index + 1, next_section_index):
-            match = _CODEX_HOOKS_RE.match(lines[index])
-            if match:
-                lines[index] = f"{match.group(1)}true{match.group(2)}"
-                config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                return
-        lines.insert(features_index + 1, "codex_hooks = true")
-        config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    features_index, next_section_index = _feature_section_bounds(lines)
+    if features_index is None:
+        suffix = "" if not lines else "\n\n"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            text.rstrip("\n") + suffix + "[features]\nhooks = true\n",
+            encoding="utf-8",
+        )
         return
 
-    suffix = "" if not lines else "\n\n"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        text.rstrip("\n") + suffix + "[features]\ncodex_hooks = true\n",
-        encoding="utf-8",
+    hooks_index, codex_hooks_indexes = _find_codex_feature_flags(
+        lines, features_index + 1, next_section_index
     )
+    if hooks_index is not None:
+        _set_existing_hooks_flag(config_path, lines, hooks_index, codex_hooks_indexes)
+        return
+    if codex_hooks_indexes:
+        _replace_legacy_codex_hooks_flag(config_path, lines, codex_hooks_indexes)
+        return
+    lines.insert(features_index + 1, "hooks = true")
+    _write_codex_toml_lines(config_path, lines)
 
 
 def _install_codex(dry_run: bool = False) -> int:
@@ -122,20 +182,20 @@ def _install_codex(dry_run: bool = False) -> int:
             parsed = cast(object, json.loads(hooks_path.read_text(encoding="utf-8")))
             existing = object_dict(parsed)
         except json.JSONDecodeError:
-            existing = {}
+            print(f"Invalid Codex hooks JSON; refusing to overwrite: {hooks_path}")
+            return 1
     else:
         existing = {}
 
-    existing["hooks"] = merge_owned_hooks(
-        existing.get("hooks"), cast(dict[str, list[dict[str, object]]], hooks)
-    )
-    _ = hooks_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    merge_owned_hooks_into(existing, cast(dict[str, list[dict[str, object]]], hooks))
+    write_json_with_backup(hooks_path, existing, "hooks")
 
     config_path = Path.home() / ".codex" / "config.toml"
+    backup_existing_file_and_report(config_path, "config")
     _enable_codex_hooks_toml(config_path)
     print_binary_install_summary(
         f"Installed vibeforcer hooks into {hooks_path}\n"
-        f"Enabled codex_hooks feature flag in {config_path}",
+        f"Enabled hooks feature flag in {config_path}",
         binary,
     )
     return 0
@@ -155,16 +215,16 @@ def _uninstall_codex(dry_run: bool = False) -> int:
         parsed = cast(object, json.loads(hooks_path.read_text(encoding="utf-8")))
         existing = object_dict(parsed)
     except json.JSONDecodeError:
-        hooks_path.unlink()
-        print(f"Removed invalid hooks file: {hooks_path}")
-        return 0
+        print(f"Invalid Codex hooks JSON; refusing to modify: {hooks_path}")
+        return 1
 
     remaining_hooks = remove_owned_hooks(existing.get("hooks"))
     if remaining_hooks:
         existing["hooks"] = remaining_hooks
-        _ = hooks_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+        write_json_with_backup(hooks_path, existing, "hooks")
         print(f"Removed vibeforcer hooks from {hooks_path}")
     else:
+        backup_existing_file_and_report(hooks_path, "hooks")
         hooks_path.unlink()
         print(f"Removed: {hooks_path}")
     return 0

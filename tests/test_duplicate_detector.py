@@ -158,6 +158,41 @@ class TestCollectBlockWindowsImportCanonicalization:
 
 
 class TestRepeatedStringLiteralMetadata:
+    def test_records_existing_locations_for_repeated_literals(
+        self, tmp_path: Path
+    ) -> None:
+        _ = (tmp_path / "src").mkdir()
+        cfg = load_config(tmp_path)
+        set_config(cfg)
+
+        parsed = [
+            _make_parsed(
+                "from __future__ import annotations\n\n"
+                f"LIMIT = {idx}\n"
+                "def flag() -> str:\n"
+                "    return 'skipped'\n"
+                "def window() -> int:\n"
+                "    return 24\n",
+                rel=f"src/file_{idx}.py",
+            )
+            for idx in range(11)
+        ]
+
+        violations = detect_repeated_literals(parsed)
+        by_rule = {violation.rule: violation for violation in violations}
+
+        string_locations = cast(
+            list[str],
+            by_rule["repeated-string-literal"].metadata["existing_locations"],
+        )
+        magic_locations = cast(
+            list[str],
+            by_rule["repeated-magic-number"].metadata["existing_locations"],
+        )
+        assert "src/file_0.py:5" in string_locations
+        assert "src/file_10.py:5" in string_locations
+        assert "src/file_0.py:7" in magic_locations
+
     def test_marks_already_defined_constant_match(self, tmp_path: Path) -> None:
         _ = (tmp_path / "src").mkdir()
         _ = (tmp_path / "src" / "constants.py").write_text(

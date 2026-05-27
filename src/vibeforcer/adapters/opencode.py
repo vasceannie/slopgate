@@ -19,6 +19,20 @@ OPENCODE_EVENT_MAP: dict[str, str] = {
     "permission.asked": PERMISSION_REQUEST,
 }
 
+OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
+    "bash": "Bash",
+    "edit": "Edit",
+    "glob": "Glob",
+    "grep": "Grep",
+    "multiedit": "MultiEdit",
+    "notebookedit": "NotebookEdit",
+    "read": "Read",
+    "todowrite": "TodoWrite",
+    "webfetch": "WebFetch",
+    "websearch": "WebSearch",
+    "write": "Write",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _OpenCodeRenderRequest:
@@ -40,8 +54,8 @@ class OpenCodeAdapter(PlatformAdapter):
         canonical["hook_event_name"] = canonical_event
 
         tool_name = string_value(raw.get("tool_name")) or ""
-        if tool_name and tool_name[0].islower():
-            canonical["tool_name"] = tool_name.capitalize()
+        if tool_name:
+            canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(tool_name, tool_name)
 
         if "tool_response" in canonical and "tool_result" not in canonical:
             canonical["tool_result"] = canonical["tool_response"]
@@ -94,6 +108,8 @@ class OpenCodeAdapter(PlatformAdapter):
         if request.decision in {BLOCK, DENY}:
             payload.update(self._block_output(request))
         if request.context:
+            if "action" not in payload:
+                payload["action"] = "context"
             payload["context"] = request.context
         return payload or None
 

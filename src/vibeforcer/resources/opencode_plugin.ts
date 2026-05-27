@@ -33,7 +33,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
 import { dirname } from "node:path"
 
-const VIBEFORCER_BIN = Bun.env.VIBEFORCER_BIN || "vibeforcer"
+const VIBEFORCER_BIN = Bun.env.VIBEFORCER_BIN || "__VIBEFORCER_BIN__"
 
 // Generate a unique session ID per plugin load (= per OpenCode session).
 const SESSION_ID = `opencode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

@@ -125,7 +125,7 @@ class TestCodexAdapterEdgeCases:
         assert "decision" not in rendered, "CRITICAL must suppress decision key"
 
     def test_pretool_deny_with_context(self) -> None:
-        """Codex PreToolUse deny does not emit unsupported context fields."""
+        """Codex PreToolUse deny can include docs-supported context fields."""
         adapter = CodexAdapter()
         findings = [
             RuleFinding(
@@ -148,12 +148,10 @@ class TestCodexAdapterEdgeCases:
         assert spec["permissionDecision"] == "deny", (
             "deny must set permissionDecision=deny"
         )
-        assert "additionalContext" not in spec, (
-            "Codex PreToolUse must not emit unsupported additionalContext"
-        )
+        assert spec["additionalContext"] == "try something else"
 
     def test_pretool_only_context_no_decision(self) -> None:
-        """Codex PreToolUse context-only output is unsupported, so emit nothing."""
+        """Codex PreToolUse context-only output emits docs-supported additionalContext."""
         adapter = CodexAdapter()
         findings = [
             RuleFinding(
@@ -170,7 +168,10 @@ class TestCodexAdapterEdgeCases:
             context="check search results",
             updated_input={},
         )
-        assert output is None
+        assert (
+            test_support.required_string(require_spec(output), "additionalContext")
+            == "check search results"
+        )
 
     def test_stop_context_appended_to_reason(self) -> None:
         """Stop block + context → context merged into reason."""

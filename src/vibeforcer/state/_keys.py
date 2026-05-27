@@ -152,6 +152,7 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
             deny_hits = state["deny_hits"]
             count = deny_hits.get(key, 0) + 1
             deny_hits[key] = count
+            state["deny_hits"] = self._prune_counter_map(deny_hits, {key})
             self._save_state(state)
         return count
 
@@ -165,6 +166,12 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
         with self._locked_state():
             state = self._load_state()
             deny_hits = state["deny_hits"]
+            if attempt_fingerprint is not None:
+                key = self._deny_key(session_id, rule_id, path, attempt_fingerprint)
+                _ = deny_hits.pop(key, None)
+                state["deny_hits"] = self._prune_counter_map(deny_hits)
+                self._save_state(state)
+                return
             keys_to_clear = [
                 key
                 for key in deny_hits
@@ -180,6 +187,7 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
             ]
             for key in keys_to_clear:
                 _ = deny_hits.pop(key, None)
+            state["deny_hits"] = self._prune_counter_map(deny_hits)
             self._save_state(state)
 
     def recent_repeated_failures(

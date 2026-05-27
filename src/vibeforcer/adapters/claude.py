@@ -96,11 +96,8 @@ class ClaudeAdapter(PlatformAdapter):
         return payload or None
 
     def _render_task_or_idle(self, request: _ClaudeRenderRequest) -> ObjectDict | None:
-        if request.decision in {BLOCK, DENY}:
-            return {
-                "continue": False,
-                "stopReason": self._decision_reason(request),
-            }
+        if request.decision in {BLOCK, DENY, "ask"}:
+            return None
         if request.context:
             return {"systemMessage": request.context}
         return None

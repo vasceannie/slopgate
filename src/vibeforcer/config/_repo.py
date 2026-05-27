@@ -24,6 +24,7 @@ def _git_output(
             cwd=str(cwd) if cwd is not None else None,
             text=True,
             timeout=timeout,
+            stderr=subprocess.DEVNULL,
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None

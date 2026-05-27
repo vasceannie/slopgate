@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import ast
-from collections import defaultdict
 from collections.abc import Set
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 from vibeforcer.constants import (
     METADATA_PATH,
 )
@@ -29,15 +28,28 @@ if TYPE_CHECKING:
 
 from ._semantic import _is_docstring_node as _is_docstring_node
 
+_MAX_EXISTING_LOCATION_PREVIEW = 12
+_LiteralValue = TypeVar("_LiteralValue", int, float, str)
+
+
+def _record_occurrence(
+    index: dict[_LiteralValue, dict[str, set[int]]],
+    value: _LiteralValue,
+    rel_path: str,
+    lineno: int,
+) -> None:
+    by_file = index.setdefault(value, {})
+    by_file.setdefault(rel_path, set()).add(lineno)
+
 
 def _collect_literals(
     parsed: list[ParsedFile],
     allowed_nums: Set[int | float],
     allowed_strs: set[str],
-) -> tuple[dict[int | float, set[str]], dict[str, set[str]]]:
+) -> tuple[dict[int | float, dict[str, set[int]]], dict[str, dict[str, set[int]]]]:
     """Walk ASTs and count non-allowed literal occurrences per file."""
-    num_counts: dict[int | float, set[str]] = defaultdict(set)
-    str_counts: dict[str, set[str]] = defaultdict(set)
+    num_counts: dict[int | float, dict[str, set[int]]] = {}
+    str_counts: dict[str, dict[str, set[int]]] = {}
 
     for pf in parsed:
         for node in ast.walk(pf.tree):
@@ -47,13 +59,13 @@ def _collect_literals(
                 continue
             val = node.value
             if isinstance(val, (int, float)) and val not in allowed_nums:
-                num_counts[val].add(pf.rel)
+                _record_occurrence(num_counts, val, pf.rel, node.lineno)
             elif (
                 isinstance(val, str)
                 and val not in allowed_strs
                 and _is_semantic_string_literal(val)
             ):
-                str_counts[val].add(pf.rel)
+                _record_occurrence(str_counts, val, pf.rel, node.lineno)
 
     return num_counts, str_counts
 
@@ -99,11 +111,29 @@ def _string_literal_metadata(
     return {"already_defined": already_defined}, suffix
 
 
+def _existing_location_metadata(
+    occurrences: dict[str, set[int]],
+) -> dict[str, object]:
+    locations: list[str] = []
+    total = 0
+    for rel_path in sorted(occurrences):
+        for lineno in sorted(occurrences[rel_path]):
+            total += 1
+            if len(locations) < _MAX_EXISTING_LOCATION_PREVIEW:
+                locations.append(f"{rel_path}:{lineno}")
+    metadata: dict[str, object] = {"existing_locations": locations}
+    remaining = total - len(locations)
+    if remaining > 0:
+        metadata["existing_locations_more"] = remaining
+    return metadata
+
+
 def _magic_number_violation(
     value: int | float,
-    files_seen: set[str],
+    occurrences: dict[str, set[int]],
     max_files: int,
 ) -> Violation | None:
+    files_seen = set(occurrences)
     if len(files_seen) <= max_files:
         return None
     return Violation(
@@ -111,21 +141,25 @@ def _magic_number_violation(
         relative_path="<project>",
         identifier=repr(value),
         detail=f"appears in {len(files_seen)} files (max: {max_files})",
+        metadata=_existing_location_metadata(occurrences),
     )
 
 
 def _string_literal_violation(
     value: str,
-    files_seen: set[str],
+    occurrences: dict[str, set[int]],
     cfg: "QualityConfig",
     constant_index: ConstantIndex,
 ) -> Violation | None:
     max_files = cfg.max_repeated_string_literals
+    files_seen = set(occurrences)
     if len(files_seen) <= max_files:
         return None
-    metadata, detail_suffix = _string_literal_metadata(
+    metadata = _existing_location_metadata(occurrences)
+    constant_metadata, detail_suffix = _string_literal_metadata(
         value, constant_index, cfg.project_root
     )
+    metadata.update(constant_metadata)
     return Violation(
         rule="repeated-string-literal",
         relative_path="<project>",

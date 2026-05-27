@@ -70,6 +70,8 @@ _ASYNC_TEST_MARKS = {"pytest.mark.asyncio", "pytest.mark.anyio", "pytest.mark.tr
 
 
 def _is_async_backend_mark(node: ast.AST, aliases: dict[str, str]) -> bool:
+    if not isinstance(node, ast.expr):
+        return False
     return _decorator_name(node, aliases) in _ASYNC_TEST_MARKS
 
 

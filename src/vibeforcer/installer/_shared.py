@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 
 from vibeforcer._types import object_dict, object_list
@@ -78,6 +81,36 @@ def remove_owned_hooks(existing_hooks: object) -> dict[str, list[dict[str, objec
         if kept:
             remaining[event] = kept
     return remaining
+
+
+def merge_owned_hooks_into(
+    config: dict[str, object], managed_hooks: dict[str, list[dict[str, object]]]
+) -> None:
+    """Replace only vibeforcer-owned hook entries in a config document."""
+    config["hooks"] = merge_owned_hooks(config.get("hooks"), managed_hooks)
+
+
+def backup_existing_file(path: Path) -> Path | None:
+    """Create a timestamped sibling backup for an existing config/plugin file."""
+    if not path.exists():
+        return None
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+    backup_path = path.with_name(f"{path.name}.vibeforcer-bak-{timestamp}")
+    _ = shutil.copy2(path, backup_path)
+    return backup_path
+
+
+def backup_existing_file_and_report(path: Path, label: str) -> None:
+    """Back up an existing file and print a concise installer status line."""
+    backup_path = backup_existing_file(path)
+    if backup_path is not None:
+        print(f"Backed up existing {label} to {backup_path}")
+
+
+def write_json_with_backup(path: Path, payload: object, label: str) -> None:
+    """Back up an existing file, then write formatted JSON."""
+    backup_existing_file_and_report(path, label)
+    _ = path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def print_binary_install_summary(message: str, binary: str) -> None:

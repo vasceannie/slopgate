@@ -154,9 +154,11 @@ def _decorator_is_dataclass(decorator: ast.expr) -> bool:
 
 
 def _base_name(base: ast.expr) -> str:
-    names = {ast.Name: "id", ast.Attribute: "attr"}
-    attr = names.get(type(base))
-    return getattr(base, attr, "") if attr is not None else ""
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    return ""
 
 
 def _grouped_type_hints(tree: ast.Module) -> list[str]:

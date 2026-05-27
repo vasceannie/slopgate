@@ -1,0 +1,171 @@
+"""Regression tests for CLI trust-audit bugs."""
+
+from __future__ import annotations
+
+import argparse
+import io
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+import vibeforcer.installer as installer_module
+import vibeforcer.search.cli as search_cli
+from vibeforcer.cli.commands import cmd_check, cmd_config_init, cmd_handle
+from vibeforcer.cli.lint import cmd_lint
+from vibeforcer.cli.main import main
+from vibeforcer.config import resolve_git_root
+from vibeforcer.constants import METADATA_COMMAND
+from vibeforcer.lint._config import reset_config
+
+
+def _clear_vibeforcer_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "VIBEFORCER_CONFIG",
+        "VIBEFORCER_CONFIG_DIR",
+        "VIBEFORCER_ROOT",
+        "CLAUDE_HOOK_LAYER_ROOT",
+        "HOOK_LAYER_ROOT",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_search_bare_query_dispatches_to_default_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, list[str]] = {}
+
+    def fake_cmd_search(args: argparse.Namespace) -> int:
+        observed["query"] = list(args.query)
+        return 0
+
+    monkeypatch.setattr(search_cli, "cmd_search", fake_cmd_search)
+
+    assert main(["search", "hello", "world"]) == 0
+
+    assert observed == {"query": ["hello", "world"]}
+
+
+def test_search_without_args_prints_help_instead_of_parse_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["search"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "Semantic code search" in captured.out
+    assert "query_args" not in captured.err
+
+
+def _run_force_config_init(config_path: Path) -> tuple[list[Path], dict[str, object]]:
+    assert cmd_config_init(argparse.Namespace(force=True)) == 0
+    backups = sorted(config_path.parent.glob("config.json.vibeforcer-bak-*"))
+    updated = json.loads(config_path.read_text(encoding="utf-8"))
+    return backups, updated
+
+
+def test_config_init_force_backs_up_existing_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_vibeforcer_env(monkeypatch)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    config_path = tmp_path / "xdg" / "vibeforcer" / "config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('{"custom": true}\n', encoding="utf-8")
+
+    backups, updated = _run_force_config_init(config_path)
+
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text(encoding="utf-8"))["custom"] is True
+    assert "custom" not in updated
+
+
+def test_handle_malformed_json_reports_clean_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("{not json"))
+
+    assert cmd_handle(argparse.Namespace(platform="claude")) == 1
+
+    captured = capsys.readouterr()
+    assert "Invalid JSON on stdin" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_check_non_git_path_is_quiet_and_does_not_create_trace_dirs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    _clear_vibeforcer_env(monkeypatch)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    target = tmp_path / "not-a-repo"
+    target.mkdir()
+
+    assert cmd_check(argparse.Namespace(path=str(target))) == 0
+
+    captured = capfd.readouterr()
+    assert "fatal: not a git repository" not in captured.err
+    assert not (tmp_path / "xdg" / "vibeforcer" / "logs").exists()
+
+
+def test_resolve_git_root_suppresses_git_stderr(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    assert resolve_git_root(tmp_path) is None
+
+    captured = capfd.readouterr()
+    assert "fatal: not a git repository" not in captured.err
+
+
+def _dry_run_lint_update_from(path: Path, monkeypatch: pytest.MonkeyPatch) -> int:
+    monkeypatch.chdir(path)
+    reset_config()
+    try:
+        return cmd_lint(argparse.Namespace(lint_command="update", path=".", dry_run=True))
+    finally:
+        reset_config()
+
+
+def test_lint_update_discovers_project_root_from_nested_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n",
+        encoding="utf-8",
+    )
+    nested = tmp_path / "src" / "pkg"
+    nested.mkdir(parents=True)
+
+    result = _dry_run_lint_update_from(nested, monkeypatch)
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "No quality_gate.toml found" not in captured.out
+
+
+def _first_command(hooks: dict[str, Any], event_name: str) -> str:
+    entry = hooks[event_name][0]
+    hook = entry["hooks"][0]
+    command = hook[METADATA_COMMAND]
+    assert isinstance(command, str)
+    return command
+
+
+def test_installer_hook_commands_quote_binary_paths_with_spaces() -> None:
+    binary = "/tmp/Vibeforcer Bin/vibeforcer"
+
+    assert _first_command(
+        installer_module._claude_hooks_block(binary), "PreToolUse"
+    ) == "'/tmp/Vibeforcer Bin/vibeforcer' handle"
+    assert _first_command(
+        installer_module._codex_hooks_block(binary), "PreToolUse"
+    ) == "'/tmp/Vibeforcer Bin/vibeforcer' handle --platform codex"

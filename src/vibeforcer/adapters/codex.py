@@ -59,6 +59,17 @@ def _apply_codex_block_decision(
     payload["reason"] = _codex_decision_reason(adapter, request)
 
 
+def _add_codex_pretool_context_and_rewrite(
+    specific: ObjectDict, request: _CodexRenderRequest
+) -> None:
+    updates: ObjectDict = {}
+    if request.updated_input:
+        updates["updatedInput"] = request.updated_input
+    if request.context:
+        updates["additionalContext"] = request.context
+    specific.update(updates)
+
+
 def _render_codex_pre_tool_use(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
@@ -68,6 +79,12 @@ def _render_codex_pre_tool_use(
         specific["permissionDecisionReason"] = _codex_decision_reason(
             adapter, request
         )
+    elif request.decision == "allow":
+        specific["permissionDecision"] = "allow"
+    if request.decision == "allow":
+        _add_codex_pretool_context_and_rewrite(specific, request)
+    elif request.context:
+        specific["additionalContext"] = request.context
     response: ObjectDict = {"hookSpecificOutput": specific}
     return response if len(specific) > 1 else None
 

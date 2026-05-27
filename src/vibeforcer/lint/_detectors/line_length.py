@@ -1,7 +1,9 @@
 """Detector for over-long lines.
 
 ``detect_long_lines`` — find lines exceeding the configured max length,
-skipping string literals (docstrings), comments, URLs, and import statements.
+skipping string literals (docstrings), comments, URLs, import statements, and
+whitespace-only padding. Trailing whitespace does not count toward the code
+line length.
 
 Uses AST-derived string-literal line ranges instead of fragile triple-quote
 counting.
@@ -25,6 +27,7 @@ def detect_long_lines(
 
     Skips:
     - Lines inside string literals (docstrings, triple-quoted strings)
+    - Whitespace-only lines and trailing whitespace padding
     - Comment-only lines
     - Lines containing URLs (``http://`` or ``https://``)
     - Import statements (``import …`` / ``from … import …``)
@@ -41,6 +44,8 @@ def detect_long_lines(
                 continue
 
             stripped = line.strip()
+            if not stripped:
+                continue
 
             # Skip comment-only lines
             if stripped.startswith("#"):
@@ -54,8 +59,9 @@ def detect_long_lines(
             if _URL_RE.search(line):
                 continue
 
-            # Check length (strip trailing newline chars for measurement)
-            line_len = len(line.rstrip("\n\r"))
+            # Check executable code length. Formatting-only trailing spaces are
+            # whitespace debt, not a reason to tell agents to mangle code/docs.
+            line_len = len(line.rstrip())
             if line_len > max_len:
                 violations.append(
                     Violation(

@@ -81,6 +81,7 @@ class _StateFileMixin:
 
 class _StateSnapshotMixin(_StateFileMixin):
     _TTL_SECONDS: int
+    _MAX_DENY_HITS = 512
 
     def _load_state(self) -> _HookStateSnapshot:
         cutoff = int(time()) - self._TTL_SECONDS
@@ -110,7 +111,33 @@ class _StateSnapshotMixin(_StateFileMixin):
 
     @classmethod
     def _coerce_counter_map(cls, raw: object) -> dict[str, int]:
-        return {key: value for key, value in cls._iter_int_items(raw) if value >= 0}
+        counters = {key: value for key, value in cls._iter_int_items(raw) if value >= 0}
+        return cls._prune_counter_map(counters)
+
+    @classmethod
+    def _prune_counter_map(
+        cls, counters: dict[str, int], protected_keys: set[str] | None = None
+    ) -> dict[str, int]:
+        if len(counters) <= cls._MAX_DENY_HITS:
+            return dict(counters)
+        protected = {
+            key: value
+            for key, value in counters.items()
+            if protected_keys is not None and key in protected_keys
+        }
+        slots = max(cls._MAX_DENY_HITS - len(protected), 0)
+        ranked = sorted(
+            (
+                (key, value)
+                for key, value in counters.items()
+                if key not in protected
+            ),
+            key=lambda item: (item[1], item[0]),
+            reverse=True,
+        )
+        selected = dict(ranked[:slots])
+        selected.update(protected)
+        return selected
 
     @staticmethod
     def _coerce_object_map(raw: object, cutoff: int) -> dict[str, ObjectDict]:

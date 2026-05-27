@@ -19,7 +19,7 @@ vibeforcer config init
 # Install hooks for your platform
 vibeforcer install claude    # patches ~/.claude/settings.json
 vibeforcer install codex     # patches ~/.codex/hooks.json
-vibeforcer install opencode  # copies plugin to ~/.config/opencode/plugins/
+vibeforcer install opencode  # copies plugin to the user OpenCode plugins dir
 
 # Run self-test
 vibeforcer test
@@ -44,8 +44,8 @@ vibeforcer lint init .            # scaffold quality_gate.toml
 ## Platform Notes
 
 - **Claude Code**: full first-class hook target. Vibeforcer can use Claude's richer event model, including prompt/session/tool interception.
-- **Codex CLI**: experimental hook support with narrower runtime coverage than Claude Code. Current upstream docs expose `PreToolUse` and `PostToolUse` around Bash commands rather than full edit/write tool parity, so vibeforcer installs Bash-focused Codex hooks and treats Codex as partial coverage.
-- **OpenCode**: implemented via a plugin shim rather than a Claude-style hook schema. OpenCode exposes plugin events such as `tool.execute.before`, `tool.execute.after`, `permission.asked`, and session events, but prompt interception and stop blocking do not have Claude-equivalent parity.
+- **Codex CLI**: experimental hook support with narrower runtime coverage than Claude Code. Vibeforcer installs conservative Codex hooks for shell and common edit tools (`Bash|apply_patch|Edit|Write`) and treats Codex as partial coverage.
+- **OpenCode**: implemented via a plugin shim rather than a Claude-style hook schema. OpenCode exposes plugin events such as `tool.execute.before`, `tool.execute.after`, `permission.asked`, and session events, but prompt interception and stop blocking do not have Claude-equivalent parity. The installer targets the user plugin directory (`~/.config/opencode/plugins/` on Linux/XDG, `%APPDATA%\\opencode\\plugins\\` on native Windows) and backs up existing plugin files before replacing owned content.
 
 ## Architecture
 

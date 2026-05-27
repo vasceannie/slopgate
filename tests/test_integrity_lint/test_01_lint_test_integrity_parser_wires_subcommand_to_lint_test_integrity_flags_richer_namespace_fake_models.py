@@ -16,9 +16,11 @@ def test_lint_test_integrity_parser_wires_subcommand() -> None:
 
     args = parser.parse_args(["lint", "test-integrity", "--details"])
 
-    assert args.command == "lint"
-    assert args.lint_command == "test-integrity"
-    assert args.details is True
+    assert (args.command, args.lint_command, args.details) == (
+        "lint",
+        "test-integrity",
+        True,
+    )
 
 def test_lint_test_integrity_flags_mock_theater_with_guidance(
     tmp_path: Path,

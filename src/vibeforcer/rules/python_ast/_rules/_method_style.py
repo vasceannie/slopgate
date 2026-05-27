@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import io
+import tokenize
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 from vibeforcer.constants import (
@@ -152,28 +154,40 @@ class PythonLongLineRule(Rule):
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
     @staticmethod
-    def _toggle_docstring(stripped: str, in_docstring: bool) -> bool:
-        """Return updated docstring-tracking state after processing stripped."""
-        for marker in ('"""', "'''"):
-            if stripped.count(marker) % 2 == 1:
-                in_docstring = not in_docstring
-        return in_docstring
+    def _string_literal_lines(source: str) -> set[int]:
+        """Return physical lines occupied by string literals/docstrings."""
+        lines: set[int] = set()
+        try:
+            tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+            for token in tokens:
+                if token.type != tokenize.STRING:
+                    continue
+                start_line = token.start[0]
+                end_line = token.end[0]
+                lines.update(range(start_line, end_line + 1))
+        except tokenize.TokenError:
+            return lines
+        return lines
 
     def _find_worst_line(self, source: str, max_length: int) -> tuple[int, int]:
         """Scan source and return (lineno, length) of the longest offending line."""
-        in_docstring = False
+        string_lines = self._string_literal_lines(source)
         worst_lineno = 0
         worst_length = 0
         for lineno, raw_line in enumerate(source.splitlines(), start=1):
             stripped = raw_line.strip()
-            in_docstring = self._toggle_docstring(stripped, in_docstring)
-            if in_docstring or stripped.startswith("#"):
+            if not stripped:
+                continue
+            if lineno in string_lines or stripped.startswith("#"):
+                continue
+            if stripped.startswith("import ") or stripped.startswith("from "):
                 continue
             if "http://" in raw_line or "https://" in raw_line:
                 continue
-            if len(raw_line) > max_length and len(raw_line) > worst_length:
+            code_length = len(raw_line.rstrip())
+            if code_length > max_length and code_length > worst_length:
                 worst_lineno = lineno
-                worst_length = len(raw_line)
+                worst_length = code_length
         return worst_lineno, worst_length
 
     def _check_source(
@@ -191,8 +205,11 @@ class PythonLongLineRule(Rule):
             severity=Severity.MEDIUM,
             decision=decision_for_context(ctx),
             message=(
-                f"Line {worst_lineno} in `{path_value}` is {worst_length} characters long. "
-                f"Keep lines at or below {max_length} characters."
+                f"Line {worst_lineno} in `{path_value}` is {worst_length} code characters long. "
+                f"Keep executable code lines at or below {max_length} characters. "
+                "Docstrings/string literals and whitespace-only padding are ignored; "
+                "wrap the expression or extract an intermediate variable instead of "
+                "mangling docs or spacing."
             ),
             metadata={METADATA_PATH: path_value, "line": worst_lineno, "length": worst_length},
         )]

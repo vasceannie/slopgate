@@ -113,9 +113,7 @@ class TestAnalyze:
         entries = [self._entry(session="s1")] * 3
         stats = _analyze(entries)
         retries = object_list(stats.get("retry_patterns"))
-        assert len(retries) > 0, (
-            "repeated denies in same session must produce retry patterns"
-        )
+        assert retries == [("GIT-001 (session s1...)", 3)]
 
     def test_daily_counts(self) -> None:
         stats = _analyze([self._entry()])

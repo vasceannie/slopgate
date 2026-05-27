@@ -60,11 +60,67 @@ class TestBaselineGuard:
             "baseline count increases should remain blocked"
         )
 
+    def test_relative_baseline_path_uses_payload_cwd(self, tmp_path: Path) -> None:
+        self._write_baseline(tmp_path, {"high-complexity": ["h1", "h2"]})
+        new_content = json.dumps(
+            {
+                "generated_at": "2026-01-02",
+                "rules": {"high-complexity": ["h1", "h2", "h3"]},
+                "schema_version": 1,
+            }
+        )
+        payload: ObjectDict = object_dict(
+            {
+                "session_id": "t",
+                "cwd": str(tmp_path),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "baselines.json", "content": new_content},
+            }
+        )
+
+        result = evaluate_payload(payload)
+
+        assert_denied_by(result, "BASELINE-001", "increasing the baseline")
+        assert "BASELINE-001" in finding_ids(result)
+
+    def test_new_nonempty_baseline_creation_blocked(self, tmp_path: Path) -> None:
+        _ = (tmp_path / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+        new_content = json.dumps(
+            {
+                "generated_at": "2026-01-02",
+                "rules": {"high-complexity": ["h1"]},
+                "schema_version": 1,
+            }
+        )
+        payload: ObjectDict = object_dict(
+            {
+                "session_id": "t",
+                "cwd": str(tmp_path),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "baselines.json", "content": new_content},
+            }
+        )
+
+        result = evaluate_payload(payload)
+
+        assert_denied_by(result, "BASELINE-001", "Creating a populated baseline")
+        assert "BASELINE-001" in finding_ids(result)
+
     @pytest.mark.parametrize(
         "command",
         [
             "quality-gate baseline .",
             "vibeforcer lint baseline .",
+            "vibeforcer   lint baseline .",
+            "vibeforcer lint    baseline .",
+            "QUALITY_GENERATE_BASELINE=1 vibeforcer lint baseline .",
+            "env QUALITY_GENERATE_BASELINE=1 /home/trav/.local/bin/vibeforcer lint baseline .",
+            "python -m vibeforcer lint baseline .",
+            "python3 -m vibeforcer lint baseline .",
             "vfc lint baseline .",
         ],
     )

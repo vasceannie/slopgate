@@ -54,7 +54,7 @@ class TestCodexAdapterBasic:
             spec, "permissionDecisionReason"
         )
 
-    def test_pretool_drops_unsupported_context_and_updated_input(self) -> None:
+    def test_pretool_deny_preserves_context_but_not_updated_input(self) -> None:
         adapter = CodexAdapter()
         findings = [
             RuleFinding(
@@ -63,19 +63,43 @@ class TestCodexAdapterBasic:
                 severity=Severity.HIGH,
                 decision="deny",
                 message="blocked",
+                additional_context="use a safer command",
             )
         ]
         output = adapter.render_output(
             "PreToolUse",
             findings,
             decision="deny",
-            context="Codex docs do not support this on PreToolUse",
+            context="use a safer command",
             updated_input={"command": "echo rewritten"},
         )
         spec = require_spec(output)
         assert spec["permissionDecision"] == "deny"
-        assert "additionalContext" not in spec
+        assert spec["additionalContext"] == "use a safer command"
         assert "updatedInput" not in spec
+
+    def test_pretool_allow_can_rewrite_input(self) -> None:
+        adapter = CodexAdapter()
+        findings = [
+            RuleFinding(
+                rule_id="SAFE-REWRITE",
+                title="t",
+                severity=Severity.LOW,
+                decision="allow",
+                additional_context="command normalized",
+            )
+        ]
+        output = adapter.render_output(
+            "PreToolUse",
+            findings,
+            decision="allow",
+            context="command normalized",
+            updated_input={"command": "echo rewritten"},
+        )
+        spec = require_spec(output)
+        assert spec["permissionDecision"] == "allow"
+        assert spec["updatedInput"] == {"command": "echo rewritten"}
+        assert spec["additionalContext"] == "command normalized"
 
     def test_pretool_block_maps_to_deny(self) -> None:
         adapter = CodexAdapter()

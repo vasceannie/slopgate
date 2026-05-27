@@ -16,9 +16,38 @@ from tests.test_hook_state_spec import (
     evaluate_payload,
     finding_ids,
     get_adapter,
+    json,
     object_dict,
     time,
 )
+
+
+def _deny_key_for_test(
+    session_id: str, rule_id: str, path: str | None, attempt_fingerprint: str | None
+) -> str:
+    normalized_path = str(Path(path).resolve(strict=False)) if path else "__pathless__"
+    return json.dumps(
+        {
+            "session_id": session_id.strip(),
+            "rule_id": rule_id.strip(),
+            "path": normalized_path,
+            "attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__",
+        },
+        sort_keys=True,
+    )
+
+
+def _seed_deny_hits(store: _InspectableHookStateStore, hits: dict[str, int]) -> None:
+    store.save_state_for_test({"deny_hits": hits})
+
+
+def _loaded_deny_hits(store: _InspectableHookStateStore) -> dict[str, object]:
+    return object_dict(store.load_state_for_test().get("deny_hits"))
+
+
+class _DirectClearStore(_InspectableHookStateStore):
+    def _deny_key_matches(self, key: str, pattern: object) -> bool:
+        raise AssertionError("exact deny-hit clear should not scan every key")
 
 class TestHookStateStore:
     def test_ttl_expiry_filters_stale_full_reads(self, tmp_path: Path) -> None:
@@ -29,6 +58,50 @@ class TestHookStateStore:
         )
 
         assert not store.has_full_read("session-a", str(tmp_path / "module.py"))
+
+    def test_large_deny_hit_state_is_bounded_but_keeps_repeated_signal(
+        self, tmp_path: Path
+    ) -> None:
+        limit = 512
+        store = _InspectableHookStateStore(tmp_path)
+        noisy_hits = {
+            _deny_key_for_test(
+                "session-a",
+                "PY-NOISE-001",
+                str(tmp_path / f"module_{idx}.py"),
+                f"attempt-{idx}",
+            ): 1
+            for idx in range(limit + 75)
+        }
+        repeated_key = _deny_key_for_test(
+            "session-a", "PY-CODE-013", str(tmp_path / "thin.py"), "important-attempt"
+        )
+        _seed_deny_hits(store, {**noisy_hits, repeated_key: 8})
+
+        deny_hits = _loaded_deny_hits(store)
+
+        assert len(deny_hits) <= limit
+        assert deny_hits[repeated_key] == 8
+
+    def test_exact_deny_hit_clear_uses_direct_key_without_scanning(
+        self, tmp_path: Path
+    ) -> None:
+        store = _DirectClearStore(tmp_path)
+        target_key = _deny_key_for_test(
+            "session-a", "PY-CODE-013", str(tmp_path / "thin.py"), "attempt-a"
+        )
+        other_key = _deny_key_for_test(
+            "session-a", "PY-CODE-013", str(tmp_path / "thin.py"), "attempt-b"
+        )
+        _seed_deny_hits(store, {target_key: 2, other_key: 2})
+
+        store.clear_deny_hit(
+            "session-a", "PY-CODE-013", str(tmp_path / "thin.py"), "attempt-a"
+        )
+        deny_hits = _loaded_deny_hits(store)
+
+        assert target_key not in deny_hits
+        assert deny_hits[other_key] == 2
 
     def test_parallel_subprocess_writes_complete_without_losing_entries(
         self, tmp_path: Path

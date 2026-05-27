@@ -82,8 +82,8 @@ class TestOpenCodeAdapterRenderPostTool:
             context="check test coverage",
             updated_input={},
         )
-        assert output == {"context": "check test coverage"}, (
-            "context-only PostToolUse should return context dict"
+        assert output == {"action": "context", "context": "check test coverage"}, (
+            "context-only PostToolUse should return context action dict"
         )
 
     def test_stop_continue(self) -> None:

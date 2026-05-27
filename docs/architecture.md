@@ -72,7 +72,7 @@ src/vibeforcer/
 ├── trace.py            JSONL tracing
 ├── enrichment.py       Project-aware context enrichment for findings
 ├── constants.py        Tool name sets, language mappings
-├── installer.py        Platform-specific hook installation
+├── installer/         Platform-specific hook/plugin installation
 ├── stats.py            Hook activity log analysis
 ├── async_jobs.py       Async post-edit quality jobs
 ├── adapters/
