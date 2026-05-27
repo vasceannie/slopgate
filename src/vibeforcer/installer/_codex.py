@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shlex
 from pathlib import Path
 from typing import cast
 
@@ -14,6 +13,7 @@ from vibeforcer.installer._shared import (
     HOOK_TYPE_COMMAND,
     backup_existing_file_and_report,
     find_binary,
+    hook_command,
     merge_owned_hooks_into,
     print_binary_install_summary,
     remove_owned_hooks,
@@ -53,7 +53,7 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
 
 def _codex_hooks_block(binary: str) -> _CodeHooks:
     hooks: _CodeHooks = {}
-    command = f"{shlex.quote(binary)} handle --platform codex"
+    command = hook_command(binary, "handle", "--platform", "codex")
     for event, meta in _CODEX_EVENTS.items():
         command_entry: _CodeHookCommand = {
             "type": HOOK_TYPE_COMMAND,

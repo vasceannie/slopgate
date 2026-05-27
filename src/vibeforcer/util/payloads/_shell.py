@@ -13,7 +13,7 @@ _COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|"})
 _COMMAND_WRAPPER_NAMES = frozenset({"env", "command", "builtin", "exec", "time", "nohup"})
 _SHELL_REDIRECTION_PATTERN = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
 _SHELL_PATHISH_PATTERN = re.compile(
-    r"([~./A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+"
+    r"(?:[A-Za-z]:[\\/])?(?:[~./\\A-Za-z0-9_-]+[/\\])*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+"
 )
 _SHELL_KNOWN_FILENAMES = frozenset(
     {
@@ -79,8 +79,10 @@ def _shell_tokens(command: str) -> list[str]:
 
 
 def _append_unique_shell_path(seen: list[str], value: str) -> None:
-    cleaned_value = value.strip("\"'")
+    cleaned_value = value.strip("\"'`")
     if not cleaned_value or _is_shell_glob_token(cleaned_value):
+        return
+    if cleaned_value.lower() in {"/dev/null", "$null", "nul", "nul:"}:
         return
     if cleaned_value not in seen:
         seen.append(cleaned_value)
@@ -112,12 +114,36 @@ def _shell_token_path_candidates(token: str) -> list[str]:
     lower_cleaned = cleaned.lower()
     if (
         "/" in token
+        or "\\" in token
         or token.startswith(("~", "./", "../"))
         or cleaned[:1].isupper()
         or lower_cleaned in _SHELL_KNOWN_FILENAMES
     ):
         return [cleaned]
     return []
+
+
+def _powershell_candidate_paths(command: str) -> list[str]:
+    seen: list[str] = []
+    path_value = r"(?P<quote>['\"]?)(?P<path>[^'\"\s;|]+)(?P=quote)"
+    parameter_pattern = re.compile(
+        rf"(?i)(?:^|\s)-(?:literalpath|path|filepath|destination|outfilepath|outfile)\s+{path_value}"
+    )
+    cmdlet_pattern = re.compile(
+        rf"(?i)\b(?:set-content|add-content|out-file|remove-item|copy-item|move-item|new-item|get-content|test-path)\b\s+{path_value}"
+    )
+    windows_path_pattern = re.compile(
+        r"(?:[A-Za-z]:[\\/][^\s;|&]+|\.{1,2}[\\/][^\s;|&]+|[A-Za-z0-9_.-]+[\\/][^\s;|&]+\.[A-Za-z0-9]+)"
+    )
+    redirection_pattern = re.compile(r"(?:\*|\d+)?>>?\s*([^\s;|&]+)")
+    for pattern in (parameter_pattern, cmdlet_pattern):
+        for match in pattern.finditer(command):
+            _append_unique_shell_path(seen, match.group("path"))
+    for match in windows_path_pattern.finditer(command):
+        _append_unique_shell_path(seen, match.group(0))
+    for match in redirection_pattern.finditer(command):
+        _append_unique_shell_path(seen, match.group(1))
+    return seen
 
 
 def _shell_redirection_paths(command: str) -> list[str]:
@@ -129,8 +155,8 @@ def _shell_redirection_paths(command: str) -> list[str]:
     return paths
 
 
-def shell_command_paths(command: str) -> list[str]:
-    seen: list[str] = []
+def shell_command_paths(command: str, shell_kind: str | None = None) -> list[str]:
+    seen = _powershell_candidate_paths(command) if shell_kind == "powershell" else []
     tokens = _shell_tokens(command)
     executable_indexes = _shell_command_executable_indexes(tokens)
 

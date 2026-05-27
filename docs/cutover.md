@@ -36,6 +36,18 @@ vibeforcer version
 vibeforcer test
 ```
 
+PowerShell:
+
+```powershell
+# From the vibeforcer source directory
+pipx install .
+# or
+py -m pip install -e .
+
+vibeforcer version
+vibeforcer test
+```
+
 ### 2. Initialize config
 
 ```bash
@@ -60,6 +72,9 @@ And copy prompt context:
 cp -r ~/.claude/hooks/enforcer/.claude/hook-layer/prompt_context ~/.config/vibeforcer/
 ```
 
+On native Windows, `vibeforcer config init` writes to
+`%APPDATA%\vibeforcer\config.json` unless `VIBEFORCER_CONFIG_DIR` is set.
+
 ### 3. Install platform hooks
 
 ```bash
@@ -81,6 +96,15 @@ For OpenCode:
 ```bash
 vibeforcer install opencode
 ```
+
+Native Windows hook commands are emitted through a PowerShell-compatible
+launcher so installed console scripts under `AppData` can be called even when
+their path contains spaces. `vibeforcer install opencode` writes the plugin to
+`%APPDATA%\opencode\plugins\vibeforcer-plugin.ts` and embeds the discovered
+binary path with JSON/TypeScript-safe escaping; set `VIBEFORCER_BIN` to override
+it at runtime. Codex CLI hook availability on native Windows still
+depends on the installed Codex version; if Codex does not run hooks on Windows,
+use WSL or Git Bash for runtime enforcement.
 
 ### 4. Verify
 

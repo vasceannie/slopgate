@@ -8,9 +8,11 @@ from ._basic import (
     first_present,
     is_bash_tool,
     is_edit_like_tool,
+    is_shell_tool,
     lower_path,
     normalize_path,
     path_matches_glob,
+    shell_kind_for_tool,
 )
 from ._patches import extract_added_patch_content, parse_patch_candidate_paths
 from ._payload import HookPayload
@@ -26,10 +28,12 @@ __all__ = [
     "first_present",
     "is_bash_tool",
     "is_edit_like_tool",
+    "is_shell_tool",
     "lower_path",
     "normalize_path",
     "parse_patch_candidate_paths",
     "path_matches_glob",
     "shell_command_executable_paths",
     "shell_command_paths",
+    "shell_kind_for_tool",
 ]

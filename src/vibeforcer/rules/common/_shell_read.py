@@ -18,6 +18,7 @@ from vibeforcer.constants import (
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
 from vibeforcer.util.payloads import (
+    is_shell_tool,
     path_matches_glob,
 )
 if TYPE_CHECKING:
@@ -50,11 +51,27 @@ def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = Fal
     lowered = command.lower()
     if "sed -i" in lowered or "tee " in lowered:
         return False
+    if any(
+        token in lowered
+        for token in (
+            "set-content",
+            "add-content",
+            "out-file",
+            "remove-item",
+            "copy-item",
+            "move-item",
+            "new-item",
+        )
+    ):
+        return False
     if re.search(r">>?\s*\S", lowered):
         return False
     if reject_find_mutation and _find_command_has_mutation(_shell_tokens(lowered)):
         return False
-    return any(command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
+    return any(command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS) or any(
+        command_has_word(lowered, verb)
+        for verb in ("get-content", "select-string", "test-path")
+    )
 
 
 def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
@@ -194,7 +211,7 @@ def _is_readonly_tool(tool_name: str | None) -> bool:
 def _is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
     return (
         tool_name is not None
-        and tool_name.lower() == "bash"
+        and is_shell_tool(tool_name)
         and bash_command is not None
         and is_safe_read_shell_command(bash_command, reject_find_mutation=True)
     )
@@ -227,7 +244,7 @@ class ProtectedPathsRule(Rule):
         matched_path = _find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:
             return []
-        if _is_safe_bash_read(ctx.tool_name, ctx.bash_command):
+        if _is_safe_bash_read(ctx.tool_name, ctx.shell_command):
             return []
         return [
             RuleFinding(

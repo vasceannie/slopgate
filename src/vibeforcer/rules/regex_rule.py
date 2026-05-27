@@ -80,7 +80,7 @@ class RegexRule(Rule):
         return hits
 
     def _collect_command_hits(self, ctx: HookContext) -> list[RegexHit]:
-        if ctx.bash_command and any(p.search(ctx.bash_command) for p in self._patterns):
+        if ctx.shell_command and any(p.search(ctx.shell_command) for p in self._patterns):
             return [RegexHit(path=None)]
         return []
 

@@ -18,6 +18,7 @@ from vibeforcer.util.payloads import (
     lower_path,
     shell_command_executable_paths,
 )
+from vibeforcer.util.platform import resolve_path_for_match
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
 
@@ -126,8 +127,8 @@ class SensitiveDataRule(Rule):
         if not compiled:
             return []
         matched = self._match_in_paths(ctx.candidate_paths, compiled)
-        if not matched and ctx.bash_command:
-            matched = self._match_in_command(ctx.bash_command, compiled)
+        if not matched and ctx.shell_command:
+            matched = self._match_in_command(ctx.shell_command, compiled)
         if not matched:
             return []
         return [
@@ -143,10 +144,7 @@ class SensitiveDataRule(Rule):
 
 
 def _resolve_candidate_path(path_value: str, cwd: Path) -> str:
-    path = Path(path_value).expanduser()
-    if not path.is_absolute():
-        path = cwd / path
-    return lower_path(str(path.resolve(strict=False)))
+    return resolve_path_for_match(path_value, cwd)
 
 
 def _is_exact_dev_null(path_value: str) -> bool:
@@ -172,11 +170,12 @@ def _match_system_command(command: str, prefixes: list[str]) -> str | None:
     separator = r"(?:^|[\s;|&(<>=])"
     terminator = r"[^\s;|&()<>'\"]*"
     for prefix in prefixes:
-        if not prefix.startswith("/"):
+        normalized_prefix = prefix.replace("\\", "/")
+        if not normalized_prefix.startswith("/") and not re.match(r"^[a-z]:/", normalized_prefix):
             if prefix in lowered:
                 return "[command]"
             continue
-        pat = separator + "(" + re.escape(prefix) + terminator + ")"
+        pat = separator + "(" + re.escape(normalized_prefix) + terminator + ")"
         for match in re.finditer(pat, lowered):
             matched_path = match.group(1)
             if _is_exact_dev_null(matched_path):
@@ -196,12 +195,12 @@ class SystemProtectionRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        prefixes = [i.lower() for i in ctx.config.system_path_prefixes]
+        prefixes = [i.replace("\\", "/").lower() for i in ctx.config.system_path_prefixes]
         if not prefixes:
             return []
         matched = _match_system_path(ctx.candidate_paths, prefixes, ctx.cwd)
-        if not matched and ctx.bash_command:
-            matched = _match_system_command(ctx.bash_command, prefixes)
+        if not matched and ctx.shell_command:
+            matched = _match_system_command(ctx.shell_command, prefixes)
         if not matched:
             return []
         return [
@@ -239,8 +238,8 @@ def _detect_git_bypass(command: str) -> str | None:
         _is_git_no_verify_shortcut(token) for token in tokens[2:]
     ):
         return _GIT_NO_VERIFY_SHORTCUT
-    if "core.hookspath" in lowered and "/dev/null" in lowered:
-        return "core.hookspath=/dev/null"
+    if "core.hookspath" in lowered and ("/dev/null" in lowered or "nul" in lowered):
+        return "core.hookspath disabled"
     return None
 
 
@@ -253,9 +252,9 @@ class GitNoVerifyRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if not ctx.bash_command:
+        if not ctx.shell_command:
             return []
-        bypass = _detect_git_bypass(ctx.bash_command)
+        bypass = _detect_git_bypass(ctx.shell_command)
         if not bypass:
             return []
         msg = (
@@ -276,7 +275,7 @@ class GitNoVerifyRule(Rule):
                 message=msg,
                 metadata={
                     "bypass_type": bypass,
-                    METADATA_COMMAND: ctx.bash_command[:200],
+                    METADATA_COMMAND: ctx.shell_command[:200],
                 },
             )
         ]

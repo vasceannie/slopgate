@@ -9,6 +9,7 @@ from vibeforcer.rules.base import is_rule_enabled
 from vibeforcer.util.payloads import (
     is_edit_like_tool,
 )
+from vibeforcer.util.platform import lower_path_for_match
 from .._helpers import (
     parse_module,
 )
@@ -126,5 +127,4 @@ def _python_ast_rule_is_disabled(ctx: HookContext, rule_id: str) -> bool:
 
 def _normalized_module_path(path_value: str) -> str:
     """Return a slash-normalized path for scenario checks."""
-    normalized = path_value.replace("\\", "/")
-    return normalized.lower()
+    return lower_path_for_match(path_value)

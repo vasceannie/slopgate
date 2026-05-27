@@ -31,7 +31,7 @@
 
 import type { Plugin } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 
 const VIBEFORCER_BIN = Bun.env.VIBEFORCER_BIN || "__VIBEFORCER_BIN__"
 
@@ -118,7 +118,7 @@ function takeRememberedToolArgs(tool: unknown, cwd: string): Record<string, unkn
 function findManagedRepoRoot(start: string): string | null {
   let current = start
   while (true) {
-    if (existsSync(`${current}/quality_gate.toml`)) {
+    if (existsSync(join(current, "quality_gate.toml"))) {
       return current
     }
     const parent = dirname(current)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from vibeforcer._types import object_dict, object_list, string_value
+from vibeforcer.util.platform import user_config_dir, user_data_dir
 
 
 class IsxError(RuntimeError):
@@ -17,19 +18,19 @@ class IsxError(RuntimeError):
 # -- well-known paths --------------------------------------------------------
 
 APP_NAME = "isx"
-APP_DIR = Path.home() / ".config" / APP_NAME
+APP_DIR = user_config_dir(APP_NAME)
 APP_CONFIG = APP_DIR / "config.json"
 
-DEFAULT_ISLANDS_CONFIG = Path.home() / ".config" / "islands" / "isx.yaml"
-DEFAULT_REPOS_PATH = Path.home() / ".local" / "share" / "islands" / "repos"
-DEFAULT_INDEXES_PATH = Path.home() / ".local" / "share" / "islands" / "indexes"
+DEFAULT_ISLANDS_CONFIG = user_config_dir("islands") / "isx.yaml"
+DEFAULT_REPOS_PATH = user_data_dir("islands") / "repos"
+DEFAULT_INDEXES_PATH = user_data_dir("islands") / "indexes"
 
 DEFAULT_CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
-DEFAULT_OPENCODE_SKILLS_DIR = Path.home() / ".config" / "opencode" / "skills"
+DEFAULT_OPENCODE_SKILLS_DIR = user_config_dir("opencode") / "skills"
 DEFAULT_OPENCODE_PLUGIN_PATH = (
-    Path.home() / ".config" / "opencode" / "plugins" / "isx-tools.ts"
+    user_config_dir("opencode") / "plugins" / "isx-tools.ts"
 )
-DEFAULT_OPENCODE_CONFIG = Path.home() / ".config" / "opencode" / "opencode.json"
+DEFAULT_OPENCODE_CONFIG = user_config_dir("opencode") / "opencode.json"
 DEFAULT_SKILL_NAME = "isx-cli"
 
 DEFAULT_EXTENSIONS = [

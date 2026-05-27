@@ -6,15 +6,15 @@ from pathlib import Path
 
 from vibeforcer._types import ObjectMapping
 from vibeforcer.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
+from vibeforcer.util.platform import lower_path_for_match, normalize_path_for_match
+
 
 def normalize_path(value: str) -> str:
-    normalized = value.replace("\\", "/")
-    return normalized.strip()
+    return normalize_path_for_match(value)
 
 
 def lower_path(value: str) -> str:
-    normalized = normalize_path(value)
-    return normalized.lower()
+    return lower_path_for_match(value)
 
 
 def first_present(
@@ -87,7 +87,24 @@ def is_edit_like_tool(tool_name: str) -> bool:
 
 
 def is_bash_tool(tool_name: str) -> bool:
-    return tool_name.lower() == "bash"
+    return shell_kind_for_tool(tool_name) == "bash"
+
+
+def shell_kind_for_tool(tool_name: str) -> str | None:
+    lowered = tool_name.strip().lower().replace("-", "_")
+    if lowered in {"bash", "sh", "zsh"}:
+        return "bash"
+    if lowered in {"powershell", "pwsh", "power_shell"}:
+        return "powershell"
+    if lowered in {"cmd", "cmd.exe", "command_prompt"}:
+        return "cmd"
+    if lowered in {"shell", "local_shell", "terminal"}:
+        return "unknown"
+    return None
+
+
+def is_shell_tool(tool_name: str) -> bool:
+    return shell_kind_for_tool(tool_name) is not None
 
 
 def detect_language(path_value: str) -> str | None:
@@ -100,7 +117,10 @@ def path_matches_glob(path_value: str, pattern: str) -> bool:
     normalized_pattern = lower_path(pattern)
     basename = Path(normalized_path).name
     if normalized_pattern.endswith("/") and "*" not in normalized_pattern:
-        return normalized_path.startswith(normalized_pattern)
+        relative_path = normalized_path.removeprefix("./")
+        return relative_path.startswith(normalized_pattern) or (
+            f"/{normalized_pattern}" in normalized_path
+        )
     if "/" not in normalized_pattern:
         return fnmatch.fnmatch(basename, normalized_pattern)
     return fnmatch.fnmatch(normalized_path, normalized_pattern)

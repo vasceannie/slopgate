@@ -18,8 +18,8 @@ from vibeforcer.constants import (
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
 from vibeforcer.util.payloads import (
-    is_bash_tool,
     is_edit_like_tool,
+    is_shell_tool,
     lower_path,
 )
 from vibeforcer.util.subprocesses import run_shell
@@ -40,7 +40,7 @@ class SearchReminderRule(Rule):
             return []
         if ctx.tool_name in {"Grep", "WebSearch", "Read"}:
             return []
-        if ctx.bash_command and command_has_word(ctx.bash_command.lower(), "grep"):
+        if ctx.shell_command and command_has_word(ctx.shell_command.lower(), "grep"):
             return [
                 RuleFinding(
                     rule_id=self.rule_id,
@@ -284,7 +284,7 @@ class PostEditLintRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
         failures, first_detail = _collect_touched_lint_failures(ctx)
         if not failures:

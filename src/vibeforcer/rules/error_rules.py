@@ -17,6 +17,7 @@ from vibeforcer._types import object_dict, string_value
 from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
+from vibeforcer.util.payloads import is_shell_tool
 
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
@@ -264,9 +265,9 @@ def _active_bash_command(ctx: HookContext, rule_id: str) -> str | None:
     enabled = ctx.config.enabled_rules.get(rule_id)
     if enabled is not None and not enabled:
         return None
-    if ctx.tool_name != "Bash":
+    if not is_shell_tool(ctx.tool_name):
         return None
-    return ctx.bash_command or None
+    return ctx.shell_command or None
 
 
 class BashOutputErrorRule(Rule):

@@ -134,6 +134,19 @@ class TestCommandTarget:
             "test search pipelines feeding shell edit commands must trigger PY-SHELL-001"
         )
 
+    def test_py_shell_redirect_edit_denied(self) -> None:
+        result = evaluate_payload(self._bash_payload("python gen.py > src/main.py"))
+        assert "PY-SHELL-001" in finding_ids(result), (
+            "redirecting output to src/*.py must trigger PY-SHELL-001"
+        )
+
+    def test_rg_pipeline_to_shell_edit_denied(self) -> None:
+        command = "rg -l foo src/ -g '*.py' | xargs sed -i 's/foo/bar/'"
+        result = evaluate_payload(self._bash_payload(command))
+        assert "PY-SHELL-001" in finding_ids(result), (
+            "search pipelines feeding shell edit commands must trigger PY-SHELL-001"
+        )
+
     def test_git_commit_gets_context(self) -> None:
         result = evaluate_payload(self._bash_payload("git commit -m 'fix: thing'"))
         assert "GIT-002" in finding_ids(result), (

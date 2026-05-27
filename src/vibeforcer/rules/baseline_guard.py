@@ -125,8 +125,9 @@ class BaselineGuardRule(Rule):
 
             return self._check_baseline_change(target.path, target.content, ctx)
 
-        # Catch CLI commands that regenerate the baseline
-        if ctx.bash_command and _is_repo_wide_baseline_command(ctx.bash_command):
+        # Catch CLI commands that regenerate the baseline.
+        command = ctx.shell_command or ctx.bash_command
+        if command and _is_repo_wide_baseline_command(command):
             return [
                 RuleFinding(
                     rule_id=self.rule_id,

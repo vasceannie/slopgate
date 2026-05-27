@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from vibeforcer.models import RuleFinding
 from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_bash_tool, is_edit_like_tool
+from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
@@ -93,7 +93,7 @@ def evaluate_common(
             findings.extend(check_fn(ct.content, ct.path, ctx))
     else:
         # Only run PostToolUse AST analysis for edit-like/bash tools, not Read/Grep/Glob
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):

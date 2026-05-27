@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 from pathlib import Path
 from typing import cast
 
@@ -12,6 +11,7 @@ from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.installer._shared import (
     HOOK_TYPE_COMMAND,
     find_binary,
+    hook_command,
     merge_owned_hooks_into,
     remove_owned_hooks,
     write_json_with_backup,
@@ -41,7 +41,7 @@ _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
 def _claude_hooks_block(binary: str) -> _ClaudeHooks:
     """Build the hooks block for Claude Code settings.json."""
     hooks: _ClaudeHooks = {}
-    command = f"{shlex.quote(binary)} handle"
+    command = hook_command(binary, "handle")
     for event in _CLAUDE_EVENTS:
         command_entry: _ClaudeHookCommand = {
             "type": HOOK_TYPE_COMMAND,

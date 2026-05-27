@@ -6,7 +6,7 @@ from pathlib import Path
 from vibeforcer._types import ObjectDict, object_dict
 from vibeforcer.models import ContentTarget, RuntimeConfig
 
-from ._basic import detect_language, is_bash_tool
+from ._basic import detect_language, first_present, shell_kind_for_tool
 from ._shell import shell_command_paths
 from ._targets import (
     _direct_candidate_paths,
@@ -63,10 +63,21 @@ class HookPayloadProperties:
 
     @cached_property
     def bash_command(self) -> str:
-        if not is_bash_tool(self.tool_name):
+        return self.shell_command
+
+    @cached_property
+    def shell_kind(self) -> str | None:
+        return shell_kind_for_tool(self.tool_name)
+
+    @cached_property
+    def shell_command(self) -> str:
+        if self.shell_kind is None:
             return ""
-        value = self.tool_input.get("command")
-        return str(value) if isinstance(value, str) else ""
+        return first_present(
+            self.tool_input,
+            ("command", "script", "cmd", "powershell_command", "pwsh_command"),
+            strip=False,
+        )
 
     @cached_property
     def content_targets(self) -> list[ContentTarget]:
@@ -87,8 +98,8 @@ class HookPayloadProperties:
             *_patch_candidate_paths(self.tool_input),
             *_tool_response_candidate_paths(self.payload),
         ]
-        if self.bash_command:
-            values.extend(shell_command_paths(self.bash_command))
+        if self.shell_command:
+            values.extend(shell_command_paths(self.shell_command, self.shell_kind))
         return _unique_paths(values)
 
     @cached_property

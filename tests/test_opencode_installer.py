@@ -6,6 +6,7 @@ from typing import Any
 
 from vibeforcer.installer import _opencode as opencode_installer
 from vibeforcer.resources import resource_path
+from vibeforcer.util import platform as platform_utils
 
 
 def _opencode_plugin_source() -> str:
@@ -23,7 +24,7 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     appdata = tmp_path / "AppData" / "Roaming"
-    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(platform_utils, "is_windows", lambda: True)
     monkeypatch.setenv("APPDATA", str(appdata))
 
     assert opencode_installer._opencode_plugin_path() == (
@@ -45,7 +46,7 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setattr(
         opencode_installer,
@@ -69,7 +70,7 @@ def test_opencode_uninstall_refuses_unrecognized_plugin(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(opencode_installer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
     target.parent.mkdir(parents=True)

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import platform
 from pathlib import Path
 
 from vibeforcer.installer._shared import (
@@ -12,6 +10,7 @@ from vibeforcer.installer._shared import (
     find_binary,
     print_binary_install_summary,
 )
+from vibeforcer.util.platform import user_config_dir
 
 _PLUGIN_NAME = "vibeforcer-plugin.ts"
 _PLUGIN_PLACEHOLDER_LITERAL = '"__VIBEFORCER_BIN__"'
@@ -24,15 +23,7 @@ _PLUGIN_OWNERSHIP_MARKERS = (
 
 def _opencode_config_dir() -> Path:
     """Resolve OpenCode's user config directory across native platforms."""
-    if platform.system().lower() == "windows":
-        appdata = os.environ.get("APPDATA")
-        if appdata:
-            return Path(appdata) / "opencode"
-        return Path.home() / "AppData" / "Roaming" / "opencode"
-    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
-    if xdg_config_home:
-        return Path(xdg_config_home) / "opencode"
-    return Path.home() / ".config" / "opencode"
+    return user_config_dir("opencode")
 
 
 def _opencode_plugin_path() -> Path:

@@ -1,0 +1,33 @@
+name: Windows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Run focused Windows compatibility tests
+        run: >
+          uv run pytest
+          tests/test_installer.py
+          tests/test_windows_compat.py
+          tests/test_engine.py::test_shell_command_paths_captures_powershell_paths
+          tests/test_engine.py::test_powershell_git_no_verify_denied
+          tests/test_engine.py::test_powershell_windows_system_path_denied
+          tests/test_engine.py::test_powershell_linter_config_edit_denied
+          -q
+
+      - name: Run full test suite
+        run: uv run pytest tests/ -q

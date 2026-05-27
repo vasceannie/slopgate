@@ -48,14 +48,18 @@ def _path_contains_fragment(path_value: str, fragment: str) -> bool:
 
 def _is_safe_bash_for_path(ctx: HookContext) -> bool:
     """Return True if the bash command is a safe read-only operation."""
-    if not ctx.tool_name or ctx.tool_name.lower() != "bash":
+    from vibeforcer.util.payloads import is_shell_tool
+
+    if not ctx.tool_name or not is_shell_tool(ctx.tool_name):
         return False
-    return is_safe_read_shell_command(ctx.bash_command.lower())
+    return is_safe_read_shell_command(ctx.shell_command.lower())
 
 
 def _is_modifying_tool(ctx: HookContext) -> bool:
     """Return True if the tool can modify files (bash or edit-like)."""
-    if ctx.tool_name and ctx.tool_name.lower() == "bash":
+    from vibeforcer.util.payloads import is_shell_tool
+
+    if ctx.tool_name and is_shell_tool(ctx.tool_name):
         return True
     from vibeforcer.util.payloads import is_edit_like_tool
 

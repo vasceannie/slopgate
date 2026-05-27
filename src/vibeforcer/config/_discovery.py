@@ -3,17 +3,22 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from vibeforcer.util.platform import is_windows, user_config_dir
+
 def config_dir() -> Path:
     """Return the vibeforcer config directory.
 
     Priority:
       1. $VIBEFORCER_CONFIG_DIR
-      2. $XDG_CONFIG_HOME/vibeforcer
-      3. ~/.config/vibeforcer
+      2. %APPDATA%/vibeforcer on Windows
+      3. $XDG_CONFIG_HOME/vibeforcer
+      4. ~/.config/vibeforcer
     """
     explicit = os.getenv("VIBEFORCER_CONFIG_DIR")
     if explicit:
         return Path(explicit).resolve()
+    if is_windows():
+        return user_config_dir("vibeforcer")
     xdg = os.getenv("XDG_CONFIG_HOME")
     if xdg:
         return Path(xdg).resolve() / "vibeforcer"

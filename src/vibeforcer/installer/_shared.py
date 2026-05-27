@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import shutil
+import shlex
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 from vibeforcer._types import object_dict, object_list
 from vibeforcer.constants import METADATA_COMMAND
+from vibeforcer.util.platform import is_windows
 
 HOOK_TYPE_COMMAND = METADATA_COMMAND
 
@@ -19,7 +23,36 @@ def find_binary() -> str:
     binary = shutil.which("vibeforcer")
     if binary:
         return binary
-    return "vibeforcer"
+    return sys.executable
+
+
+def base_invocation(binary: str) -> list[str]:
+    if Path(binary).resolve() == Path(sys.executable).resolve():
+        return [binary, "-m", "vibeforcer"]
+    return [binary]
+
+
+def shell_command(argv: list[str], *, windows: bool | None = None) -> str:
+    use_windows = is_windows() if windows is None else windows
+    if not use_windows:
+        return shlex.join(argv)
+    ps_args = ["'" + arg.replace("'", "''") + "'" for arg in argv]
+    ps_script = "& " + " ".join(ps_args)
+    return subprocess.list2cmdline(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            ps_script,
+        ]
+    )
+
+
+def hook_command(binary: str, *args: str, windows: bool | None = None) -> str:
+    return shell_command([*base_invocation(binary), *args], windows=windows)
 
 
 def entry_has_vibeforcer_command(entry: object) -> bool:

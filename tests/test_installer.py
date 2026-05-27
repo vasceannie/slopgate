@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import tomli
+from pytest import CaptureFixture, MonkeyPatch
 
 import vibeforcer.installer as installer_module
+import vibeforcer.installer._shared as installer_shared
+import vibeforcer.util.platform as platform_utils
 
 
 def _hook_builder(name: str) -> Any:
@@ -17,6 +21,55 @@ def _assert_canonical_codex_hooks_feature(config: dict[str, Any]) -> None:
     features = config["features"]
     assert features["hooks"] is True
     assert "codex_hooks" not in features
+
+
+def _dry_run_install_json(
+    platform: str,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    *,
+    binary: str | None = "vibeforcer",
+    windows: bool = False,
+) -> dict[str, Any]:
+    def which(name: str) -> str | None:
+        return binary if name == "vibeforcer" else None
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(installer_shared, "is_windows", lambda: windows)
+    monkeypatch.setattr(installer_shared.shutil, "which", which)
+
+    assert installer_module.install_platform(platform, dry_run=True) == 0
+    output = capsys.readouterr().out
+    return json.loads(output[output.index("{") :])
+
+
+def _all_hook_commands(hooks: dict[str, Any]) -> Iterable[str]:
+    for entries in hooks.values():
+        for entry in entries:
+            for hook in entry["hooks"]:
+                command = hook.get("command")
+                if isinstance(command, str):
+                    yield command
+
+
+def _hook_commands(hooks: dict[str, Any], event_name: str = "PreToolUse") -> list[str]:
+    entries = hooks[event_name]
+    assert isinstance(entries, list)
+    commands: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        hook_entries = entry.get("hooks")
+        if not isinstance(hook_entries, list):
+            continue
+        for hook in hook_entries:
+            if not isinstance(hook, dict):
+                continue
+            command = hook.get("command")
+            if isinstance(command, str):
+                commands.append(command)
+    return commands
 
 
 def test_codex_hooks_cover_current_tool_events() -> None:
@@ -48,20 +101,32 @@ def test_codex_hooks_cover_current_tool_events() -> None:
     )
 
 
+def test_codex_hooks_are_bash_only(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    data = _dry_run_install_json("codex", capsys, monkeypatch, tmp_path)
+    hooks = data["hooks"]
+    commands = list(_all_hook_commands(hooks))
+    assert commands
+    assert all(command.startswith("vibeforcer ") for command in commands)
+    assert all(" handle" in command for command in commands)
+    assert all("powershell.exe" not in command for command in commands)
+
+
 def test_codex_installer_enables_current_toml_feature(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
-        '\n'.join(
+        "\n".join(
             [
                 'model = "gpt-5"',
-                '',
-                '[features]',
-                'plugin_hooks = true',
-                'codex_hooks = false # stale',
-                '',
+                "",
+                "[features]",
+                "plugin_hooks = true",
+                "codex_hooks = false # stale",
+                "",
                 '[projects."/tmp/example"]',
                 'trust_level = "trusted"',
-                '',
+                "",
             ]
         ),
         encoding="utf-8",
@@ -150,25 +215,6 @@ def _existing_codex_hooks() -> dict[str, object]:
             ]
         }
     }
-
-
-def _hook_commands(hooks: dict[str, Any], event_name: str = "PreToolUse") -> list[str]:
-    entries = hooks[event_name]
-    assert isinstance(entries, list)
-    commands: list[str] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        hook_entries = entry.get("hooks")
-        if not isinstance(hook_entries, list):
-            continue
-        for hook in hook_entries:
-            if not isinstance(hook, dict):
-                continue
-            command = hook.get("command")
-            if isinstance(command, str):
-                commands.append(command)
-    return commands
 
 
 def _install_with_existing_hooks(
@@ -271,3 +317,78 @@ def test_codex_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
 def test_claude_hooks_include_cwd_changed() -> None:
     hooks = _hook_builder("_claude_hooks_block")("vibeforcer")
     assert "CwdChanged" in hooks
+
+
+def test_claude_dry_run_hooks_include_cwd_changed(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    data = _dry_run_install_json("claude", capsys, monkeypatch, tmp_path)
+    assert "CwdChanged" in data["hooks"]
+
+
+def test_windows_codex_install_emits_powershell_hook_commands(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    data = _dry_run_install_json(
+        "codex",
+        capsys,
+        monkeypatch,
+        tmp_path,
+        binary=r"C:\Users\Trav App\AppData\Local\Programs\Python\Scripts\vibeforcer.exe",
+        windows=True,
+    )
+    commands = list(_all_hook_commands(data["hooks"]))
+    assert commands
+    for command in commands:
+        assert command.startswith("powershell.exe ")
+        assert "-NoProfile" in command
+        assert "-NonInteractive" in command
+        assert "-Command" in command
+        assert "C:\\Users\\Trav App\\AppData" in command
+        assert "handle" in command
+        assert "codex" in command
+
+
+def test_claude_install_falls_back_to_python_module_invocation(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    data = _dry_run_install_json(
+        "claude",
+        capsys,
+        monkeypatch,
+        tmp_path,
+        binary=None,
+    )
+    commands = list(_all_hook_commands(data["hooks"]))
+    assert commands
+    assert all(" -m vibeforcer handle" in command for command in commands)
+
+
+def test_opencode_install_bakes_windows_binary_into_plugin(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    binary = r"C:\Users\Trav App\AppData\Local\Programs\Python\Scripts\vibeforcer.exe"
+
+    def which(name: str) -> str | None:
+        return binary if name == "vibeforcer" else None
+
+    monkeypatch.setattr(platform_utils, "is_windows", lambda: True)
+    monkeypatch.setattr(installer_shared.shutil, "which", which)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+
+    assert installer_module.install_platform("opencode", dry_run=False) == 0
+
+    plugin_path = tmp_path / "Roaming" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    plugin = plugin_path.read_text(encoding="utf-8")
+    assert "__VIBEFORCER_BIN__" not in plugin
+    assert json.dumps(binary) in plugin
+    assert "Bun.env.VIBEFORCER_BIN ||" in plugin
+
+
+def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
+    from vibeforcer.resources import resource_path
+
+    plugin = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
+    assert "empty enforcer response" not in plugin
+    assert "if (!trimmed) return null" in plugin
+    assert "exits 0 with no stdout" in plugin
