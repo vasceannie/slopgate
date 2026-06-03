@@ -16,6 +16,7 @@ from vibeforcer._types import (
 from vibeforcer.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
+    render_request_from_call,
     render_permission_request_output,
 )
 from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
@@ -105,47 +106,44 @@ class ClaudeAdapter(PlatformAdapter):
     @override
     def render_output(
         self,
-        event_name: str,
-        findings: list[RuleFinding],
-        *,
-        context: str | None = None,
-        updated_input: ObjectDict | None = None,
-        decision: str | None = None,
+        *args: object,
+        **kwargs: object,
     ) -> ObjectDict | None:
-        if not findings:
+        render_request = render_request_from_call(args, kwargs)
+        if not render_request.findings:
             return None
 
         request = _ClaudeRenderRequest(
-            event_name=event_name,
-            findings=findings,
-            context=context,
-            updated_input=updated_input or {},
-            decision=decision,
+            event_name=render_request.event_name,
+            findings=render_request.findings,
+            context=render_request.context,
+            updated_input=render_request.updated_input,
+            decision=render_request.decision,
         )
 
-        if event_name == PRE_TOOL_USE:
+        if request.event_name == PRE_TOOL_USE:
             return self._render_pre_tool_use(request)
 
-        if event_name == PERMISSION_REQUEST:
+        if request.event_name == PERMISSION_REQUEST:
             return self._render_permission_request(request)
 
-        if event_name == "SessionStart":
-            if context:
-                return hook_specific_context_output("SessionStart", context)
+        if request.event_name == "SessionStart":
+            if request.context:
+                return hook_specific_context_output("SessionStart", request.context)
             return None
 
-        if event_name in {"UserPromptSubmit", POST_TOOL_USE}:
+        if request.event_name in {"UserPromptSubmit", POST_TOOL_USE}:
             return self._render_prompt_or_posttool(request)
 
-        if event_name in {"Stop", "SubagentStop", "ConfigChange"}:
+        if request.event_name in {"Stop", "SubagentStop", "ConfigChange"}:
             return self._render_stop_like(request)
 
-        if event_name == "PostToolUseFailure":
-            if context:
-                return {"systemMessage": context}
+        if request.event_name == "PostToolUseFailure":
+            if request.context:
+                return {"systemMessage": request.context}
             return None
 
-        if event_name in {"TaskCompleted", "TeammateIdle"}:
+        if request.event_name in {"TaskCompleted", "TeammateIdle"}:
             return self._render_task_or_idle(request)
 
         return None

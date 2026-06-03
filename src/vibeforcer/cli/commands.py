@@ -9,12 +9,12 @@ from typing import cast
 from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
 from vibeforcer.cli._claude_retry import claude_team_event_feedback
 from vibeforcer.cli._config_commands import (
-    cmd_config_init,
-    cmd_config_path,
-    cmd_config_show,
+    cmd_config_init as cmd_config_init,
+    cmd_config_path as cmd_config_path,
+    cmd_config_show as cmd_config_show,
 )
 
-VALID_PLATFORMS = ("claude", "codex", "opencode")
+VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor")
 INSTALL_TARGETS = (*VALID_PLATFORMS, "all")
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(VALID_PLATFORMS)} (default: claude)"

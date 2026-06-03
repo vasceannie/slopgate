@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from vibeforcer.util.platform import normalize_path_for_match as normalize_path
+
 from ._basic import (
     any_path_matches,
     detect_language,
@@ -10,7 +12,6 @@ from ._basic import (
     is_edit_like_tool,
     is_shell_tool,
     lower_path,
-    normalize_path,
     path_matches_glob,
     shell_kind_for_tool,
 )

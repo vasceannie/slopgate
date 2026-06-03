@@ -131,15 +131,13 @@ def write_islands_config(path: Path, model: str) -> None:
     _ = path.write_text(render_islands_yaml(model))
 
 
-def runtime_env(
-    cfg: SearchConfig, extra_env: dict[str, str] | None = None
-) -> dict[str, str]:
-    """Build the environment dict for an islands-ollama subprocess."""
-    env: dict[str, str] = dict(os.environ)
+def _apply_base_url(env: dict[str, str], cfg: SearchConfig) -> None:
     base_url = string_value(cfg.get("base_url"))
     if base_url:
         env["OPENAI_BASE_URL"] = base_url
 
+
+def _apply_api_key(env: dict[str, str], cfg: SearchConfig) -> None:
     api_key_env = string_value(cfg.get("api_key_env"))
     api_key_value = string_value(cfg.get("api_key_value"))
     if api_key_env:
@@ -150,6 +148,15 @@ def runtime_env(
     elif api_key_value:
         env["OPENAI_API_KEY"] = api_key_value
 
+
+def _first_matching_git_token(token_var: str) -> tuple[str, str] | None:
+    for key, val in os.environ.items():
+        if key == token_var or (key.endswith("_TOKEN") and "git" in key.lower()):
+            return key, val
+    return None
+
+
+def _propagate_git_tokens(env: dict[str, str]) -> None:
     for token_var in (
         "ISLANDS_GIT_TOKEN",
         "GITLAB_TOKEN",
@@ -158,11 +165,20 @@ def runtime_env(
     ):
         if token_var in env and env[token_var]:
             continue
-        for key, val in os.environ.items():
-            if key == token_var or (key.endswith("_TOKEN") and "git" in key.lower()):
-                env[key] = val
-                break
+        match = _first_matching_git_token(token_var)
+        if match is not None:
+            key, val = match
+            env[key] = val
 
+
+def runtime_env(
+    cfg: SearchConfig, extra_env: dict[str, str] | None = None
+) -> dict[str, str]:
+    """Build the environment dict for an islands-ollama subprocess."""
+    env: dict[str, str] = dict(os.environ)
+    _apply_base_url(env, cfg)
+    _apply_api_key(env, cfg)
+    _propagate_git_tokens(env)
     if extra_env:
         env.update(extra_env)
 

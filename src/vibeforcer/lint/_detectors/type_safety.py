@@ -65,6 +65,108 @@ def _annotation_contains_any(node: ast.AST) -> bool:
 _TYPING_MODULES = frozenset({"typing", "typing_extensions"})
 
 
+def _any_import_violation(
+    node: ast.ImportFrom,
+    pf: ParsedFile,
+    parents: dict[int, ast.AST],
+) -> list[Violation]:
+    if _inside_type_checking(node, parents):
+        return []
+    if not node.module or node.module not in _TYPING_MODULES:
+        return []
+    return [
+        Violation(
+            rule="banned-any",
+            relative_path=pf.rel,
+            identifier="import-Any",
+            detail=f"line {node.lineno}",
+        )
+        for alias in node.names
+        if alias.name == "Any"
+    ]
+
+
+def _function_args(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.arg]:
+    all_args = [
+        *node.args.args,
+        *node.args.posonlyargs,
+        *node.args.kwonlyargs,
+    ]
+    if node.args.vararg:
+        all_args.append(node.args.vararg)
+    if node.args.kwarg:
+        all_args.append(node.args.kwarg)
+    return all_args
+
+
+def _function_any_violations(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    pf: ParsedFile,
+    parents: dict[int, ast.AST],
+) -> list[Violation]:
+    if _inside_type_checking(node, parents):
+        return []
+    violations: list[Violation] = []
+    if node.returns and _annotation_contains_any(node.returns):
+        violations.append(
+            Violation(
+                rule="banned-any",
+                relative_path=pf.rel,
+                identifier=node.name,
+                detail=f"return annotation, line {node.returns.lineno}",
+            )
+        )
+    for arg in _function_args(node):
+        if arg.annotation and _annotation_contains_any(arg.annotation):
+            violations.append(
+                Violation(
+                    rule="banned-any",
+                    relative_path=pf.rel,
+                    identifier=node.name,
+                    detail=f"param {arg.arg}, line {arg.lineno}",
+                )
+            )
+    return violations
+
+
+def _annotation_target_name(node: ast.AnnAssign) -> str:
+    if isinstance(node.target, ast.Name):
+        return node.target.id
+    return "<annotation>"
+
+
+def _variable_any_violation(
+    node: ast.AnnAssign,
+    pf: ParsedFile,
+    parents: dict[int, ast.AST],
+) -> Violation | None:
+    if _inside_type_checking(node, parents):
+        return None
+    if not _annotation_contains_any(node.annotation):
+        return None
+    return Violation(
+        rule="banned-any",
+        relative_path=pf.rel,
+        identifier=_annotation_target_name(node),
+        detail=f"line {node.lineno}",
+    )
+
+
+def _any_violations_for_node(
+    node: ast.AST,
+    pf: ParsedFile,
+    parents: dict[int, ast.AST],
+) -> list[Violation]:
+    if isinstance(node, ast.ImportFrom):
+        return _any_import_violation(node, pf, parents)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return _function_any_violations(node, pf, parents)
+    if isinstance(node, ast.AnnAssign):
+        violation = _variable_any_violation(node, pf, parents)
+        return [] if violation is None else [violation]
+    return []
+
+
 def detect_any_usage(
     files: list[Path] | list[ParsedFile] | None = None,
 ) -> list[Violation]:
@@ -82,75 +184,8 @@ def detect_any_usage(
 
     for pf in parsed:
         parents = pf.parent_map
-
         for node in ast.walk(pf.tree):
-            # ── from typing import Any ──────────────────────────────
-            if isinstance(node, ast.ImportFrom):
-                if _inside_type_checking(node, parents):
-                    continue
-                if node.module and node.module in _TYPING_MODULES:
-                    for alias in node.names:
-                        if alias.name == "Any":
-                            violations.append(
-                                Violation(
-                                    rule="banned-any",
-                                    relative_path=pf.rel,
-                                    identifier="import-Any",
-                                    detail=f"line {node.lineno}",
-                                )
-                            )
-
-            # ── Function annotations (args + return) ────────────────
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if _inside_type_checking(node, parents):
-                    continue
-                # Return annotation
-                if node.returns and _annotation_contains_any(node.returns):
-                    violations.append(
-                        Violation(
-                            rule="banned-any",
-                            relative_path=pf.rel,
-                            identifier=node.name,
-                            detail=f"return annotation, line {node.returns.lineno}",
-                        )
-                    )
-                # Argument annotations
-                all_args = [
-                    *node.args.args,
-                    *node.args.posonlyargs,
-                    *node.args.kwonlyargs,
-                ]
-                if node.args.vararg:
-                    all_args.append(node.args.vararg)
-                if node.args.kwarg:
-                    all_args.append(node.args.kwarg)
-                for arg in all_args:
-                    if arg.annotation and _annotation_contains_any(arg.annotation):
-                        violations.append(
-                            Violation(
-                                rule="banned-any",
-                                relative_path=pf.rel,
-                                identifier=node.name,
-                                detail=f"param {arg.arg}, line {arg.lineno}",
-                            )
-                        )
-
-            # ── Variable annotations: x: Any = … ───────────────────
-            if isinstance(node, ast.AnnAssign):
-                if _inside_type_checking(node, parents):
-                    continue
-                if _annotation_contains_any(node.annotation):
-                    target_name = ""
-                    if isinstance(node.target, ast.Name):
-                        target_name = node.target.id
-                    violations.append(
-                        Violation(
-                            rule="banned-any",
-                            relative_path=pf.rel,
-                            identifier=target_name or "<annotation>",
-                            detail=f"line {node.lineno}",
-                        )
-                    )
+            violations.extend(_any_violations_for_node(node, pf, parents))
 
     return violations
 

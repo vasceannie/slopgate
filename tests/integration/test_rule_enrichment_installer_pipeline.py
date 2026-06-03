@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from types import SimpleNamespace
-
-from hypothesis import given, strategies as st
 
 from vibeforcer.enrichment._helpers import append_enrichment_message, resolve_path
 from vibeforcer.enrichment.fixtures import discover_fixtures, find_parametrize_examples
+from vibeforcer.adapters.base import render_request_from_call
 from vibeforcer.context import build_context
 from vibeforcer.engine._render import render_output
 from vibeforcer.installer._shared import (
+    command_is_vibeforcer_hook,
     filter_owned_hook_commands,
     hook_command,
     merge_owned_hooks,
@@ -86,10 +85,12 @@ def test_installer_hook_pipeline_filters_only_vibeforcer_owned_commands() -> Non
     removed = remove_owned_hooks({"PreToolUse": [entry]})
 
     assert {
+        "owned": command_is_vibeforcer_hook(owned["command"]),
         "filtered": filtered,
         "merged_hooks": merged["PreToolUse"],
         "removed": removed,
     } == {
+        "owned": True,
         "filtered": {"matcher": "Write", "hooks": [external]},
         "merged_hooks": [{"matcher": "Write", "hooks": [external]}, managed["PreToolUse"][0]],
         "removed": {"PreToolUse": [{"matcher": "Write", "hooks": [external]}]},
@@ -170,6 +171,28 @@ def _render_findings() -> list[RuleFinding]:
 def _rendered_text(output: object) -> str:
     assert output is not None
     return str(output)
+
+
+def test_adapter_render_request_pipeline_extracts_event_and_findings() -> None:
+    findings = _render_findings()
+    request = render_request_from_call(
+        ("PreToolUse", findings),
+        {
+            "context": "immediate repair",
+            "updated_input": {"command": "rewritten"},
+            "decision": "deny",
+        },
+    )
+
+    assert {
+        "event_name": request.event_name,
+        "finding_count": len(request.findings),
+        "decision": request.decision,
+    } == {
+        "event_name": "PreToolUse",
+        "finding_count": 2,
+        "decision": "deny",
+    }
 
 
 def test_render_output_pipeline_orders_denial_context_before_advisory_debt(

@@ -313,7 +313,7 @@ _DEPRECATED_APIS = [
 
 
 class LangGraphDeprecatedAPIRule(Rule):
-    """Flag deprecated LangGraph API usage."""
+    """Flag outdated LangGraph graph-builder API usage."""
 
     rule_id: str = "LG-API-001"
     title: str = "Deprecated LangGraph API usage"

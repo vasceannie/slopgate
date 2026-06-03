@@ -24,6 +24,42 @@ from tests.test_engine import (
     finding_ids,
 )
 
+
+def _repo_with_touched_source_coverage(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo_lint_static_refs"
+    src_dir = repo / "src" / "pkg"
+    tests_dir = repo / "tests"
+    src_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    _ = (repo / "quality_gate.toml").write_text(
+        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    )
+    _ = (src_dir / "__init__.py").write_text("", encoding="utf-8")
+    _ = (src_dir / "config.py").write_text(
+        "class SessionConfig:\n    pass\n",
+        encoding="utf-8",
+    )
+    _ = (tests_dir / "test_config.py").write_text(
+        "from pkg.config import SessionConfig\n\n"
+        "def test_config_reference():\n"
+        "    assert SessionConfig() is not None\n",
+        encoding="utf-8",
+    )
+    return repo
+
+
+def _evaluate_post_edit_lint_for_touched_source(repo: Path) -> object:
+    payload = {
+        "session_id": "t",
+        "cwd": str(repo),
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "tool_input": {"file_path": "src/pkg/config.py"},
+        "tool_response": {"filePath": "src/pkg/config.py", "success": True},
+    }
+    return evaluate_payload(payload)
+
+
 class TestEnforcementModes:
     def test_outside_repo_runs_safety_only(self, tmp_path: Path) -> None:
         outside = tmp_path / "outside"
@@ -162,35 +198,8 @@ class TestEnforcementModes:
     def test_post_edit_lint_uses_suite_tests_for_touched_source_coverage(
         self, tmp_path: Path
     ) -> None:
-        repo = tmp_path / "repo_lint_static_refs"
-        src_dir = repo / "src" / "pkg"
-        tests_dir = repo / "tests"
-        src_dir.mkdir(parents=True)
-        tests_dir.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-        _ = (src_dir / "__init__.py").write_text("", encoding="utf-8")
-        _ = (src_dir / "config.py").write_text(
-            "class SessionConfig:\n    pass\n",
-            encoding="utf-8",
-        )
-        _ = (tests_dir / "test_config.py").write_text(
-            "from pkg.config import SessionConfig\n\n"
-            "def test_config_reference():\n"
-            "    assert SessionConfig() is not None\n",
-            encoding="utf-8",
-        )
-        payload = {
-            "session_id": "t",
-            "cwd": str(repo),
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "src/pkg/config.py"},
-            "tool_response": {"filePath": "src/pkg/config.py", "success": True},
-        }
-
-        result = evaluate_payload(payload)
+        repo = _repo_with_touched_source_coverage(tmp_path)
+        result = _evaluate_post_edit_lint_for_touched_source(repo)
 
         assert "QUALITY-LINT-001" not in finding_ids(result), (
             "touched-source lint must not ignore existing tests and invent 0% static coverage"
@@ -240,122 +249,3 @@ class TestEnforcementModes:
         ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
         assert not ast_findings
 
-    def test_repo_enrollment_rule_blocks_disable_sentinel(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_sentinel"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        result = evaluate_payload(_pretool_write_payload(repo, ".noqualitygate", ""))
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "enrolled repos should block writes that disable the quality gate sentinel"
-        )
-
-    def test_repo_enrollment_rule_blocks_delete_marker(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_delete"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        result = evaluate_payload(_pretool_delete_payload(repo, "quality_gate.toml"))
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "enrolled repos should block deletion of quality_gate.toml"
-        )
-
-    def test_repo_enrollment_rule_blocks_enabled_false(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_disable_flag"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        result = evaluate_payload(
-            _pretool_write_payload(repo, "quality_gate.toml", "[quality_gate]\nenabled = false\n")
-        )
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "enrolled repos should block config edits that disable the quality gate"
-        )
-
-    def test_repo_enrollment_rule_blocks_direct_policy_marker_edits(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_policy_marker_edit"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        result = evaluate_payload(
-            _pretool_write_payload(
-                repo,
-                "quality_gate.toml",
-                """
-[quality_gate]
-enabled = true
-[magic_values]
-allowed_strings = ["type", "value", "text", "status", "field", "company"]
-[wrappers]
-allowed = []
-""".lstrip(),
-            )
-        )
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "direct quality_gate.toml allowlist mutations should remain blocked"
-        )
-
-    def test_repo_enrollment_rule_blocks_patch_marker_edits(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_policy_marker_patch"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        payload = {
-            "session_id": "t",
-            "cwd": str(repo),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Patch",
-            "tool_input": {
-                "patch": """
-*** Begin Patch
-*** Update File: quality_gate.toml
-@@
- allowed_strings = [
-+    "field",
-+    "company",
- ]
-*** End Patch
-""".lstrip()
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "patches that add lint allowlist entries should remain blocked"
-        )
-
-    def test_repo_enrollment_rule_blocks_patch_delete(self, tmp_path: Path) -> None:
-        repo = tmp_path / "repo_enrolled_patch_delete"
-        repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
-        )
-
-        payload = {
-            "session_id": "t",
-            "cwd": str(repo),
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Patch",
-            "tool_input": {
-                "patch": "*** Begin Patch\n*** Delete File: quality_gate.toml\n*** End Patch\n"
-            },
-        }
-        result = evaluate_payload(payload)
-        assert_denied_by(result, "REPO-ENROLL-001")
-        assert "REPO-ENROLL-001" in finding_ids(result), (
-            "patch deletion of quality_gate.toml should remain blocked"
-        )

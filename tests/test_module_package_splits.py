@@ -31,7 +31,7 @@ PUBLIC_IMPORT_CASES = (
     ("vibeforcer.lint._detectors.test_smells", "detect_long_tests"),
     ("vibeforcer.lint._detectors.test_smells", "detect_mock_theater"),
     ("vibeforcer.lint._detectors.test_smells", "detect_untested_production_code"),
-    ("vibeforcer.lint._detectors.test_smells", "detect_obsolete_or_deprecated_tests"),
+    ("vibeforcer.lint._detectors.test_smells", "detect_stale_test_references"),
     ("vibeforcer.lint._detectors.duplicates", "detect_semantic_clones"),
     ("vibeforcer.lint._detectors.duplicates", "detect_repeated_literals"),
     ("vibeforcer.lint._detectors.duplicates", "detect_repeated_blocks"),

@@ -6,10 +6,7 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 from vibeforcer.rules.base import is_rule_enabled
-from vibeforcer.util.payloads import (
-    is_edit_like_tool,
-)
-from vibeforcer.util.platform import lower_path_for_match as _normalized_module_path
+from vibeforcer.util.payloads import is_edit_like_tool
 from .._helpers import (
     parse_module,
 )
@@ -123,3 +120,10 @@ def _parsed_classes(source: str, ctx: HookContext) -> list[ast.ClassDef]:
 
 def _python_ast_rule_is_disabled(ctx: HookContext, rule_id: str) -> bool:
     return not is_rule_enabled(ctx, rule_id) or not ctx.config.python_ast_enabled
+
+
+def _normalized_module_path(path_value: str) -> str:
+    stripped = path_value.strip()
+    if not stripped:
+        return ""
+    return stripped.replace("\\", "/").casefold()

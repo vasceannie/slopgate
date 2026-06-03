@@ -31,7 +31,7 @@ def resolve_config_path() -> Path:
     Priority:
       1. $VIBEFORCER_CONFIG env var (explicit file path)
       2. config_dir() / config.json
-      3. Legacy: $CLAUDE_HOOK_LAYER_ROOT / .claude/hook-layer/config.json
+      3. Compat fallback: $CLAUDE_HOOK_LAYER_ROOT / .claude/hook-layer/config.json
       4. Bundled defaults (resources/defaults.json)
     """
     # Explicit file override
@@ -46,14 +46,14 @@ def resolve_config_path() -> Path:
     if xdg_config.exists():
         return xdg_config
 
-    # Legacy hook-layer location
+    # Compat fallback hook-layer location
     legacy_root = os.getenv("CLAUDE_HOOK_LAYER_ROOT") or os.getenv("HOOK_LAYER_ROOT")
     if legacy_root:
         legacy_path = Path(legacy_root) / ".claude" / "hook-layer" / "config.json"
         if legacy_path.exists():
             return legacy_path
 
-    # Default legacy location
+    # Default compat fallback location
     legacy_default = (
         Path.home()
         / ".claude"
@@ -78,7 +78,7 @@ def detect_root() -> Path:
     Priority:
       1. $VIBEFORCER_ROOT
       2. config_dir()
-      3. Legacy: $CLAUDE_HOOK_LAYER_ROOT / $HOOK_LAYER_ROOT
+      3. Compat fallback: $CLAUDE_HOOK_LAYER_ROOT / $HOOK_LAYER_ROOT
     """
     explicit = os.getenv("VIBEFORCER_ROOT")
     if explicit:

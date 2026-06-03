@@ -16,6 +16,7 @@ from vibeforcer._types import (
 from vibeforcer.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
+    render_request_from_call,
     render_permission_request_output,
 )
 from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
@@ -176,44 +177,41 @@ class CodexAdapter(PlatformAdapter):
     @override
     def render_output(
         self,
-        event_name: str,
-        findings: list[RuleFinding],
-        *,
-        context: str | None = None,
-        updated_input: ObjectDict | None = None,
-        decision: str | None = None,
+        *args: object,
+        **kwargs: object,
     ) -> ObjectDict | None:
-        if not findings:
+        render_request = render_request_from_call(args, kwargs)
+        if not render_request.findings:
             return None
-        if event_name not in CODEX_EVENTS:
+        if render_request.event_name not in CODEX_EVENTS:
             return None
 
         request = _CodexRenderRequest(
-            event_name=event_name,
-            findings=findings,
-            context=context,
-            updated_input=updated_input or {},
-            decision=decision,
+            event_name=render_request.event_name,
+            findings=render_request.findings,
+            context=render_request.context,
+            updated_input=render_request.updated_input,
+            decision=render_request.decision,
         )
 
-        if event_name == PRE_TOOL_USE:
+        if request.event_name == PRE_TOOL_USE:
             return _render_codex_pre_tool_use(self, request)
 
-        if event_name == PERMISSION_REQUEST:
+        if request.event_name == PERMISSION_REQUEST:
             return _render_codex_permission_request(self, request)
 
-        if event_name == POST_TOOL_USE:
+        if request.event_name == POST_TOOL_USE:
             return _render_codex_post_tool_use(self, request)
 
-        if event_name == "SessionStart":
-            if context:
-                return hook_specific_context_output("SessionStart", context)
+        if request.event_name == "SessionStart":
+            if request.context:
+                return hook_specific_context_output("SessionStart", request.context)
             return None
 
-        if event_name == "UserPromptSubmit":
+        if request.event_name == "UserPromptSubmit":
             return _render_codex_prompt_submit(self, request)
 
-        if event_name == "Stop":
+        if request.event_name == "Stop":
             return _render_codex_stop(self, request)
 
         return None

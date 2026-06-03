@@ -12,7 +12,50 @@ from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
+from vibeforcer.lint._helpers import (
+    ParsedFile,
+    ensure_parsed,
+    find_source_files,
+    _without_leading_docstring,
+)
+
+
+def _single_delegated_call(body: list[ast.stmt]) -> ast.Call | None:
+    stmts = _without_leading_docstring(body)
+    if len(stmts) != 1:
+        return None
+    stmt = stmts[0]
+    if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call):
+        return stmt.value
+    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+        return stmt.value
+    return None
+
+
+def _delegatable_params(args: ast.arguments) -> set[str]:
+    names = {a.arg for a in args.args}
+    names |= {a.arg for a in args.posonlyargs}
+    names |= {a.arg for a in args.kwonlyargs}
+    names.discard("self")
+    names.discard("cls")
+    return names
+
+
+def _is_passthrough_arg(arg: ast.expr, param_names: set[str]) -> bool:
+    value = arg.value if isinstance(arg, ast.Starred) else arg
+    return isinstance(value, ast.Name) and value.id in param_names
+
+
+def _is_passthrough_keyword(keyword: ast.keyword, param_names: set[str]) -> bool:
+    if keyword.arg is None:
+        return True
+    return isinstance(keyword.value, ast.Name) and keyword.value.id in param_names
+
+
+def _passes_only_params(call: ast.Call, param_names: set[str]) -> bool:
+    return all(_is_passthrough_arg(arg, param_names) for arg in call.args) and all(
+        _is_passthrough_keyword(keyword, param_names) for keyword in call.keywords
+    )
 
 
 def _is_simple_delegation(
@@ -22,58 +65,16 @@ def _is_simple_delegation(
 
     Returns ``None`` if the function does meaningful work beyond delegation.
     """
-    body = func_node.body
-    # Skip docstring
-    start = 0
-    if (
-        body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
-        start = 1
-
-    stmts = body[start:]
-    if len(stmts) != 1:
+    call = _single_delegated_call(func_node.body)
+    if call is None:
         return None
 
-    stmt = stmts[0]
-    # ``return some_call(...)``
-    if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call):
-        call = stmt.value
-    # bare ``some_call(...)`` (no return)
-    elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-        call = stmt.value
-    else:
-        return None
-
-    # Build the callee name
     callee = call_name(call)
     if not callee:
         return None
 
-    # Check that every argument is just passed through from the params
-    param_names = {a.arg for a in func_node.args.args}
-    param_names |= {a.arg for a in func_node.args.posonlyargs}
-    param_names |= {a.arg for a in func_node.args.kwonlyargs}
-    param_names.discard("self")
-    param_names.discard("cls")
-
-    for arg in call.args:
-        if isinstance(arg, ast.Starred):
-            arg = arg.value
-        if isinstance(arg, ast.Name) and arg.id in param_names:
-            continue
+    if not _passes_only_params(call, _delegatable_params(func_node.args)):
         return None
-
-    for kw in call.keywords:
-        if kw.arg is None:
-            # **kwargs pass-through
-            continue
-        if isinstance(kw.value, ast.Name) and kw.value.id in param_names:
-            continue
-        return None
-
     return callee
 
 

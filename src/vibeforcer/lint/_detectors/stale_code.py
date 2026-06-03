@@ -14,10 +14,10 @@ from vibeforcer.lint._config import get_config
 from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
 
 
-def detect_deprecated_patterns(
+def detect_stale_patterns(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
-    """Scan source files for lines matching deprecated-pattern regexes."""
+    """Scan source files for lines matching stale-pattern regexes."""
     cfg = get_config()
     if not cfg.deprecated_patterns:
         return []

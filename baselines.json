@@ -1,46 +1,6 @@
 {
-  "baseline_note": "Pruned fixed baseline entries after unnecessary-wrapper refactors.",
+  "baseline_note": "All previously baselined violations were fixed and pruned.",
   "generated_at": "2026-06-03T00:00:00+00:00",
-  "rules": {
-    "deep-nesting": [
-      "deep-nesting|src/vibeforcer/lint/_detectors/logging_conventions.py|detect_wrong_logger_name|depth=5",
-      "deep-nesting|src/vibeforcer/lint/_detectors/type_safety.py|detect_any_usage|depth=6"
-    ],
-    "duplicate-call-sequence": [
-      "duplicate-call-sequence|src/vibeforcer/cli/main.py|_string_list_attr|calls [getattr, isinstance, cast, isinstance, values.append], shared with src/vibeforcer/search/cli.py:_string_list_arg",
-      "duplicate-call-sequence|src/vibeforcer/search/cli.py|_string_list_arg|calls [getattr, isinstance, cast, isinstance, values.append], shared with src/vibeforcer/cli/main.py:_string_list_attr",
-      "duplicate-call-sequence|src/vibeforcer/rules/regex_rule.py|_collect_content_hits|calls [_path_allowed, any, p.search, hits.append, RegexHit], shared with src/vibeforcer/rules/regex_rule.py:_collect_path_hits",
-      "duplicate-call-sequence|src/vibeforcer/rules/regex_rule.py|_collect_path_hits|calls [_path_allowed, any, p.search, hits.append, RegexHit], shared with src/vibeforcer/rules/regex_rule.py:_collect_content_hits",
-      "duplicate-call-sequence|src/vibeforcer/rules/regex_rule.py|_collect_command_hits|calls [any, p.search, RegexHit], shared with src/vibeforcer/rules/regex_rule.py:_collect_prompt_hits",
-      "duplicate-call-sequence|src/vibeforcer/rules/regex_rule.py|_collect_prompt_hits|calls [any, p.search, RegexHit], shared with src/vibeforcer/rules/regex_rule.py:_collect_command_hits"
-    ],
-    "high-complexity": [
-      "high-complexity|src/vibeforcer/lint/_detectors/exception_safety.py|_is_silent_body|complexity=23",
-      "high-complexity|src/vibeforcer/lint/_detectors/type_safety.py|detect_any_usage|complexity=24",
-      "high-complexity|src/vibeforcer/lint/_detectors/wrappers.py|_is_simple_delegation|complexity=22",
-      "high-complexity|src/vibeforcer/rules/python_ast/_helpers.py|evaluate_common|complexity=13",
-      "high-complexity|src/vibeforcer/search/index_ops.py|resolve_reindex_target|complexity=14",
-      "high-complexity|src/vibeforcer/search/runtime.py|runtime_env|complexity=13"
-    ],
-    "long-method": [
-      "long-method|src/vibeforcer/lint/_detectors/type_safety.py|detect_any_usage|lines=80",
-      "long-method|src/vibeforcer/lint/_detectors/wrappers.py|_is_simple_delegation|lines=53",
-      "long-method|src/vibeforcer/search/scaffolds.py|render_opencode_plugin|lines=255"
-    ],
-    "oversized-module-soft": [
-      "oversized-module-soft|src/vibeforcer/search/scaffolds.py|scaffolds.py|lines=368 (soft limit=350)"
-    ],
-    "silent-except": [
-      "silent-except|src/vibeforcer/search/index_ops.py|local_indexes|line 34: continue"
-    ],
-    "too-many-params": [
-      "too-many-params|src/vibeforcer/_argparse_types.py|add_parser|params=16",
-      "too-many-params|src/vibeforcer/adapters/base.py|render_output|params=5",
-      "too-many-params|src/vibeforcer/adapters/claude.py|render_output|params=5",
-      "too-many-params|src/vibeforcer/adapters/codex.py|render_output|params=5",
-      "too-many-params|src/vibeforcer/adapters/opencode.py|render_output|params=5",
-      "too-many-params|src/vibeforcer/enrichment/type_enrichers.py|_describe_suppression|params=5"
-    ]
-  },
+  "rules": {},
   "schema_version": 1
 }

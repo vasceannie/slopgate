@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from ._source_parse import _normalized_module_path
+from vibeforcer.util.payloads import lower_path
 
 
 def _module_split_scenario(path_value: str) -> str:
     """Classify an oversized module so hook guidance can be specific."""
-    normalized = _normalized_module_path(path_value)
+    normalized = lower_path(path_value)
     name = normalized.rsplit("/", 1)[-1]
     name_scenarios = {"conftest.py": "conftest", "__init__.py": "package-init"}
     if scenario := name_scenarios.get(name):

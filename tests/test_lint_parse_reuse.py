@@ -40,6 +40,18 @@ def _fail_read(*_args: object, **_kwargs: object) -> list[str]:
     raise AssertionError("detector reread a ParsedFile")
 
 
+def _source_detector_results(parsed: ParsedFile) -> tuple[object, ...]:
+    return (
+        code_smells.detect_high_complexity([parsed]),
+        code_smells.detect_long_methods([parsed]),
+        code_smells.detect_too_many_params([parsed]),
+        code_smells.detect_deep_nesting([parsed]),
+        code_smells.detect_god_classes([parsed]),
+        code_smells.detect_oversized_modules([parsed]),
+        [violation.rule for violation in wrappers.detect_unnecessary_wrappers([parsed])],
+    )
+
+
 def test_source_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pytest.MonkeyPatch) -> None:
     parsed = _parsed(
         "def wrapper(value):\n"
@@ -52,16 +64,7 @@ def test_source_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pyte
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
 
-    detector_results = (
-        code_smells.detect_high_complexity([parsed]),
-        code_smells.detect_long_methods([parsed]),
-        code_smells.detect_too_many_params([parsed]),
-        code_smells.detect_deep_nesting([parsed]),
-        code_smells.detect_god_classes([parsed]),
-        code_smells.detect_oversized_modules([parsed]),
-        [violation.rule for violation in wrappers.detect_unnecessary_wrappers([parsed])],
-    )
-    assert detector_results == ([], [], [], [], [], [], ["unnecessary-wrapper"])
+    assert _source_detector_results(parsed) == ([], [], [], [], [], [], ["unnecessary-wrapper"])
 
 
 def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,7 +87,7 @@ def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
 
     detector_rules = (
-        [v.rule for v in stale_code.detect_deprecated_patterns([parsed])],
+        [v.rule for v in stale_code.detect_stale_patterns([parsed])],
         [v.rule for v in logging_conventions.detect_direct_get_logger([parsed])],
         [v.rule for v in logging_conventions.detect_wrong_logger_name([parsed])],
     )

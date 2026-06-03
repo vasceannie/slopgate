@@ -22,7 +22,7 @@ from vibeforcer.installer._shared import find_binary, shell_command
 from vibeforcer.util.platform import is_windows, user_config_dir, user_data_dir
 
 _INSTALL_TARGETS = VALID_PLATFORMS
-CLAUDE_PLATFORM, CODEX_PLATFORM, OPENCODE_PLATFORM = _INSTALL_TARGETS
+CLAUDE_PLATFORM, CODEX_PLATFORM, OPENCODE_PLATFORM, CURSOR_PLATFORM = _INSTALL_TARGETS
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,11 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
             OPENCODE_PLATFORM,
             user_config_dir(OPENCODE_PLATFORM) / "plugins" / "vibeforcer-plugin.ts",
             user_config_dir(OPENCODE_PLATFORM).exists(),
+        ),
+        InstallSite(
+            CURSOR_PLATFORM,
+            home / ".cursor" / "hooks.json",
+            (home / ".cursor").exists(),
         ),
     ]
     if include_missing:

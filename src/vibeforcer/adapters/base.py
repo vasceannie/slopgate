@@ -4,13 +4,49 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 
-from vibeforcer._types import ObjectDict, ObjectMapping
+from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
 from vibeforcer.constants import BLOCK, DENY
 from vibeforcer.models import RuleFinding
 from vibeforcer.rules.base import join_messages as _join_messages
 
 _PERMISSION_REQUEST_DECISIONS = frozenset({DENY, "allow", BLOCK, "ask"})
+
+
+@dataclass(frozen=True, slots=True)
+class RenderRequest:
+    event_name: str
+    findings: list[RuleFinding]
+    context: str | None
+    updated_input: ObjectDict
+    decision: str | None
+
+
+def render_request_from_call(
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+) -> RenderRequest:
+    if len(args) != 2:
+        raise TypeError("render_output expects event_name and findings")
+    event_name, findings = args
+    if not isinstance(event_name, str):
+        raise TypeError("event_name must be a string")
+    if not isinstance(findings, list):
+        raise TypeError("findings must be a list")
+    context_value = kwargs.pop("context", None)
+    updated_input_value = kwargs.pop("updated_input", None)
+    decision_value = kwargs.pop("decision", None)
+    if kwargs:
+        unexpected = ", ".join(sorted(kwargs))
+        raise TypeError(f"unexpected render_output keyword(s): {unexpected}")
+    return RenderRequest(
+        event_name=event_name,
+        findings=[finding for finding in findings if isinstance(finding, RuleFinding)],
+        context=context_value if isinstance(context_value, str) else None,
+        updated_input=object_dict(updated_input_value),
+        decision=decision_value if isinstance(decision_value, str) else None,
+    )
 
 
 def hook_specific_context_output(event_name: str, context: str) -> ObjectDict:
@@ -56,12 +92,8 @@ class PlatformAdapter(ABC):
     @abstractmethod
     def render_output(
         self,
-        event_name: str,
-        findings: list[RuleFinding],
-        *,
-        context: str | None = None,
-        updated_input: ObjectDict | None = None,
-        decision: str | None = None,
+        *args: object,
+        **kwargs: object,
     ) -> ObjectDict | None:
         """Render findings into platform-native JSON for stdout."""
 

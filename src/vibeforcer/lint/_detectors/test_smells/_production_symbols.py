@@ -154,7 +154,7 @@ def _replacement_hint(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDe
 
 
 def _node_mentions_deprecated(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> bool:
-    text = " ".join([node.name.lower(), _docstring_text(node), *_decorator_texts(node)])
+    text = " ".join([_docstring_text(node), *_decorator_texts(node)])
     if any(token in text for token in _DEPRECATED_TOKENS):
         return True
     for child in ast.walk(node):

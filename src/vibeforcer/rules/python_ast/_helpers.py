@@ -52,6 +52,51 @@ def parse_module(source: str, max_chars: int) -> ast.Module | None:
         return None
 
 
+def _authored_python_path(path_value: str) -> bool:
+    if not path_value.lower().endswith((".py", ".pyi")):
+        return False
+    return not is_third_party_or_virtualenv_path(path_value)
+
+
+def _read_candidate_source(ctx: HookContext, path_value: str) -> str | None:
+    full_path = (
+        (ctx.cwd / path_value).resolve()
+        if not Path(path_value).is_absolute()
+        else Path(path_value)
+    )
+    try:
+        return full_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _pre_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
+    return [
+        (ct.content, ct.path)
+        for ct in ctx.content_targets
+        if _authored_python_path(ct.path)
+    ]
+
+
+def _post_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
+    if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
+        return []
+    sources: list[tuple[str, str]] = []
+    for path_value in ctx.candidate_paths:
+        if not _authored_python_path(path_value):
+            continue
+        source = _read_candidate_source(ctx, path_value)
+        if source is not None:
+            sources.append((source, path_value))
+    return sources
+
+
+def _python_sources_for_context(ctx: HookContext) -> list[tuple[str, str]]:
+    if ctx.event_name in ("PreToolUse", "PermissionRequest"):
+        return _pre_tool_sources(ctx)
+    return _post_tool_sources(ctx)
+
+
 def evaluate_common(
     rule: Rule,
     ctx: HookContext,
@@ -63,34 +108,8 @@ def evaluate_common(
     if not ctx.config.python_ast_enabled:
         return []
     findings: list[RuleFinding] = []
-    is_pre = ctx.event_name in ("PreToolUse", "PermissionRequest")
-    if is_pre:
-        for ct in ctx.content_targets:
-            if not ct.path.lower().endswith((".py", ".pyi")):
-                continue
-            if is_third_party_or_virtualenv_path(ct.path):
-                continue
-            findings.extend(check_fn(ct.content, ct.path, ctx))
-    else:
-        # Only run PostToolUse AST analysis for edit-like/bash tools, not Read/Grep/Glob
-        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
-            return []
-        for path_value in ctx.candidate_paths:
-            if not path_value.lower().endswith((".py", ".pyi")):
-                continue
-            # Skip third-party / vendored code — not authored by the agent
-            if is_third_party_or_virtualenv_path(path_value):
-                continue
-            full_path = (
-                (ctx.cwd / path_value).resolve()
-                if not Path(path_value).is_absolute()
-                else Path(path_value)
-            )
-            try:
-                source = full_path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            findings.extend(check_fn(source, path_value, ctx))
+    for source, path_value in _python_sources_for_context(ctx):
+        findings.extend(check_fn(source, path_value, ctx))
     return findings
 
 

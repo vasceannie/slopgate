@@ -24,7 +24,7 @@ from .logging_conventions import (
     detect_direct_get_logger,
     detect_wrong_logger_name,
 )
-from .stale_code import detect_deprecated_patterns
+from .stale_code import detect_stale_patterns
 from .test_smells import (
     detect_assertion_free_tests,
     detect_assertion_roulette,
@@ -50,7 +50,7 @@ __all__ = [
     "detect_broad_except_swallow",
     "detect_conditional_assertions",
     "detect_deep_nesting",
-    "detect_deprecated_patterns",
+    "detect_stale_patterns",
     "detect_direct_get_logger",
     "detect_eager_tests",
     "detect_fixtures_outside_conftest",

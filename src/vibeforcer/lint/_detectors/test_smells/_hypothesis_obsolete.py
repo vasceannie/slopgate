@@ -186,13 +186,13 @@ def _missing_production_imports(parsed_tests: list[ParsedFile], modules: set[str
     return violations
 
 
-def detect_obsolete_or_deprecated_tests(
+def detect_stale_test_references(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
     *,
     index: TestIntegrityIndex | None = None,
 ) -> list[Violation]:
-    """Find tests tied to missing modules or deprecated/obsolete production APIs."""
+    """Find tests tied to missing modules or stale production APIs."""
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
     modules = index.module_names

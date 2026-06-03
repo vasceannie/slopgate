@@ -28,6 +28,7 @@ from vibeforcer.adapters import get_adapter, ADAPTERS
 from vibeforcer.adapters.base import PlatformAdapter
 from vibeforcer.adapters.claude import ClaudeAdapter
 from vibeforcer.adapters.codex import CodexAdapter
+from vibeforcer.adapters.cursor import CursorAdapter
 from vibeforcer.adapters.opencode import OpenCodeAdapter
 from vibeforcer.engine import evaluate_payload
 from vibeforcer.models import RuleFinding, Severity
@@ -132,4 +133,4 @@ def rendered_string(mapping: ObjectDict, key: str, default: str = "") -> str:
 # ===========================================================================
 
 # Exported test support used by split test modules.
-__all__ = ('ADAPTERS', 'Callable', 'ClaudeAdapter', 'CodexAdapter', 'FIXTURES_DIR', 'ObjectDict', 'OpenCodeAdapter', 'Path', 'PlatformAdapter', 'RuleFinding', 'Severity', '_RESOURCES_DIR', '_config_with_enabled_rules', '_load_platform_fixture', '_repo_with_quality_gate', 'cast', 'engine_module', 'evaluate_payload', 'get_adapter', 'json', 'object_dict', 'pytest', 'rendered_string', 'require_nested', 'require_rendered', 'require_spec', 'string_value', 'test_support')
+__all__ = ('ADAPTERS', 'Callable', 'ClaudeAdapter', 'CodexAdapter', 'CursorAdapter', 'FIXTURES_DIR', 'ObjectDict', 'OpenCodeAdapter', 'Path', 'PlatformAdapter', 'RuleFinding', 'Severity', '_RESOURCES_DIR', '_config_with_enabled_rules', '_load_platform_fixture', '_repo_with_quality_gate', 'cast', 'engine_module', 'evaluate_payload', 'get_adapter', 'json', 'object_dict', 'pytest', 'rendered_string', 'require_nested', 'require_rendered', 'require_spec', 'string_value', 'test_support')

@@ -52,23 +52,25 @@ def _is_logging_call(node: ast.stmt) -> bool:
             return False
 
 
+def _default_return_value_label(val: ast.AST | None) -> str | None:
+    match val:
+        case None:
+            return "bare-return"
+        case ast.Constant(value=None):
+            return "return-none"
+        case ast.Constant(value=False | 0 | ""):
+            return "return-default"
+        case ast.Dict(keys=[]):
+            return "return-default"
+        case ast.List(elts=[]):
+            return "return-default"
+        case _:
+            return None
+
+
 def _is_default_return(node: ast.stmt) -> bool:
     """True when *node* is ``return <sentinel>`` (None, {}, [], "", 0, False)."""
-    if not isinstance(node, ast.Return):
-        return False
-    val = node.value
-    if val is None:
-        return True  # bare ``return``
-    if isinstance(val, ast.Constant):
-        if val.value is None or val.value is False or val.value == 0 or val.value == "":
-            return True
-    # Empty dict: ``return {}``
-    if isinstance(val, ast.Dict) and not val.keys:
-        return True
-    # Empty list: ``return []``
-    if isinstance(val, ast.List) and not val.elts:
-        return True
-    return False
+    return isinstance(node, ast.Return) and _default_return_value_label(node.value) is not None
 
 
 def _is_broad_except(handler: ast.ExceptHandler) -> bool:
@@ -105,6 +107,21 @@ def _body_is_swallow(body: list[ast.stmt]) -> bool:
             continue
         return False  # some other statement
     return has_return
+
+
+def _single_silent_statement_label(stmt: ast.stmt) -> str | None:
+    if isinstance(stmt, ast.Continue):
+        return "continue"
+    if isinstance(stmt, ast.Return):
+        return _default_return_value_label(stmt.value)
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+        if isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
+            return "assign-none"
+    return None
+
+
+def _contains_logging(body: list[ast.stmt]) -> bool:
+    return any(_is_logging_call(stmt) for stmt in body)
 
 
 # ---------------------------------------------------------------------------
@@ -231,34 +248,13 @@ def _is_silent_body(body: list["ast.stmt"]) -> str | None:
         return "pass"  # body was only pass/comments
 
     if len(meaningful) == 1:
-        stmt = meaningful[0]
-        # continue
-        if isinstance(stmt, ast.Continue):
-            return "continue"
-        # bare return / return None
-        if isinstance(stmt, ast.Return):
-            val = stmt.value
-            if val is None:
-                return "bare-return"
-            if isinstance(val, ast.Constant) and val.value is None:
-                return "return-none"
-            if isinstance(val, ast.Constant) and val.value in (False, 0, ""):
-                return "return-default"
-            if (
-                isinstance(val, (ast.Dict, ast.List))
-                and not getattr(val, "keys", None)
-                and not getattr(val, "elts", None)
-            ):
-                return "return-default"
-        # <var> = None
-        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-            if isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
-                return "assign-none"
+        label = _single_silent_statement_label(meaningful[0])
+        if label is not None:
+            return label
 
     # If body has logging, it's not "silent" — let other detectors handle it
-    for stmt in body:
-        if _is_logging_call(stmt):
-            return None
+    if _contains_logging(body):
+        return None
     # Check for return-default without logging (broader than _body_is_swallow)
     for stmt in meaningful:
         if _is_default_return(stmt):

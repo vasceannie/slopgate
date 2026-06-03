@@ -7,11 +7,19 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
 from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
+
+
+@dataclass(frozen=True)
+class _LoggerNameContext:
+    rel_path: str
+    disallowed: Sequence[str]
+    expected: str
 
 
 def _is_in_infrastructure(rel_path: str) -> bool:
@@ -85,26 +93,60 @@ def detect_wrong_logger_name(
     for pf in parsed:
         if _is_in_infrastructure(pf.rel):
             continue
-        for node in ast.walk(pf.tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            # Only look at module-level or class-level assignments
-            for target in node.targets:
-                if not isinstance(target, ast.Name):
-                    continue
-                name = target.id
-                if name in disallowed:
-                    # Check if the value is a logger-like call
-                    if _is_logger_call(node.value):
-                        violations.append(
-                            Violation(
-                                rule="wrong-logger-name",
-                                relative_path=pf.rel,
-                                identifier=f"L{node.lineno}",
-                                detail=f"'{name}' → use '{expected}'",
-                            )
-                        )
+        violations.extend(
+            _collect_wrong_logger_name_violations(pf, list(disallowed), expected)
+        )
 
+    return violations
+
+
+def _wrong_logger_name_violation(
+    node: ast.Assign,
+    target: ast.expr,
+    context: _LoggerNameContext,
+) -> Violation | None:
+    if not isinstance(target, ast.Name):
+        return None
+    name = target.id
+    if name not in context.disallowed:
+        return None
+    if not _is_logger_call(node.value):
+        return None
+    return Violation(
+        rule="wrong-logger-name",
+        relative_path=context.rel_path,
+        identifier=f"L{node.lineno}",
+        detail=f"'{name}' → use '{context.expected}'",
+    )
+
+
+def _wrong_logger_name_violations(
+    node: ast.AST,
+    context: _LoggerNameContext,
+) -> list[Violation]:
+    if not isinstance(node, ast.Assign):
+        return []
+    violations: list[Violation] = []
+    for target in node.targets:
+        violation = _wrong_logger_name_violation(
+            node,
+            target,
+            context,
+        )
+        if violation is not None:
+            violations.append(violation)
+    return violations
+
+
+def _collect_wrong_logger_name_violations(
+    parsed_file: ParsedFile,
+    disallowed: Sequence[str],
+    expected: str,
+) -> list[Violation]:
+    context = _LoggerNameContext(parsed_file.rel, disallowed, expected)
+    violations: list[Violation] = []
+    for node in ast.walk(parsed_file.tree):
+        violations.extend(_wrong_logger_name_violations(node, context))
     return violations
 
 

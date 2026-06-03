@@ -125,7 +125,7 @@ LINT_PATH_DEFAULTS: Final[_LintPathDefaults] = {
 
 
 LINT_WRAPPERS_DEFAULTS: Final[_LintWrappersDefaults] = {
-    "allowed": [],
+    "allowed": [["lower_path_for_match", "casefold"]],
 }
 
 

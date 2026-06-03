@@ -94,6 +94,14 @@ def _block_index_rebuild_helpers(
             monkeypatch.setattr(module, name, fail_rebuild)
 
 
+def _indexed_detector_results(index: object) -> tuple[object, bool, bool, bool]:
+    untested = _production_detectors.detect_untested_production_code(index=index)
+    missing_integration = _production_detectors.detect_missing_integration_tests(index=index)
+    hypothesis_candidates = _hypothesis_obsolete.detect_hypothesis_candidates(index=index)
+    deprecated_tests = _hypothesis_obsolete.detect_stale_test_references(index=index)
+    return untested, bool(missing_integration), bool(hypothesis_candidates), bool(deprecated_tests)
+
+
 def test_build_test_integrity_index_caches_shared_symbols_and_references() -> None:
     parsed_src, parsed_tests = _sample_inputs()
     index = build_test_integrity_index(parsed_src, parsed_tests)
@@ -132,23 +140,7 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
         _hypothesis_obsolete,
     )
 
-    untested = _production_detectors.detect_untested_production_code(index=index)
-    missing_integration = _production_detectors.detect_missing_integration_tests(
-        index=index
-    )
-    hypothesis_candidates = _hypothesis_obsolete.detect_hypothesis_candidates(
-        index=index
-    )
-    deprecated_tests = _hypothesis_obsolete.detect_obsolete_or_deprecated_tests(
-        index=index
-    )
-
-    assert (untested, bool(missing_integration), bool(hypothesis_candidates), bool(deprecated_tests)) == (
-        [],
-        True,
-        True,
-        True,
-    )
+    assert _indexed_detector_results(index) == ([], True, True, True)
 
 
 def test_test_integrity_collectors_build_one_shared_index(

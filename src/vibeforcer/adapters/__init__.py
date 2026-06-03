@@ -7,6 +7,7 @@ Supported platforms:
   - claude   : Anthropic Claude Code (default)
   - codex    : OpenAI Codex CLI
   - opencode : OpenCode (Anomaly)
+  - cursor   : Cursor native hooks
 """
 
 from __future__ import annotations
@@ -14,11 +15,13 @@ from __future__ import annotations
 from vibeforcer.adapters.base import PlatformAdapter
 from vibeforcer.adapters.claude import ClaudeAdapter
 from vibeforcer.adapters.codex import CodexAdapter
+from vibeforcer.adapters.cursor import CursorAdapter
 from vibeforcer.adapters.opencode import OpenCodeAdapter
 
 ADAPTERS: dict[str, type[PlatformAdapter]] = {
     "claude": ClaudeAdapter,
     "codex": CodexAdapter,
+    "cursor": CursorAdapter,
     "opencode": OpenCodeAdapter,
 }
 

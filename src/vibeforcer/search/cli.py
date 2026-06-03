@@ -53,12 +53,7 @@ def _string_list_arg(args: argparse.Namespace, name: str) -> list[str]:
     raw_value = getattr(args, name, None)
     if not isinstance(raw_value, list):
         return []
-    raw_items = cast(list[object], raw_value)
-    values: list[str] = []
-    for item in raw_items:
-        if isinstance(item, str):
-            values.append(item)
-    return values
+    return [item for item in cast(list[object], raw_value) if isinstance(item, str)]
 
 
 def _token_from_cli(

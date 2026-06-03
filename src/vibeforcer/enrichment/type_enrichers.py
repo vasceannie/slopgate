@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from vibeforcer.enrichment._helpers import (
@@ -73,43 +74,54 @@ _NOQA_CODE_RE = re.compile(r"#\s*noq" + r"a:\s*(\S+)")
 _PYLINT_CODE_RE = re.compile(r"#\s*pyl" + r"int:\s*disable=(\S+)")
 
 
+@dataclass(frozen=True)
+class _SuppressionPattern:
+    marker: str
+    regex: re.Pattern[str]
+    missing_code_message: str | None
+    prefix: str
+
+
 def _describe_suppression(
     line: str,
-    marker: str,
-    regex: re.Pattern[str],
-    missing_code_message: str | None,
-    prefix: str,
+    pattern: _SuppressionPattern,
 ) -> str | None:
-    if marker not in line:
+    if pattern.marker not in line:
         return None
-    match = regex.search(line)
+    match = pattern.regex.search(line)
     if match is None:
-        return missing_code_message
-    return f"{prefix}`{match.group(1)}`"
+        return pattern.missing_code_message
+    return f"{pattern.prefix}`{match.group(1)}`"
 
 
 def _suppression_description(line: str) -> str | None:
     return (
         _describe_suppression(
             line,
-            _TYPE_IGNORE_MARKER,
-            _TYPE_IGNORE_CODE_RE,
-            "type ignore without an error code",
-            "type ignore for ",
+            _SuppressionPattern(
+                _TYPE_IGNORE_MARKER,
+                _TYPE_IGNORE_CODE_RE,
+                "type ignore without an error code",
+                "type ignore for ",
+            ),
         )
         or _describe_suppression(
             line,
-            _NOQA_MARKER,
-            _NOQA_CODE_RE,
-            "noqa without a rule code",
-            "noqa for ",
+            _SuppressionPattern(
+                _NOQA_MARKER,
+                _NOQA_CODE_RE,
+                "noqa without a rule code",
+                "noqa for ",
+            ),
         )
         or _describe_suppression(
             line,
-            _PYLINT_MARKER,
-            _PYLINT_CODE_RE,
-            None,
-            "pylint disable for ",
+            _SuppressionPattern(
+                _PYLINT_MARKER,
+                _PYLINT_CODE_RE,
+                None,
+                "pylint disable for ",
+            ),
         )
     )
 

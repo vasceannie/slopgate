@@ -7,6 +7,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import cast
@@ -16,6 +17,10 @@ from vibeforcer.constants import METADATA_COMMAND
 from vibeforcer.util.platform import is_windows
 
 HOOK_TYPE_COMMAND = METADATA_COMMAND
+
+HOOK_TIMEOUT_SHORT = 10
+HOOK_TIMEOUT_STANDARD = HOOK_TIMEOUT_SHORT + HOOK_TIMEOUT_SHORT
+HOOK_TIMEOUT_LONG = HOOK_TIMEOUT_STANDARD + HOOK_TIMEOUT_SHORT
 
 
 def find_binary() -> str:
@@ -217,6 +222,42 @@ def remove_file_with_backup(path: Path, label: str) -> None:
     backup_existing_file_and_report(path, label)
     path.unlink()
     print(f"Removed: {path}")
+
+
+def uninstall_hooks_file(
+    hooks_path: Path,
+    *,
+    label: str,
+    remove_owned: Callable[[object], dict[str, list[dict[str, object]]]],
+    dry_run: bool = False,
+) -> int:
+    """Remove vibeforcer-owned hook entries from a platform hooks.json file."""
+    if not hooks_path.exists():
+        print(f"No {label} hooks found.")
+        return 0
+    if dry_run:
+        print(f"Would remove vibeforcer hook entries from {hooks_path}")
+        return 0
+
+    existing = require_json_object(hooks_path, f"{label} hooks", action="modify")
+    if existing is None:
+        return 1
+
+    remaining_hooks = remove_owned(existing.get("hooks"))
+    if remaining_hooks:
+        existing["hooks"] = remaining_hooks
+        write_json_with_backup(hooks_path, existing, "hooks")
+        print(f"Removed vibeforcer hooks from {hooks_path}")
+        return 0
+
+    existing.pop("hooks", None)
+    if existing:
+        write_json_with_backup(hooks_path, existing, "hooks")
+        print(f"Removed vibeforcer hooks from {hooks_path}")
+        return 0
+
+    remove_file_with_backup(hooks_path, "hooks")
+    return 0
 
 
 def print_binary_install_summary(message: str, binary: str) -> None:

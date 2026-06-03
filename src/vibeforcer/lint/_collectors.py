@@ -33,7 +33,7 @@ def _ast_src_collectors(
         detect_direct_get_logger,
         detect_wrong_logger_name,
     )
-    from vibeforcer.lint._detectors.stale_code import detect_deprecated_patterns
+    from vibeforcer.lint._detectors.stale_code import detect_stale_patterns
     from vibeforcer.lint._detectors.type_safety import (
         detect_any_usage,
         detect_type_suppressions,
@@ -41,7 +41,7 @@ def _ast_src_collectors(
     from vibeforcer.lint._detectors.wrappers import detect_unnecessary_wrappers
     return [
         ("unnecessary-wrapper", detect_unnecessary_wrappers(parsed_src)),
-        ("deprecated-pattern", detect_deprecated_patterns(parsed_src)),
+        ("deprecated-pattern", detect_stale_patterns(parsed_src)),
         ("direct-get-logger", detect_direct_get_logger(parsed_src)),
         ("wrong-logger-name", detect_wrong_logger_name(parsed_src)),
         ("banned-any", detect_any_usage(parsed_src)),
@@ -125,7 +125,7 @@ def _test_integrity_collectors(
         detect_missing_integration_tests,
         detect_mock_theater,
         detect_mocked_integration_tests,
-        detect_obsolete_or_deprecated_tests,
+        detect_stale_test_references,
         detect_schema_bypasses,
         detect_untested_production_code,
         detect_weak_assertions,
@@ -137,7 +137,7 @@ def _test_integrity_collectors(
         ("untested-production-code", detect_untested_production_code(index=index)),
         ("missing-integration-test", detect_missing_integration_tests(index=index)),
         ("hypothesis-candidate", detect_hypothesis_candidates(index=index)),
-        ("obsolete-or-deprecated-test", detect_obsolete_or_deprecated_tests(index=index)),
+        ("obsolete-or-deprecated-test", detect_stale_test_references(index=index)),
         ("weak-test-assertion", detect_weak_assertions(test_targets)),
         ("mock-theater", detect_mock_theater(test_targets)),
         ("schema-bypass-test-data", detect_schema_bypasses(test_targets)),

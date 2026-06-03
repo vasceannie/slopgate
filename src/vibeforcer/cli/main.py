@@ -32,13 +32,10 @@ def _string_list_attr(args: argparse.Namespace, name: str) -> list[str] | None:
     raw_value = getattr(args, name, None)
     if not isinstance(raw_value, list):
         return None
-    values: list[str] = []
     raw_items = cast(list[object], raw_value)
-    for item in raw_items:
-        if not isinstance(item, str):
-            return None
-        values.append(item)
-    return values or None
+    if not all(isinstance(item, str) for item in raw_items):
+        return None
+    return cast(list[str], raw_items) or None
 
 
 def _search_subcommands() -> set[str]:

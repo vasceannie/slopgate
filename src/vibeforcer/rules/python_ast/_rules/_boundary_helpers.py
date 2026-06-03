@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     pass
 
-from ._source_parse import _normalized_module_path as _normalized_module_path
+from vibeforcer.util.payloads import lower_path as lower_path
 
 
 _BOUNDARY_LOG_METHODS = frozenset(
@@ -125,7 +125,7 @@ def _path_parts(path_value: str) -> set[str]:
 
 
 def _is_test_module_path(path_value: str) -> bool:
-    normalized = _normalized_module_path(path_value)
+    normalized = lower_path(path_value)
     name = normalized.rsplit("/", 1)[-1]
     return (
         normalized.startswith("tests/")

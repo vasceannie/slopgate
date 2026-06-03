@@ -45,7 +45,7 @@ def test_declarative_window_accepts_standard_logger_plus_constants() -> None:
         '_FIELD_DISCOVERED_FMT = "Field discovered: {} ({})"\n'
     )
 
-    assert should_skip_block_window(body, range(0, 3), "<module>", set()) == True
+    assert should_skip_block_window(body, range(0, 3), "<module>", set())
 
 
 def test_declarative_window_rejects_logger_plus_side_effects() -> None:

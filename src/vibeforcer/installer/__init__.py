@@ -4,17 +4,19 @@ Supports:
   vibeforcer install claude    → patches ~/.claude/settings.json
   vibeforcer install codex     → patches ~/.codex/hooks.json
   vibeforcer install opencode  → copies TS plugin to ~/.config/opencode/plugins/
+  vibeforcer install cursor    → patches ~/.cursor/hooks.json
 """
 
 from __future__ import annotations
 
-from vibeforcer.installer import _claude, _codex, _opencode, _suite
+from vibeforcer.installer import _claude, _codex, _cursor, _opencode, _suite
 from vibeforcer.installer._claude import _CLAUDE_EVENTS, _claude_hooks_block
 from vibeforcer.installer._codex import (
     _CODEX_EVENTS,
     _codex_hooks_block,
     _enable_codex_hooks_toml,
 )
+from vibeforcer.installer._cursor import _CURSOR_EVENTS, _cursor_hooks_block
 from vibeforcer.installer._shared import find_binary as _find_binary
 
 
@@ -41,6 +43,14 @@ def _install_opencode(dry_run: bool = False) -> int:
 
 _uninstall_opencode = _opencode._uninstall_opencode
 
+
+def _install_cursor(dry_run: bool = False) -> int:
+    _cursor.find_binary = _find_binary
+    return _cursor._install_cursor(dry_run=dry_run)
+
+
+_uninstall_cursor = _cursor._uninstall_cursor
+
 install_suite = _suite.install_suite
 SuiteInstallOptions = _suite.SuiteInstallOptions
 SuiteUninstallOptions = _suite.SuiteUninstallOptions
@@ -51,6 +61,7 @@ update_suite = _suite.update_suite
 _INSTALLERS = {
     "claude": (_install_claude, _uninstall_claude),
     "codex": (_install_codex, _uninstall_codex),
+    "cursor": (_install_cursor, _uninstall_cursor),
     "opencode": (_install_opencode, _uninstall_opencode),
 }
 
@@ -68,15 +79,19 @@ def uninstall_platform(platform: str, dry_run: bool = False) -> int:
 __all__ = [
     "_CLAUDE_EVENTS",
     "_CODEX_EVENTS",
+    "_CURSOR_EVENTS",
     "_claude_hooks_block",
     "_codex_hooks_block",
+    "_cursor_hooks_block",
     "_enable_codex_hooks_toml",
     "_find_binary",
     "_install_claude",
     "_install_codex",
+    "_install_cursor",
     "_install_opencode",
     "_uninstall_claude",
     "_uninstall_codex",
+    "_uninstall_cursor",
     "_uninstall_opencode",
     "install_platform",
     "install_suite",

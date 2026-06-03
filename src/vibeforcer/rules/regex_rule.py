@@ -23,6 +23,32 @@ class RegexHit:
     snippet: str | None = None
 
 
+def _collect_content_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
+    hits: list[RegexHit] = []
+    for content_target in ctx.content_targets:
+        hit = rule._path_hit(content_target.path, content_target.content)
+        if hit is not None:
+            hits.append(hit)
+    return hits
+
+
+def _collect_command_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
+    return rule._scalar_hit(ctx.shell_command)
+
+
+def _collect_path_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
+    hits: list[RegexHit] = []
+    for path_value in ctx.candidate_paths:
+        hit = rule._path_hit(path_value, path_value)
+        if hit is not None:
+            hits.append(hit)
+    return hits
+
+
+def _collect_prompt_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
+    return rule._scalar_hit(ctx.user_prompt)
+
+
 @final
 class RegexRule(Rule):
     config: RegexRuleConfig
@@ -70,33 +96,18 @@ class RegexRule(Rule):
             path=first_path, matched_paths=all_paths, rule_id=self.rule_id
         )
 
-    def _collect_content_hits(self, ctx: HookContext) -> list[RegexHit]:
-        hits: list[RegexHit] = []
-        for content_target in ctx.content_targets:
-            if not self._path_allowed(content_target.path):
-                continue
-            if any(p.search(content_target.content) for p in self._patterns):
-                hits.append(RegexHit(path=content_target.path))
-        return hits
+    def _matches_text(self, value: str) -> bool:
+        return any(pattern.search(value) for pattern in self._patterns)
 
-    def _collect_command_hits(self, ctx: HookContext) -> list[RegexHit]:
-        if ctx.shell_command and any(p.search(ctx.shell_command) for p in self._patterns):
-            return [RegexHit(path=None)]
-        return []
+    def _path_hit(self, path_value: str, text: str) -> RegexHit | None:
+        if not self._path_allowed(path_value):
+            return None
+        if not self._matches_text(text):
+            return None
+        return RegexHit(path=path_value)
 
-    def _collect_path_hits(self, ctx: HookContext) -> list[RegexHit]:
-        hits: list[RegexHit] = []
-        for path_value in ctx.candidate_paths:
-            if not self._path_allowed(path_value):
-                continue
-            if any(p.search(path_value) for p in self._patterns):
-                hits.append(RegexHit(path=path_value))
-        return hits
-
-    def _collect_prompt_hits(self, ctx: HookContext) -> list[RegexHit]:
-        if ctx.user_prompt and any(p.search(ctx.user_prompt) for p in self._patterns):
-            return [RegexHit(path=None)]
-        return []
+    def _scalar_hit(self, value: str) -> list[RegexHit]:
+        return [RegexHit(path=None)] if value and self._matches_text(value) else []
 
     def _build_finding(self, hits: list[RegexHit]) -> RuleFinding:
         is_context = self.config.action == "context"
@@ -121,15 +132,15 @@ class RegexRule(Rule):
             return []
 
         collectors = {
-            "content": self._collect_content_hits,
-            "command": self._collect_command_hits,
-            METADATA_PATH: self._collect_path_hits,
-            "prompt": self._collect_prompt_hits,
+            "content": _collect_content_hits,
+            "command": _collect_command_hits,
+            METADATA_PATH: _collect_path_hits,
+            "prompt": _collect_prompt_hits,
         }
         collector = collectors.get(self.config.target)
         if collector is None:
             return []
-        hits = collector(ctx)
+        hits = collector(self, ctx)
         if not hits:
             return []
         return [self._build_finding(hits)]

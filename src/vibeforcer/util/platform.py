@@ -41,7 +41,10 @@ def normalize_path_for_match(value: str) -> str:
 
 
 def lower_path_for_match(value: str) -> str:
-    return normalize_path_for_match(value).casefold()
+    normalized = normalize_path_for_match(value)
+    if not normalized:
+        return ""
+    return "/".join(part.casefold() for part in normalized.split("/"))
 
 
 def looks_like_windows_absolute_path(value: str) -> bool:

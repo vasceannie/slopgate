@@ -18,7 +18,7 @@ from vibeforcer.installer._shared import (
     print_binary_install_summary,
     remove_owned_hooks,
     require_json_object,
-    remove_file_with_backup,
+    uninstall_hooks_file,
     write_json_with_backup,
 )
 
@@ -213,31 +213,9 @@ def _install_codex(dry_run: bool = False) -> int:
 
 
 def _uninstall_codex(dry_run: bool = False) -> int:
-    hooks_path = Path.home() / ".codex" / "hooks.json"
-    if not hooks_path.exists():
-        print("No Codex hooks found.")
-        return 0
-
-    if dry_run:
-        print(f"Would remove vibeforcer hook entries from {hooks_path}")
-        return 0
-
-    existing = require_json_object(hooks_path, "Codex hooks", action="modify")
-    if existing is None:
-        return 1
-
-    remaining_hooks = remove_owned_hooks(existing.get("hooks"))
-    if remaining_hooks:
-        existing["hooks"] = remaining_hooks
-        write_json_with_backup(hooks_path, existing, "hooks")
-        print(f"Removed vibeforcer hooks from {hooks_path}")
-        return 0
-
-    existing.pop("hooks", None)
-    if existing:
-        write_json_with_backup(hooks_path, existing, "hooks")
-        print(f"Removed vibeforcer hooks from {hooks_path}")
-        return 0
-
-    remove_file_with_backup(hooks_path, "hooks")
-    return 0
+    return uninstall_hooks_file(
+        Path.home() / ".codex" / "hooks.json",
+        label="Codex",
+        remove_owned=remove_owned_hooks,
+        dry_run=dry_run,
+    )
