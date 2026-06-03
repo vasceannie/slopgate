@@ -21,7 +21,12 @@ def _write_clean_project(root: Path) -> Path:
         "from __future__ import annotations\n\n\ndef answer() -> int:\n    return 1\n",
         encoding="utf-8",
     )
-    (root / "tests").mkdir()
+    tests = root / "tests"
+    tests.mkdir()
+    (tests / "test_clean.py").write_text(
+        "from pkg.clean import answer\n\n\ndef test_answer_contract() -> None:\n    assert answer() == 1\n",
+        encoding="utf-8",
+    )
     return src_pkg
 
 

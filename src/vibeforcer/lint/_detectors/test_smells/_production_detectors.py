@@ -11,20 +11,19 @@ from vibeforcer.constants import (
     MISSING_IMPORT_PREVIEW_LIMIT,
 )
 from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._helpers import (
-    ParsedFile,
-    ensure_parsed,
-    find_test_files,
-)
+from vibeforcer.lint._helpers import ParsedFile
 
 from ._assertion_core import _call_tail as _call_tail
 from ._coverage_helpers import _CoverageInputs as _CoverageInputs, _coverage_violation as _coverage_violation, _metadata_int as _metadata_int, _runtime_coverage_by_rel as _runtime_coverage_by_rel
+from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index
 from ._production_symbols import _INTEGRATION_HELPER_NAME_PREFIXES as _INTEGRATION_HELPER_NAME_PREFIXES, _INTEGRATION_SEAM_TOKENS as _INTEGRATION_SEAM_TOKENS, _INTEGRATION_UTILITY_MODULE_TOKENS as _INTEGRATION_UTILITY_MODULE_TOKENS, _INTEGRATION_UTILITY_NAME_TOKENS as _INTEGRATION_UTILITY_NAME_TOKENS, _ProductionSymbol as _ProductionSymbol, _integration_test_reference_tokens as _integration_test_reference_tokens, _production_symbols as _production_symbols, _production_test_inputs as _production_test_inputs, _symbol_is_referenced as _symbol_is_referenced
 
 
 def detect_untested_production_code(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: TestIntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find production modules with low runtime or static test coverage.
 
@@ -32,10 +31,12 @@ def detect_untested_production_code(
     runtime line coverage. Otherwise the detector falls back to static reference
     coverage by public symbol name and says so in the output.
     """
-    parsed_src, _parsed_tests, refs = _production_test_inputs(src_files, test_files)
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    refs = index.test_reference_tokens
     coverage_source, runtime_coverage = _runtime_coverage_by_rel()
     by_path: dict[str, list[_ProductionSymbol]] = {}
-    for symbol in _production_symbols(parsed_src):
+    for symbol in index.production_symbols:
         by_path.setdefault(symbol.relative_path, []).append(symbol)
 
     violations: list[Violation] = []
@@ -127,6 +128,8 @@ def _integration_seam_score(symbol: _ProductionSymbol, callers: int) -> tuple[in
 def detect_missing_integration_tests(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: TestIntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find reused production seams that lack integration/e2e references.
 
@@ -134,12 +137,12 @@ def detect_missing_integration_tests(
     queue prioritizes dataflow, orchestration, parser, store, handler, API, and
     UI seams instead of high-fan-in leaf helpers such as markup/style functions.
     """
-    parsed_src = ensure_parsed(src_files, fallback=[])
-    parsed_tests = ensure_parsed(test_files, fallback=find_test_files())
-    integration_refs = _integration_test_reference_tokens(parsed_tests)
-    call_sites = _production_call_sites(parsed_src)
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    integration_refs = index.integration_test_reference_tokens
+    call_sites = index.production_call_sites
     violations: list[Violation] = []
-    for symbol in _production_symbols(parsed_src):
+    for symbol in index.production_symbols:
         callers = len(call_sites.get(symbol.name, []))
         if (
             symbol.kind != METADATA_FUNCTION

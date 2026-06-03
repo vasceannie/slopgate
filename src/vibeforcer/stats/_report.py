@@ -52,7 +52,9 @@ def print_report(stats: Mapping[str, object]) -> None:
     for event, count in _pairs(stats, "by_event"):
         print(f"  {event:25s} {count:6,}")
 
+    _print_enforcement_rules(stats)
     _print_denied_rules(stats)
+    _print_advisory_and_enrichment(stats)
     _print_denied_files(stats)
     _print_retry_patterns(stats)
     _print_churn_metrics(stats)
@@ -61,6 +63,27 @@ def print_report(stats: Mapping[str, object]) -> None:
         title="Severity Breakdown",
         pairs=_pairs(stats, "by_severity"),
         formatter=lambda sev, count: f"  {sev:10s} {count:6,}",
+    )
+
+
+def _print_enforcement_rules(stats: Mapping[str, object]) -> None:
+    print("\n--- Top Enforcement Rules (deny/block) ---")
+    for rule, count in _pairs(stats, "top_rules_enforced"):
+        print(f"  {rule:25s} {count:5,}")
+
+
+def _print_advisory_and_enrichment(stats: Mapping[str, object]) -> None:
+    _print_pairs_section(
+        title="Advisory Context Rules",
+        pairs=_pairs(stats, "advisory_rules")[:10],
+        formatter=lambda rule, count: f"  {rule:25s} {count:5,}",
+        empty_message="(none detected)",
+    )
+    _print_pairs_section(
+        title="Enrichment / Metrics Telemetry",
+        pairs=_pairs(stats, "enrichment_rules")[:10],
+        formatter=lambda rule, count: f"  {rule:25s} {count:5,}",
+        empty_message="(none detected)",
     )
 
 

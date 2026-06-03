@@ -295,6 +295,12 @@ class RequireQualityCheckRule(Rule):
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
+        if not ctx.state.should_emit_stop_quality_reminder(ctx.session_id):
+            return []
+        response = _get_stop_response(ctx).lower()
+        if any(phrase in response for phrase in _PREEXISTING_PHRASES):
+            return []
+        ctx.state.record_stop_quality_reminder(ctx.session_id)
         return [
             RuleFinding(
                 rule_id=self.rule_id,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
@@ -11,27 +12,30 @@ from vibeforcer.lint._helpers import (
     ensure_parsed,
     find_test_files,
     function_body_lines,
-    relative_path,
-    safe_parse,
 )
 
 from ._assertion_core import _dotted_name as _dotted_name
 
 
-def _resolve_test_file_paths(files: list[Path] | None) -> list[Path]:
+def _resolve_test_file_paths(files: Sequence[Path] | None) -> Sequence[Path]:
+    """Compatibility helper for callers importing the old path resolver."""
     return files if files is not None else find_test_files()
 
 
-def detect_long_tests(files: list[Path] | None = None) -> list[Violation]:
+def _parsed_test_files(
+    files: Sequence[Path | ParsedFile] | None,
+) -> list[ParsedFile]:
+    return ensure_parsed(files, fallback=find_test_files())
+
+
+def detect_long_tests(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find test functions/methods exceeding the configured line-count limit."""
     cfg = get_config()
     violations: list[Violation] = []
-    for path in _resolve_test_file_paths(files):
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in _parsed_test_files(files):
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("test_"):
                     continue
@@ -40,7 +44,7 @@ def detect_long_tests(files: list[Path] | None = None) -> list[Violation]:
                     violations.append(
                         Violation(
                             rule="long-test",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"lines={lines}",
                         )
@@ -85,16 +89,14 @@ def _count_sut_calls(node: ast.AST) -> int:
     return count
 
 
-def detect_eager_tests(files: list[Path] | None = None) -> list[Violation]:
+def detect_eager_tests(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find test functions with too many SUT calls."""
     cfg = get_config()
     violations: list[Violation] = []
-    for path in _resolve_test_file_paths(files):
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in _parsed_test_files(files):
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("test_"):
                     continue
@@ -103,7 +105,7 @@ def detect_eager_tests(files: list[Path] | None = None) -> list[Violation]:
                     violations.append(
                         Violation(
                             rule="eager-test",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"sut_calls={calls}",
                         )
@@ -162,16 +164,13 @@ def _has_assertion(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def detect_assertion_free_tests(files: list[Path] | None = None) -> list[Violation]:
+def detect_assertion_free_tests(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find test functions that never assert anything."""
-    files = files if files is not None else find_test_files()
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in _parsed_test_files(files):
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("test_"):
                     continue
@@ -179,7 +178,7 @@ def detect_assertion_free_tests(files: list[Path] | None = None) -> list[Violati
                     violations.append(
                         Violation(
                             rule="assertion-free-test",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                         )
                     )
@@ -189,7 +188,6 @@ def detect_assertion_free_tests(files: list[Path] | None = None) -> list[Violati
 # ---------------------------------------------------------------------------
 # Assertion roulette — too many bare asserts in a row
 # ---------------------------------------------------------------------------
-
 def _is_bare_assert(node: ast.stmt) -> bool:
     """True when *node* is an ``assert`` statement without a message."""
     return isinstance(node, ast.Assert) and node.msg is None
@@ -219,7 +217,7 @@ def _max_bare_assert_run(stmts: list[ast.stmt]) -> int:
 
 
 def detect_assertion_roulette(
-    files: list[Path] | list[ParsedFile] | None = None,
+    files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find test functions with long runs of bare ``assert`` (no message).
 
@@ -229,7 +227,7 @@ def detect_assertion_roulette(
     """
     cfg = get_config()
     threshold = cfg.max_consecutive_bare_asserts
-    parsed = ensure_parsed(files, fallback=find_test_files())
+    parsed = _parsed_test_files(files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -254,7 +252,6 @@ def detect_assertion_roulette(
 # ---------------------------------------------------------------------------
 # Conditional assertions — asserts inside if/for/while
 # ---------------------------------------------------------------------------
-
 def _contains_assert(node: ast.AST) -> bool:
     """True if the subtree rooted at *node* contains any assertion."""
     for child in ast.walk(node):
@@ -273,14 +270,14 @@ def _conditional_assertion_line(node: ast.FunctionDef | ast.AsyncFunctionDef) ->
 
 
 def detect_conditional_assertions(
-    files: list[Path] | list[ParsedFile] | None = None,
+    files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find test functions with assertions inside ``if``/``for``/``while``."""
     cfg = get_config()
     if not cfg.ban_conditional_assertions:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_test_files())
+    parsed = _parsed_test_files(files)
     violations: list[Violation] = []
 
     for pf in parsed:

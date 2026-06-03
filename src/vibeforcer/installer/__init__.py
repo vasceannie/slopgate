@@ -8,7 +8,7 @@ Supports:
 
 from __future__ import annotations
 
-from vibeforcer.installer import _claude, _codex, _opencode
+from vibeforcer.installer import _claude, _codex, _opencode, _suite
 from vibeforcer.installer._claude import _CLAUDE_EVENTS, _claude_hooks_block
 from vibeforcer.installer._codex import (
     _CODEX_EVENTS,
@@ -41,6 +41,12 @@ def _install_opencode(dry_run: bool = False) -> int:
 
 _uninstall_opencode = _opencode._uninstall_opencode
 
+install_suite = _suite.install_suite
+SuiteInstallOptions = _suite.SuiteInstallOptions
+SuiteUninstallOptions = _suite.SuiteUninstallOptions
+uninstall_autoupdate = _suite.uninstall_autoupdate
+uninstall_suite = _suite.uninstall_suite
+update_suite = _suite.update_suite
 
 _INSTALLERS = {
     "claude": (_install_claude, _uninstall_claude),
@@ -73,5 +79,11 @@ __all__ = [
     "_uninstall_codex",
     "_uninstall_opencode",
     "install_platform",
+    "install_suite",
+    "SuiteInstallOptions",
+    "SuiteUninstallOptions",
+    "uninstall_autoupdate",
     "uninstall_platform",
+    "uninstall_suite",
+    "update_suite",
 ]

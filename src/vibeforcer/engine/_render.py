@@ -28,10 +28,29 @@ def _merge_updated_input(findings: list[RuleFinding]) -> dict[str, object]:
 
 
 def _collect_context(findings: list[RuleFinding]) -> str | None:
-    parts = [item.additional_context for item in findings if item.additional_context]
-    if not parts:
+    contextual = [item for item in findings if item.additional_context]
+    if not contextual:
         return None
-    return "\n\n".join(dict.fromkeys(parts))
+    if not any(item.decision in {DENY, "block", "ask"} for item in contextual):
+        parts = [item.additional_context for item in contextual if item.additional_context]
+        return "\n\n".join(dict.fromkeys(parts))
+    immediate_parts = [
+        item.additional_context
+        for item in contextual
+        if item.additional_context and item.decision in {DENY, "block", "ask"}
+    ]
+    advisory_parts = [
+        item.additional_context
+        for item in contextual
+        if item.additional_context and item.decision not in {DENY, "block", "ask"}
+    ]
+    parts = list(dict.fromkeys(immediate_parts))
+    advisory = "\n\n".join(dict.fromkeys(advisory_parts))
+    if advisory:
+        parts.append(
+            "Later design debt / not the immediate unblock action:\n" + advisory
+        )
+    return "\n\n".join(parts) if parts else None
 
 
 def _top_decision(findings: list[RuleFinding]) -> str | None:

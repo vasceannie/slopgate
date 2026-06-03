@@ -126,6 +126,8 @@ class _FullReadStateMixin(_StateKeyMixin, _StateSnapshotMixin):
 
 
 class _SearchReminderStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+    _STOP_QUALITY_REMINDER_PREFIX = "stop-quality-reminder:"
+
     def should_emit_search_reminder(self, session_id: str) -> bool:
         key = session_id.strip()
         state = self._load_state()
@@ -135,6 +137,21 @@ class _SearchReminderStateMixin(_StateKeyMixin, _StateSnapshotMixin):
         with self._locked_state():
             state = self._load_state()
             self._mark_recent_int_entry(state, "search_reminders", session_id)
+            self._save_state(state)
+
+    def _stop_quality_reminder_key(self, session_id: str) -> str:
+        return f"{self._STOP_QUALITY_REMINDER_PREFIX}{session_id.strip()}"
+
+    def should_emit_stop_quality_reminder(self, session_id: str) -> bool:
+        key = self._stop_quality_reminder_key(session_id)
+        state = self._load_state()
+        return key not in state["search_reminders"]
+
+    def record_stop_quality_reminder(self, session_id: str) -> None:
+        key = self._stop_quality_reminder_key(session_id)
+        with self._locked_state():
+            state = self._load_state()
+            self._mark_recent_int_entry(state, "search_reminders", key)
             self._save_state(state)
 
 

@@ -159,6 +159,43 @@ class TestEnforcementModes:
         assert "QUALITY-LINT-001" in finding_ids(result)
         assert_blocked(result, "QUALITY-LINT-001")
 
+    def test_post_edit_lint_uses_suite_tests_for_touched_source_coverage(
+        self, tmp_path: Path
+    ) -> None:
+        repo = tmp_path / "repo_lint_static_refs"
+        src_dir = repo / "src" / "pkg"
+        tests_dir = repo / "tests"
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+        _ = (repo / "quality_gate.toml").write_text(
+            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        )
+        _ = (src_dir / "__init__.py").write_text("", encoding="utf-8")
+        _ = (src_dir / "config.py").write_text(
+            "class SessionConfig:\n    pass\n",
+            encoding="utf-8",
+        )
+        _ = (tests_dir / "test_config.py").write_text(
+            "from pkg.config import SessionConfig\n\n"
+            "def test_config_reference():\n"
+            "    assert SessionConfig() is not None\n",
+            encoding="utf-8",
+        )
+        payload = {
+            "session_id": "t",
+            "cwd": str(repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/pkg/config.py"},
+            "tool_response": {"filePath": "src/pkg/config.py", "success": True},
+        }
+
+        result = evaluate_payload(payload)
+
+        assert "QUALITY-LINT-001" not in finding_ids(result), (
+            "touched-source lint must not ignore existing tests and invent 0% static coverage"
+        )
+
     def test_posttool_ast_health_resolves_relative_paths_from_cwd(
         self, tmp_path: Path
     ) -> None:

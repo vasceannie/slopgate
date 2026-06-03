@@ -15,13 +15,11 @@ from vibeforcer.constants import (
 )
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
+from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
 from vibeforcer.util.payloads import (
     first_present,
     is_bash_tool,
     is_edit_like_tool,
-)
-from .._helpers import (
-    _is_third_party_path,
 )
 if TYPE_CHECKING:
     from vibeforcer.context import HookContext
@@ -80,7 +78,7 @@ def _flat_sibling_projected_removed_files(ctx: HookContext) -> dict[Path, set[st
     for path_value in removed_paths:
         if not path_value.lower().endswith((".py", ".pyi")):
             continue
-        if _is_third_party_path(path_value):
+        if is_third_party_or_virtualenv_path(path_value):
             continue
         full = _flat_sibling_resolve_candidate_path(ctx, path_value)
         prefix = PythonFlatFileSiblingsRule.prefix_for_name(full.name)
@@ -239,7 +237,7 @@ class PythonFlatFileSiblingsRule(Rule):
         for path_value in ctx.candidate_paths:
             if not path_value.lower().endswith((".py", ".pyi")):
                 continue
-            if _is_third_party_path(path_value):
+            if is_third_party_or_virtualenv_path(path_value):
                 continue
             full = _flat_sibling_resolve_candidate_path(ctx, path_value)
             parent = full.parent

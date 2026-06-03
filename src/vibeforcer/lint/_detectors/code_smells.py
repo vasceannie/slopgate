@@ -7,18 +7,18 @@ oversized modules, and god classes.
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
 from vibeforcer.lint._helpers import (
+    ParsedFile,
     class_body_lines,
     count_methods,
+    ensure_parsed,
     find_source_files,
     function_body_lines,
-    relative_path,
-    safe_parse,
-    read_lines,
 )
 
 
@@ -54,24 +54,22 @@ def _complexity(node: ast.AST) -> int:
     return count
 
 
-def detect_high_complexity(files: list[Path] | None = None) -> list[Violation]:
+def detect_high_complexity(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find functions/methods exceeding the configured complexity threshold."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 cc = _complexity(node)
                 if cc > cfg.max_complexity:
                     violations.append(
                         Violation(
                             rule="high-complexity",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"complexity={cc}",
                         )
@@ -84,24 +82,22 @@ def detect_high_complexity(files: list[Path] | None = None) -> list[Violation]:
 # ---------------------------------------------------------------------------
 
 
-def detect_long_methods(files: list[Path] | None = None) -> list[Violation]:
+def detect_long_methods(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find functions/methods exceeding the configured line-count threshold."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 lines = function_body_lines(node)
                 if lines > cfg.max_method_lines:
                     violations.append(
                         Violation(
                             rule="long-method",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"lines={lines}",
                         )
@@ -114,17 +110,15 @@ def detect_long_methods(files: list[Path] | None = None) -> list[Violation]:
 # ---------------------------------------------------------------------------
 
 
-def detect_too_many_params(files: list[Path] | None = None) -> list[Violation]:
+def detect_too_many_params(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find functions/methods with more parameters than the configured limit."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 args = node.args
                 param_count = (
@@ -137,7 +131,7 @@ def detect_too_many_params(files: list[Path] | None = None) -> list[Violation]:
                     violations.append(
                         Violation(
                             rule="too-many-params",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"params={param_count}",
                         )
@@ -170,24 +164,22 @@ def _max_nesting(node: ast.AST, current: int = 0) -> int:
     return deepest
 
 
-def detect_deep_nesting(files: list[Path] | None = None) -> list[Violation]:
+def detect_deep_nesting(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find functions/methods with nesting deeper than the configured limit."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 depth = _max_nesting(node)
                 if depth > cfg.max_nesting_depth:
                     violations.append(
                         Violation(
                             rule="deep-nesting",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=f"depth={depth}",
                         )
@@ -200,21 +192,21 @@ def detect_deep_nesting(files: list[Path] | None = None) -> list[Violation]:
 # ---------------------------------------------------------------------------
 
 
-def detect_oversized_modules(files: list[Path] | None = None) -> list[Violation]:
+def detect_oversized_modules(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Flag modules exceeding the soft or hard line-count thresholds."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        lines = read_lines(path)
-        line_count = len(lines)
-        rel = relative_path(path)
+    for pf in parsed:
+        line_count = len(pf.lines)
         if line_count > cfg.max_module_lines_hard:
             violations.append(
                 Violation(
                     rule="oversized-module",
-                    relative_path=rel,
-                    identifier=path.name,
+                    relative_path=pf.rel,
+                    identifier=pf.path.name,
                     detail=f"lines={line_count} (hard limit={cfg.max_module_lines_hard})",
                 )
             )
@@ -222,8 +214,8 @@ def detect_oversized_modules(files: list[Path] | None = None) -> list[Violation]
             violations.append(
                 Violation(
                     rule="oversized-module-soft",
-                    relative_path=rel,
-                    identifier=path.name,
+                    relative_path=pf.rel,
+                    identifier=pf.path.name,
                     detail=f"lines={line_count} (soft limit={cfg.max_module_lines_soft})",
                 )
             )
@@ -235,17 +227,15 @@ def detect_oversized_modules(files: list[Path] | None = None) -> list[Violation]
 # ---------------------------------------------------------------------------
 
 
-def detect_god_classes(files: list[Path] | None = None) -> list[Violation]:
+def detect_god_classes(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find classes with too many methods or too many lines."""
     cfg = get_config()
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if isinstance(node, ast.ClassDef):
                 n_methods = count_methods(node)
                 n_lines = class_body_lines(node)
@@ -258,7 +248,7 @@ def detect_god_classes(files: list[Path] | None = None) -> list[Violation]:
                     violations.append(
                         Violation(
                             rule="god-class",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=node.name,
                             detail=", ".join(reasons),
                         )

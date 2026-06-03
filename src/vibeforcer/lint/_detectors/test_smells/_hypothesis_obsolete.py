@@ -10,13 +10,10 @@ from vibeforcer.constants import (
 )
 from vibeforcer._types import ObjectDict
 from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._helpers import (
-    ParsedFile,
-    ensure_parsed,
-    find_test_files,
-)
+from vibeforcer.lint._helpers import ParsedFile, project_root
 
 from ._coverage_helpers import _metadata_int as _metadata_int
+from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index
 from ._production_symbols import _HYPOTHESIS_NAME_TOKENS as _HYPOTHESIS_NAME_TOKENS, _ProductionSymbol as _ProductionSymbol, _module_names as _module_names, _package_roots as _package_roots, _production_symbols as _production_symbols, _production_test_inputs as _production_test_inputs, _reference_tokens_for_tree as _reference_tokens_for_tree, _symbol_is_referenced as _symbol_is_referenced
 
 
@@ -80,18 +77,17 @@ def _hypothesis_score(symbol: _ProductionSymbol) -> tuple[int, list[str], list[s
 def detect_hypothesis_candidates(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: TestIntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find tested production functions likely to benefit from property-based tests."""
-    parsed_src, parsed_tests, refs = _production_test_inputs(src_files, test_files)
-    hypothesis_refs: set[str] = set()
-    for pf in parsed_tests:
-        source = "\n".join(pf.lines).lower()
-        if "hypothesis" not in source and "@given" not in source and "given(" not in source:
-            continue
-        hypothesis_refs.update(_reference_tokens_for_tree(pf.tree))
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    refs = index.test_reference_tokens
+    hypothesis_refs = index.hypothesis_reference_tokens
 
     violations: list[Violation] = []
-    for symbol in _production_symbols(parsed_src):
+    for symbol in index.production_symbols:
         if symbol.kind != METADATA_FUNCTION or not _symbol_is_referenced(symbol, refs):
             continue
         if _symbol_is_referenced(symbol, hypothesis_refs):
@@ -114,6 +110,11 @@ def detect_hypothesis_candidates(
     return sorted(violations, key=lambda v: (-_metadata_int(v, "property_test_score"), v.relative_path, v.identifier))
 
 
+def _project_module_path_exists(module: str) -> bool:
+    module_path = project_root().joinpath(*module.split("."))
+    return module_path.with_suffix(".py").is_file() or (module_path / "__init__.py").is_file()
+
+
 def _missing_import_from_violation(
     node: ast.ImportFrom,
     pf: ParsedFile,
@@ -124,7 +125,7 @@ def _missing_import_from_violation(
         return None
     module = node.module
     root = module.split(".", maxsplit=1)[0]
-    if root not in roots or module in modules:
+    if root not in roots or module in modules or _project_module_path_exists(module):
         return None
     imported_names = [alias.name for alias in node.names]
     return Violation(
@@ -140,7 +141,11 @@ def _missing_import_from_violation(
 
 
 def _module_or_package_exists(module: str, modules: set[str]) -> bool:
-    return module in modules or any(existing.startswith(f"{module}.") for existing in modules)
+    return (
+        module in modules
+        or any(existing.startswith(f"{module}.") for existing in modules)
+        or _project_module_path_exists(module)
+    )
 
 
 def _missing_import_violations(
@@ -184,18 +189,20 @@ def _missing_production_imports(parsed_tests: list[ParsedFile], modules: set[str
 def detect_obsolete_or_deprecated_tests(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: TestIntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find tests tied to missing modules or deprecated/obsolete production APIs."""
-    parsed_src = ensure_parsed(src_files, fallback=[])
-    parsed_tests = ensure_parsed(test_files, fallback=find_test_files())
-    modules = _module_names(parsed_src)
-    violations = _missing_production_imports(parsed_tests, modules)
-    deprecated_symbols = [symbol for symbol in _production_symbols(parsed_src) if symbol.deprecated]
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    modules = index.module_names
+    violations = _missing_production_imports(index.parsed_tests, modules)
+    deprecated_symbols = index.deprecated_symbols
     if not deprecated_symbols:
         return sorted(violations, key=lambda v: (v.relative_path, v.identifier))
 
-    for pf in parsed_tests:
-        refs = _reference_tokens_for_tree(pf.tree)
+    for pf in index.parsed_tests:
+        refs = index.test_reference_tokens_by_rel.get(pf.rel, set())
         for symbol in deprecated_symbols:
             if not _symbol_is_referenced(symbol, refs):
                 continue

@@ -15,6 +15,9 @@ class _Counters:
     by_event: Counter[str] = field(default_factory=Counter)
     by_decision: Counter[str] = field(default_factory=Counter)
     by_rule: Counter[str] = field(default_factory=Counter)
+    enforcement_rules: Counter[str] = field(default_factory=Counter)
+    advisory_rules: Counter[str] = field(default_factory=Counter)
+    enrichment_rules: Counter[str] = field(default_factory=Counter)
     by_severity: Counter[str] = field(default_factory=Counter)
     by_tool: Counter[str] = field(default_factory=Counter)
     by_session: Counter[str] = field(default_factory=Counter)
@@ -33,6 +36,7 @@ class _Counters:
     retries_before_resolution: list[int] = field(default_factory=list)
     pathless_loop_rules: Counter[str] = field(default_factory=Counter)
     fixture_filtered: int = 0
+    analyzed_events: int = 0
 
 
 @dataclass(slots=True)
@@ -42,6 +46,11 @@ class _EntryContext:
     session: str
     tool: str
     ts_str: str
+
+
+def _is_enrichment_rule(rule_id: str) -> bool:
+    """Return True for internal enrichment/metrics telemetry rule rows."""
+    return rule_id == "ENRICHMENT" or rule_id.startswith("_ENRICHMENT")
 
 
 def _record_deny_metadata(meta: object, counters: _Counters) -> None:
@@ -68,11 +77,17 @@ def _process_finding(
     severity = str(finding.get("severity", "unknown"))
 
     counters.by_rule[rule_id] += 1
+    if _is_enrichment_rule(rule_id):
+        counters.enrichment_rules[rule_id] += 1
     if isinstance(decision, str):
         counters.by_decision[decision] += 1
+        if decision in {"deny", "block"} and not _is_enrichment_rule(rule_id):
+            counters.enforcement_rules[rule_id] += 1
+        elif decision in {"ask", "warn", "context", "info"}:
+            counters.advisory_rules[rule_id] += 1
     counters.by_severity[severity] += 1
 
-    if decision != "deny":
+    if decision not in {"deny", "block"}:
         return False
 
     counters.denies_by_rule[rule_id] += 1
@@ -114,6 +129,7 @@ def _process_entry(entry: dict[str, object], counters: _Counters) -> None:
         counters.fixture_filtered += 1
         return
 
+    counters.analyzed_events += 1
     event = str(entry.get("event_name", "unknown"))
     counters.by_event[event] += 1
     tool = str(entry.get("tool_name", "")) or "(none)"
@@ -139,12 +155,9 @@ def _compute_retry_patterns(counters: _Counters) -> Counter[str]:
     return retry_counts
 
 
-def analyze(entries: list[dict[str, object]]) -> ObjectDict:
-    counters = _Counters()
-    for entry in entries:
-        _process_entry(entry, counters)
-
-    retry_counts = _compute_retry_patterns(counters)
+def _record_repeated_deny_metrics(
+    counters: _Counters,
+) -> tuple[Counter[str], Counter[str]]:
     top_looping_files: Counter[str] = Counter()
     repeated_by_rule: Counter[str] = Counter()
     for (_, rule_id, path), count in counters.deny_counts_by_key.items():
@@ -155,38 +168,59 @@ def analyze(entries: list[dict[str, object]]) -> ObjectDict:
         counters.retries_before_resolution.append(count - 1)
         repeated_by_rule[rule_id] += 1
         top_looping_files[path] += count
-    median_retries = 0.0
-    if counters.retries_before_resolution:
-        sorted_vals = sorted(counters.retries_before_resolution)
-        mid = len(sorted_vals) // 2
-        if len(sorted_vals) % 2 == 1:
-            median_retries = float(sorted_vals[mid])
-        else:
-            median_retries = (sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0
+    return repeated_by_rule, top_looping_files
+
+
+def _median(values: list[int]) -> float:
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    mid = len(sorted_vals) // 2
+    if len(sorted_vals) % 2 == 1:
+        return float(sorted_vals[mid])
+    return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0
+
+
+def _first_time_resolution_rate(counters: _Counters) -> float:
     total_resolution = counters.first_time_resolved + counters.repeated_denies
-    first_time_resolution_rate = (
-        counters.first_time_resolved / total_resolution if total_resolution else 0.0
-    )
+    return counters.first_time_resolved / total_resolution if total_resolution else 0.0
+
+
+def _date_range(counters: _Counters) -> str:
     dates = sorted(counters.daily_counts.keys())
-    date_range = f"{dates[0]} to {dates[-1]}" if dates else "unknown"
+    return f"{dates[0]} to {dates[-1]}" if dates else "unknown"
+
+
+def analyze(entries: list[dict[str, object]]) -> ObjectDict:
+    counters = _Counters()
+    for entry in entries:
+        _process_entry(entry, counters)
+
+    retry_counts = _compute_retry_patterns(counters)
+    repeated_by_rule, top_looping_files = _record_repeated_deny_metrics(counters)
 
     return {
-        "total_events": len(entries),
+        "raw_total_events": len(entries),
+        "analyzed_events": counters.analyzed_events,
+        "total_events": counters.analyzed_events,
         "fixture_filtered": counters.fixture_filtered,
-        "date_range": date_range,
+        "date_range": _date_range(counters),
         "by_event": counters.by_event.most_common(),
         "by_decision": counters.by_decision.most_common(),
         "by_severity": counters.by_severity.most_common(),
         "top_rules_denied": counters.denies_by_rule.most_common(20),
+        "top_rules_enforced": counters.enforcement_rules.most_common(20),
+        "advisory_rules": counters.advisory_rules.most_common(20),
+        "enrichment_rules": counters.enrichment_rules.most_common(20),
         "top_files_denied": counters.denies_by_file.most_common(15),
         "top_tools": counters.by_tool.most_common(10),
         "sessions": len(counters.by_session),
         "daily_counts": sorted(counters.daily_counts.items()),
         "retry_patterns": retry_counts.most_common(15),
         "rule_examples": dict(counters.rule_examples),
-        "first_time_resolution_rate": round(first_time_resolution_rate, 4),
+        "first_time_resolution_rate": round(_first_time_resolution_rate(counters), 4),
         "repeated_deny_rate_by_rule": repeated_by_rule.most_common(20),
-        "median_retries_before_resolution": median_retries,
+        "median_retries_before_resolution": _median(counters.retries_before_resolution),
         "top_looping_files": top_looping_files.most_common(15),
         "top_pathless_loop_rules": counters.pathless_loop_rules.most_common(15),
     }

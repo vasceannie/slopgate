@@ -120,16 +120,24 @@ def _run_lint_check_details(
 
 def test_lint_collectors_are_baselined_or_classified() -> None:
     lint_check_collectors = _collector_names(
-        {"_structure_src_collectors", "_ast_src_collectors", "_test_collectors", "run_all_collectors"}
+        {
+            "_structure_src_collectors",
+            "_ast_src_collectors",
+            "_test_collectors",
+            "_test_integrity_collectors",
+            "run_all_collectors",
+        }
     )
-    test_integrity_collectors = _collector_names({"run_test_integrity_collectors"})
+    test_integrity_collectors = _collector_names(
+        {"_test_integrity_collectors", "run_test_integrity_collectors"}
+    )
     current_collectors = lint_check_collectors | test_integrity_collectors
     baseline = json.loads((ROOT / "baselines.json").read_text(encoding="utf-8"))
     baseline_keys = set(baseline.get("rules", {}))
 
     assert current_collectors - baseline_keys - _parity.classified_collector_keys() == set()
     assert lint_check_collectors <= _parity.COLLECTOR_CATEGORIES["baseline_lint"]
-    assert test_integrity_collectors <= _parity.COLLECTOR_CATEGORIES["focused_lint"]
+    assert test_integrity_collectors <= _parity.COLLECTOR_CATEGORIES["baseline_lint"]
 
 
 def test_runtime_hook_rules_are_classified() -> None:

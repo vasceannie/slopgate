@@ -17,6 +17,7 @@ from vibeforcer.constants import (
 )
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule, is_rule_enabled
+from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
 from vibeforcer.util.payloads import (
     is_shell_tool,
     path_matches_glob,
@@ -74,10 +75,25 @@ def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = Fal
     )
 
 
+def _is_broad_claude_dir_pattern(pattern: str) -> bool:
+    normalized_pattern = pattern.strip().lower().replace("\\", "/")
+    return normalized_pattern in {".claude/", "*/.claude/"}
+
+
+def _is_claude_worktree_path(path_value: str) -> bool:
+    normalized_path = path_value.lower().replace("\\", "/")
+    while normalized_path.startswith("./"):
+        normalized_path = normalized_path[2:]
+    return "/.claude/worktrees/" in f"/{normalized_path.lstrip('/')}"
+
+
 def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
     for pattern in patterns:
-        if path_matches_glob(path_value, pattern):
-            return pattern
+        if not path_matches_glob(path_value, pattern):
+            continue
+        if _is_broad_claude_dir_pattern(pattern) and _is_claude_worktree_path(path_value):
+            continue
+        return pattern
     return None
 
 
@@ -176,6 +192,8 @@ class FullFileReadRule(Rule):
             return []
         target = _find_read_target(ctx.candidate_paths, self.EXEMPT_SUFFIXES)
         if target is None:
+            return []
+        if is_third_party_or_virtualenv_path(target):
             return []
         normalized_target = self._normalize_read_path(ctx, target)
         if self._is_full_read(ctx.tool_input):

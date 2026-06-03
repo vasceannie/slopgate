@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict
 from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.installer._shared import (
     HOOK_TYPE_COMMAND,
@@ -17,6 +17,7 @@ from vibeforcer.installer._shared import (
     merge_owned_hooks_into,
     print_binary_install_summary,
     remove_owned_hooks,
+    require_json_object,
     write_json_with_backup,
 )
 
@@ -113,6 +114,17 @@ def _write_codex_toml_lines(config_path: Path, lines: list[str]) -> None:
     config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _existing_codex_toml_is_valid(config_path: Path) -> bool:
+    if not config_path.exists():
+        return True
+    try:
+        tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        print(f"Invalid Codex config TOML; refusing to modify: {config_path}: {exc}")
+        return False
+    return True
+
+
 def _drop_lines(lines: list[str], indexes: list[int]) -> None:
     for index in reversed(indexes):
         del lines[index]
@@ -177,20 +189,18 @@ def _install_codex(dry_run: bool = False) -> int:
         return 0
 
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    if hooks_path.exists():
-        try:
-            parsed = cast(object, json.loads(hooks_path.read_text(encoding="utf-8")))
-            existing = object_dict(parsed)
-        except json.JSONDecodeError:
-            print(f"Invalid Codex hooks JSON; refusing to overwrite: {hooks_path}")
-            return 1
-    else:
+    if not hooks_path.exists():
         existing = {}
+    elif (existing := require_json_object(hooks_path, "Codex hooks", action="overwrite")) is None:
+        return 1
+
+    config_path = Path.home() / ".codex" / "config.toml"
+    if not _existing_codex_toml_is_valid(config_path):
+        return 1
 
     merge_owned_hooks_into(existing, cast(dict[str, list[dict[str, object]]], hooks))
     write_json_with_backup(hooks_path, existing, "hooks")
 
-    config_path = Path.home() / ".codex" / "config.toml"
     backup_existing_file_and_report(config_path, "config")
     _enable_codex_hooks_toml(config_path)
     print_binary_install_summary(
@@ -211,11 +221,8 @@ def _uninstall_codex(dry_run: bool = False) -> int:
         print(f"Would remove vibeforcer hook entries from {hooks_path}")
         return 0
 
-    try:
-        parsed = cast(object, json.loads(hooks_path.read_text(encoding="utf-8")))
-        existing = object_dict(parsed)
-    except json.JSONDecodeError:
-        print(f"Invalid Codex hooks JSON; refusing to modify: {hooks_path}")
+    existing = require_json_object(hooks_path, "Codex hooks", action="modify")
+    if existing is None:
         return 1
 
     remaining_hooks = remove_owned_hooks(existing.get("hooks"))
@@ -223,8 +230,15 @@ def _uninstall_codex(dry_run: bool = False) -> int:
         existing["hooks"] = remaining_hooks
         write_json_with_backup(hooks_path, existing, "hooks")
         print(f"Removed vibeforcer hooks from {hooks_path}")
-    else:
-        backup_existing_file_and_report(hooks_path, "hooks")
-        hooks_path.unlink()
-        print(f"Removed: {hooks_path}")
+        return 0
+
+    existing.pop("hooks", None)
+    if existing:
+        write_json_with_backup(hooks_path, existing, "hooks")
+        print(f"Removed vibeforcer hooks from {hooks_path}")
+        return 0
+
+    backup_existing_file_and_report(hooks_path, "hooks")
+    hooks_path.unlink()
+    print(f"Removed: {hooks_path}")
     return 0

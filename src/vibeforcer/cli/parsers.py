@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from vibeforcer._argparse_types import SubparserRegistry
 
 from vibeforcer.cli.commands import (
+    INSTALL_TARGETS,
     PLATFORM_HELP,
     VALID_PLATFORMS,
     cmd_check,
@@ -16,10 +17,12 @@ from vibeforcer.cli.commands import (
     cmd_handle,
     cmd_handle_async,
     cmd_install,
+    cmd_install_suite,
     cmd_replay,
     cmd_stats,
     cmd_test,
     cmd_uninstall,
+    cmd_update_suite,
     cmd_version,
 )
 from vibeforcer.cli.lint import cmd_lint
@@ -111,8 +114,72 @@ def _add_platform_install_parser(
     func: object,
 ) -> None:
     parser = _add_command_parser(sub, name, help_text=help_text, func=func)
-    _ = parser.add_argument("platform", choices=VALID_PLATFORMS)
+    choices = INSTALL_TARGETS if name in {"install", "uninstall"} else VALID_PLATFORMS
+    _ = parser.add_argument("platform", choices=choices)
     _add_dry_run_argument(parser)
+    if name == "install":
+        _add_suite_update_arguments(parser, include_dry_run=False)
+    if name not in {"install", "uninstall"}:
+        return
+    _ = parser.add_argument(
+        "--with-autoupdate",
+        action="store_true",
+        help="Also install/remove the current OS's periodic GitHub updater",
+    )
+    if name == "uninstall":
+        return
+    _ = parser.add_argument(
+        "--interval-minutes",
+        type=int,
+        default=3 * 10,
+        help="Auto-update polling interval for the native scheduler",
+    )
+
+
+def _add_suite_update_arguments(
+    parser: argparse.ArgumentParser, *, include_dry_run: bool = True
+) -> None:
+    if include_dry_run:
+        _add_dry_run_argument(parser)
+    _ = parser.add_argument(
+        "--source",
+        default="git+https://github.com/vasceannie/vibeforcer.git@master",
+        help="Package source used by auto-update clients",
+    )
+    _ = parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        help="Create hook install sites even when that harness has not been configured yet",
+    )
+
+
+def _add_suite_parsers(sub: SubparserRegistry) -> None:
+    install_suite = _add_command_parser(
+        sub,
+        "install-suite",
+        help_text="Install all detected harness hooks and optionally the auto-updater",
+        func=cmd_install_suite,
+    )
+    _add_suite_update_arguments(install_suite)
+    _ = install_suite.add_argument(
+        "--with-autoupdate",
+        action="store_true",
+        help="Install the current OS's periodic GitHub updater",
+    )
+    _ = install_suite.add_argument(
+        "--interval-minutes",
+        type=int,
+        default=3 * 10,
+        help="Auto-update polling interval for the native scheduler",
+    )
+
+    update_suite = _add_command_parser(
+        sub,
+        "update-suite",
+        help_text="Update Vibeforcer from GitHub and refresh detected hook sites",
+        func=cmd_update_suite,
+    )
+    _add_suite_update_arguments(update_suite)
 
 
 def _add_core_parsers(sub: SubparserRegistry) -> None:
@@ -150,6 +217,7 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     _add_platform_install_parser(
         sub, "uninstall", help_text="Remove hooks from a platform", func=cmd_uninstall
     )
+    _add_suite_parsers(sub)
 
     stats = _add_command_parser(
         sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
@@ -195,10 +263,11 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
         lint_sub,
         LintAnalysisParserSpec(
             name="check",
-            help_text="Lint the current project root",
+            help_text="Lint the current project root, including test-integrity checks",
             description=(
-                "Lint the current project root. This command intentionally accepts no "
-                "file or directory argument so agents cannot bypass full-project checks."
+                "Lint the current project root, including test-integrity checks. This "
+                "command intentionally accepts no file or directory argument so agents "
+                "cannot bypass full-project checks."
             ),
             details_help=(
                 "Show extended violation locations, signatures, and repair prognosis"

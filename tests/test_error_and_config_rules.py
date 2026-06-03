@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from vibeforcer.engine import evaluate_payload
+from vibeforcer.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
 from tests.support import BUNDLE_ROOT, finding_ids, hook_output, required_string
 
 
 class TestBashOutputError:
     """ERRORS-BASH-001: detect errors in exit-0 bash output."""
+
+    def test_rule_classes_keep_stable_rule_ids(self) -> None:
+        assert {
+            BashOutputErrorRule.rule_id,
+            BashFailureReinforcementRule.rule_id,
+        } == {"ERRORS-BASH-001", "ERRORS-FAIL-001"}
 
     @staticmethod
     def _post_bash(
@@ -62,6 +69,64 @@ class TestBashOutputError:
         )
         assert "Rerun the smallest failing command" in message, (
             "context should include the next repair action"
+        )
+
+    def test_quality_lint_tail_output_gets_full_lint_guidance(self) -> None:
+        payload = self._post_bash(
+            "cd /home/trav/repos/job-hunter && vibeforcer lint check 2>&1 | tail -8",
+            """
+✗ untested-production-code src/tui/views/dashboard.py: on_mount has no focused coverage
+✗ PY-LOG-002 src/tui/views/dashboard.py: boundary lifecycle method lacks logging
+Found 2 error-like quality findings.
+""".strip(),
+        )
+        result = evaluate_payload(payload)
+        message = required_string(hook_output(result), "additionalContext")
+
+        expected_fragments = (
+            "ERRORS-BASH-001",
+            "quality-command output",
+            "vibeforcer lint check --details",
+            "tail-only",
+        )
+        missing = [fragment for fragment in expected_fragments if fragment not in message]
+        assert not missing, f"missing quality-lint guidance fragments: {missing}"
+        assert "Rerun the smallest failing command" not in message
+
+    def _quality_lint_alias_guidance_gaps(self, alias: str) -> tuple[list[str], list[str]]:
+        payload = self._post_bash(
+            f"{alias} lint check 2>&1 | tail -8",
+            """
+✗ untested-production-code src/tui/views/dashboard.py: on_mount has no focused coverage
+Found 1 error-like quality finding.
+""".strip(),
+        )
+        result = evaluate_payload(payload)
+        message = required_string(hook_output(result), "additionalContext")
+
+        expected = (
+            "quality-command output",
+            "vibeforcer lint check --details",
+            "tail-only",
+        )
+        missing: list[str] = [fragment for fragment in expected if fragment not in message]
+        unexpected: list[str] = [
+            fragment
+            for fragment in ("Rerun the smallest failing command",)
+            if fragment in message
+        ]
+        return missing, unexpected
+
+    def test_vfc_lint_alias_gets_full_lint_guidance(self) -> None:
+        missing, unexpected = self._quality_lint_alias_guidance_gaps("vfc")
+        assert not missing and not unexpected, (
+            f"alias vfc missing={missing} unexpected={unexpected}"
+        )
+
+    def test_isx_lint_alias_gets_full_lint_guidance(self) -> None:
+        missing, unexpected = self._quality_lint_alias_guidance_gaps("isx")
+        assert not missing and not unexpected, (
+            f"alias isx missing={missing} unexpected={unexpected}"
         )
 
     def test_read_only_command_skipped(self) -> None:

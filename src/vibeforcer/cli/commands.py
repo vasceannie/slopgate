@@ -11,6 +11,7 @@ from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
 from vibeforcer.cli._claude_retry import claude_team_event_feedback
 
 VALID_PLATFORMS = ("claude", "codex", "opencode")
+INSTALL_TARGETS = (*VALID_PLATFORMS, "all")
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(VALID_PLATFORMS)} (default: claude)"
 )
@@ -182,20 +183,83 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import install_platform
+    from vibeforcer.installer import SuiteInstallOptions, install_platform, install_suite
+    from vibeforcer.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES, install_autoupdate
 
-    return install_platform(
-        _string_arg(args, "platform"),
+    platform = _string_arg(args, "platform")
+    if platform == "all":
+        return install_suite(
+            SuiteInstallOptions(
+                dry_run=_bool_arg(args, "dry_run"),
+                include_missing=_bool_arg(args, "include_missing"),
+                with_autoupdate=_bool_arg(args, "with_autoupdate"),
+                source=_string_arg(args, "source"),
+                interval_minutes=(
+                    _int_arg(args, "interval_minutes") or DEFAULT_UPDATE_INTERVAL_MINUTES
+                ),
+            )
+        )
+
+    status = install_platform(platform, dry_run=_bool_arg(args, "dry_run"))
+    if not _bool_arg(args, "with_autoupdate") or status != 0:
+        return status
+    return install_autoupdate(
         dry_run=_bool_arg(args, "dry_run"),
-    )
+        source=_string_arg(args, "source"),
+        include_missing=_bool_arg(args, "include_missing"),
+        interval_minutes=(
+            _int_arg(args, "interval_minutes") or DEFAULT_UPDATE_INTERVAL_MINUTES
+        ),
+    ) or status
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import uninstall_platform
+    from vibeforcer.installer import (
+        SuiteUninstallOptions,
+        uninstall_autoupdate,
+        uninstall_platform,
+        uninstall_suite,
+    )
 
-    return uninstall_platform(
-        _string_arg(args, "platform"),
+    platform = _string_arg(args, "platform")
+    if platform == "all":
+        return uninstall_suite(
+            SuiteUninstallOptions(
+                dry_run=_bool_arg(args, "dry_run"),
+                with_autoupdate=_bool_arg(args, "with_autoupdate"),
+            )
+        )
+
+    status = uninstall_platform(platform, dry_run=_bool_arg(args, "dry_run"))
+    if not _bool_arg(args, "with_autoupdate"):
+        return status
+    return uninstall_autoupdate(dry_run=_bool_arg(args, "dry_run")) or status
+
+
+def cmd_install_suite(args: argparse.Namespace) -> int:
+    from vibeforcer.installer import SuiteInstallOptions, install_suite
+    from vibeforcer.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES
+
+    return install_suite(
+        SuiteInstallOptions(
+            dry_run=_bool_arg(args, "dry_run"),
+            include_missing=_bool_arg(args, "include_missing"),
+            with_autoupdate=_bool_arg(args, "with_autoupdate"),
+            source=_string_arg(args, "source"),
+            interval_minutes=(
+                _int_arg(args, "interval_minutes") or DEFAULT_UPDATE_INTERVAL_MINUTES
+            ),
+        )
+    )
+
+
+def cmd_update_suite(args: argparse.Namespace) -> int:
+    from vibeforcer.installer import update_suite
+
+    return update_suite(
         dry_run=_bool_arg(args, "dry_run"),
+        source=_string_arg(args, "source"),
+        include_missing=_bool_arg(args, "include_missing"),
     )
 
 

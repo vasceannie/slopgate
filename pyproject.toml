@@ -69,6 +69,7 @@ python-version = "3.12"
 [dependency-groups]
 dev = [
     "basedpyright>=1.39.0",
+    "hypothesis>=6.155.1",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.13",

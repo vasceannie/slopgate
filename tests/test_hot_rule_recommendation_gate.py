@@ -99,6 +99,7 @@ def _assert_quality_lint_repair_context(context: str, output_text: str) -> None:
         "Do not continue feature work",
         "reread the touched file",
         "smallest repo-root quality command",
+        "from the repo root, run `vibeforcer lint check`",
         "fix only the reported collector",
     ]
     missing_context = [phrase for phrase in required_context if phrase not in context]

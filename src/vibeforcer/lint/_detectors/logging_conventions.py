@@ -6,11 +6,12 @@ Flags direct ``logging.getLogger()`` calls and disallowed logger variable names.
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import find_source_files, relative_path, safe_parse
+from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
 
 
 def _is_in_infrastructure(rel_path: str) -> bool:
@@ -22,7 +23,9 @@ def _is_in_infrastructure(rel_path: str) -> bool:
     return rel_path.startswith(prefix)
 
 
-def detect_direct_get_logger(files: list[Path] | None = None) -> list[Violation]:
+def detect_direct_get_logger(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Flag direct ``logging.getLogger(...)`` calls.
 
     Projects that define a custom logger factory should use it consistently
@@ -33,17 +36,13 @@ def detect_direct_get_logger(files: list[Path] | None = None) -> list[Violation]
         # No custom factory configured — nothing to enforce
         return []
 
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
 
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
+    for pf in parsed:
+        if _is_in_infrastructure(pf.rel):
             continue
-        rel = relative_path(path)
-        if _is_in_infrastructure(rel):
-            continue
-        for node in ast.walk(tree):
+        for node in ast.walk(pf.tree):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
@@ -57,7 +56,7 @@ def detect_direct_get_logger(files: list[Path] | None = None) -> list[Violation]
                 violations.append(
                     Violation(
                         rule="direct-get-logger",
-                        relative_path=rel,
+                        relative_path=pf.rel,
                         identifier=f"L{node.lineno}",
                         detail=f"use {cfg.logger_function}() instead",
                     )
@@ -66,7 +65,9 @@ def detect_direct_get_logger(files: list[Path] | None = None) -> list[Violation]
     return violations
 
 
-def detect_wrong_logger_name(files: list[Path] | None = None) -> list[Violation]:
+def detect_wrong_logger_name(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Flag logger variables with disallowed names.
 
     The project should use a single, consistent variable name (e.g. ``logger``)
@@ -78,17 +79,13 @@ def detect_wrong_logger_name(files: list[Path] | None = None) -> list[Violation]
     if not disallowed:
         return []
 
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
 
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
+    for pf in parsed:
+        if _is_in_infrastructure(pf.rel):
             continue
-        rel = relative_path(path)
-        if _is_in_infrastructure(rel):
-            continue
-        for node in ast.walk(tree):
+        for node in ast.walk(pf.tree):
             if not isinstance(node, ast.Assign):
                 continue
             # Only look at module-level or class-level assignments
@@ -102,7 +99,7 @@ def detect_wrong_logger_name(files: list[Path] | None = None) -> list[Violation]
                         violations.append(
                             Violation(
                                 rule="wrong-logger-name",
-                                relative_path=rel,
+                                relative_path=pf.rel,
                                 identifier=f"L{node.lineno}",
                                 detail=f"'{name}' → use '{expected}'",
                             )

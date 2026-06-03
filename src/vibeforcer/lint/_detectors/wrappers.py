@@ -7,11 +7,12 @@ call that passes through all of its arguments unchanged.
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import find_source_files, relative_path, safe_parse
+from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
 
 
 def _is_simple_delegation(
@@ -93,19 +94,17 @@ def call_name(call: ast.Call) -> str:
     return ""
 
 
-def detect_unnecessary_wrappers(files: list[Path] | None = None) -> list[Violation]:
+def detect_unnecessary_wrappers(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Find thin wrapper functions that simply delegate to another call."""
     cfg = get_config()
     allowed = cfg.allowed_wrappers
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
 
-    for path in files:
-        tree = safe_parse(path)
-        if tree is None:
-            continue
-        rel = relative_path(path)
-        for node in ast.walk(tree):
+    for pf in parsed:
+        for node in ast.walk(pf.tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             # Skip dunder methods, properties, and private overrides
@@ -122,7 +121,7 @@ def detect_unnecessary_wrappers(files: list[Path] | None = None) -> list[Violati
             violations.append(
                 Violation(
                     rule="unnecessary-wrapper",
-                    relative_path=rel,
+                    relative_path=pf.rel,
                     identifier=node.name,
                     detail=f"delegates to {callee}",
                 )

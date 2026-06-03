@@ -54,10 +54,15 @@ class PythonBoundaryLoggingRule(Rule):
             ),
             additional_context=(
                 "Boundary logging required: use the project logger/telemetry "
-                "abstraction, not stdlib logging. Prefer `logger.info(...)` with "
-                "the event name or target package/service, correlation/request id "
-                "when available, and enough stable fields to debug failures without "
-                "logging secrets or raw payload bodies."
+                "abstraction, not stdlib logging. For TUI/Textual lifecycle methods "
+                "and package/event boundaries, import the logger factory or telemetry "
+                "client your project already provides; define a module logger such as "
+                "`logger = get_project_logger(__name__)` when that matches your "
+                "project abstraction; then call `logger.info(...)` with "
+                "operation/state/count/status fields before the handoff. Include "
+                "event name, target package/service, correlation/request id when "
+                "available, and enough stable fields to debug failures without logging "
+                "secrets or raw payloads."
             ),
             metadata={
                 METADATA_PATH: path_value,

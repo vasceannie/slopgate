@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from vibeforcer._types import object_list
-from vibeforcer.constants import DENY, METADATA_PATH, POST_TOOL_USE
+from vibeforcer._types import object_dict, object_list, string_value
+from vibeforcer.constants import (
+    DENY,
+    METADATA_PATH,
+    POST_TOOL_USE,
+    PRODUCTION_SYMBOL_PREVIEW_LIMIT,
+)
 from vibeforcer.context import HookContext
 from vibeforcer.models import RuleFinding
+from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
 
 _REPLAN_PROMPT = (
     "If a hook denies or blocks your change, do not immediately retry the same edit pattern. "
@@ -28,7 +34,8 @@ _RULE_HINTS: dict[str, str] = {
         "adding more conditionals."
     ),
     "PY-CODE-013": (
-        "Next step: inline trivial pass-throughs unless the wrapper owns a real "
+        "Recovery skill: load `code-hygiene-refactor` before retrying. "
+        "Next step: inline pass-throughs unless the wrapper owns a real "
         "domain boundary. A real wrapper does at least one job: validates/normalizes "
         "inputs, changes abstraction level with a domain name, centralizes policy, "
         "caching, permission, or logging, adapts one interface to another, or hides "
@@ -55,7 +62,7 @@ _RULE_HINTS: dict[str, str] = {
         "repair spans many files, switch to `hygiene-orchestrator`. Next step: "
         "choose a split shape first: conftest registry/support modules, "
         "module-to-package facade, thin __init__.py, CLI/router-to-services, "
-        "test-module split, or data/resources extraction."
+        "test-module split, or data/resources extraction; do no line shaving."
     ),
     "PY-TEST-003": (
         "Next step: convert loops-with-asserts into pytest parametrization "
@@ -119,8 +126,8 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
         f"{phase_note}The edit landed, but touched-file lint found quality debt. "
         "Do not continue feature work. Next action: 1) reread the touched file, "
         "2) fix only the reported collector/hit, 3) verify from the project root "
-        "with the smallest repo-root quality command: `vibeforcer lint check` "
-        "(no file/path argument), "
+        "with the smallest repo-root quality command: "
+        "from the repo root, run `vibeforcer lint check` (no file/path argument), "
         "4) if no path is available, inspect the last edited file from tool context."
         f"{pathless_note}"
     )
@@ -131,14 +138,109 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
             "Use the oversized-module split playbook instead of patching around "
             "line-count symptoms."
         )
+    if _quality_lint_has_collector(item, "untested-production-code"):
+        hint = f"{hint} {_untested_production_code_hint(item)}"
     return hint
 
 
+_QUALITY_SYMBOL_KEYS = {
+    "symbol",
+    "symbols",
+    "function",
+    "functions",
+    "function_names",
+    "public_symbols",
+    "unreferenced_symbols",
+    "untested_symbols",
+}
+
+
+def _append_unique(values: list[str], value: str) -> None:
+    if value and value not in values:
+        values.append(value)
+
+
+def _flatten_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (int, float, bool)):
+        return [str(value)]
+    if isinstance(value, dict):
+        flattened: list[str] = []
+        for item in object_dict(value).values():
+            flattened.extend(_flatten_strings(item))
+        return flattened
+    flattened = []
+    for item in object_list(value):
+        flattened.extend(_flatten_strings(item))
+    return flattened
+
+
+def _quality_lint_symbols(item: RuleFinding) -> list[str]:
+    symbols: list[str] = []
+    metadata = item.metadata
+    for key in _QUALITY_SYMBOL_KEYS:
+        for value in _flatten_strings(metadata.get(key)):
+            _append_unique(symbols, value)
+    for hit in object_list(metadata.get("hits")):
+        hit_data = object_dict(hit)
+        for key in _QUALITY_SYMBOL_KEYS:
+            for value in _flatten_strings(hit_data.get(key)):
+                _append_unique(symbols, value)
+    return symbols[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]
+
+
+def _quality_lint_paths(item: RuleFinding) -> list[str]:
+    paths: list[str] = []
+    path = _finding_path(item)
+    if path:
+        _append_unique(paths, path)
+    for value in _flatten_strings(item.metadata.get("paths")):
+        display_path = _quality_display_path(value)
+        if display_path:
+            _append_unique(paths, display_path)
+    for hit in object_list(item.metadata.get("hits")):
+        hit_path = string_value(object_dict(hit).get(METADATA_PATH))
+        display_path = _quality_display_path(hit_path)
+        if display_path:
+            _append_unique(paths, display_path)
+    return paths[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]
+
+
+def _preview_label(label: str, values: list[str]) -> str:
+    if not values:
+        return ""
+    shown = ", ".join(f"`{value}`" for value in values)
+    return f" {label}: {shown}."
+
+
+def _untested_production_code_hint(item: RuleFinding) -> str:
+    return (
+        "Untested-production-code unblock: add or update the nearest "
+        "behavior/integration tests for the reported production surface first."
+        f"{_preview_label('Paths', _quality_lint_paths(item))}"
+        f"{_preview_label('Symbols', _quality_lint_symbols(item))} "
+        "Run the focused pytest target you changed, then, from the repo root, run "
+        "`vibeforcer lint check` with no file/path argument."
+    )
+
+
 def _quality_lint_has_oversized_module(item: RuleFinding) -> bool:
+    return _quality_lint_has_collector_prefix(
+        item, ("oversized-module:", "oversized-module-soft:")
+    )
+
+
+def _quality_lint_has_collector(item: RuleFinding, collector_name: str) -> bool:
+    return _quality_lint_has_collector_prefix(item, (f"{collector_name}:",))
+
+
+def _quality_lint_has_collector_prefix(
+    item: RuleFinding, prefixes: tuple[str, ...]
+) -> bool:
     collectors = object_list(item.metadata.get("failing_collectors"))
     return any(
-        isinstance(collector, str)
-        and collector.startswith(("oversized-module:", "oversized-module-soft:"))
+        isinstance(collector, str) and collector.startswith(prefixes)
         for collector in collectors
     )
 
@@ -178,7 +280,36 @@ def _failure_class(rule_id: str) -> str:
 def _finding_path(item: RuleFinding) -> str | None:
     path = item.metadata.get(METADATA_PATH)
     if isinstance(path, str) and path:
-        return path
+        display_path = _quality_display_path(path)
+        if display_path is None:
+            return _first_hit_path(item)
+        return display_path
+    return None
+
+
+def _quality_display_path(path_value: str | None) -> str | None:
+    if not path_value:
+        return None
+    normalized = path_value.replace("\\", "/")
+    lowered = normalized.lower()
+    if lowered in {"content", "patch.diff"}:
+        return None
+    if is_third_party_or_virtualenv_path(normalized):
+        return None
+    return path_value
+
+
+def _first_hit_path(item: RuleFinding) -> str | None:
+    for hit in object_list(item.metadata.get("hits")):
+        if isinstance(hit, str) and hit and hit != "content":
+            display_path = _quality_display_path(hit)
+            if display_path:
+                return display_path
+        if isinstance(hit, dict):
+            hit_path = string_value(object_dict(hit).get(METADATA_PATH))
+            display_path = _quality_display_path(hit_path)
+            if display_path:
+                return display_path
     return None
 
 
@@ -191,6 +322,8 @@ def _denial_context(ctx: HookContext, item: RuleFinding, repeat_count: int) -> s
     path = _finding_path(item)
     if path:
         parts.append(f"target: {path}")
+        if item.metadata.get(METADATA_PATH) == "content":
+            parts.append(f"patch content touched: {path}")
     if repeat_count >= 2:
         parts.append(f"repeat count: {repeat_count}")
     return "; ".join(parts) + "."

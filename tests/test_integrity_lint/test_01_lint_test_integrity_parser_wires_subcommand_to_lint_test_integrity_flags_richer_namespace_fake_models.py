@@ -5,6 +5,7 @@ from tests.test_test_integrity_lint import (
     _assert_mock_theater_guidance,
     _assert_mocked_integration_report,
     _assert_schema_bypass_and_weak_assertion_report,
+    _run_lint_check,
     _run_test_integrity,
     _write_project,
     build_parser,
@@ -52,6 +53,40 @@ def test_sends_notice_payload_contract():
     assert result == 1
     assert "[NEW] mock-theater" in captured.out
     _assert_mock_theater_guidance(captured.out, result)
+
+
+def test_main_lint_check_includes_test_integrity_findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_project(
+        tmp_path,
+        """
+from unittest.mock import MagicMock
+
+
+def test_sends_notice():
+    sender = MagicMock()
+    sender({"company": "Acme"})
+    sender.assert_called_once()
+
+
+def test_sends_notice_payload_contract():
+    sender = MagicMock()
+    sender({"company": "Acme"})
+    sender.assert_called_once_with({"company": "Acme"})
+""".lstrip(),
+    )
+
+    result = _run_lint_check(tmp_path, monkeypatch, details=True)
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "vibeforcer lint " in captured.out
+    assert "vibeforcer lint test-integrity" not in captured.out
+    _assert_mock_theater_guidance(captured.out, result)
+
 
 def test_lint_test_integrity_flags_weak_assertions_and_schema_bypasses(
     tmp_path: Path,

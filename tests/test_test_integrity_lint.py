@@ -38,6 +38,20 @@ def _run_test_integrity(
         reset_config()
 
 
+def _run_lint_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    details: bool = False,
+) -> int:
+    monkeypatch.chdir(tmp_path)
+    reset_config()
+    try:
+        return cmd_lint(argparse.Namespace(lint_command="check", details=details))
+    finally:
+        reset_config()
+
+
 def _assert_mock_theater_guidance(output: str, result: int) -> None:
     assert result == 1, "mock-theater fixture should fail test-integrity lint"
     expected_guidance = [
@@ -210,5 +224,53 @@ def runtime_low() -> str:
         encoding="utf-8",
     )
 
+
+def _write_project_root_bootstrap_package(tmp_path: Path) -> None:
+    cloud_pkg = tmp_path / "cloud" / "services" / "opportunity"
+    cloud_pkg.mkdir(parents=True)
+    (tmp_path / "cloud" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "cloud" / "services" / "__init__.py").write_text("", encoding="utf-8")
+    (cloud_pkg / "__init__.py").write_text("", encoding="utf-8")
+    (cloud_pkg / "bootstrap.py").write_text(
+        'def configure_opportunity_dependencies() -> str:\n    return "configured"\n',
+        encoding="utf-8",
+    )
+
+
+def _write_src_cloud_module(tmp_path: Path) -> None:
+    (tmp_path / "src" / "cloud").mkdir(parents=True)
+    (tmp_path / "src" / "cloud" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "src" / "cloud" / "other.py").write_text(
+        "def covered() -> str:\n    return 'ok'\n",
+        encoding="utf-8",
+    )
+
+
+def test_obsolete_detector_allows_existing_project_root_bootstrap_imports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Production bootstrap imports in tests are valid when the module exists."""
+    _write_project(
+        tmp_path,
+        """
+from cloud.services.opportunity.bootstrap import configure_opportunity_dependencies
+
+
+def test_bootstrap_import_contract():
+    assert configure_opportunity_dependencies() == "configured"
+""".lstrip(),
+    )
+    _write_project_root_bootstrap_package(tmp_path)
+    _write_src_cloud_module(tmp_path)
+
+    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    output = capsys.readouterr().out
+
+    assert result == 1
+    assert "imports missing production module `cloud.services.opportunity.bootstrap`" not in output
+
+
 # Exported test support used by split test modules.
-__all__ = ('Path', '_assert_high_fan_in_style_helper_discount', '_assert_holistic_suite_gap_report', '_assert_mock_theater_guidance', '_assert_mocked_integration_report', '_assert_runtime_coverage_report', '_assert_schema_bypass_and_weak_assertion_report', '_run_test_integrity', '_write_holistic_suite_gap_project', '_write_project', '_write_runtime_coverage_project', 'argparse', 'build_parser', 'cmd_lint', 'pytest', 'reset_config')
+__all__ = ('Path', '_assert_high_fan_in_style_helper_discount', '_assert_holistic_suite_gap_report', '_assert_mock_theater_guidance', '_assert_mocked_integration_report', '_assert_runtime_coverage_report', '_assert_schema_bypass_and_weak_assertion_report', '_run_lint_check', '_run_test_integrity', '_write_holistic_suite_gap_project', '_write_project', '_write_runtime_coverage_project', 'argparse', 'build_parser', 'cmd_lint', 'pytest', 'reset_config')

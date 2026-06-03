@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from vibeforcer.models import RuleFinding
 from vibeforcer.rules.base import Rule, is_rule_enabled
+from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
 from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
@@ -15,21 +16,6 @@ if TYPE_CHECKING:
 
     CheckFn = Callable[[str, str, "HookContext"], list[RuleFinding]]
 
-
-# Paths containing any of these directory names are third-party, generated,
-# or virtual-environment code and should be excluded from quality analysis.
-_THIRD_PARTY_DIR_NAMES = frozenset(
-    {
-        ".venv",
-        "venv",
-        "env",
-        "site-packages",
-        "node_modules",
-        ".tox",
-        ".nox",
-        ".eggs",
-    }
-)
 
 # Prefixes that signal a function family (parse_*, build_*, validate_*, …)
 _FAMILY_PREFIXES = (
@@ -50,12 +36,6 @@ _FAMILY_PREFIXES = (
     "serialize_",
     "deserialize_",
 )
-
-
-def _is_third_party_path(path: str) -> bool:
-    """Return True if path points to third-party / vendored code."""
-    normalised = path.replace("\\", "/")
-    return any(part in _THIRD_PARTY_DIR_NAMES for part in normalised.split("/"))
 
 
 def decision_for_context(ctx: HookContext) -> str:
@@ -88,7 +68,7 @@ def evaluate_common(
         for ct in ctx.content_targets:
             if not ct.path.lower().endswith((".py", ".pyi")):
                 continue
-            if _is_third_party_path(ct.path):
+            if is_third_party_or_virtualenv_path(ct.path):
                 continue
             findings.extend(check_fn(ct.content, ct.path, ctx))
     else:
@@ -99,7 +79,7 @@ def evaluate_common(
             if not path_value.lower().endswith((".py", ".pyi")):
                 continue
             # Skip third-party / vendored code — not authored by the agent
-            if _is_third_party_path(path_value):
+            if is_third_party_or_virtualenv_path(path_value):
                 continue
             full_path = (
                 (ctx.cwd / path_value).resolve()

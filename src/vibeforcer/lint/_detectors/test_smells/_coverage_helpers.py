@@ -25,17 +25,17 @@ def _coverage_rel_path(path_text: str) -> str | None:
     if not path_text:
         return None
     root = get_config().project_root
-    path = Path(path_text)
+    normalized_text = path_text.replace("\\", "/")
+    path = Path(normalized_text)
     if not path.is_absolute():
         path = root / path
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except (OSError, ValueError):
-        normalized = path_text.replace("\\", "/")
-        marker_index = normalized.find("src/")
+        marker_index = normalized_text.find("src/")
         if marker_index >= 0:
-            return normalized[marker_index:]
-        return normalized
+            return normalized_text[marker_index:]
+        return normalized_text
 
 
 def _coverage_percent_from_summary(summary: dict[str, object]) -> int | None:
@@ -78,22 +78,53 @@ def _coverage_percent_from_json_file(path: Path) -> dict[str, int]:
     return coverage
 
 
+def _xml_source_roots(root_node: ET.Element) -> list[Path]:
+    project_root = get_config().project_root
+    roots: list[Path] = []
+    for source_node in root_node.findall(".//source"):
+        source_text = (source_node.text or "").strip()
+        if not source_text:
+            continue
+        source_path = Path(source_text)
+        if not source_path.is_absolute():
+            source_path = project_root / source_path
+        roots.append(source_path)
+    return roots
+
+
+def _coverage_xml_rel_paths(filename: str, source_roots: list[Path]) -> set[str]:
+    rel_paths: set[str] = set()
+    rel = _coverage_rel_path(filename)
+    if rel is not None:
+        rel_paths.add(rel)
+    if Path(filename).is_absolute():
+        return rel_paths
+    for source_root in source_roots:
+        source_rel = _coverage_rel_path((source_root / filename).as_posix())
+        if source_rel is not None:
+            rel_paths.add(source_rel)
+    return rel_paths
+
+
 def _coverage_percent_from_xml_file(path: Path) -> dict[str, int]:
     try:
-        root = ET.parse(path).getroot()
+        root_node = ET.parse(path).getroot()
     except (OSError, ET.ParseError):
         return {}
+    source_roots = _xml_source_roots(root_node)
     coverage: dict[str, int] = {}
-    for class_node in root.findall(".//class"):
+    for class_node in root_node.findall(".//class"):
         filename = class_node.attrib.get("filename", "")
-        rel = _coverage_rel_path(filename)
-        if rel is None:
+        rel_paths = _coverage_xml_rel_paths(filename, source_roots)
+        if not rel_paths:
             continue
         line_rate = class_node.attrib.get("line-rate")
         try:
-            coverage[rel] = int(round(float(line_rate or "0") * 100))
+            percent = int(round(float(line_rate or "0") * 100))
         except ValueError:
             continue
+        for rel in rel_paths:
+            coverage[rel] = percent
     return coverage
 
 
@@ -158,10 +189,15 @@ def _static_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
     coverage = inputs.static_coverage
     if coverage >= 50:
         return None
+    coverage_note = (
+        "no coverage.json/coverage.xml found"
+        if inputs.coverage_source == "static-reference"
+        else f"not present in {inputs.coverage_source}"
+    )
     detail = (
         f"static_test_reference_coverage={coverage}% "
         f"({len(inputs.referenced)}/{len(inputs.symbols)} public symbols referenced); "
-        f"unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])}; no coverage.json/coverage.xml found"
+        f"unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])}; {coverage_note}"
     )
     metadata = dict[str, object]()
     metadata["coverage_kind"] = "static-reference"
@@ -178,5 +214,7 @@ def _static_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
 
 def _coverage_violation(inputs: _CoverageInputs) -> Violation | None:
     if inputs.runtime_coverage:
-        return _runtime_coverage_violation(inputs)
+        if inputs.relative_path in inputs.runtime_coverage:
+            return _runtime_coverage_violation(inputs)
+        return None
     return _static_coverage_violation(inputs)

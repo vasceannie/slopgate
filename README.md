@@ -29,6 +29,9 @@ vibeforcer install claude    # patches ~/.claude/settings.json
 vibeforcer install codex     # patches ~/.codex/hooks.json
 vibeforcer install opencode  # copies plugin to the user OpenCode plugins dir
 
+# Or use the native all-harness installer and OS auto-updater
+vibeforcer install all --with-autoupdate
+
 # Run self-test
 vibeforcer test
 
@@ -48,6 +51,8 @@ vibeforcer lint init .            # scaffold quality_gate.toml
 | **Claude Code** | ✅ Production | `vibeforcer install claude` |
 | **Codex CLI** | ⚠️ Partial | `vibeforcer install codex` |
 | **OpenCode** | ⚠️ Degraded | `vibeforcer install opencode` |
+
+`vibeforcer install all --with-autoupdate` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `vibeforcer update-suite`, so a push to `github.com/vasceannie/vibeforcer` refreshes the package and rewrites the local Claude/Codex/OpenCode install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. `install-suite --with-autoupdate` remains as a compatibility alias for the same all-harness flow.
 
 ## Platform Notes
 
@@ -99,8 +104,10 @@ vibeforcer replay --payload fixture.json [--platform codex] [--pretty]
 vibeforcer check [path]
 
 # Install/uninstall hooks
-vibeforcer install <platform> [--dry-run]
+vibeforcer install <platform|all> [--with-autoupdate] [--dry-run]
 vibeforcer uninstall <platform> [--dry-run]
+vibeforcer install-suite [--with-autoupdate] [--dry-run]
+vibeforcer update-suite [--dry-run]
 
 # Activity analysis
 vibeforcer stats [--log results.jsonl] [--days N] [--json]

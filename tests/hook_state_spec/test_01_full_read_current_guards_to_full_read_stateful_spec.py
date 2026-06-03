@@ -65,6 +65,34 @@ class TestFullReadCurrentGuards:
         ), "large Python files should remain exempt from full-read enforcement"
         assert_not_denied(result)
 
+    @pytest.mark.parametrize(
+        "path_value",
+        (
+            ".venv/lib/python3.12/site-packages/pkg/module.py",
+            ".venvs/job-hunter/lib/python3.12/site-packages/pkg/module.py",
+            "venv/lib/python3.12/site-packages/pkg/module.py",
+            "env/lib/python3.12/site-packages/pkg/module.py",
+            "src/pkg/site-packages/vendor/module.py",
+        ),
+    )
+    def test_partial_virtualenv_python_read_is_allowed_when_rule_enabled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path_value: str
+    ) -> None:
+        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
+        target = tmp_path / path_value
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("a = 1\nb = 2\n", encoding="utf-8")
+
+        result = evaluate_payload(
+            _read_payload(str(target), cwd=str(tmp_path), offset=1, limit=1)
+        )
+
+        assert all(
+            finding.rule_id != "BUILTIN-ENFORCE-FULL-READ"
+            for finding in result.findings
+        ), "virtualenv/library files should not trigger full-read hook enforcement"
+        assert_not_denied(result)
+
     def test_other_session_still_denied_without_stateful_unlock(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

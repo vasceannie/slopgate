@@ -297,6 +297,79 @@ class TestInlinePayloadDenies:
         result = evaluate_payload(pretool_write("Makefile", "all:\n\techo hi\n"))
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
 
+    def test_default_claude_control_plane_markdown_denied(
+        self,
+        pretool_write: WriteBuilder,
+        tmp_path: Path,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        _write_config_from_defaults(tmp_path, monkeypatch, _keep_default_config)
+        result = evaluate_payload(
+            pretool_write(
+                ".claude/CLAUDE.md",
+                "# local control plane\n",
+            )
+        )
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
+        assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result)
+
+    def test_broad_claude_protection_allows_claude_worktree_content(
+        self,
+        pretool_write: WriteBuilder,
+        tmp_path: Path,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        _write_config_from_defaults(
+            tmp_path,
+            monkeypatch,
+            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+        )
+        result = evaluate_payload(
+            pretool_write(
+                ".claude/worktrees/feature/src/app.py",
+                "from __future__ import annotations\n",
+            )
+        )
+        assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
+
+    def test_broad_claude_protection_still_denies_normal_claude_content(
+        self,
+        pretool_write: WriteBuilder,
+        tmp_path: Path,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        _write_config_from_defaults(
+            tmp_path,
+            monkeypatch,
+            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+        )
+        result = evaluate_payload(
+            pretool_write(
+                ".claude/CLAUDE.md",
+                "# local control plane\n",
+            )
+        )
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
+
+    def test_broad_claude_protection_still_denies_protected_files_in_worktrees(
+        self,
+        pretool_write: WriteBuilder,
+        tmp_path: Path,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        _write_config_from_defaults(
+            tmp_path,
+            monkeypatch,
+            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+        )
+        result = evaluate_payload(
+            pretool_write(
+                ".claude/worktrees/feature/Makefile",
+                "all:\n\techo hi\n",
+            )
+        )
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
+
     def test_protected_staging_rule_file_denied(
         self, pretool_write: WriteBuilder
     ) -> None:

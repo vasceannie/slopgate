@@ -1,0 +1,33 @@
+name: Suite Auto Update
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  installer-suite:
+    name: installer suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Validate suite installer and auto-update planner
+        run: uv run pytest tests/test_suite_autoupdate.py tests/test_installer.py tests/test_opencode_installer.py -q
+
+      - name: Dry-run native all-device install
+        run: uv run vibeforcer install all --with-autoupdate --dry-run --include-missing
+
+      - name: Dry-run GitHub update path
+        run: uv run vibeforcer update-suite --dry-run --include-missing

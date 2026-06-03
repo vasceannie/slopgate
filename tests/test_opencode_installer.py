@@ -80,6 +80,24 @@ def test_opencode_uninstall_refuses_unrecognized_plugin(
     assert target.read_text(encoding="utf-8") == "custom plugin\n"
 
 
+def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "// docs mention vibeforcer handle --platform opencode, but this is custom\n",
+        encoding="utf-8",
+    )
+
+    assert opencode_installer._uninstall_opencode(dry_run=False) == 1
+    assert target.exists()
+    assert "this is custom" in target.read_text(encoding="utf-8")
+
+
 def test_opencode_plugin_logs_posttool_context_actions() -> None:
     plugin = _opencode_plugin_source()
     assert 'result.action === "warn" || result.action === "context"' in plugin

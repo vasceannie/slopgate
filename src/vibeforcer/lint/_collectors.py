@@ -33,10 +33,10 @@ def _ast_src_collectors(
     )
     from vibeforcer.lint._detectors.wrappers import detect_unnecessary_wrappers
     return [
-        ("unnecessary-wrapper", detect_unnecessary_wrappers(src_files)),
-        ("deprecated-pattern", detect_deprecated_patterns(src_files)),
-        ("direct-get-logger", detect_direct_get_logger(src_files)),
-        ("wrong-logger-name", detect_wrong_logger_name(src_files)),
+        ("unnecessary-wrapper", detect_unnecessary_wrappers(parsed_src)),
+        ("deprecated-pattern", detect_deprecated_patterns(parsed_src)),
+        ("direct-get-logger", detect_direct_get_logger(parsed_src)),
+        ("wrong-logger-name", detect_wrong_logger_name(parsed_src)),
         ("banned-any", detect_any_usage(parsed_src)),
         ("type-suppression", detect_type_suppressions(parsed_src)),
         ("broad-except-swallow", detect_broad_except_swallow(parsed_src)),
@@ -66,11 +66,11 @@ def _structure_src_collectors(
         detect_semantic_clones,
     )
     return [
-        ("high-complexity", detect_high_complexity(src_files)),
-        ("long-method", detect_long_methods(src_files)),
-        ("too-many-params", detect_too_many_params(src_files)),
-        ("deep-nesting", detect_deep_nesting(src_files)),
-        ("god-class", detect_god_classes(src_files)),
+        ("high-complexity", detect_high_complexity(parsed_src)),
+        ("long-method", detect_long_methods(parsed_src)),
+        ("too-many-params", detect_too_many_params(parsed_src)),
+        ("deep-nesting", detect_deep_nesting(parsed_src)),
+        ("god-class", detect_god_classes(parsed_src)),
         ("oversized-module", [v for v in oversized if v.rule == "oversized-module"]),
         ("oversized-module-soft", [v for v in oversized if v.rule == "oversized-module-soft"]),
         ("semantic-clone", detect_semantic_clones(parsed_src)),
@@ -95,21 +95,24 @@ def _test_collectors(
         detect_long_tests,
     )
     return [
-        ("long-test", detect_long_tests(test_files)),
-        ("eager-test", detect_eager_tests(test_files)),
-        ("assertion-free-test", detect_assertion_free_tests(test_files)),
+        ("long-test", detect_long_tests(parsed_tests)),
+        ("eager-test", detect_eager_tests(parsed_tests)),
+        ("assertion-free-test", detect_assertion_free_tests(parsed_tests)),
         ("assertion-roulette", detect_assertion_roulette(parsed_tests)),
         ("conditional-assertion", detect_conditional_assertions(parsed_tests)),
         ("fixture-outside-conftest", detect_fixtures_outside_conftest(parsed_tests)),
     ]
 
 
-def run_test_integrity_collectors(
-    src_files: list[Path],
-    test_files: list[Path],
+def _test_integrity_collectors(
+    parsed_src: list[ParsedFile],
+    parsed_tests: list[ParsedFile],
+    *,
+    parsed_test_targets: list[ParsedFile] | None = None,
 ) -> list[tuple[str, list[Violation]]]:
-    """Run focused detectors for bad-test-efficacy indicators only."""
+    """Collect bad-test-efficacy and holistic suite-quality indicators."""
     from vibeforcer.lint._detectors.test_smells import (
+        build_test_integrity_index,
         detect_hand_built_test_payloads,
         detect_hypothesis_candidates,
         detect_missing_integration_tests,
@@ -121,19 +124,77 @@ def run_test_integrity_collectors(
         detect_weak_assertions,
     )
 
+    index = build_test_integrity_index(parsed_src, parsed_tests)
+    test_targets = parsed_tests if parsed_test_targets is None else parsed_test_targets
+    return [
+        ("untested-production-code", detect_untested_production_code(index=index)),
+        ("missing-integration-test", detect_missing_integration_tests(index=index)),
+        ("hypothesis-candidate", detect_hypothesis_candidates(index=index)),
+        ("obsolete-or-deprecated-test", detect_obsolete_or_deprecated_tests(index=index)),
+        ("weak-test-assertion", detect_weak_assertions(test_targets)),
+        ("mock-theater", detect_mock_theater(test_targets)),
+        ("schema-bypass-test-data", detect_schema_bypasses(test_targets)),
+        ("hand-built-test-payload", detect_hand_built_test_payloads(test_targets)),
+        ("mocked-integration-test", detect_mocked_integration_tests(test_targets)),
+    ]
+
+
+def run_test_integrity_collectors(
+    src_files: list[Path],
+    test_files: list[Path],
+) -> list[tuple[str, list[Violation]]]:
+    """Run focused detectors for bad-test-efficacy indicators only."""
+
     parsed_src = parse_files(src_files)
     parsed_tests = parse_files(test_files)
     return [
         ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
-        ("untested-production-code", detect_untested_production_code(parsed_src, parsed_tests)),
-        ("missing-integration-test", detect_missing_integration_tests(parsed_src, parsed_tests)),
-        ("hypothesis-candidate", detect_hypothesis_candidates(parsed_src, parsed_tests)),
-        ("obsolete-or-deprecated-test", detect_obsolete_or_deprecated_tests(parsed_src, parsed_tests)),
-        ("weak-test-assertion", detect_weak_assertions(parsed_tests)),
-        ("mock-theater", detect_mock_theater(parsed_tests)),
-        ("schema-bypass-test-data", detect_schema_bypasses(parsed_tests)),
-        ("hand-built-test-payload", detect_hand_built_test_payloads(parsed_tests)),
-        ("mocked-integration-test", detect_mocked_integration_tests(parsed_tests)),
+        *_test_integrity_collectors(parsed_src, parsed_tests),
+    ]
+
+
+def run_touched_collectors(
+    src_files: list[Path],
+    test_files: list[Path],
+    *,
+    reference_test_files: list[Path] | None = None,
+) -> list[tuple[str, list[Violation]]]:
+    """Run detectors for touched files while using suite tests as references.
+
+    Post-edit hooks should lint only the file(s) a tool just touched, but
+    source-oriented test-integrity detectors need the whole test suite as their
+    reference corpus. Otherwise every isolated production edit looks untested
+    whenever the hook payload lacks the matching test files.
+    """
+    from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
+    from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
+    from vibeforcer.lint._config import get_config
+    from vibeforcer.quality.constant_index import (
+        build_project_constant_index,
+        set_session_constant_index,
+    )
+
+    parsed_src = parse_files(src_files)
+    parsed_tests = parse_files(test_files)
+    parsed_reference_tests = (
+        parsed_tests if reference_test_files is None else parse_files(reference_test_files)
+    )
+    parsed_all = [*parsed_src, *parsed_tests]
+    oversized = detect_oversized_modules(parsed_all)
+    constant_index = build_project_constant_index(get_config().project_root)
+    set_session_constant_index(constant_index)
+    literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
+
+    return [
+        ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
+        *_structure_src_collectors(src_files, parsed_src, oversized, literals),
+        *_ast_src_collectors(src_files, parsed_src),
+        *_test_collectors(test_files, parsed_tests),
+        *_test_integrity_collectors(
+            parsed_src,
+            parsed_reference_tests,
+            parsed_test_targets=parsed_tests,
+        ),
     ]
 
 
@@ -152,7 +213,8 @@ def run_all_collectors(
 
     parsed_src = parse_files(src_files)
     parsed_tests = parse_files(test_files)
-    oversized = detect_oversized_modules([*src_files, *test_files])
+    parsed_all = [*parsed_src, *parsed_tests]
+    oversized = detect_oversized_modules(parsed_all)
     constant_index = build_project_constant_index(get_config().project_root)
     set_session_constant_index(constant_index)
     literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
@@ -162,4 +224,5 @@ def run_all_collectors(
         *_structure_src_collectors(src_files, parsed_src, oversized, literals),
         *_ast_src_collectors(src_files, parsed_src),
         *_test_collectors(test_files, parsed_tests),
+        *_test_integrity_collectors(parsed_src, parsed_tests),
     ]

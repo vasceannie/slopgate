@@ -17,7 +17,8 @@ _PLUGIN_PLACEHOLDER_LITERAL = '"__VIBEFORCER_BIN__"'
 _PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Vibeforcer Plugin",
     "Vibeforcer plugin loaded",
-    "vibeforcer handle --platform opencode",
+    "const VIBEFORCER_BIN",
+    "const SESSION_ID",
 )
 
 
@@ -40,7 +41,7 @@ def _render_opencode_plugin(template_text: str, binary: str) -> str:
 
 
 def _is_owned_opencode_plugin(content: str) -> bool:
-    return any(marker in content for marker in _PLUGIN_OWNERSHIP_MARKERS)
+    return all(marker in content for marker in _PLUGIN_OWNERSHIP_MARKERS)
 
 
 def _backup_and_report(path: Path) -> None:

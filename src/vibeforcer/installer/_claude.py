@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict
 from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.installer._shared import (
     HOOK_TYPE_COMMAND,
@@ -14,6 +13,7 @@ from vibeforcer.installer._shared import (
     hook_command,
     merge_owned_hooks_into,
     remove_owned_hooks,
+    require_json_object,
     write_json_with_backup,
 )
 
@@ -65,16 +65,11 @@ def _install_claude(dry_run: bool = False) -> int:
         print(json.dumps({"hooks": hooks}, indent=2))
         return 0
 
-    if settings_path.exists():
-        try:
-            parsed = cast(object, json.loads(settings_path.read_text(encoding="utf-8")))
-            settings = object_dict(parsed)
-        except json.JSONDecodeError:
-            print(f"Invalid Claude settings JSON; refusing to overwrite: {settings_path}")
-            return 1
-    else:
+    if not settings_path.exists():
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings = {}
+    elif (settings := require_json_object(settings_path, "Claude settings", action="overwrite")) is None:
+        return 1
 
     merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
     write_json_with_backup(settings_path, settings, "settings")
@@ -90,12 +85,9 @@ def _uninstall_claude(dry_run: bool = False) -> int:
         print("No Claude settings found.")
         return 0
 
-    try:
-        parsed = cast(object, json.loads(settings_path.read_text(encoding="utf-8")))
-    except json.JSONDecodeError:
-        print(f"Invalid Claude settings JSON; refusing to modify: {settings_path}")
+    settings = require_json_object(settings_path, "Claude settings", action="modify")
+    if settings is None:
         return 1
-    settings = object_dict(parsed)
     if "hooks" not in settings:
         print("No hooks found in Claude settings.")
         return 0

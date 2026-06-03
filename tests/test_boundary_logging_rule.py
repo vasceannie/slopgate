@@ -4,6 +4,11 @@ from pathlib import Path
 
 from vibeforcer.engine import evaluate_payload
 from vibeforcer.models import EngineResult
+from vibeforcer.rules.python_ast._rules._boundary_rule import PythonBoundaryLoggingRule
+
+
+def test_boundary_logging_rule_keeps_stable_rule_id() -> None:
+    assert PythonBoundaryLoggingRule.rule_id == "PY-LOG-002"
 
 
 def _enrolled_repo(tmp_path: Path) -> Path:
@@ -53,6 +58,41 @@ def publish_order_created(bus: EventBus, order_id: str, source: str | None = Non
     assert result.output is not None, "Expected PY-LOG-002 to emit hook output"
     assert "event boundary" in output, f"Expected event-boundary guidance in {output}"
     assert "logger.info" in output, f"Expected logger.info recovery guidance in {output}"
+
+
+def test_textual_lifecycle_boundary_guidance_names_generic_project_logger(tmp_path: Path) -> None:
+    repo = _enrolled_repo(tmp_path)
+    result = evaluate_payload(
+        _write_payload(
+            repo,
+            "src/tui/views/dashboard.py",
+            """
+from textual.app import ComposeResult
+from textual.widgets import Static
+
+
+class DashboardView(Static):
+    def on_mount(self) -> None:
+        self.refresh(recompose=True)
+
+    def compose(self) -> ComposeResult:
+        yield Static("ready")
+""".lstrip(),
+        )
+    )
+
+    output = str(result.output)
+    expected_fragments = (
+        "project logger/telemetry abstraction",
+        "logger = get_project_logger(__name__)",
+        "logger.info",
+        "operation/state/count/status",
+        "raw payloads",
+    )
+    missing = [fragment for fragment in expected_fragments if fragment not in output]
+    assert "PY-LOG-002" in _rule_ids(result)
+    assert not missing, f"missing boundary logging guidance fragments: {missing}"
+    assert "from src.logging import get_logger" not in output
 
 
 def test_package_boundary_client_call_requires_log(tmp_path: Path) -> None:

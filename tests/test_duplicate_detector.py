@@ -107,6 +107,44 @@ class TestCollectBlockWindowsDeclarativeConstants:
 
         assert [v for v in violations if v.rule == "repeated-code-block"] == []
 
+    def test_logger_plus_module_constants_shape_no_violation(self) -> None:
+        """Standard logger + constants scaffolds are declarations, not behavior."""
+        extraction = (
+            "logger = get_logger(__name__)\n"
+            '_FRAME_DEPTH_FMT = "Switched to frame {} (depth {})"\n'
+            '_FIELD_DISCOVERED_FMT = "Field discovered: {} ({})"\n'
+        )
+        tailor_node = (
+            "logger = get_logger(__name__)\n"
+            '_TAILOR_PHASE = "tailor_documents"\n'
+            '_TAILORING_FAILURE_WARNING = "Resume tailoring failed"\n'
+        )
+
+        violations = detect_repeated_blocks(
+            [_make_parsed(extraction, rel="extraction.py"), _make_parsed(tailor_node, rel="_node.py")]
+        )
+
+        assert [v for v in violations if v.rule == "repeated-code-block"] == []
+
+    def test_logger_constant_reorder_shape_no_violation(self) -> None:
+        """Hash-breaking declaration order should not be necessary either."""
+        extraction = (
+            '_FRAME_DEPTH_FMT = "Switched to frame {} (depth {})"\n'
+            "logger = get_logger(__name__)\n"
+            '_FIELD_DISCOVERED_FMT = "Field discovered: {} ({})"\n'
+        )
+        tailor_node = (
+            "logger = get_logger(__name__)\n"
+            '_TAILOR_PHASE = "tailor_documents"\n'
+            '_TAILORING_FAILURE_WARNING = "Resume tailoring failed"\n'
+        )
+
+        violations = detect_repeated_blocks(
+            [_make_parsed(extraction, rel="extraction.py"), _make_parsed(tailor_node, rel="_node.py")]
+        )
+
+        assert [v for v in violations if v.rule == "repeated-code-block"] == []
+
     def test_side_effectful_module_duplicate_still_fires(self) -> None:
         """Only declarative constants are skipped; module behavior remains guarded."""
         source_a = (
@@ -125,6 +163,25 @@ class TestCollectBlockWindowsDeclarativeConstants:
         )
 
         assert len([v for v in violations if v.rule == "repeated-code-block"]) == 2
+
+    def test_safe_constant_factory_window_not_hashed(self) -> None:
+        """Established constant factory calls should not require hash camouflage."""
+        source_a = (
+            '_CHOICE_WIDGETS = frozenset({"checkbox", "radio", "select"})\n'
+            '_SAMPLE_BOOLEAN_VALUE = "".join(("tr", "ue"))\n'
+            '_STATUS_OK = cast(Status, "ok")\n'
+        )
+        source_b = (
+            '_TEXT_SUFFIXES = frozenset({".md", ".txt"})\n'
+            '_UNKNOWN_SUFFIX = "".join(("un", "known"))\n'
+            '_STATUS_WARNING = cast(Status, "warning")\n'
+        )
+
+        violations = detect_repeated_blocks(
+            [_make_parsed(source_a, rel="a.py"), _make_parsed(source_b, rel="b.py")]
+        )
+
+        assert [v for v in violations if v.rule == "repeated-code-block"] == []
 
 
 class TestCollectBlockWindowsImportCanonicalization:

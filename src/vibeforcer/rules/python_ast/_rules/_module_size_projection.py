@@ -14,6 +14,7 @@ from vibeforcer.constants import (
 )
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
+from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
 from vibeforcer.util.payloads import (
     extract_path_from_mapping,
     first_present,
@@ -21,7 +22,6 @@ from vibeforcer.util.payloads import (
     is_edit_like_tool,
 )
 from .._helpers import (
-    _is_third_party_path,
     decision_for_context,
 )
 if TYPE_CHECKING:
@@ -145,7 +145,7 @@ def _project_top_level_edit(ctx: HookContext, tool_input: ObjectDict) -> tuple[s
     if (
         not path_value
         or not path_value.lower().endswith((".py", ".pyi"))
-        or _is_third_party_path(path_value)
+        or is_third_party_or_virtualenv_path(path_value)
     ):
         return None
     old_string = first_present(
@@ -174,7 +174,7 @@ def _project_multiedit_sources(ctx: HookContext, tool_input: ObjectDict) -> list
         if (
             not path_value
             or not path_value.lower().endswith((".py", ".pyi"))
-            or _is_third_party_path(path_value)
+            or is_third_party_or_virtualenv_path(path_value)
         ):
             continue
         source = projected_by_path.get(path_value)
@@ -198,7 +198,7 @@ def _project_multiedit_sources(ctx: HookContext, tool_input: ObjectDict) -> list
 
 
 def _is_authored_python_path(path_value: str) -> bool:
-    return path_value.lower().endswith((".py", ".pyi")) and not _is_third_party_path(path_value)
+    return path_value.lower().endswith((".py", ".pyi")) and not is_third_party_or_virtualenv_path(path_value)
 
 
 def _dedupe_sources(sources: list[tuple[str, str]]) -> list[tuple[str, str]]:

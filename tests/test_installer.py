@@ -174,6 +174,18 @@ def test_claude_install_refuses_invalid_existing_json(tmp_path: Path, monkeypatc
     assert settings_path.read_text(encoding="utf-8") == "{not-json"
 
 
+def test_claude_install_refuses_non_object_existing_json(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text("[]", encoding="utf-8")
+
+    assert installer_module._install_claude(dry_run=False) == 1
+    assert settings_path.read_text(encoding="utf-8") == "[]"
+
+
 def test_codex_install_refuses_invalid_existing_hooks_json(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -187,12 +199,40 @@ def test_codex_install_refuses_invalid_existing_hooks_json(
     assert hooks_path.read_text(encoding="utf-8") == "{not-json"
 
 
+def test_codex_uninstall_refuses_non_object_existing_hooks_json(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    hooks_path = tmp_path / ".codex" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text("[]", encoding="utf-8")
+
+    assert installer_module._uninstall_codex(dry_run=False) == 1
+    assert hooks_path.read_text(encoding="utf-8") == "[]"
+
+
+def test_codex_install_refuses_invalid_existing_config_toml_before_hooks_write(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    hooks_path = tmp_path / ".codex" / "hooks.json"
+    config_path = tmp_path / ".codex" / "config.toml"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(json.dumps({"hooks": {}}), encoding="utf-8")
+    config_path.write_text("broken = [\n", encoding="utf-8")
+
+    assert installer_module._install_codex(dry_run=False) == 1
+
+    assert json.loads(hooks_path.read_text(encoding="utf-8")) == {"hooks": {}}
+    assert config_path.read_text(encoding="utf-8") == "broken = [\n"
+
+
 def _existing_claude_settings() -> dict[str, object]:
     return {
         "hooks": {
             "PreToolUse": [
                 {"matcher": "Bash", "hooks": [{"type": "command", "command": "other-gate"}]},
-                {"hooks": [{"type": "command", "command": "old-vibeforcer handle"}]},
+                {"hooks": [{"type": "command", "command": "/old/bin/vibeforcer handle"}]},
             ]
         }
     }
@@ -208,7 +248,7 @@ def _existing_codex_hooks() -> dict[str, object]:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "old-vibeforcer handle --platform codex",
+                            "command": "/old/bin/vibeforcer handle --platform codex",
                         }
                     ],
                 },
@@ -251,7 +291,37 @@ def test_claude_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
 
     commands = _installed_hook_commands(settings_path)
     assert "other-gate" in commands
-    assert "old-vibeforcer handle" not in commands
+    assert "/old/bin/vibeforcer handle" not in commands
+    assert commands.count("vibeforcer handle") == 1
+
+
+def test_claude_install_preserves_unrelated_hook_inside_mixed_entry(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    settings_path = _install_with_existing_hooks(
+        tmp_path,
+        monkeypatch,
+        ".claude",
+        "settings.json",
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [
+                            {"type": "command", "command": "other-gate"},
+                            {"type": "command", "command": "vibeforcer handle"},
+                        ],
+                    }
+                ]
+            }
+        },
+    )
+
+    assert installer_module._install_claude(dry_run=False) == 0
+
+    commands = _installed_hook_commands(settings_path)
+    assert "other-gate" in commands
     assert commands.count("vibeforcer handle") == 1
 
 
@@ -295,6 +365,71 @@ def test_claude_uninstall_removes_only_vibeforcer_hooks(
     assert commands == ["other-gate"]
 
 
+def test_claude_uninstall_preserves_unrelated_hook_inside_mixed_entry(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {"type": "command", "command": "other-gate"},
+                                {"type": "command", "command": "vibeforcer handle"},
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert installer_module._uninstall_claude(dry_run=False) == 0
+
+    hooks = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]
+    commands = _hook_commands(hooks)
+    assert commands == ["other-gate"]
+
+
+def test_claude_uninstall_preserves_user_hook_that_only_mentions_vibeforcer_handle(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "printf 'docs mention vibeforcer handle only'",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert installer_module._uninstall_claude(dry_run=False) == 0
+
+    hooks = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]
+    assert _hook_commands(hooks) == ["printf 'docs mention vibeforcer handle only'"]
+
+
 def test_codex_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -310,8 +445,43 @@ def test_codex_install_preserves_unrelated_hooks_and_replaces_only_vibeforcer(
 
     commands = _installed_hook_commands(hooks_path)
     assert "other-gate" in commands
-    assert "old-vibeforcer handle --platform codex" not in commands
+    assert "/old/bin/vibeforcer handle --platform codex" not in commands
     assert commands.count("vibeforcer handle --platform codex") == 1
+
+
+def test_codex_uninstall_preserves_non_hook_user_settings_when_only_owned_hooks_remain(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    hooks_path = tmp_path / ".codex" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "customSetting": {"keep": True},
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "vibeforcer handle --platform codex",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert installer_module._uninstall_codex(dry_run=False) == 0
+
+    remaining = json.loads(hooks_path.read_text(encoding="utf-8"))
+    assert remaining == {"customSetting": {"keep": True}}
+    assert sorted(hooks_path.parent.glob("hooks.json.vibeforcer-bak-*"))
 
 
 def test_claude_hooks_include_cwd_changed() -> None:

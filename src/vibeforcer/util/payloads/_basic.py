@@ -117,10 +117,11 @@ def path_matches_glob(path_value: str, pattern: str) -> bool:
     normalized_pattern = lower_path(pattern)
     basename = Path(normalized_path).name
     if normalized_pattern.endswith("/") and "*" not in normalized_pattern:
-        relative_path = normalized_path.removeprefix("./")
-        return relative_path.startswith(normalized_pattern) or (
-            f"/{normalized_pattern}" in normalized_path
-        )
+        directory_pattern = normalized_pattern.rstrip("/")
+        relative_path = normalized_path.removeprefix("./").rstrip("/")
+        return relative_path == directory_pattern or relative_path.startswith(
+            f"{directory_pattern}/"
+        ) or f"/{directory_pattern}/" in f"/{normalized_path.rstrip('/')}/"
     if "/" not in normalized_pattern:
         return fnmatch.fnmatch(basename, normalized_pattern)
     return fnmatch.fnmatch(normalized_path, normalized_pattern)

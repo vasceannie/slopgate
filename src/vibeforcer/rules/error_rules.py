@@ -222,6 +222,12 @@ _ERROR_CONTEXT = (
     "these errors are 'pre-existing' or 'introduced by your changes'.",
     "Do NOT dismiss errors as 'out of scope', 'unrelated', or 'for a separate PR'.",
 )
+_QUALITY_COMMAND_CONTEXT = (
+    "⚠️ ERRORS-BASH-001 — quality-command output/finding visibility: a lint or quality command exited 0 but printed violation/error-looking findings.\n"
+    "Next action: Rerun the full quality command from the repo root without tail-only snippets; use `vibeforcer lint check --details` when you need exact repair context.",
+    "these findings are 'pre-existing' or 'introduced by your changes'.",
+    "Do NOT summarize only the tail output or continue before the full lint/details view has been inspected.",
+)
 _FAILURE_CONTEXT = (
     "⚠️ ERRORS-FAIL-001 — Bash command exited non-zero.\n"
     "Next action: Inspect stdout/stderr, fix the root cause, then rerun the same "
@@ -289,12 +295,14 @@ class BashOutputErrorRule(Rule):
         output = _extract_bash_output(ctx)
         if not output or not _has_error_signals(output):
             return []
+        quality_command = re.search(r"\b(?:vibeforcer|vfc|isx)\s+lint\s+", command, re.IGNORECASE)
+        context_template = _QUALITY_COMMAND_CONTEXT if quality_command else _ERROR_CONTEXT
         return [
             RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                additional_context=_command_error_context(command, _ERROR_CONTEXT),
+                additional_context=_command_error_context(command, context_template),
                 metadata={METADATA_COMMAND: _safe_command_excerpt(command)},
             )
         ]

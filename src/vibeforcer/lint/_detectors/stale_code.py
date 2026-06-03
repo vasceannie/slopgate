@@ -6,14 +6,17 @@ imports that should use modern ``X | Y`` syntax).
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import find_source_files, read_lines, relative_path
+from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_source_files
 
 
-def detect_deprecated_patterns(files: list[Path] | None = None) -> list[Violation]:
+def detect_deprecated_patterns(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
     """Scan source files for lines matching deprecated-pattern regexes."""
     cfg = get_config()
     if not cfg.deprecated_patterns:
@@ -26,13 +29,11 @@ def detect_deprecated_patterns(files: list[Path] | None = None) -> list[Violatio
         except re.error:
             continue
 
-    files = files if files is not None else find_source_files()
+    parsed = ensure_parsed(files, fallback=find_source_files())
     violations: list[Violation] = []
 
-    for path in files:
-        rel = relative_path(path)
-        lines = read_lines(path)
-        for lineno, line in enumerate(lines, 1):
+    for pf in parsed:
+        for lineno, line in enumerate(pf.lines, 1):
             stripped = line.strip()
             # Skip comments
             if stripped.startswith("#"):
@@ -42,7 +43,7 @@ def detect_deprecated_patterns(files: list[Path] | None = None) -> list[Violatio
                     violations.append(
                         Violation(
                             rule="deprecated-pattern",
-                            relative_path=rel,
+                            relative_path=pf.rel,
                             identifier=f"L{lineno}",
                             detail=desc,
                         )
