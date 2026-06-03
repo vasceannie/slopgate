@@ -1,2 +1,6 @@
 [quality_gate]
 enabled = true
+
+[post_edit_quality]
+enabled = false
+block_on_failure = false

@@ -48,6 +48,19 @@ def _find_command_has_mutation(tokens: list[str]) -> bool:
     return "find" in tokens and bool(_FIND_MUTATING_ACTIONS & set(tokens))
 
 
+_SHELL_REDIRECT_RE = re.compile(r"(?:[12]?>>?|&>)\s*([^\s;&|]+)")
+_ALLOWED_REDIRECT_TARGETS = frozenset({"/dev/null", "nul", "&1", "&2"})
+
+
+def _has_unsafe_shell_redirection(command: str) -> bool:
+    """Return True when shell redirection writes somewhere other than a null/fd sink."""
+    for match in _SHELL_REDIRECT_RE.finditer(command):
+        target = match.group(1).strip("'\"").lower()
+        if target not in _ALLOWED_REDIRECT_TARGETS:
+            return True
+    return False
+
+
 def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = False) -> bool:
     lowered = command.lower()
     if "sed -i" in lowered or "tee " in lowered:
@@ -65,7 +78,7 @@ def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = Fal
         )
     ):
         return False
-    if re.search(r">>?\s*\S", lowered):
+    if _has_unsafe_shell_redirection(lowered):
         return False
     if reject_find_mutation and _find_command_has_mutation(_shell_tokens(lowered)):
         return False
@@ -80,18 +93,34 @@ def _is_broad_claude_dir_pattern(pattern: str) -> bool:
     return normalized_pattern in {".claude/", "*/.claude/"}
 
 
-def _is_claude_worktree_path(path_value: str) -> bool:
+def _normalize_claude_candidate_path(path_value: str) -> str:
     normalized_path = path_value.lower().replace("\\", "/")
     while normalized_path.startswith("./"):
         normalized_path = normalized_path[2:]
-    return "/.claude/worktrees/" in f"/{normalized_path.lstrip('/')}"
+    return f"/{normalized_path.lstrip('/')}"
+
+
+def _is_claude_worktree_path(path_value: str) -> bool:
+    return "/.claude/worktrees/" in _normalize_claude_candidate_path(path_value)
+
+
+def _is_claude_plan_markdown_path(path_value: str) -> bool:
+    marker = "/.claude/plans/"
+    normalized_path = _normalize_claude_candidate_path(path_value)
+    if marker not in normalized_path:
+        return False
+    plan_name = normalized_path.rsplit(marker, 1)[1]
+    return bool(plan_name) and "/" not in plan_name and plan_name.endswith(".md")
 
 
 def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
     for pattern in patterns:
         if not path_matches_glob(path_value, pattern):
             continue
-        if _is_broad_claude_dir_pattern(pattern) and _is_claude_worktree_path(path_value):
+        if _is_broad_claude_dir_pattern(pattern) and (
+            _is_claude_worktree_path(path_value)
+            or _is_claude_plan_markdown_path(path_value)
+        ):
             continue
         return pattern
     return None

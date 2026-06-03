@@ -18,20 +18,16 @@ from vibeforcer.lint._config import get_config
 # ---------------------------------------------------------------------------
 
 
-def _cfg():
-    return get_config()
-
-
 def project_root() -> Path:
-    return _cfg().project_root
+    return get_config().project_root
 
 
 def src_root() -> Path:
-    return _cfg().src_root
+    return get_config().src_root
 
 
 def tests_root() -> Path:
-    return _cfg().tests_root
+    return get_config().tests_root
 
 
 # ---------------------------------------------------------------------------
@@ -40,11 +36,11 @@ def tests_root() -> Path:
 
 
 def _is_excluded_dir(name: str) -> bool:
-    return name in _cfg().exclude_dirs
+    return name in get_config().exclude_dirs
 
 
 def _is_excluded_file(name: str) -> bool:
-    for pat in _cfg().exclude_patterns:
+    for pat in get_config().exclude_patterns:
         if fnmatch.fnmatch(name, pat):
             return True
     return False
@@ -52,7 +48,7 @@ def _is_excluded_file(name: str) -> bool:
 
 def _scope() -> str:
     """Return the effective scan scope (all | changed | staged)."""
-    return os.environ.get("QUALITY_SCOPE", _cfg().default_scope)
+    return os.environ.get("QUALITY_SCOPE", get_config().default_scope)
 
 
 def _git_diff_paths(*args: str) -> set[Path]:
@@ -163,37 +159,36 @@ def read_lines(path: Path) -> list[str]:
         return []
 
 
-def function_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-    """Count the lines in a function body (excluding decorators and docstrings)."""
-    if not node.body:
+def _span_lines(nodes: list[ast.stmt]) -> int:
+    if not nodes:
         return 0
-    first = node.body[0]
-    # Skip docstring
-    start_idx = 0
+    start = nodes[0].lineno
+    end_node = nodes[-1]
+    end = getattr(end_node, "end_lineno", end_node.lineno)
+    return end - start + 1
+
+
+def _without_leading_docstring(nodes: list[ast.stmt]) -> list[ast.stmt]:
+    if not nodes:
+        return []
+    first = nodes[0]
     if (
         isinstance(first, ast.Expr)
         and isinstance(first.value, ast.Constant)
         and isinstance(first.value.value, str)
     ):
-        start_idx = 1
-    if start_idx >= len(node.body):
-        return 0
-    first_body = node.body[start_idx]
-    last_body = node.body[-1]
-    start_line = first_body.lineno
-    end_line = getattr(last_body, "end_lineno", last_body.lineno)
-    return end_line - start_line + 1
+        return nodes[1:]
+    return nodes
+
+
+def function_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    """Count the lines in a function body (excluding decorators and docstrings)."""
+    return _span_lines(_without_leading_docstring(node.body))
 
 
 def class_body_lines(node: ast.ClassDef) -> int:
     """Count the total lines spanned by a class body."""
-    if not node.body:
-        return 0
-    first = node.body[0]
-    last = node.body[-1]
-    start = first.lineno
-    end = getattr(last, "end_lineno", last.lineno)
-    return end - start + 1
+    return _span_lines(node.body)
 
 
 def count_methods(node: ast.ClassDef) -> int:

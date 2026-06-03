@@ -12,6 +12,17 @@ from vibeforcer.cli.commands import cmd_install, cmd_install_suite, cmd_uninstal
 from vibeforcer.cli.parsers import build_parser
 
 
+def _record_suite_subprocess_run(monkeypatch: Any) -> list[list[str]]:
+    run_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], check: bool = False) -> subprocess.CompletedProcess[list[str]]:
+        run_commands.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+    return run_commands
+
+
 def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
     args = build_parser().parse_args(
         [
@@ -49,10 +60,12 @@ def test_native_install_all_parser_supports_autoupdate() -> None:
         ["install", "all", "--with-autoupdate", "--dry-run"]
     )
 
-    assert args.command == "install"
-    assert args.platform == "all"
-    assert args.with_autoupdate is True
-    assert args.dry_run is True
+    assert (args.command, args.platform, args.with_autoupdate, args.dry_run) == (
+        "install",
+        "all",
+        True,
+        True,
+    )
 
 
 def test_native_uninstall_all_parser_supports_autoupdate() -> None:
@@ -60,11 +73,13 @@ def test_native_uninstall_all_parser_supports_autoupdate() -> None:
         ["uninstall", "all", "--with-autoupdate", "--dry-run"]
     )
 
-    assert args.command == "uninstall"
-    assert args.func == cmd_uninstall
-    assert args.platform == "all"
-    assert args.with_autoupdate is True
-    assert args.dry_run is True
+    assert (args.command, args.func, args.platform, args.with_autoupdate, args.dry_run) == (
+        "uninstall",
+        cmd_uninstall,
+        "all",
+        True,
+        True,
+    )
 
 
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
@@ -238,11 +253,12 @@ def test_linux_autoupdate_install_refuses_unowned_existing_units(
     service.write_text("custom service\n", encoding="utf-8")
     timer.write_text("custom timer\n", encoding="utf-8")
 
-    assert suite.install_autoupdate(dry_run=False) == 1
-
-    assert service.read_text(encoding="utf-8") == "custom service\n"
-    assert timer.read_text(encoding="utf-8") == "custom timer\n"
-    assert not sorted(service.parent.glob("*.vibeforcer-bak-*"))
+    assert (
+        suite.install_autoupdate(dry_run=False),
+        service.read_text(encoding="utf-8"),
+        timer.read_text(encoding="utf-8"),
+        sorted(service.parent.glob("*.vibeforcer-bak-*")),
+    ) == (1, "custom service\n", "custom timer\n", [])
 
 
 def test_autoupdate_uninstall_refuses_incidental_scheduler_marker_text(
@@ -317,33 +333,31 @@ def test_linux_autoupdate_install_backs_up_existing_units(
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "linux")
     monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/vibeforcer")
-    run_commands: list[list[str]] = []
-
-    def fake_run(command: list[str], check: bool = False) -> subprocess.CompletedProcess[list[str]]:
-        run_commands.append(command)
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(
-        suite.subprocess,
-        "run",
-        fake_run,
-    )
+    run_commands = _record_suite_subprocess_run(monkeypatch)
     service = tmp_path / ".config/systemd/user/vibeforcer-auto-update.service"
     timer = tmp_path / ".config/systemd/user/vibeforcer-auto-update.timer"
     service.parent.mkdir(parents=True)
     service.write_text(f"# {suite._AUTOUPDATE_MARKER}\nexisting service\n", encoding="utf-8")
     timer.write_text(f"# {suite._AUTOUPDATE_MARKER}\nexisting timer\n", encoding="utf-8")
 
-    assert suite.install_autoupdate(dry_run=False) == 0
-
+    status = suite.install_autoupdate(dry_run=False)
     backups = sorted(service.parent.glob("*.vibeforcer-bak-*"))
-    assert service.read_text(encoding="utf-8") != "existing service\n"
-    assert timer.read_text(encoding="utf-8") != "existing timer\n"
-    assert [backup.read_text(encoding="utf-8") for backup in backups] == [
-        f"# {suite._AUTOUPDATE_MARKER}\nexisting service\n",
-        f"# {suite._AUTOUPDATE_MARKER}\nexisting timer\n",
-    ]
-    assert run_commands == [["systemctl", "--user", "enable", "--now", "vibeforcer-auto-update.timer"]]
+    assert (
+        status,
+        service.read_text(encoding="utf-8") != "existing service\n",
+        timer.read_text(encoding="utf-8") != "existing timer\n",
+        [backup.read_text(encoding="utf-8") for backup in backups],
+        run_commands,
+    ) == (
+        0,
+        True,
+        True,
+        [
+            f"# {suite._AUTOUPDATE_MARKER}\nexisting service\n",
+            f"# {suite._AUTOUPDATE_MARKER}\nexisting timer\n",
+        ],
+        [["systemctl", "--user", "enable", "--now", "vibeforcer-auto-update.timer"]],
+    )
 
 
 def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
@@ -372,28 +386,20 @@ def test_macos_autoupdate_uninstall_backs_up_owned_launch_agent(
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "darwin")
     monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/vibeforcer")
-    run_commands: list[list[str]] = []
-
-    def fake_run(command: list[str], check: bool = False) -> subprocess.CompletedProcess[list[str]]:
-        run_commands.append(command)
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(
-        suite.subprocess,
-        "run",
-        fake_run,
-    )
+    run_commands = _record_suite_subprocess_run(monkeypatch)
     plan = suite.build_scheduler_plan()
     plan.target_path.parent.mkdir(parents=True)
     plan.target_path.write_text(plan.content, encoding="utf-8")
 
-    assert suite.uninstall_autoupdate(dry_run=False) == 0
-
+    status = suite.uninstall_autoupdate(dry_run=False)
     backups = sorted(plan.target_path.parent.glob("*.vibeforcer-bak-*"))
-    assert not plan.target_path.exists()
-    assert len(backups) == 1
-    assert "rocks.baked.vibeforcer.autoupdate" in backups[0].read_text(encoding="utf-8")
-    assert run_commands == [["launchctl", "unload", "-w", str(plan.target_path)]]
+    assert (
+        status,
+        plan.target_path.exists(),
+        len(backups),
+        "rocks.baked.vibeforcer.autoupdate" in backups[0].read_text(encoding="utf-8"),
+        run_commands,
+    ) == (0, False, 1, True, [["launchctl", "unload", "-w", str(plan.target_path)]])
 
 
 def test_install_suite_dry_run_installs_detected_sites_without_writing(

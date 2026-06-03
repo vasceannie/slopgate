@@ -14,6 +14,11 @@ import pytest
 from vibeforcer.cli.lint import cmd_lint
 from vibeforcer.lint import _collectors
 from vibeforcer.lint import _parity
+from vibeforcer.lint._collectors import (
+    run_all_collectors,
+    run_test_integrity_collectors,
+    run_touched_collectors,
+)
 from vibeforcer.lint._config import reset_config
 
 
@@ -157,6 +162,21 @@ def test_hook_baseline_counterparts_reference_known_collectors() -> None:
     }
 
     assert {rule_id: names for rule_id, names in unknown.items() if names} == {}
+
+
+def test_public_collector_entrypoints_return_named_pairs() -> None:
+    results = {
+        "integrity": run_test_integrity_collectors([], []),
+        "touched": run_touched_collectors([], []),
+        "all": run_all_collectors([], []),
+    }
+    leading_rules = {key: pairs[0][0] for key, pairs in results.items()}
+
+    assert leading_rules == {
+        "integrity": "python-parse-error",
+        "touched": "python-parse-error",
+        "all": "python-parse-error",
+    }
 
 
 def test_lint_check_reports_python_parse_errors(

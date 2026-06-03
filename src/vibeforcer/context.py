@@ -11,12 +11,8 @@ from vibeforcer.trace import TraceWriter
 from vibeforcer.util.payloads import HookPayload
 
 
-@dataclass(slots=True)
-class HookContext:
+class _CoreContextProperties:
     payload: HookPayload
-    config: RuntimeConfig
-    trace: TraceWriter
-    state: HookStateStore
 
     @property
     def event_name(self) -> str:
@@ -31,6 +27,20 @@ class HookContext:
         return self.payload.tool_input
 
     @property
+    def user_prompt(self) -> str:
+        return self.payload.user_prompt
+
+    @property
+    def cwd(self) -> Path:
+        return self.payload.cwd
+
+    @property
+    def session_id(self) -> str:
+        return self.payload.session_id
+
+
+class _ShellContextProperties(_CoreContextProperties):
+    @property
     def bash_command(self) -> str:
         return self.payload.bash_command
 
@@ -42,10 +52,8 @@ class HookContext:
     def shell_kind(self) -> str | None:
         return self.payload.shell_kind
 
-    @property
-    def user_prompt(self) -> str:
-        return self.payload.user_prompt
 
+class _TargetContextProperties(_ShellContextProperties):
     @property
     def content_targets(self) -> list[ContentTarget]:
         return self.payload.content_targets
@@ -55,16 +63,16 @@ class HookContext:
         return self.payload.candidate_paths
 
     @property
-    def cwd(self) -> Path:
-        return self.payload.cwd
-
-    @property
-    def session_id(self) -> str:
-        return self.payload.session_id
-
-    @property
     def languages(self) -> set[str]:
         return self.payload.languages
+
+
+@dataclass(slots=True)
+class HookContext(_TargetContextProperties):
+    payload: HookPayload
+    config: RuntimeConfig
+    trace: TraceWriter
+    state: HookStateStore
 
 
 def build_context(payload_dict: ObjectMapping) -> HookContext:

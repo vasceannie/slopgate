@@ -4,6 +4,7 @@ from vibeforcer.context import HookContext
 from vibeforcer.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
 from vibeforcer.models import RuleFinding, Severity
 from vibeforcer.rules.base import Rule
+from vibeforcer.util.payloads import is_edit_like_tool
 from vibeforcer.rules.common import (
     FullFileReadRule,
     GitNoVerifyRule,
@@ -55,16 +56,23 @@ class PythonAstImportFailureRule(Rule):
         self._error = error
 
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        decision = DENY if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) else "block"
+        decision = None
+        if is_edit_like_tool(ctx.tool_name):
+            decision = DENY if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) else "block"
+        blocking = decision is not None
         return [
             RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
-                severity=Severity.HIGH,
+                severity=Severity.HIGH if blocking else Severity.MEDIUM,
                 decision=decision,
-                message="Python AST checks are unavailable due to import failure.",
+                message=(
+                    "Python AST checks are unavailable due to import failure. "
+                    "Non-edit commands may continue; Python edits remain blocked "
+                    "until Vibeforcer's AST rule package imports cleanly."
+                ),
                 additional_context=repr(self._error),
-                metadata={"kind": "import_error"},
+                metadata={"kind": "import_error", "blocking": blocking},
             )
         ]
 

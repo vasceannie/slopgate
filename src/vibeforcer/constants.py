@@ -11,6 +11,7 @@ BLOCK = "block"
 METADATA_PATH = "path"
 METADATA_FUNCTION = "function"
 METADATA_COMMAND = "command"
+PYTEST_TEST_PREFIX = "test_"
 EDIT_TOOL_NAMES = {
     "edit",
     "write",
@@ -30,6 +31,8 @@ SAFE_READ_SHELL_VERBS = {
     "head",
     "tail",
     "grep",
+    "rg",
+    "ripgrep",
     "egrep",
     "fgrep",
     "zgrep",

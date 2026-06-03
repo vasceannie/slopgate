@@ -34,11 +34,14 @@ def user_data_dir(app_name: str) -> Path:
 
 
 def normalize_path_for_match(value: str) -> str:
-    return value.replace("\\", "/").strip()
+    stripped = value.strip()
+    if not stripped:
+        return ""
+    return stripped.replace("\\", "/")
 
 
 def lower_path_for_match(value: str) -> str:
-    return normalize_path_for_match(value).lower()
+    return normalize_path_for_match(value).casefold()
 
 
 def looks_like_windows_absolute_path(value: str) -> bool:

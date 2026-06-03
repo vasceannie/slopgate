@@ -10,6 +10,13 @@ from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._helpers import ParsedFile, parse_files
 from vibeforcer.lint._parse_errors import detect_python_parse_errors
 
+SourceAnalysis = tuple[
+    list[ParsedFile],
+    list[ParsedFile],
+    list[Violation],
+    list[Violation],
+]
+
 
 def _ast_src_collectors(
     src_files: list[Path],
@@ -139,6 +146,28 @@ def _test_integrity_collectors(
     ]
 
 
+def _source_analysis(
+    src_files: list[Path],
+    test_files: list[Path],
+) -> SourceAnalysis:
+    from vibeforcer.lint._config import get_config
+    from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
+    from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
+    from vibeforcer.quality.constant_index import (
+        build_project_constant_index,
+        set_session_constant_index,
+    )
+
+    parsed_src = parse_files(src_files)
+    parsed_tests = parse_files(test_files)
+    parsed_all = [*parsed_src, *parsed_tests]
+    oversized = detect_oversized_modules(parsed_all)
+    constant_index = build_project_constant_index(get_config().project_root)
+    set_session_constant_index(constant_index)
+    literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
+    return parsed_src, parsed_tests, oversized, literals
+
+
 def run_test_integrity_collectors(
     src_files: list[Path],
     test_files: list[Path],
@@ -166,24 +195,10 @@ def run_touched_collectors(
     reference corpus. Otherwise every isolated production edit looks untested
     whenever the hook payload lacks the matching test files.
     """
-    from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
-    from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-    from vibeforcer.lint._config import get_config
-    from vibeforcer.quality.constant_index import (
-        build_project_constant_index,
-        set_session_constant_index,
-    )
-
-    parsed_src = parse_files(src_files)
-    parsed_tests = parse_files(test_files)
+    parsed_src, parsed_tests, oversized, literals = _source_analysis(src_files, test_files)
     parsed_reference_tests = (
         parsed_tests if reference_test_files is None else parse_files(reference_test_files)
     )
-    parsed_all = [*parsed_src, *parsed_tests]
-    oversized = detect_oversized_modules(parsed_all)
-    constant_index = build_project_constant_index(get_config().project_root)
-    set_session_constant_index(constant_index)
-    literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
 
     return [
         ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
@@ -203,21 +218,7 @@ def run_all_collectors(
     test_files: list[Path],
 ) -> list[tuple[str, list[Violation]]]:
     """Run all detectors and return (rule_name, violations) pairs."""
-    from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
-    from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-    from vibeforcer.lint._config import get_config
-    from vibeforcer.quality.constant_index import (
-        build_project_constant_index,
-        set_session_constant_index,
-    )
-
-    parsed_src = parse_files(src_files)
-    parsed_tests = parse_files(test_files)
-    parsed_all = [*parsed_src, *parsed_tests]
-    oversized = detect_oversized_modules(parsed_all)
-    constant_index = build_project_constant_index(get_config().project_root)
-    set_session_constant_index(constant_index)
-    literals = detect_repeated_literals(parsed_src, constant_index=constant_index)
+    parsed_src, parsed_tests, oversized, literals = _source_analysis(src_files, test_files)
 
     return [
         ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),

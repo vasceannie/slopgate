@@ -22,7 +22,7 @@ from ._targets import (
 )
 
 
-class HookPayloadProperties:
+class _CoreHookPayloadProperties:
     payload: ObjectDict
     config: RuntimeConfig
 
@@ -61,6 +61,8 @@ class HookPayloadProperties:
         value = self.payload.get("prompt")
         return str(value) if isinstance(value, str) else ""
 
+
+class _ShellHookPayloadProperties(_CoreHookPayloadProperties):
     @cached_property
     def bash_command(self) -> str:
         return self.shell_command
@@ -79,6 +81,8 @@ class HookPayloadProperties:
             strip=False,
         )
 
+
+class _TargetHookPayloadProperties(_ShellHookPayloadProperties):
     @cached_property
     def content_targets(self) -> list[ContentTarget]:
         targets: list[ContentTarget] = []
@@ -110,3 +114,7 @@ class HookPayloadProperties:
             if language:
                 languages.add(language)
         return languages
+
+
+class HookPayloadProperties(_TargetHookPayloadProperties):
+    pass

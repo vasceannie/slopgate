@@ -18,6 +18,7 @@ from vibeforcer.installer._shared import (
     print_binary_install_summary,
     remove_owned_hooks,
     require_json_object,
+    remove_file_with_backup,
     write_json_with_backup,
 )
 
@@ -238,7 +239,5 @@ def _uninstall_codex(dry_run: bool = False) -> int:
         print(f"Removed vibeforcer hooks from {hooks_path}")
         return 0
 
-    backup_existing_file_and_report(hooks_path, "hooks")
-    hooks_path.unlink()
-    print(f"Removed: {hooks_path}")
+    remove_file_with_backup(hooks_path, "hooks")
     return 0

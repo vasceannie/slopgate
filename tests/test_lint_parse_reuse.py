@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +12,7 @@ from vibeforcer.lint._detectors import stale_code
 from vibeforcer.lint._detectors import wrappers
 from vibeforcer.lint._detectors.test_smells import _basic_detection
 from vibeforcer.lint import _helpers
+from vibeforcer.lint._config import get_config
 from vibeforcer.lint._helpers import (
     ParsedFile,
     build_parent_map,
@@ -51,15 +52,16 @@ def test_source_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pyte
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
 
-    assert code_smells.detect_high_complexity([parsed]) == []
-    assert code_smells.detect_long_methods([parsed]) == []
-    assert code_smells.detect_too_many_params([parsed]) == []
-    assert code_smells.detect_deep_nesting([parsed]) == []
-    assert code_smells.detect_god_classes([parsed]) == []
-    assert code_smells.detect_oversized_modules([parsed]) == []
-    assert [violation.rule for violation in wrappers.detect_unnecessary_wrappers([parsed])] == [
-        "unnecessary-wrapper"
-    ]
+    detector_results = (
+        code_smells.detect_high_complexity([parsed]),
+        code_smells.detect_long_methods([parsed]),
+        code_smells.detect_too_many_params([parsed]),
+        code_smells.detect_deep_nesting([parsed]),
+        code_smells.detect_god_classes([parsed]),
+        code_smells.detect_oversized_modules([parsed]),
+        [violation.rule for violation in wrappers.detect_unnecessary_wrappers([parsed])],
+    )
+    assert detector_results == ([], [], [], [], [], [], ["unnecessary-wrapper"])
 
 
 def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,8 +70,9 @@ def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest
         "log = logging.getLogger(__name__)\n"
         "value: typing.List[str] = []\n"
     )
-    cfg = SimpleNamespace(
-        deprecated_patterns=((r"typing\.List", "use list[str]"),),
+    cfg = replace(
+        get_config(),
+        deprecated_patterns=[(r"typing\.List", "use list[str]")],
         logger_function="make_logger",
         logging_infrastructure_path="",
         disallowed_logger_names={"log"},
@@ -80,15 +83,16 @@ def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
 
-    assert [v.rule for v in stale_code.detect_deprecated_patterns([parsed])] == [
-        "deprecated-pattern"
-    ]
-    assert [v.rule for v in logging_conventions.detect_direct_get_logger([parsed])] == [
-        "direct-get-logger"
-    ]
-    assert [v.rule for v in logging_conventions.detect_wrong_logger_name([parsed])] == [
-        "wrong-logger-name"
-    ]
+    detector_rules = (
+        [v.rule for v in stale_code.detect_deprecated_patterns([parsed])],
+        [v.rule for v in logging_conventions.detect_direct_get_logger([parsed])],
+        [v.rule for v in logging_conventions.detect_wrong_logger_name([parsed])],
+    )
+    assert detector_rules == (
+        ["deprecated-pattern"],
+        ["direct-get-logger"],
+        ["wrong-logger-name"],
+    )
 
 
 def test_basic_test_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,8 +106,9 @@ def test_basic_test_detectors_reuse_parsed_files_without_reparsing(monkeypatch: 
     )
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
 
-    assert _basic_detection.detect_long_tests([parsed]) == []
-    assert _basic_detection.detect_eager_tests([parsed]) == []
-    assert [v.rule for v in _basic_detection.detect_assertion_free_tests([parsed])] == [
-        "assertion-free-test"
-    ]
+    detector_results = (
+        _basic_detection.detect_long_tests([parsed]),
+        _basic_detection.detect_eager_tests([parsed]),
+        [v.rule for v in _basic_detection.detect_assertion_free_tests([parsed])],
+    )
+    assert detector_results == ([], [], ["assertion-free-test"])

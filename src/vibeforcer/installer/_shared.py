@@ -213,6 +213,12 @@ def write_json_with_backup(path: Path, payload: object, label: str) -> None:
     _ = path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def remove_file_with_backup(path: Path, label: str) -> None:
+    backup_existing_file_and_report(path, label)
+    path.unlink()
+    print(f"Removed: {path}")
+
+
 def print_binary_install_summary(message: str, binary: str) -> None:
     print(message)
     print(f"Binary: {binary}")

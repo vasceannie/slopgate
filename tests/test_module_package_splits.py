@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
 
 SPLIT_MODULES = (
     "src/vibeforcer/lint/_detectors/test_smells.py",
@@ -19,6 +20,11 @@ SPLIT_MODULES = (
     "src/vibeforcer/engine.py",
     "src/vibeforcer/util/payloads.py",
     "src/vibeforcer/stats.py",
+)
+
+SOFT_OVERSIZED_SPLIT_TARGETS = (
+    "src/vibeforcer/installer/_suite.py",
+    "src/vibeforcer/rules/python_ast/_rules/_module_size_projection.py",
 )
 
 PUBLIC_IMPORT_CASES = (
@@ -62,6 +68,16 @@ def test_large_core_module_is_package_with_no_legacy_module_file(legacy_module: 
 
     assert not module_path.exists(), f"legacy oversized module remains: {legacy_module}"
     assert (package_path / "__init__.py").is_file(), f"missing package facade: {package_path}"
+
+
+@pytest.mark.parametrize("module_name", [*SOFT_OVERSIZED_SPLIT_TARGETS])
+def test_split_target_is_not_soft_oversized(module_name: str) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / module_name
+
+    violations = detect_oversized_modules([module_path])
+
+    assert violations == []
 
 
 @pytest.mark.parametrize(("module_name", "public_name"), PUBLIC_IMPORT_CASES)

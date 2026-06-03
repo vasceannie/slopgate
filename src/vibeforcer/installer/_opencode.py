@@ -9,6 +9,7 @@ from vibeforcer.installer._shared import (
     backup_existing_file_and_report,
     find_binary,
     print_binary_install_summary,
+    remove_file_with_backup,
 )
 from vibeforcer.util.platform import user_config_dir
 
@@ -97,7 +98,5 @@ def _uninstall_opencode(dry_run: bool = False) -> int:
         print(f"Would back up and delete: {target}")
         return 0
 
-    _backup_and_report(target)
-    target.unlink()
-    print(f"Removed: {target}")
+    remove_file_with_backup(target, "file")
     return 0

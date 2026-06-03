@@ -6,15 +6,10 @@ from pathlib import Path
 
 from vibeforcer._types import ObjectMapping
 from vibeforcer.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
-from vibeforcer.util.platform import lower_path_for_match, normalize_path_for_match
-
-
-def normalize_path(value: str) -> str:
-    return normalize_path_for_match(value)
-
-
-def lower_path(value: str) -> str:
-    return lower_path_for_match(value)
+from vibeforcer.util.platform import (
+    lower_path_for_match as lower_path,
+    normalize_path_for_match as normalize_path,
+)
 
 
 def first_present(
@@ -22,7 +17,7 @@ def first_present(
 ) -> str:
     for key in keys:
         value = mapping.get(key)
-        if isinstance(value, str) and value.strip():
+        if isinstance(value, str) and (value.strip() or not strip):
             return value.strip() if strip else value
     return ""
 
@@ -86,21 +81,29 @@ def is_edit_like_tool(tool_name: str) -> bool:
     return False
 
 
+SHELL_TOOL_KINDS = {
+    "bash": "bash",
+    "sh": "bash",
+    "zsh": "bash",
+    "powershell": "powershell",
+    "pwsh": "powershell",
+    "power_shell": "powershell",
+    "cmd": "cmd",
+    "cmd.exe": "cmd",
+    "command_prompt": "cmd",
+    "shell": "unknown",
+    "local_shell": "unknown",
+    "terminal": "unknown",
+}
+
+
 def is_bash_tool(tool_name: str) -> bool:
     return shell_kind_for_tool(tool_name) == "bash"
 
 
 def shell_kind_for_tool(tool_name: str) -> str | None:
     lowered = tool_name.strip().lower().replace("-", "_")
-    if lowered in {"bash", "sh", "zsh"}:
-        return "bash"
-    if lowered in {"powershell", "pwsh", "power_shell"}:
-        return "powershell"
-    if lowered in {"cmd", "cmd.exe", "command_prompt"}:
-        return "cmd"
-    if lowered in {"shell", "local_shell", "terminal"}:
-        return "unknown"
-    return None
+    return SHELL_TOOL_KINDS.get(lowered)
 
 
 def is_shell_tool(tool_name: str) -> bool:

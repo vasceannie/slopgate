@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import cast
@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from vibeforcer.context import HookContext
     from vibeforcer.models import RuleFinding
 
+FixtureExtrasBuilder = Callable[[Path, Sequence[FixtureInfo]], list[str]]
+
 
 def _first_hit_path(finding: RuleFinding) -> str | None:
     hits = finding.metadata.get("hits")
@@ -40,6 +42,35 @@ def _append_context(finding: RuleFinding, parts: Sequence[str]) -> None:
         return
     existing = finding.additional_context or ""
     finding.additional_context = (existing + "\n\n" + "\n".join(parts)).strip()
+
+
+def _resolve_hit_path(finding: RuleFinding, root: Path) -> Path | None:
+    path_str = _first_hit_path(finding)
+    if path_str is None:
+        return None
+    return resolve_path(path_str, root)
+
+
+def _hit_path_and_fixtures(
+    finding: RuleFinding,
+    root: Path,
+) -> tuple[Path, list[FixtureInfo]] | None:
+    test_path = _resolve_hit_path(finding, root)
+    if test_path is None:
+        return None
+    return test_path, discover_fixtures(test_path, root)
+
+
+def _append_fixture_enrichment(
+    finding: RuleFinding,
+    ctx: HookContext,
+    build_extras: FixtureExtrasBuilder,
+) -> None:
+    hit = _hit_path_and_fixtures(finding, ctx.config.root)
+    if hit is None:
+        return
+    _, fixtures = hit
+    append_enrichment_message(finding, build_extras(ctx.config.root, fixtures))
 
 
 def _project_mentions(root: Path, dependency: str) -> bool:
@@ -111,27 +142,10 @@ def _build_test_loop_context_parts(
     return parts
 
 
-def enrich_test_loop(finding: RuleFinding, ctx: HookContext) -> None:
-    """Enrich loop-based tests with fixture and parametrize context."""
-    path_str = _first_hit_path(finding)
-    if path_str is None:
-        return
-    test_path = resolve_path(path_str, ctx.config.root)
-    fixtures = discover_fixtures(test_path, ctx.config.root)
-    examples = find_parametrize_examples(test_path, ctx.config.root)
-    append_enrichment_message(
-        finding, _build_test_loop_message_extras(fixtures, examples)
-    )
-    _append_context(finding, _build_test_loop_context_parts(fixtures, examples))
-
-
-def enrich_assertion_roulette(finding: RuleFinding, ctx: HookContext) -> None:
-    """Enrich multi-assertion tests with nearby fixture hints."""
-    path_str = _first_hit_path(finding)
-    if path_str is None:
-        return
-    test_path = resolve_path(path_str, ctx.config.root)
-    fixtures = discover_fixtures(test_path, ctx.config.root)
+def _build_assertion_roulette_extras(
+    _root: Path,
+    fixtures: Sequence[FixtureInfo],
+) -> list[str]:
     extras = [
         "\nTIP: If assertions test different aspects of one result, consider "
         + "splitting into focused test functions (one concept per test)."
@@ -139,35 +153,53 @@ def enrich_assertion_roulette(finding: RuleFinding, ctx: HookContext) -> None:
     if fixtures:
         names = ", ".join(f"`{fixture['name']}`" for fixture in fixtures[:6])
         extras.insert(0, f"\nAvailable fixtures: {names}")
-    append_enrichment_message(finding, extras)
+    return extras
 
 
-def enrich_test_smells(finding: RuleFinding, ctx: HookContext) -> None:
-    """Enrich general test-smell findings with local alternatives."""
-    path_str = _first_hit_path(finding)
-    if path_str is None:
-        return
-    test_path = resolve_path(path_str, ctx.config.root)
-    fixtures = discover_fixtures(test_path, ctx.config.root)
+def _build_test_smell_extras(
+    root: Path,
+    fixtures: Sequence[FixtureInfo],
+) -> list[str]:
     extras: list[str] = []
     if fixtures:
         names = ", ".join(f"`{fixture['name']}`" for fixture in fixtures[:6])
         extras.append(f"\nAvailable fixtures: {names}")
-    found = _time_utils(ctx.config.root)
+    found = _time_utils(root)
     if found:
         extras.append(
             f"\nProject has time utilities: {', '.join(found)} — "
             + "prefer frozen or polled time controls over sleep-based timing."
         )
-    append_enrichment_message(finding, extras)
+    return extras
+
+
+def enrich_test_loop(finding: RuleFinding, ctx: HookContext) -> None:
+    """Enrich loop-based tests with fixture and parametrize context."""
+    hit = _hit_path_and_fixtures(finding, ctx.config.root)
+    if hit is not None:
+        test_path, fixtures = hit
+        examples = find_parametrize_examples(test_path, ctx.config.root)
+        append_enrichment_message(
+            finding, _build_test_loop_message_extras(fixtures, examples)
+        )
+        _append_context(finding, _build_test_loop_context_parts(fixtures, examples))
+
+
+def enrich_assertion_roulette(finding: RuleFinding, ctx: HookContext) -> None:
+    """Enrich multi-assertion tests with nearby fixture hints."""
+    _append_fixture_enrichment(finding, ctx, _build_assertion_roulette_extras)
+
+
+def enrich_test_smells(finding: RuleFinding, ctx: HookContext) -> None:
+    """Enrich general test-smell findings with local alternatives."""
+    _append_fixture_enrichment(finding, ctx, _build_test_smell_extras)
 
 
 def enrich_fixture_outside_conftest(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich fixture-placement findings with the nearest conftest target."""
-    path_str = _first_hit_path(finding)
-    if path_str is None:
+    test_path = _resolve_hit_path(finding, ctx.config.root)
+    if test_path is None:
         return
-    test_path = resolve_path(path_str, ctx.config.root)
     conftest = test_path.parent / "conftest.py"
     extras: list[str] = []
     if conftest.exists():

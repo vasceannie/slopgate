@@ -143,10 +143,6 @@ class SensitiveDataRule(Rule):
         ]
 
 
-def _resolve_candidate_path(path_value: str, cwd: Path) -> str:
-    return resolve_path_for_match(path_value, cwd)
-
-
 def _is_exact_dev_null(path_value: str) -> bool:
     """Return True only for the harmless null device path."""
     return lower_path(path_value) == "/dev/null"
@@ -155,7 +151,7 @@ def _is_exact_dev_null(path_value: str) -> bool:
 def _match_system_path(paths: list[str], prefixes: list[str], cwd: Path) -> str | None:
     """Return the first path matching a system prefix, or None."""
     for path_value in paths:
-        lowered = _resolve_candidate_path(path_value, cwd)
+        lowered = resolve_path_for_match(path_value, cwd)
         if _is_exact_dev_null(lowered):
             continue
         if any(lowered.startswith(p) for p in prefixes):

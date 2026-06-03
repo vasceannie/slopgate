@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ast
-from collections import Counter
 from pathlib import Path
 from vibeforcer.constants import (
     INTEGRATION_SEAM_THRESHOLD,
@@ -13,7 +11,6 @@ from vibeforcer.constants import (
 from vibeforcer.lint._baseline import Violation
 from vibeforcer.lint._helpers import ParsedFile
 
-from ._assertion_core import _call_tail as _call_tail
 from ._coverage_helpers import _CoverageInputs as _CoverageInputs, _coverage_violation as _coverage_violation, _metadata_int as _metadata_int, _runtime_coverage_by_rel as _runtime_coverage_by_rel
 from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index
 from ._production_symbols import _INTEGRATION_HELPER_NAME_PREFIXES as _INTEGRATION_HELPER_NAME_PREFIXES, _INTEGRATION_SEAM_TOKENS as _INTEGRATION_SEAM_TOKENS, _INTEGRATION_UTILITY_MODULE_TOKENS as _INTEGRATION_UTILITY_MODULE_TOKENS, _INTEGRATION_UTILITY_NAME_TOKENS as _INTEGRATION_UTILITY_NAME_TOKENS, _ProductionSymbol as _ProductionSymbol, _integration_test_reference_tokens as _integration_test_reference_tokens, _production_symbols as _production_symbols, _production_test_inputs as _production_test_inputs, _symbol_is_referenced as _symbol_is_referenced
@@ -56,26 +53,6 @@ def detect_untested_production_code(
         if violation is not None:
             violations.append(violation)
     return sorted(violations, key=lambda v: (_metadata_int(v, "coverage_percent"), v.relative_path))
-
-
-def _production_call_sites(parsed_src: list[ParsedFile]) -> dict[str, list[str]]:
-    symbols = _production_symbols(parsed_src)
-    name_counts = Counter(symbol.name for symbol in symbols)
-    unique_function_names = {
-        symbol.name
-        for symbol in symbols
-        if symbol.kind == METADATA_FUNCTION and name_counts[symbol.name] == 1
-    }
-    sites: dict[str, set[str]] = {name: set() for name in unique_function_names}
-    for pf in parsed_src:
-        for child in ast.walk(pf.tree):
-            if not isinstance(child, ast.Call):
-                continue
-            tail = _call_tail(child)
-            if tail not in unique_function_names:
-                continue
-            sites.setdefault(tail, set()).add(f"{pf.rel}:{child.lineno}")
-    return {name: sorted(values) for name, values in sites.items() if values}
 
 
 def _has_token(text: str, tokens: set[str]) -> bool:

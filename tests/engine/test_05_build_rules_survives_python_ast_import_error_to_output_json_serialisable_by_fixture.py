@@ -8,6 +8,7 @@ from tests.test_engine import (
     Path,
     VALID_TOP_LEVEL_KEYS,
     VIRTUALENV_PARSE_SKIP_PATHS,
+    BashBuilder,
     WriteBuilder,
     _fixture_output,
     _rule_build_context,
@@ -46,6 +47,47 @@ def test_build_rules_survives_python_ast_import_error(
     assert "PY-CODE-008" not in fallback_ids, f"Fallback should skip AST rules: {fallback_ids}"
     assert "PY-IMPORT-001" not in fallback_ids, f"Fallback should skip import AST rules: {fallback_ids}"
     assert "PY-AST-IMPORT-001" in fallback_ids, f"Missing import-error sentinel: {fallback_ids}"
+
+
+def _force_python_ast_import_error(monkeypatch: MonkeyPatch) -> None:
+    import vibeforcer.rules as rules_mod
+
+    monkeypatch.setattr(
+        rules_mod,
+        "_PYTHON_AST_IMPORT_ERROR",
+        SyntaxError("synthetic import failure"),
+        raising=False,
+    )
+    monkeypatch.setattr(rules_mod, "_PYTHON_AST_IMPORT_REPORTED", False, raising=False)
+
+
+def test_python_ast_import_error_allows_bash_validation_commands(
+    pretool_bash: BashBuilder, monkeypatch: MonkeyPatch
+) -> None:
+    _force_python_ast_import_error(monkeypatch)
+
+    result = evaluate_payload(
+        pretool_bash(
+            "uv run ruff check src/logging/runtime.py && "
+            "uv run basedpyright src/logging/runtime.py 2>&1 | tail -5",
+            cwd="/home/trav/repos/job-hunter",
+        )
+    )
+
+    assert any(f.rule_id == "PY-AST-IMPORT-001" for f in result.findings)
+    assert output_string(hook_output(result), "permissionDecision") != "deny"
+
+
+def test_python_ast_import_error_still_blocks_python_edits(
+    pretool_write: WriteBuilder, monkeypatch: MonkeyPatch
+) -> None:
+    _force_python_ast_import_error(monkeypatch)
+
+    result = evaluate_payload(pretool_write("src/example.py", "value = 1\n"))
+
+    assert any(f.rule_id == "PY-AST-IMPORT-001" for f in result.findings)
+    assert_denied_by(result, "PY-AST-IMPORT-001")
+
 
 def test_python_ast_parse_failure_is_reported(pretool_write: WriteBuilder) -> None:
     result = evaluate_payload(pretool_write("src/bad.py", "def broken(:\n    pass\n"))

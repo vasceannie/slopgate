@@ -13,7 +13,13 @@ import pytest
 
 import vibeforcer.installer as installer_module
 import vibeforcer.search.cli as search_cli
-from vibeforcer.cli.commands import cmd_check, cmd_config_init, cmd_handle
+from vibeforcer.cli.commands import (
+    cmd_check,
+    cmd_config_init,
+    cmd_config_path,
+    cmd_config_show,
+    cmd_handle,
+)
 from vibeforcer.cli.lint import cmd_lint
 from vibeforcer.cli.main import main
 from vibeforcer.config import resolve_git_root
@@ -82,6 +88,26 @@ def test_config_init_force_backs_up_existing_config(
     assert len(backups) == 1
     assert json.loads(backups[0].read_text(encoding="utf-8"))["custom"] is True
     assert "custom" not in updated
+
+
+def test_config_command_facade_exports_split_commands() -> None:
+    assert callable(cmd_config_show)
+
+
+def test_config_path_prints_resolved_config_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_vibeforcer_env(monkeypatch)
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
+
+    assert cmd_config_path(argparse.Namespace()) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.strip() == str(config_path)
 
 
 def test_handle_malformed_json_reports_clean_error(

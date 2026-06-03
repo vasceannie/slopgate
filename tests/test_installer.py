@@ -107,10 +107,12 @@ def test_codex_hooks_are_bash_only(
     data = _dry_run_install_json("codex", capsys, monkeypatch, tmp_path)
     hooks = data["hooks"]
     commands = list(_all_hook_commands(hooks))
-    assert commands
-    assert all(command.startswith("vibeforcer ") for command in commands)
-    assert all(" handle" in command for command in commands)
-    assert all("powershell.exe" not in command for command in commands)
+    assert (
+        bool(commands),
+        all(command.startswith("vibeforcer ") for command in commands),
+        all(" handle" in command for command in commands),
+        all("powershell.exe" not in command for command in commands),
+    ) == (True, True, True, True)
 
 
 def test_codex_installer_enables_current_toml_feature(tmp_path: Path) -> None:
@@ -509,14 +511,19 @@ def test_windows_codex_install_emits_powershell_hook_commands(
     )
     commands = list(_all_hook_commands(data["hooks"]))
     assert commands
-    for command in commands:
-        assert command.startswith("powershell.exe ")
-        assert "-NoProfile" in command
-        assert "-NonInteractive" in command
-        assert "-Command" in command
-        assert "C:\\Users\\Trav App\\AppData" in command
-        assert "handle" in command
-        assert "codex" in command
+    command_contracts = [
+        (
+            command.startswith("powershell.exe "),
+            "-NoProfile" in command,
+            "-NonInteractive" in command,
+            "-Command" in command,
+            "C:\\Users\\Trav App\\AppData" in command,
+            "handle" in command,
+            "codex" in command,
+        )
+        for command in commands
+    ]
+    assert command_contracts == [(True, True, True, True, True, True, True)] * len(commands)
 
 
 def test_claude_install_falls_back_to_python_module_invocation(

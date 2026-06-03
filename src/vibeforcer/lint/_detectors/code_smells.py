@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
+from vibeforcer.lint._config import QualityConfig, get_config
 from vibeforcer.lint._helpers import (
     ParsedFile,
     class_body_lines,
@@ -20,6 +20,12 @@ from vibeforcer.lint._helpers import (
     find_source_files,
     function_body_lines,
 )
+
+DetectorState = tuple[QualityConfig, list[ParsedFile], list[Violation]]
+
+
+def _detector_state(files: Sequence[Path | ParsedFile] | None) -> DetectorState:
+    return get_config(), ensure_parsed(files, fallback=find_source_files()), []
 
 
 # ---------------------------------------------------------------------------
@@ -58,9 +64,7 @@ def detect_high_complexity(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find functions/methods exceeding the configured complexity threshold."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -86,9 +90,7 @@ def detect_long_methods(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find functions/methods exceeding the configured line-count threshold."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -114,9 +116,7 @@ def detect_too_many_params(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find functions/methods with more parameters than the configured limit."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -168,9 +168,7 @@ def detect_deep_nesting(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find functions/methods with nesting deeper than the configured limit."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         for node in ast.walk(pf.tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -196,9 +194,7 @@ def detect_oversized_modules(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Flag modules exceeding the soft or hard line-count thresholds."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         line_count = len(pf.lines)
         if line_count > cfg.max_module_lines_hard:
@@ -231,9 +227,7 @@ def detect_god_classes(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find classes with too many methods or too many lines."""
-    cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
-    violations: list[Violation] = []
+    cfg, parsed, violations = _detector_state(files)
     for pf in parsed:
         for node in ast.walk(pf.tree):
             if isinstance(node, ast.ClassDef):

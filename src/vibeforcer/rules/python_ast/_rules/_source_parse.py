@@ -9,7 +9,7 @@ from vibeforcer.rules.base import is_rule_enabled
 from vibeforcer.util.payloads import (
     is_edit_like_tool,
 )
-from vibeforcer.util.platform import lower_path_for_match
+from vibeforcer.util.platform import lower_path_for_match as _normalized_module_path
 from .._helpers import (
     parse_module,
 )
@@ -123,8 +123,3 @@ def _parsed_classes(source: str, ctx: HookContext) -> list[ast.ClassDef]:
 
 def _python_ast_rule_is_disabled(ctx: HookContext, rule_id: str) -> bool:
     return not is_rule_enabled(ctx, rule_id) or not ctx.config.python_ast_enabled
-
-
-def _normalized_module_path(path_value: str) -> str:
-    """Return a slash-normalized path for scenario checks."""
-    return lower_path_for_match(path_value)
