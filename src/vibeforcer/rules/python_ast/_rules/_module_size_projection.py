@@ -91,10 +91,29 @@ def _oversized_module_split_guidance(path_value: str, scenario: str) -> str:
         "Oversized module split playbook:\n"
         "1) Do not cut by line number alone; split around responsibilities and import seams.\n"
         "2) Preserve public imports with a small facade/re-export layer when callers exist.\n"
-        "3) Move tests with the behavior, then run the narrowest compile/test check."
+        "3) Move tests with the behavior, then run the narrowest compile/test check.\n"
+        "Line-count camouflage is not a fix: do not delete blank lines, compress "
+        "formatting, or shuffle comments just to duck the threshold; ruff/formatters "
+        "will normalize style while the oversized-module design smell remains."
     )
     plan = _OVERSIZED_SPLIT_PLANS.get(scenario, _OVERSIZED_SPLIT_PLANS["module-to-package"])
     return f"{plan}\n\n{common}\n{verification}"
+
+
+def _significant_line_fingerprint(source: str) -> tuple[str, ...]:
+    """Return content lines after removing blank-line padding only."""
+    return tuple(line.rstrip() for line in source.splitlines() if line.strip())
+
+
+def _is_line_count_camouflage(before: str, after: str) -> bool:
+    """Detect blank-line/spacing shaving on an already-oversized module."""
+    before_lines = _line_count(before)
+    after_lines = _line_count(after)
+    return (
+        before_lines > LINT_MAX_MODULE_LINES_SOFT
+        and after_lines < before_lines
+        and _significant_line_fingerprint(before) == _significant_line_fingerprint(after)
+    )
 
 
 def _read_python_source(ctx: HookContext, path_value: str) -> str | None:
@@ -211,6 +230,58 @@ def _post_python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
     return sources
 
 
+def _project_top_level_before_after(
+    ctx: HookContext,
+    tool_input: ObjectDict,
+) -> tuple[str, str, str] | None:
+    path_value = extract_path_from_mapping(tool_input)
+    if not path_value or not _is_authored_python_path(path_value):
+        return None
+    old_string = first_present(
+        tool_input,
+        ("old_string", "oldString", "old_text", "oldText"),
+        strip=False,
+    )
+    new_string = first_present(
+        tool_input,
+        ("new_string", "newString", "new_text", "newText"),
+        strip=False,
+    )
+    if not old_string:
+        return None
+    source = _read_python_source(ctx, path_value)
+    if source is None or old_string not in source:
+        return None
+    return path_value, source, source.replace(old_string, new_string, 1)
+
+
+def _pre_python_camouflage_sources(ctx: HookContext) -> list[tuple[str, str, str]]:
+    if ctx.event_name not in (PRE_TOOL_USE, PERMISSION_REQUEST):
+        return []
+    sources: list[tuple[str, str, str]] = []
+    top_level_projection = _project_top_level_before_after(ctx, ctx.tool_input)
+    if top_level_projection is not None:
+        sources.append(top_level_projection)
+    for path_value, projected in _project_multiedit_sources(ctx, ctx.tool_input):
+        before = _read_python_source(ctx, path_value)
+        if before is not None:
+            sources.append((path_value, before, projected))
+    for ct in ctx.content_targets:
+        if not _is_authored_python_path(ct.path) or ct.source in {"multi_edit", "multi_edit_old"}:
+            continue
+        before = _read_python_source(ctx, ct.path)
+        if before is not None:
+            sources.append((ct.path, before, ct.content))
+    return _dedupe_camouflage_sources(sources)
+
+
+def _dedupe_camouflage_sources(sources: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    deduped: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for path_value, before, after in sources:
+        deduped.setdefault((path_value, after), (path_value, before, after))
+    return list(deduped.values())
+
+
 def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
     """Return full/projection Python sources for size-oriented hook checks.
 
@@ -220,6 +291,12 @@ def _python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
     if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST):
         return _dedupe_sources(_pre_python_structural_sources(ctx))
     return _dedupe_sources(_post_python_structural_sources(ctx))
+
+
+class _LineCountCamouflageFinding(NamedTuple):
+    path_value: str
+    before_lines: int
+    after_lines: int
 
 
 class _ModuleSizeFinding(NamedTuple):
@@ -249,7 +326,8 @@ class PythonModuleSizeRule(Rule):
             message=(
                 f"Python module `{finding.path_value}` is {collector}: "
                 f"{finding.line_count} lines exceeds limit {threshold}. "
-                f"Use the {scenario} split plan before writing it."
+                f"Use the {scenario} split plan before writing it; line-count "
+                "camouflage will be blocked."
             ),
             additional_context=_oversized_module_split_guidance(finding.path_value, scenario),
             metadata={
@@ -261,12 +339,59 @@ class PythonModuleSizeRule(Rule):
             },
         )
 
+    def _camouflage_finding(
+        self,
+        ctx: HookContext,
+        finding: _LineCountCamouflageFinding,
+    ) -> RuleFinding:
+        scenario = _module_split_scenario(finding.path_value)
+        removed = finding.before_lines - finding.after_lines
+        return RuleFinding(
+            rule_id=self.rule_id,
+            title="Block oversized-module line-count camouflage",
+            severity=Severity.HIGH,
+            decision=decision_for_context(ctx),
+            message=(
+                f"Line-count camouflage on oversized module `{finding.path_value}`: "
+                f"the edit removes {removed} blank/spacing lines "
+                f"({finding.before_lines} -> {finding.after_lines}) while keeping the "
+                "same nonblank content. Do a package/facade split instead of shaving "
+                "empty space."
+            ),
+            additional_context=_oversized_module_split_guidance(finding.path_value, scenario),
+            metadata={
+                METADATA_PATH: finding.path_value,
+                "collector": "line-count-camouflage",
+                "split_scenario": scenario,
+                "before_lines": finding.before_lines,
+                "after_lines": finding.after_lines,
+                "removed_lines": removed,
+            },
+        )
+
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if _python_ast_rule_is_disabled(ctx, self.rule_id):
             return []
         findings: list[RuleFinding] = []
+        camouflage_paths: set[str] = set()
+        for path_value, before, after in _pre_python_camouflage_sources(ctx):
+            if not _is_line_count_camouflage(before, after):
+                continue
+            camouflage_paths.add(path_value)
+            findings.append(
+                self._camouflage_finding(
+                    ctx,
+                    _LineCountCamouflageFinding(
+                        path_value,
+                        _line_count(before),
+                        _line_count(after),
+                    ),
+                )
+            )
         for path_value, source in _python_structural_sources(ctx):
+            if path_value in camouflage_paths:
+                continue
             line_count = _line_count(source)
             if line_count > LINT_MAX_MODULE_LINES_HARD:
                 findings.append(

@@ -269,6 +269,9 @@ def _post_lint_oversized_guidance(paths: list[str]) -> str:
     return (
         f"Oversized-module recovery: use the {scenario} split plan before continuing. "
         f"{_post_lint_split_detail(scenario)} "
+        "Line-count camouflage is not recovery: do not delete blank lines, compress "
+        "formatting, or shuffle comments just to duck the threshold; ruff/formatters "
+        "will normalize style while the oversized-module design smell remains. "
         "If the file is mostly generated data or giant literals, move data into "
         "resources, fixtures, or builders instead of hiding it in Python code. "
         f"Verify with `python3 -m py_compile {target}` plus the smallest focused tests."

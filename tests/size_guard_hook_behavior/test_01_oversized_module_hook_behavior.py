@@ -22,6 +22,38 @@ from tests.test_size_guard_hook_behavior import (
 )
 
 class TestOversizedModuleHookBehavior:
+    def test_pretool_edit_blocks_blank_line_shaving_even_when_result_drops_under_threshold(
+        self, tmp_path: Path
+    ) -> None:
+        _enroll_repo(tmp_path)
+        spaced_content = "".join(f"VALUE_{idx} = None\n\n" for idx in range(176))
+        squeezed_content = _assignment_module(176)
+
+        result = evaluate_payload(
+            _pre_edit_payload(
+                tmp_path,
+                "src/line_shaved.py",
+                spaced_content,
+                spaced_content,
+                squeezed_content,
+            )
+        )
+
+        assert_hook_prevents(result, expected_text="line-count camouflage")
+        findings = _findings_for_rule(result, OVERSIZED_MODULE_RULE)
+        assert len(findings) == 1, result.findings
+        metadata = findings[0].metadata
+        assert metadata["collector"] == "line-count-camouflage", metadata
+        before_lines = metadata["before_lines"]
+        after_lines = metadata["after_lines"]
+        assert isinstance(before_lines, int), metadata
+        assert isinstance(after_lines, int), metadata
+        assert before_lines > 350, metadata
+        assert after_lines < before_lines, metadata
+        details = _result_text(result)
+        assert "package/facade split" in details, details
+        assert "ruff/formatters" in details, details
+
     def test_pretool_write_blocks_soft_oversized_python_module(
         self, tmp_path: Path
     ) -> None:
