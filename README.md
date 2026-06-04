@@ -2,20 +2,22 @@
 
 Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Codex CLI and OpenCode are supported with platform-specific limitations.
 
+![Slopgate analytics dashboard — decision volume, event pipeline, top rules, severity mix](docs/assets/dashboard-overview.png)
+
 ## Install
 
+Install [uv](https://docs.astral.sh/uv/) first, then either install the global CLI or work from a project venv.
+
 ```bash
-pipx install .
-# or
-pip install -e .
-```
+# Global CLI on PATH (recommended)
+uv tool install .
 
-PowerShell:
+# From PyPI (when published)
+# uv tool install slopgate
 
-```powershell
-py -m pip install -e .
-# or, when using pipx on Windows
-pipx install .
+# Development: project venv + dev tools
+uv sync
+uv run slopgate test
 ```
 
 ## Quick Start
@@ -43,6 +45,60 @@ slopgate lint check             # scan the full project from the detected root
 slopgate lint check --details   # extended violations + repair prognosis
 slopgate lint init .            # scaffold slopgate.toml
 ```
+
+## Dashboard
+
+The [`dashboard/`](dashboard/) app visualizes Slopgate JSONL traces (`~/.config/slopgate/logs/*.jsonl`): decision volume, top rules, sessions, harness status, and rule toggles. It complements `slopgate stats` with interactive charts and file upload.
+
+### Live dashboard (default: port 18834)
+
+Build static assets with trace data baked in, deploy to the canvas directory, then run the API/static server:
+
+```bash
+# From repo root — local logs on this machine
+python3 dashboard/scripts/build-standalone.py --logs-dir ~/.config/slopgate/logs
+
+# Or fetch logs + config from a remote host over SSH (default host: little)
+python3 dashboard/scripts/build-standalone.py --ssh little
+
+# Serve UI + live APIs (snapshot, SSE stream, config read/write, harness status)
+python3 dashboard/scripts/serve.py
+```
+
+Open **http://127.0.0.1:18834/** (or `http://0.0.0.0:18834/` when `BIND=0.0.0.0`).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `18834` | HTTP listen port |
+| `BIND` | `0.0.0.0` | Bind address |
+| `SLOPGATE_SSH_HOST` | `little` | SSH host for live logs, config, and harness APIs |
+| `SLOPGATE_CONFIG_PATH` | `~/.config/slopgate/config.json` | Documented config path (read via SSH) |
+| `SLOPGATE_TRACE_DIR` | `~/.config/slopgate/logs` | Documented trace dir (read via SSH) |
+
+`serve.py` serves files from `~/.openclaw/canvas/forcedash` (populated by `build-standalone.py`). Without a prior build, start `serve.py` only after `build-standalone.py` has run at least once.
+
+### UI development (port 8080)
+
+For frontend work without the canvas deploy path:
+
+```bash
+cd dashboard
+npm install   # or: bun install
+npm run dev   # Vite → http://localhost:8080
+```
+
+- Starts with **mock** data unless `window.__SLOPGATE_DATA__` is injected.
+- **Drop** `.jsonl` / `.ndjson` trace files onto the UI to explore local logs.
+- Rule editing and harness panels need `serve.py` on **18834** (API routes are not proxied through Vite).
+
+### Trace inputs
+
+| Source | How |
+|---|---|
+| Hooks (live) | `events.jsonl`, `rules.jsonl`, `results.jsonl`, `subprocess.jsonl` under `~/.config/slopgate/logs/` |
+| CLI summary | `slopgate stats --days 7` (terminal; no UI) |
+| Dashboard upload | Drag JSONL files in dev mode |
+| Baked build | `build-standalone.py` inlines recent history into the deployed `index.html` |
 
 ## Supported Platforms
 
@@ -101,8 +157,8 @@ claude --plugin-dir ./bundle/claude-plugin
                         ▼
               ┌────────────────────┐
               │   Rule Engine      │
-              │  (30 Python rules  │
-              │   + 39 regex rules)│
+              │ 87 hook rules      │
+              │ (42 Py + 45 regex) │
               └─────────┬──────────┘
                         ▼
               ┌────────────────────┐
@@ -167,14 +223,18 @@ slopgate lint init [path]
 slopgate lint update [path] [--dry-run]
 ```
 
-#### 28 Batch Detectors
+#### 38 batch lint detectors
+
+Separate from hook rule IDs: `slopgate lint check` runs these AST/static detectors project-wide (baseline-gated). The real-time hook `QUALITY-LINT-001` reuses the same detector engine on touched files after edits.
 
 | Category | Detectors |
 |---|---|
-| **Code smells** | high-complexity, long-method, too-many-params, deep-nesting, god-class, oversized-module |
-| **Type safety** | banned-any (typing.Any), type-suppression (# type: ignore) |
+| **Parse** | python-parse-error |
+| **Code smells** | high-complexity, long-method, too-many-params, deep-nesting, god-class, oversized-module, oversized-module-soft |
+| **Type safety** | banned-any, type-suppression |
 | **Exception safety** | broad-except-swallow, silent-except, silent-datetime-fallback |
 | **Test smells** | long-test, eager-test, assertion-free-test, assertion-roulette, conditional-assertion, fixture-outside-conftest |
+| **Test integrity** | untested-production-code, missing-integration-test, hypothesis-candidate, obsolete-or-deprecated-test, weak-test-assertion, mock-theater, schema-bypass-test-data, hand-built-test-payload, mocked-integration-test |
 | **Duplication** | semantic-clone, repeated-magic-number, repeated-string-literal, repeated-code-block, duplicate-call-sequence |
 | **Logging** | direct-get-logger, wrong-logger-name |
 | **Stale code** | deprecated-pattern |
@@ -196,36 +256,43 @@ Per-repo overrides via `slopgate.toml` in the repo root.
 
 ## Rules
 
-### Real-time Hook Rules (30 Python + 39 regex)
-- Path protection (protected, sensitive, system)
-- Git safety (--no-verify, stash ban)
-- Python AST quality (long methods, deep nesting, complexity, dead code, god class, feature envy, thin wrappers)
-- Test quality (assertion roulette, test loops, fixtures placement, test smells)
-- Error handling (bash output errors, failure reinforcement)
-- Session controls (stop checks, config change guard)
-- LangGraph best practices (state reducers, mutation detection, deprecated API)
-- Baseline inflation guard
+Slopgate has **three surfaces** that are easy to conflate:
+
+| Surface | Count (bundled defaults) | When it runs |
+|---|---:|---|
+| **Real-time hooks** | **87** rule evaluations | Agent tool events (`slopgate handle`) |
+| ↳ Python classes | 42 (3 always-on + 39 repo-strict) | Path/git/AST quality, post-edit lint bridge, stop/session, LangGraph, etc. |
+| ↳ Regex (`config.json`) | 45 | Pattern rules for Python/TS/Rust/shell/git/config paths |
+| **Batch lint** | **38** detectors | `slopgate lint check` (project-wide, baseline-gated) |
+
+Many IDs overlap *by design* (for example `PY-CODE-013` in hooks and `god-class` / wrapper detectors in batch lint). The dashboard “top rules” chart is dominated by high-volume hook IDs such as `QUALITY-LINT-001` (post-edit touched-file lint), `PY-LOG-002`, and `PY-CODE-013` — not by the older “30 + 39” inventory.
+
+Repo mode still applies: **outside_repo** runs only the 3 always-on safety rules; **repo_strict** (with `slopgate.toml`) runs the full 87; **repo_relaxed** drops repo-strict families but keeps always-on safety.
+
+### Real-time hook rules (42 Python + 45 regex)
+
+- **Always-on (3):** protected paths, sensitive data, system paths
+- **Workflow & quality (repo-strict):** full-file read, git `--no-verify`, search reminders, post-edit quality commands, `QUALITY-LINT-001` / `QUALITY-POST-001`, baseline guard, enrollment, hook-infra protection, rulebook security, config-change guard, session/stop controls, bash error reinforcement
+- **Python AST (19):** `PY-AST-001`, `PY-CODE-008`–`018`, `PY-EXC-001`/`002`, `PY-IMPORT-001`–`003`, `PY-LOG-002`, `PY-TEST-005`, etc.
+- **LangGraph (3):** state reducers, mutation, deprecated API
+- **Regex (45):** type/exception/logging/test/shell/QA-path/TS/Rust patterns in bundled `defaults.json` (override via `~/.config/slopgate/config.json`)
 
 Availability depends on platform support:
 
 - **Claude Code**: widest runtime coverage
+- **Cursor**: partial — native `hooks.json` with Cursor-specific stdout shapes; strongest blocking on `preToolUse`, `beforeShellExecution`, and `beforeReadFile` (post-tool hooks are advisory/context-only, not hard blocks like Claude `PostToolUse` denial)
 - **Codex CLI**: currently limited by Codex's narrower hook surface
 - **OpenCode**: mediated through plugin event translation with advisory gaps around prompt and stop control
 
-### Batch Lint Rules (28 detectors)
-- See "28 Batch Detectors" table above
-- Configured via `slopgate.toml` in each project
-- Baseline tracking: only *new* violations fail the gate
+### Batch lint (38 detectors)
+
+- See the **38 batch lint detectors** table under Code Quality Linting
+- Configured per repo via `slopgate.toml`; only *new* violations fail the gate
 - Repo-wide baseline regeneration is disabled to prevent agents from normalizing technical debt
 
-### Declarative Regex Rules (39)
-Configured in `config.json` — covers:
-- Python type safety (Any ban, suppression ban)
-- Exception handling patterns
-- Shell quality bypasses
-- Linter config protection
-- TODO/FIXME markers
-- And more
+### Declarative regex rules (45)
+
+Configured in `config.json` (`regex_rules` in bundled defaults) — covers Python/TS/Rust quality and test patterns, shell bypasses, QA path protection, linter config guards, git reminders, and more. Disable or downgrade per rule via `disabled_rules` / `severity_overrides`.
 
 ## Per-Repo Overrides
 
@@ -277,21 +344,6 @@ Or in `slopgate.toml`:
 enabled = false
 ```
 
-## Testing
-
-```bash
-cd slopgate
-PYTHONPATH=src pytest tests/ -q
-```
-
-PowerShell:
-
-```powershell
-cd slopgate
-$env:PYTHONPATH = "src"
-pytest tests/ -q
-```
-
 ## Windows / PowerShell Notes
 
 - Native Windows installs use the standard console scripts generated by Python
@@ -309,33 +361,3 @@ pytest tests/ -q
   version. When Codex hooks are unavailable or degraded on Windows, use WSL or
   Git Bash for runtime enforcement and use `slopgate lint check` natively for
   batch quality checks.
-
-## Archived Windows worktree
-
-The old `slopgate-windows-powershell` git worktree (`windows-powershell-compat`) is
-archived; native Windows support is in this repo. See
-[docs/archive/windows-powershell-compat.md](docs/archive/windows-powershell-compat.md).
-
-## Cutover from slopgate / Enforcer
-
-```bash
-# 0. One-shot rename (repos + user config + OpenCode plugin)
-slopgate migrate
-# Repo-only: slopgate migrate --repo-only /path/to/repo
-
-# 1. Install slopgate globally
-pipx install ~/path/to/slopgate
-
-# 2. Copy your config
-mkdir -p ~/.config/slopgate
-cp ~/.claude/hooks/enforcer/.claude/hook-layer/config.json ~/.config/slopgate/
-
-# 3. Install hooks (replaces shell wrappers)
-slopgate install claude
-
-# 4. Test
-slopgate test
-
-# 5. Remove old enforcer (optional)
-# rm -rf ~/.claude/hooks/enforcer
-```

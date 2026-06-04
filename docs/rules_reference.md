@@ -1,6 +1,6 @@
 # Rules Reference
 
-## Built-in Python Rules (30)
+## Built-in Python Rules (42: 3 always-on + 39 repo-strict)
 
 ### Path & System Protection
 
@@ -78,7 +78,7 @@
 | LG-NODE-001 | MEDIUM | PostToolUse | Direct state mutation in node functions |
 | LG-API-001 | LOW | PostToolUse | Deprecated API usage (set_entry_point, etc.) |
 
-## Declarative Regex Rules (39)
+## Declarative Regex Rules (45)
 
 Configured in `config.json` under `regex_rules`. Each rule specifies patterns, target, and action.
 

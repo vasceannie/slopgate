@@ -24,8 +24,8 @@ slopgate is a global CLI guardrails engine for AI coding agents. One rule set, t
                         ▼
               ┌────────────────────┐
               │   Rule Engine      │
-              │  30 Python rules   │
-              │  39 regex rules    │
+              │  87 hook rules     │
+              │  (42 Py + 45 rx)  │
               └─────────┬──────────┘
                         ▼
               ┌────────────────────┐

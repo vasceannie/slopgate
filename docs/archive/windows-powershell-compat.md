@@ -13,7 +13,7 @@ Do not develop against `windows-powershell-compat`. Use:
 
 ```bash
 cd ~/.openclaw/workspace-hooker/slopgate
-pipx install .
+uv tool install .
 slopgate install claude   # or install all
 slopgate test
 ```

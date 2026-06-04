@@ -15,8 +15,8 @@
 
 ## What stays the same
 
-- All 30 Python rules — identical behavior
-- All 39 regex rules — loaded from same config format
+- All bundled Python hook rules (42: 3 always-on + 39 repo-strict) — identical behavior
+- All 45 bundled regex rules — loaded from same config format
 - Adapter core behavior is shared, but platform hook capabilities differ
   (Claude has fullest parity; Codex/OpenCode have platform-specific limits)
 - `slopgate.toml` per-repo overrides — identical
@@ -29,7 +29,7 @@
 
 ```bash
 # From the slopgate source directory
-pipx install .
+uv tool install .
 
 # Verify
 slopgate version
@@ -40,9 +40,7 @@ PowerShell:
 
 ```powershell
 # From the slopgate source directory
-pipx install .
-# or
-py -m pip install -e .
+uv tool install .
 
 slopgate version
 slopgate test

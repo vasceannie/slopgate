@@ -107,9 +107,6 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
 
 
 def _package_update_command(source: str) -> list[str]:
-    pipx = shutil.which("pipx")
-    if pipx:
-        return [pipx, "install", "--force", source]
     uv = shutil.which("uv")
     if uv:
         return [uv, "tool", "install", "--force", source]

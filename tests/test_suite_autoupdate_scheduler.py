@@ -299,7 +299,36 @@ def test_uninstall_suite_dry_run_reports_detected_sites_without_writing(
     assert (status, called, "Would uninstall: claude" in output) == (0, [], True)
 
 
-def test_update_suite_dry_run_reports_package_update_and_hook_refresh(
+def test_update_suite_dry_run_uses_uv_tool_install_when_uv_is_on_path(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(suite, "find_binary", lambda: "slopgate")
+
+    def uv_only(name: str) -> str | None:
+        return "/usr/bin/uv" if name == "uv" else None
+
+    monkeypatch.setattr(suite.shutil, "which", uv_only)
+    (tmp_path / ".claude").mkdir()
+
+    status = installer_module.update_suite(
+        installer_module.SuiteUpdateOptions(
+            dry_run=True,
+            source="git+https://example.invalid/vf.git@main",
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert (
+        status,
+        "Would run:" in output,
+        "uv tool install --force" in output,
+        "Refreshing claude hooks" in output,
+        "Would install: claude" in output,
+    ) == (0, True, True, True, True)
+
+
+def test_update_suite_dry_run_falls_back_to_pip_without_uv(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
