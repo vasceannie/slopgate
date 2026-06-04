@@ -12,14 +12,15 @@ from slopgate.installer._install_scope import (
     normalize_install_scope,
     resolve_project_root,
     scope_paths,
+    ResidualInstallScopeWarning,
     warn_residual_install_scope,
 )
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import (
     HOOK_TIMEOUT_LONG,
     HOOK_TIMEOUT_SHORT,
     HOOK_TIMEOUT_STANDARD,
     command_is_slopgate_hook,
-    find_binary,
     hook_command,
     print_binary_install_summary,
     require_json_object,
@@ -41,9 +42,9 @@ _CURSOR_EVENTS: dict[str, dict[str, object]] = {
     "afterShellExecution": {"timeout": HOOK_TIMEOUT_STANDARD, "failClosed": False},
     "beforeMCPExecution": {"timeout": HOOK_TIMEOUT_STANDARD, "failClosed": True},
     "afterMCPExecution": {"timeout": HOOK_TIMEOUT_STANDARD, "failClosed": False},
-    "beforeReadFile": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": True},
-    "beforeTabFileRead": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": True},
-    "afterFileEdit": {"timeout": HOOK_TIMEOUT_LONG, "failClosed": True},
+    "beforeReadFile": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": False},
+    "beforeTabFileRead": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": False},
+    "afterFileEdit": {"timeout": HOOK_TIMEOUT_LONG, "failClosed": False},
     "afterTabFileEdit": {"timeout": HOOK_TIMEOUT_LONG, "failClosed": False},
     "beforeSubmitPrompt": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": False},
     "sessionStart": {"timeout": HOOK_TIMEOUT_SHORT, "failClosed": False},
@@ -60,11 +61,6 @@ def _cursor_user_hooks_path() -> Path:
 
 def _cursor_project_hooks_path(project_root: Path) -> Path:
     return project_root.resolve() / ".cursor" / "hooks.json"
-
-
-def _cursor_hooks_path() -> Path:
-    """Default install target (user-level). Kept for tests and backward compatibility."""
-    return _cursor_user_hooks_path()
 
 
 def _cursor_hooks_block(binary: str) -> _CursorHooks:
@@ -150,7 +146,7 @@ def _install_cursor(
     project_root: Path | None = None,
 ) -> int:
     install_scope = normalize_install_scope(scope)
-    binary = find_binary()
+    binary = installer_shared.find_binary()
     hooks = _cursor_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(
@@ -205,11 +201,13 @@ def _uninstall_cursor(
         last_status = status
     if not dry_run:
         warn_residual_install_scope(
-            platform_label="Cursor",
-            scope=scope,
-            user_path=_cursor_user_hooks_path(),
-            project_path=_cursor_project_hooks_path(root),
-            project_root=project_root,
-            has_owned=_json_has_owned_slopgate_hooks,
+            ResidualInstallScopeWarning(
+                platform_label="Cursor",
+                scope=scope,
+                user_path=_cursor_user_hooks_path(),
+                project_path=_cursor_project_hooks_path(root),
+                project_root=project_root,
+                has_owned=_json_has_owned_slopgate_hooks,
+            )
         )
     return last_status

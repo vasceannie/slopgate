@@ -8,15 +8,16 @@ from typing import cast
 
 from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from slopgate.installer._install_scope import (
+    ResidualInstallScopeWarning,
     _json_has_owned_slopgate_hooks,
     normalize_install_scope,
     resolve_project_root,
     scope_paths,
     warn_residual_install_scope,
 )
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
-    find_binary,
     hook_command,
     merge_owned_hooks_into,
     remove_owned_hooks,
@@ -70,6 +71,14 @@ def _claude_hooks_block(binary: str) -> _ClaudeHooks:
     return hooks
 
 
+def _write_claude_settings(
+    settings_path: Path, settings: dict[str, object], status_line: str
+) -> int:
+    write_json_with_backup(settings_path, settings, "settings")
+    print(status_line)
+    return 0
+
+
 def _install_claude_at(settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool) -> int:
     if dry_run:
         print(f"Would patch: {settings_path}")
@@ -83,9 +92,9 @@ def _install_claude_at(settings_path: Path, hooks: _ClaudeHooks, *, dry_run: boo
         return 1
 
     merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
-    write_json_with_backup(settings_path, settings, "settings")
-    print(f"Installed slopgate hooks into {settings_path}")
-    return 0
+    return _write_claude_settings(
+        settings_path, settings, f"Installed slopgate hooks into {settings_path}"
+    )
 
 
 def _install_claude(
@@ -95,7 +104,7 @@ def _install_claude(
     project_root: Path | None = None,
 ) -> int:
     install_scope = normalize_install_scope(scope)
-    binary = find_binary()
+    binary = installer_shared.find_binary()
     hooks = _claude_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(
@@ -144,9 +153,9 @@ def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
         settings["hooks"] = remaining_hooks
     else:
         del settings["hooks"]
-    write_json_with_backup(settings_path, settings, "settings")
-    print(f"Removed slopgate hooks from {settings_path}")
-    return 0
+    return _write_claude_settings(
+        settings_path, settings, f"Removed slopgate hooks from {settings_path}"
+    )
 
 
 def _uninstall_claude(
@@ -177,11 +186,13 @@ def _uninstall_claude(
         print("No Claude settings found.")
     if not dry_run:
         warn_residual_install_scope(
-            platform_label="Claude",
-            scope=scope,
-            user_path=_claude_user_settings_path(),
-            project_path=_claude_project_settings_path(root),
-            project_root=project_root,
-            has_owned=_json_has_owned_slopgate_hooks,
+            ResidualInstallScopeWarning(
+                platform_label="Claude",
+                scope=scope,
+                user_path=_claude_user_settings_path(),
+                project_path=_claude_project_settings_path(root),
+                project_root=project_root,
+                has_owned=_json_has_owned_slopgate_hooks,
+            )
         )
     return last_status

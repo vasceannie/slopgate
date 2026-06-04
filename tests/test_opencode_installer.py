@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from slopgate.installer import _opencode as opencode_installer
+import slopgate.installer._shared as installer_shared
 from slopgate.resources import resource_path
 from slopgate.util import platform as platform_utils
 
@@ -27,7 +28,7 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
     monkeypatch.setattr(platform_utils, "is_windows", lambda: True)
     monkeypatch.setenv("APPDATA", str(appdata))
 
-    assert opencode_installer._opencode_plugin_path() == (
+    assert opencode_installer._opencode_user_plugin_path() == (
         appdata / "opencode" / "plugins" / "slopgate-plugin.ts"
     )
 
@@ -49,7 +50,7 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setattr(
-        opencode_installer,
+        installer_shared,
         "find_binary",
         lambda: "/tmp/Slopgate Bin/slopgate",
     )

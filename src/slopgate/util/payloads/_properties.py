@@ -4,6 +4,7 @@ from functools import cached_property
 from pathlib import Path
 
 from slopgate._types import ObjectDict, object_dict
+from slopgate.constants import SESSION_ID
 from slopgate.models import ContentTarget, RuntimeConfig
 
 from ._basic import detect_language, first_present, shell_kind_for_tool
@@ -53,7 +54,7 @@ class _CoreHookPayloadProperties:
 
     @cached_property
     def session_id(self) -> str:
-        value = self.payload.get("session_id")
+        value = self.payload.get(SESSION_ID)
         return str(value).strip() if value is not None else ""
 
     @cached_property

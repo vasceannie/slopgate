@@ -11,6 +11,9 @@ BLOCK = "block"
 METADATA_PATH = "path"
 METADATA_FUNCTION = "function"
 METADATA_COMMAND = "command"
+SESSION_ID = "session_id"
+SESSION_ID_CAMEL = "sessionId"
+METADATA_CWD = "cwd"
 PYTEST_TEST_PREFIX = "test_"
 EDIT_TOOL_NAMES = {
     "edit",

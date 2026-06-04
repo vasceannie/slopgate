@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE
+from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, SESSION_ID
 from slopgate.context import build_context
 from slopgate.util.subprocesses import run_shell
 
@@ -31,7 +31,7 @@ def run_async_jobs(payload_dict: Mapping[str, object]) -> tuple[str, list[str]]:
         ctx.trace.subprocess(
             {
                 "event_name": ctx.event_name,
-                "session_id": ctx.session_id,
+                SESSION_ID: ctx.session_id,
                 METADATA_COMMAND: result.command,
                 "cwd": result.cwd,
                 "returncode": result.returncode,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import pytest
 
@@ -100,3 +101,24 @@ def test_self_test_smoke_passes_all_cases(capsys: pytest.CaptureFixture[str]) ->
     assert "git --no-verify → deny" in captured.out, captured.out
     assert "codex adapter → deny" in captured.out, captured.out
     assert "opencode adapter → deny" in captured.out, captured.out
+
+
+def test_cmd_migrate_reports_nothing_for_clean_repo(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from slopgate.cli._migrate import cmd_migrate
+
+    assert (
+        cmd_migrate(
+            argparse.Namespace(
+                dry_run=False,
+                force=False,
+                path=str(tmp_path),
+                user_only=True,
+                repo_only=True,
+            )
+        )
+        == 0
+    )
+    assert "Nothing to migrate." in capsys.readouterr().out

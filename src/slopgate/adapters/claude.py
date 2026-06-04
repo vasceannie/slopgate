@@ -13,6 +13,7 @@ from slopgate._types import (
     object_dict,
     string_value,
 )
+from slopgate.adapters._payload_fields import merge_standard_session_fields
 from slopgate.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
@@ -62,12 +63,7 @@ class ClaudeAdapter(PlatformAdapter):
         event_name = _canonical_event_name(raw)
         if event_name:
             canonical["hook_event_name"] = event_name
-        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
-        if session_id:
-            canonical["session_id"] = session_id
-        cwd = string_value(raw.get("cwd")) or string_value(raw.get("workspace_root"))
-        if cwd:
-            canonical["cwd"] = cwd
+        merge_standard_session_fields(raw, canonical)
         return canonical
 
     def _decision_reason(self, request: _ClaudeRenderRequest) -> str:

@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from typing_extensions import override
 
 from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate.adapters._payload_fields import (
+    merge_standard_session_fields,
+    sync_tool_result_fields,
+)
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.models import RuleFinding
 
@@ -60,18 +64,8 @@ class OpenCodeAdapter(PlatformAdapter):
             lowered = tool_name.strip().lower().replace("-", "_")
             canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
 
-        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
-        if session_id:
-            canonical["session_id"] = session_id
-
-        cwd = string_value(raw.get("cwd")) or string_value(raw.get("directory"))
-        if cwd:
-            canonical["cwd"] = cwd
-
-        if "tool_response" in canonical and "tool_result" not in canonical:
-            canonical["tool_result"] = canonical["tool_response"]
-        elif "tool_result" in canonical and "tool_response" not in canonical:
-            canonical["tool_response"] = canonical["tool_result"]
+        merge_standard_session_fields(raw, canonical, cwd_extra_keys=("directory",))
+        sync_tool_result_fields(canonical)
         return canonical
 
     def _decision_reason(self, request: _OpenCodeRenderRequest) -> str:

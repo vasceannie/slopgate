@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from slopgate.installer import _cursor_hooks_block, _install_cursor, _uninstall_cursor
-from slopgate.installer._cursor import _cursor_hooks_path
+from slopgate.installer._cursor import _cursor_user_hooks_path
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import HOOK_TIMEOUT_STANDARD
 
 
@@ -16,7 +17,11 @@ def _cursor_hooks_block_snapshot(binary: str) -> dict[str, object]:
         "command": shell_entry["command"],
         "has_after_file_edit": "afterFileEdit" in hooks,
         "has_tab_hooks": "beforeTabFileRead" in hooks and "afterTabFileEdit" in hooks,
-        "fail_closed": shell_entry["failClosed"],
+        "shell_fail_closed": shell_entry["failClosed"],
+        "read_fail_closed": hooks["beforeReadFile"][0]["failClosed"],
+        "tab_read_fail_closed": hooks["beforeTabFileRead"][0]["failClosed"],
+        "after_edit_fail_closed": hooks["afterFileEdit"][0]["failClosed"],
+        "mcp_fail_closed": hooks["beforeMCPExecution"][0]["failClosed"],
         "timeout": shell_entry["timeout"],
     }
 
@@ -26,7 +31,11 @@ def test_cursor_hooks_block_uses_native_events_and_cursor_platform() -> None:
         "command": "'/tmp/Slopgate Bin/slopgate' handle --platform cursor",
         "has_after_file_edit": True,
         "has_tab_hooks": True,
-        "fail_closed": True,
+        "shell_fail_closed": True,
+        "read_fail_closed": False,
+        "tab_read_fail_closed": False,
+        "after_edit_fail_closed": False,
+        "mcp_fail_closed": True,
         "timeout": HOOK_TIMEOUT_STANDARD,
     }
 
@@ -35,8 +44,8 @@ def _cursor_install_merge_snapshot(tmp_path: Path, monkeypatch: Any) -> dict[str
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     import slopgate.installer._cursor as cursor_installer
 
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
-    hooks_path = _cursor_hooks_path()
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
+    hooks_path = _cursor_user_hooks_path()
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text(
         json.dumps(
@@ -101,7 +110,7 @@ def test_cursor_install_project_scope_writes_repo_hooks(
 ) -> None:
     import slopgate.installer._cursor as cursor_installer
 
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     status = cursor_installer._install_cursor(dry_run=False, scope="project")

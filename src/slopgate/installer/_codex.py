@@ -10,16 +10,17 @@ from typing import cast
 
 from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from slopgate.installer._install_scope import (
+    ResidualInstallScopeWarning,
     _json_has_owned_slopgate_hooks,
     normalize_install_scope,
     resolve_project_root,
     scope_paths,
     warn_residual_install_scope,
 )
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
     backup_existing_file_and_report,
-    find_binary,
     hook_command,
     merge_owned_hooks_into,
     print_binary_install_summary,
@@ -66,10 +67,6 @@ def _codex_user_hooks_path() -> Path:
 
 def _codex_project_hooks_path(project_root: Path) -> Path:
     return project_root / ".codex" / "hooks.json"
-
-
-def _codex_hooks_path() -> Path:
-    return _codex_user_hooks_path()
 
 
 def _codex_config_path_for_hooks(hooks_path: Path) -> Path:
@@ -238,7 +235,7 @@ def _install_codex(
     project_root: Path | None = None,
 ) -> int:
     install_scope = normalize_install_scope(scope)
-    binary = find_binary()
+    binary = installer_shared.find_binary()
     hooks = _codex_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(
@@ -297,11 +294,13 @@ def _uninstall_codex(
         last_status = status
     if not dry_run:
         warn_residual_install_scope(
-            platform_label="Codex",
-            scope=scope,
-            user_path=_codex_user_hooks_path(),
-            project_path=_codex_project_hooks_path(root),
-            project_root=project_root,
-            has_owned=_json_has_owned_slopgate_hooks,
+            ResidualInstallScopeWarning(
+                platform_label="Codex",
+                scope=scope,
+                user_path=_codex_user_hooks_path(),
+                project_path=_codex_project_hooks_path(root),
+                project_root=project_root,
+                has_owned=_json_has_owned_slopgate_hooks,
+            )
         )
     return last_status

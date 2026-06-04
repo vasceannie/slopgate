@@ -106,7 +106,7 @@ def test_claude_reinstall_replaces_powershell_owned_hook_and_preserves_user_hook
     settings_path = _seed_claude_hook_settings(
         tmp_path, monkeypatch, "my-slopgate-helper handle", old_owned
     )
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "slopgate")
 
     result = installer_module._install_claude(dry_run=False)
 

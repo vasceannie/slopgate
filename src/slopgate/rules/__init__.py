@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from slopgate.context import HookContext
-from slopgate.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE, SESSION_ID
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule
 from slopgate.util.payloads import is_edit_like_tool
@@ -82,7 +82,7 @@ def _trace_python_ast_import_error(ctx: HookContext, error: Exception) -> None:
         {
             "platform": "any",
             "event_name": ctx.event_name,
-            "session_id": ctx.session_id,
+            SESSION_ID: ctx.session_id,
             "tool_name": ctx.tool_name,
             "rule_id": "PY-AST-IMPORT-001",
             "severity": "high",

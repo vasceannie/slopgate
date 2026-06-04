@@ -123,6 +123,37 @@ def test_handle_malformed_json_reports_clean_error(
     assert "Traceback" not in captured.err
 
 
+class _InteractiveStdin(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+    def read(self, *_args: object, **_kwargs: object) -> str:
+        raise AssertionError("interactive stdin should not be read")
+
+
+def test_handle_interactive_stdin_reports_clean_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", _InteractiveStdin())
+
+    exit_code = cmd_handle(argparse.Namespace(platform="cursor"))
+    captured = capsys.readouterr()
+    assert {
+        "exit_code": exit_code,
+        "no_json": "No JSON payload on stdin" in captured.err,
+        "handle_hint": "slopgate handle" in captured.err,
+        "platform_hint": "--platform cursor" in captured.err,
+        "no_traceback": "Traceback" not in captured.err,
+    } == {
+        "exit_code": 1,
+        "no_json": True,
+        "handle_hint": True,
+        "platform_hint": True,
+        "no_traceback": True,
+    }
+
+
 def test_check_non_git_path_is_quiet_and_does_not_create_trace_dirs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

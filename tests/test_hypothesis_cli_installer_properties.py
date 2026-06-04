@@ -9,7 +9,7 @@ from slopgate.installer._shared import (
     filter_owned_hook_commands,
     merge_owned_hooks,
 )
-from slopgate.installer._suite import update_suite
+from slopgate.installer._suite import SuiteUpdateOptions, update_suite
 from slopgate.installer._suite_autoupdate import install_autoupdate, uninstall_autoupdate
 
 _SHORT_TEXT = strategies.text(
@@ -45,7 +45,7 @@ def test_command_is_slopgate_hook_rejects_non_string_inputs_property(_: None) ->
 
 @given(strategies.just(True))
 def test_update_suite_dry_run_returns_zero_property(dry_run: bool) -> None:
-    result = update_suite(dry_run=dry_run)
+    result = update_suite(SuiteUpdateOptions(dry_run=dry_run))
     assert result == 0, f"update_suite(dry_run=True) must return 0, got {result}"
 
 

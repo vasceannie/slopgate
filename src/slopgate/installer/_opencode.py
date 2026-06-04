@@ -6,15 +6,16 @@ import json
 from pathlib import Path
 
 from slopgate.installer._install_scope import (
+    ResidualInstallScopeWarning,
     _opencode_plugin_has_owned_slopgate,
     normalize_install_scope,
     resolve_project_root,
     scope_paths,
     warn_residual_install_scope,
 )
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import (
     backup_existing_file_and_report,
-    find_binary,
     print_binary_install_summary,
     remove_file_with_backup,
 )
@@ -41,10 +42,6 @@ def _opencode_user_plugin_path() -> Path:
 
 def _opencode_project_plugin_path(project_root: Path) -> Path:
     return project_root / ".opencode" / "plugins" / _PLUGIN_NAME
-
-
-def _opencode_plugin_path() -> Path:
-    return _opencode_user_plugin_path()
 
 
 def _render_opencode_plugin(template_text: str, binary: str) -> str:
@@ -95,7 +92,7 @@ def _install_opencode(
         return 1
 
     install_scope = normalize_install_scope(scope)
-    binary = find_binary()
+    binary = installer_shared.find_binary()
     root = resolve_project_root(project_root)
     paths = scope_paths(
         install_scope,
@@ -170,11 +167,13 @@ def _uninstall_opencode(
         print("No OpenCode slopgate plugin found.")
     if not dry_run:
         warn_residual_install_scope(
-            platform_label="OpenCode",
-            scope=scope,
-            user_path=_opencode_user_plugin_path(),
-            project_path=_opencode_project_plugin_path(root),
-            project_root=project_root,
-            has_owned=_opencode_plugin_has_owned_slopgate,
+            ResidualInstallScopeWarning(
+                platform_label="OpenCode",
+                scope=scope,
+                user_path=_opencode_user_plugin_path(),
+                project_path=_opencode_project_plugin_path(root),
+                project_root=project_root,
+                has_owned=_opencode_plugin_has_owned_slopgate,
+            )
         )
     return last_status

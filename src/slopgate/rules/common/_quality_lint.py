@@ -11,6 +11,7 @@ from slopgate.constants import (
     BLOCK,
     METADATA_COMMAND,
     METADATA_PATH,
+    SESSION_ID,
     PYTEST_TEST_PREFIX,
     QUALITY_FAILURE_PREVIEW_LIMIT,
 )
@@ -84,7 +85,7 @@ def _run_quality_commands(
         ctx.trace.subprocess(
             {
                 "event_name": ctx.event_name,
-                "session_id": ctx.session_id,
+                SESSION_ID: ctx.session_id,
                 METADATA_COMMAND: result.command,
                 "cwd": result.cwd,
                 "returncode": result.returncode,

@@ -76,10 +76,16 @@ def render_output(
     findings: list[RuleFinding],
     adapter: PlatformAdapter | None = None,
 ) -> ObjectDict | None:
-    if not findings:
-        return None
-
     adapter = adapter or get_adapter("claude")
+    if not findings:
+        return adapter.render_output(
+            ctx.event_name,
+            findings,
+            context=None,
+            updated_input={},
+            decision=None,
+        )
+
     return adapter.render_output(
         ctx.event_name,
         findings,

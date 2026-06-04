@@ -5,6 +5,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Literal
 
+from slopgate.constants import SESSION_ID
 from slopgate.config import (
     is_path_skipped,
     is_repo_disabled,
@@ -37,7 +38,7 @@ def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
     return {
         "platform": platform,
         "event_name": ctx.event_name,
-        "session_id": ctx.session_id,
+        SESSION_ID: ctx.session_id,
         "tool_name": ctx.tool_name,
     }
 

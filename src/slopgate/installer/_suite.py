@@ -50,6 +50,17 @@ class SuiteUninstallOptions:
 
 
 @dataclass(frozen=True)
+class SuiteUpdateOptions:
+    """Options for updating Slopgate and refreshing hook install sites."""
+
+    dry_run: bool = False
+    source: str = DEFAULT_UPDATE_SOURCE
+    include_missing: bool = False
+    install_scope: str = "user"
+    project_root: Path | None = None
+
+
+@dataclass(frozen=True)
 class InstallSite:
     """A platform hook install site on the current device."""
 
@@ -215,21 +226,14 @@ def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
     return status
 
 
-def update_suite(
-    *,
-    dry_run: bool = False,
-    source: str = DEFAULT_UPDATE_SOURCE,
-    include_missing: bool = False,
-    install_scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
+def update_suite(options: SuiteUpdateOptions) -> int:
     """Update Slopgate from GitHub, then refresh detected local hook sites."""
     from slopgate.installer import install_platform
 
     print(f"Device: {current_device_label()}")
-    update_command = _package_update_command(source)
-    print("Update source: " + source)
-    if dry_run:
+    update_command = _package_update_command(options.source)
+    print("Update source: " + options.source)
+    if options.dry_run:
         print("Would run: " + shell_command(update_command))
     else:
         env = os.environ.copy()
@@ -239,17 +243,17 @@ def update_suite(
             return completed.returncode
 
     status = 0
-    for site in discover_install_sites(include_missing=include_missing):
+    for site in discover_install_sites(include_missing=options.include_missing):
         print(f"Refreshing {site.platform} hooks at {site.path}")
-        if dry_run:
+        if options.dry_run:
             print(f"Would install: {site.platform}")
             continue
         status = (
             install_platform(
                 site.platform,
                 dry_run=False,
-                install_scope=install_scope,
-                project_root=project_root,
+                install_scope=options.install_scope,
+                project_root=options.project_root,
             )
             or status
         )

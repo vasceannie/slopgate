@@ -11,6 +11,7 @@ from tests.test_adapters import (
 )
 from slopgate._types import ObjectDict
 from slopgate.constants import BLOCK, DENY, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.engine import evaluate_payload
 
 
 def test_cursor_adapter_registry_name() -> None:
@@ -164,6 +165,37 @@ def test_cursor_adapter_renders_before_submit_prompt_block() -> None:
         "continue": False,
         "user_message": "[PROMPT-001 | HIGH] Prompt blocked.",
     }
+
+
+def test_cursor_adapter_renders_pretool_allow_for_empty_findings() -> None:
+    output = require_rendered(
+        get_adapter("cursor").render_output(PRE_TOOL_USE, [], decision=None),
+    )
+    assert output == {"permission": "allow"}
+
+
+def test_cursor_evaluate_payload_emits_native_allow_for_clean_pre_hook() -> None:
+    result = evaluate_payload(
+        {
+            "hook_event_name": "beforeShellExecution",
+            "command": "printf CURSOR_SHELL_OK",
+            "cwd": "/tmp",
+        },
+        platform="cursor",
+    )
+
+    assert result.output == {"permission": "allow"}
+
+
+def test_cursor_adapter_renders_before_submit_prompt_allow_for_empty_findings() -> None:
+    output = require_rendered(
+        get_adapter("cursor").render_output("UserPromptSubmit", [], decision=None),
+    )
+    assert output == {"continue": True}
+
+
+def test_cursor_adapter_renders_post_tool_empty_findings_as_noop() -> None:
+    assert get_adapter("cursor").render_output(POST_TOOL_USE, [], decision=None) is None
 
 
 def test_cursor_adapter_renders_post_tool_use_as_additional_context() -> None:

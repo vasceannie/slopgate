@@ -220,7 +220,9 @@ def test_update_suite_returns_nonzero_when_package_update_fails(
 
     monkeypatch.setattr(installer_suite.subprocess, "run", lambda *_a, **_k: _FailedRun())
 
-    assert installer_suite.update_suite(dry_run=False) == 1
+    assert (
+        installer_suite.update_suite(installer_suite.SuiteUpdateOptions(dry_run=False)) == 1
+    )
 
 
 def test_install_autoupdate_dry_run_allows_missing_binary(

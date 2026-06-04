@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from slopgate._types import ObjectDict, object_dict, object_list, string_value
-from slopgate.constants import METADATA_PATH
+from slopgate.constants import METADATA_PATH, SESSION_ID
 
 @dataclass
 class _Counters:
@@ -124,7 +124,7 @@ def _classify_findings(
 
 def _process_entry(entry: dict[str, object], counters: _Counters) -> None:
     """Process a single results.jsonl entry into the counters."""
-    session = str(entry.get("session_id", "unknown"))
+    session = str(entry.get(SESSION_ID, "unknown"))
     if session.startswith("fixture-") or session.startswith("test-"):
         counters.fixture_filtered += 1
         return

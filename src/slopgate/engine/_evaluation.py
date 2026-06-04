@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate._types import ObjectDict
+from slopgate.constants import SESSION_ID
 from slopgate.adapters import get_adapter
 from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
@@ -58,7 +59,7 @@ def _trace_evaluation_start(ctx: HookContext, metadata: _EvaluationMetadata) -> 
             "platform_capability": metadata.platform_capability,
             "degraded_reason": metadata.degraded_reason,
             "event_name": ctx.event_name,
-            "session_id": ctx.session_id,
+            SESSION_ID: ctx.session_id,
             "tool_name": ctx.tool_name,
             "candidate_paths": ctx.candidate_paths,
             "languages": sorted(ctx.languages),
@@ -80,7 +81,7 @@ def _trace_evaluation_result(
             "platform_capability": metadata.platform_capability,
             "degraded_reason": metadata.degraded_reason,
             "event_name": ctx.event_name,
-            "session_id": ctx.session_id,
+            SESSION_ID: ctx.session_id,
             "tool_name": ctx.tool_name,
             "findings": _serialize_findings(acc.findings),
             "errors": acc.errors,

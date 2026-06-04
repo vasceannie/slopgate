@@ -156,7 +156,7 @@ def test_codex_install_writes_hooks_and_toml_feature(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "slopgate")
 
     assert installer_module._install_codex(dry_run=False) == 0
 
@@ -192,7 +192,7 @@ def test_codex_install_refuses_invalid_existing_hooks_json(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "slopgate")
     hooks_path = tmp_path / ".codex" / "hooks.json"
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text("{not-json", encoding="utf-8")
@@ -272,7 +272,7 @@ def _install_with_existing_hooks(
     existing_hooks: dict[str, object],
 ) -> Path:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "slopgate")
     hooks_path = tmp_path / harness_dir / file_name
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text(json.dumps(existing_hooks), encoding="utf-8")

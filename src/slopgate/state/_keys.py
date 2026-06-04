@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from time import time
-from slopgate.constants import (
-    METADATA_PATH,
-)
+from slopgate.constants import METADATA_PATH, SESSION_ID
 from slopgate._types import (
     ObjectDict,
     ObjectMapping,
@@ -27,7 +25,7 @@ def _failure_count(item: ObjectDict) -> int:
 class _StateKeyMixin:
     def _full_read_key(self, session_id: str, path: str) -> str:
         return json.dumps(
-            {"session_id": session_id.strip(), METADATA_PATH: self._normalize_path(path.strip())},
+            {SESSION_ID: session_id.strip(), METADATA_PATH: self._normalize_path(path.strip())},
             sort_keys=True,
         )
 
@@ -41,7 +39,7 @@ class _StateKeyMixin:
         normalized_path = self._normalize_path(path) if path else "__pathless__"
         return json.dumps(
             {
-                "session_id": session_id.strip(),
+                SESSION_ID: session_id.strip(),
                 "rule_id": rule_id.strip(),
                 METADATA_PATH: normalized_path,
                 "attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__",
@@ -58,7 +56,7 @@ class _StateKeyMixin:
             parsed = object_dict(json.loads(key))
         except json.JSONDecodeError:
             return False
-        if string_value(parsed.get("session_id")) != pattern.session_id.strip():
+        if string_value(parsed.get(SESSION_ID)) != pattern.session_id.strip():
             return False
         if string_value(parsed.get("rule_id")) != pattern.rule_id.strip():
             return False
@@ -223,7 +221,7 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
                 parsed = object_dict(json.loads(key))
             except json.JSONDecodeError:
                 continue
-            if string_value(parsed.get("session_id")) != key_prefix:
+            if string_value(parsed.get(SESSION_ID)) != key_prefix:
                 continue
             rule_id = string_value(parsed.get("rule_id"))
             if rule_id is None:

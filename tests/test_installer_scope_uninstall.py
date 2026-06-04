@@ -10,6 +10,7 @@ import slopgate.installer._claude as claude_installer
 import slopgate.installer._codex as codex_installer
 import slopgate.installer._cursor as cursor_installer
 import slopgate.installer._opencode as opencode_installer
+import slopgate.installer._shared as installer_shared
 from slopgate.installer._opencode import _PLUGIN_OWNERSHIP_MARKERS
 from slopgate.installer._shared import command_is_slopgate_hook
 
@@ -91,7 +92,8 @@ def _install_uninstall_project_roundtrip(
 def test_claude_project_uninstall_preserves_third_party_hooks(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(claude_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
+    config_path = tmp_path / ".claude" / "settings.json"
 
     def read_third_party(parsed: dict[str, object]) -> bool:
         hooks = parsed.get("hooks")
@@ -116,15 +118,19 @@ def test_claude_project_uninstall_preserves_third_party_hooks(
         monkeypatch,
         install=claude_installer._install_claude,
         uninstall=claude_installer._uninstall_claude,
-        config_path=tmp_path / ".claude" / "settings.json",
+        config_path=config_path,
         read_third_party=read_third_party,
     )
+    nested = json.loads(config_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0][
+        "hooks"
+    ]
+    assert nested[0]["command"] == "./existing.sh"
 
 
 def test_codex_project_uninstall_preserves_third_party_hooks(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(codex_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
 
     def read_third_party(parsed: dict[str, object]) -> bool:
         hooks = parsed.get("hooks")
@@ -136,20 +142,25 @@ def test_codex_project_uninstall_preserves_third_party_hooks(
         entry = shell[0]
         return isinstance(entry, dict) and entry.get("command") == "./existing.sh"
 
+    config_path = tmp_path / ".codex" / "hooks.json"
     _install_uninstall_project_roundtrip(
         tmp_path,
         monkeypatch,
         install=codex_installer._install_codex,
         uninstall=codex_installer._uninstall_codex,
-        config_path=tmp_path / ".codex" / "hooks.json",
+        config_path=config_path,
         read_third_party=read_third_party,
     )
+    shell_entry = json.loads(config_path.read_text(encoding="utf-8"))["hooks"][
+        "beforeShellExecution"
+    ][0]
+    assert shell_entry["command"] == "./existing.sh"
 
 
 def test_cursor_project_uninstall_preserves_third_party_hooks(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
 
     def read_third_party(parsed: dict[str, object]) -> bool:
         hooks = parsed.get("hooks")
@@ -161,20 +172,25 @@ def test_cursor_project_uninstall_preserves_third_party_hooks(
         entry = shell[0]
         return isinstance(entry, dict) and entry.get("command") == "./existing.sh"
 
+    config_path = tmp_path / ".cursor" / "hooks.json"
     _install_uninstall_project_roundtrip(
         tmp_path,
         monkeypatch,
         install=cursor_installer._install_cursor,
         uninstall=cursor_installer._uninstall_cursor,
-        config_path=tmp_path / ".cursor" / "hooks.json",
+        config_path=config_path,
         read_third_party=read_third_party,
     )
+    shell_entry = json.loads(config_path.read_text(encoding="utf-8"))["hooks"][
+        "beforeShellExecution"
+    ][0]
+    assert shell_entry["command"] == "./existing.sh"
 
 
 def test_opencode_project_uninstall_removes_owned_plugin_only(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setattr(opencode_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     assert opencode_installer._install_opencode(dry_run=False, scope="project") == 0
@@ -188,7 +204,7 @@ def test_opencode_project_uninstall_removes_owned_plugin_only(
 def test_uninstall_user_scope_warns_when_project_hooks_remain(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     repo = tmp_path / "repo"
     repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(repo)
@@ -201,21 +217,25 @@ def test_uninstall_user_scope_warns_when_project_hooks_remain(
     assert ".cursor/hooks.json" in captured.out
 
 
-def test_user_scope_uninstall_does_not_touch_project_install(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
+def _user_scope_uninstall_leaves_project_hooks(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> dict[str, bool]:
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
     repo = tmp_path / "repo"
     repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(repo)
 
-    assert cursor_installer._install_cursor(dry_run=False, scope="both") == 0
+    if cursor_installer._install_cursor(dry_run=False, scope="both") != 0:
+        raise AssertionError("project+user install failed")
     project_hooks = tmp_path / "repo" / ".cursor" / "hooks.json"
     user_hooks = tmp_path / "home" / ".cursor" / "hooks.json"
-    assert project_hooks.exists() and user_hooks.exists()
+    if not project_hooks.exists() or not user_hooks.exists():
+        raise AssertionError("expected both hook files to exist")
 
-    assert cursor_installer._uninstall_cursor(dry_run=False, scope="user") == 0
+    if cursor_installer._uninstall_cursor(dry_run=False, scope="user") != 0:
+        raise AssertionError("user-scope uninstall failed")
 
     user_parsed = json.loads(user_hooks.read_text(encoding="utf-8"))
     project_parsed = json.loads(project_hooks.read_text(encoding="utf-8"))
@@ -233,5 +253,18 @@ def test_user_scope_uninstall_does_not_touch_project_install(
         for entry in entries
         if isinstance(entry, dict)
     ]
-    assert not any(command_is_slopgate_hook(command) for command in user_commands)
-    assert any(command_is_slopgate_hook(command) for command in project_commands)
+    return {
+        "user_clean": not any(command_is_slopgate_hook(command) for command in user_commands),
+        "project_retained": any(
+            command_is_slopgate_hook(command) for command in project_commands
+        ),
+    }
+
+
+def test_user_scope_uninstall_does_not_touch_project_install(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    assert _user_scope_uninstall_leaves_project_hooks(tmp_path, monkeypatch) == {
+        "user_clean": True,
+        "project_retained": True,
+    }

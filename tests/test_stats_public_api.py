@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -23,15 +24,18 @@ def test_load_entries_skips_invalid_json_lines(tmp_path: Path) -> None:
 
 
 def test_load_entries_filters_events_older_than_day_window(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc)
+    fresh_ts = now.isoformat()
+    stale_ts = (now - timedelta(days=30)).isoformat()
     log_path = tmp_path / "events.jsonl"
     log_path.write_text(
-        '{"timestamp":"2026-06-03T00:00:00+00:00","event_name":"fresh"}\n'
-        '{"timestamp":"2020-01-01T00:00:00+00:00","event_name":"stale"}\n',
+        f'{{"timestamp":"{fresh_ts}","event_name":"fresh"}}\n'
+        f'{{"timestamp":"{stale_ts}","event_name":"stale"}}\n',
         encoding="utf-8",
     )
 
     assert load_entries(log_path, days=1) == [
-        {"timestamp": "2026-06-03T00:00:00+00:00", "event_name": "fresh"}
+        {"timestamp": fresh_ts, "event_name": "fresh"}
     ]
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 
 from slopgate._argparse_types import SubparserRegistry
 
@@ -26,18 +25,6 @@ from slopgate.cli.commands import (
     cmd_update_suite,
     cmd_version,
 )
-from slopgate.cli.lint import cmd_lint
-
-
-@dataclass(frozen=True)
-class LintAnalysisParserSpec:
-    name: str
-    help_text: str
-    description: str
-    details_help: str
-    lint_command: str
-
-
 def _add_platform_argument(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument(
         "--platform", choices=VALID_PLATFORMS, default="claude", help=PLATFORM_HELP
@@ -73,7 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     _add_core_parsers(sub)
     _add_config_parsers(sub)
-    _add_lint_parsers(sub)
+    from slopgate.cli.parsers_lint import add_lint_parsers
+
+    add_lint_parsers(sub)
 
     from slopgate.search.cli import build_search_parser
 
@@ -174,15 +163,26 @@ def _add_suite_update_arguments(
     )
 
 
+def _add_suite_command_parser(
+    sub: SubparserRegistry,
+    name: str,
+    *,
+    help_text: str,
+    func: object,
+) -> argparse.ArgumentParser:
+    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    _add_suite_update_arguments(parser)
+    _add_install_scope_arguments(parser)
+    return parser
+
+
 def _add_suite_parsers(sub: SubparserRegistry) -> None:
-    install_suite = _add_command_parser(
+    install_suite = _add_suite_command_parser(
         sub,
         "install-suite",
         help_text="Install all detected harness hooks and optionally the auto-updater",
         func=cmd_install_suite,
     )
-    _add_suite_update_arguments(install_suite)
-    _add_install_scope_arguments(install_suite)
     _ = install_suite.add_argument(
         "--with-autoupdate",
         action="store_true",
@@ -195,17 +195,15 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
         help="Auto-update polling interval for the native scheduler",
     )
 
-    update_suite = _add_command_parser(
+    _ = _add_suite_command_parser(
         sub,
         "update-suite",
         help_text="Update Slopgate from GitHub and refresh detected hook sites",
         func=cmd_update_suite,
     )
-    _add_suite_update_arguments(update_suite)
-    _add_install_scope_arguments(update_suite)
 
 
-def _add_core_parsers(sub: SubparserRegistry) -> None:
+def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
     handle = _add_command_parser(
         sub, "handle", help_text="Read hook payload from stdin", func=cmd_handle
     )
@@ -214,6 +212,16 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     _add_command_parser(
         sub, "handle-async", help_text="Run async post-edit jobs", func=cmd_handle_async
     )
+
+    replay = _add_command_parser(
+        sub, "replay", help_text="Replay a saved payload", func=cmd_replay
+    )
+    _ = replay.add_argument("--payload", required=True)
+    _ = replay.add_argument("--pretty", action="store_true")
+    _add_platform_argument(replay)
+
+
+def _add_repo_enrollment_parsers(sub: SubparserRegistry) -> None:
     _add_path_command_parser(
         sub, "check", help_text="Check quality gate for a repo", func=cmd_check
     )
@@ -227,13 +235,8 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
         help="Only enroll the main repo root",
     )
 
-    replay = _add_command_parser(
-        sub, "replay", help_text="Replay a saved payload", func=cmd_replay
-    )
-    _ = replay.add_argument("--payload", required=True)
-    _ = replay.add_argument("--pretty", action="store_true")
-    _add_platform_argument(replay)
 
+def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
     _add_platform_install_parser(
         sub, "install", help_text="Install hooks for a platform", func=cmd_install
     )
@@ -242,6 +245,8 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     )
     _add_suite_parsers(sub)
 
+
+def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     stats = _add_command_parser(
         sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
     )
@@ -275,6 +280,13 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     )
 
 
+def _add_core_parsers(sub: SubparserRegistry) -> None:
+    _add_hook_runtime_parsers(sub)
+    _add_repo_enrollment_parsers(sub)
+    _add_platform_install_parsers(sub)
+    _add_maintenance_parsers(sub)
+
+
 def _add_config_parsers(sub: SubparserRegistry) -> None:
     config_parser = sub.add_parser("config", help="Configuration management")
     config_sub = config_parser.add_subparsers(dest="config_command")
@@ -291,85 +303,3 @@ def _add_config_parsers(sub: SubparserRegistry) -> None:
     )
 
 
-def _add_lint_analysis_parser(
-    lint_sub: SubparserRegistry,
-    spec: LintAnalysisParserSpec,
-) -> None:
-    parser = lint_sub.add_parser(
-        spec.name,
-        help=spec.help_text,
-        description=spec.description,
-    )
-    _add_details_argument(parser, help_text=spec.details_help)
-    parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
-
-
-def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
-    _add_lint_analysis_parser(
-        lint_sub,
-        LintAnalysisParserSpec(
-            name="check",
-            help_text="Lint the current project root, including test-integrity checks",
-            description=(
-                "Lint the current project root, including test-integrity checks. This "
-                "command intentionally accepts no file or directory argument so agents "
-                "cannot bypass full-project checks."
-            ),
-            details_help=(
-                "Show extended violation locations, signatures, and repair prognosis"
-            ),
-            lint_command="check",
-        ),
-    )
-    _add_lint_analysis_parser(
-        lint_sub,
-        LintAnalysisParserSpec(
-            name="test-integrity",
-            help_text=(
-                "Scan tests for weak assertions, mock theater, and schema-bypass fakes"
-            ),
-            description=(
-                "Scan the current project tests for bad-test-efficacy indicators: weak "
-                "presence assertions, mock-only proofs, schema bypasses, hand-built "
-                "payload drift, over-mocked integration tests, untested production code, "
-                "missing integration seams, Hypothesis candidates, and obsolete tests."
-            ),
-            details_help="Show contextual repair guidance for each suspicious test",
-            lint_command="test-integrity",
-        ),
-    )
-
-
-def _add_lint_baseline_parser(lint_sub: SubparserRegistry) -> None:
-    baseline = lint_sub.add_parser(
-        "baseline",
-        help="Disabled: repo-wide rebaselining is not allowed",
-        description="Disabled: repo-wide rebaselining is not allowed",
-    )
-    _add_optional_path_argument(baseline)
-    baseline.set_defaults(func=cmd_lint, lint_command="baseline")
-
-
-def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
-    init = lint_sub.add_parser("init", help="Scaffold slopgate.toml")
-    _add_optional_path_argument(init)
-    init.set_defaults(func=cmd_lint, lint_command="init")
-
-
-def _add_lint_update_parser(lint_sub: SubparserRegistry) -> None:
-    update = lint_sub.add_parser("update", help="Add missing config keys")
-    _add_optional_path_argument(update)
-    _add_dry_run_argument(update)
-    update.set_defaults(func=cmd_lint, lint_command="update")
-
-
-def _add_lint_parsers(sub: SubparserRegistry) -> None:
-    lint = sub.add_parser("lint", help="Batch code quality analysis")
-    lint_sub = lint.add_subparsers(dest="lint_command")
-
-    _add_lint_analysis_parsers(lint_sub)
-    _add_lint_baseline_parser(lint_sub)
-    _add_lint_init_parser(lint_sub)
-    _add_lint_update_parser(lint_sub)
-
-    lint.set_defaults(func=cmd_lint, lint_command="check")

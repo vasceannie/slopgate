@@ -29,94 +29,28 @@ from slopgate.installer._cursor import (
 from slopgate.installer._install_scope import INSTALL_SCOPES
 from slopgate.installer._shared import find_binary as _find_binary
 
-
-def _install_claude(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    _claude.find_binary = _find_binary
-    return _claude._install_claude(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _uninstall_claude(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    return _claude._uninstall_claude(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _install_codex(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    _codex.find_binary = _find_binary
-    return _codex._install_codex(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _uninstall_codex(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    return _codex._uninstall_codex(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _install_opencode(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    _opencode.find_binary = _find_binary
-    return _opencode._install_opencode(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _uninstall_opencode(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    return _opencode._uninstall_opencode(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _install_cursor(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    _cursor.find_binary = _find_binary
-    return _cursor._install_cursor(dry_run=dry_run, scope=scope, project_root=project_root)
-
-
-def _uninstall_cursor(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
-) -> int:
-    return _cursor._uninstall_cursor(dry_run=dry_run, scope=scope, project_root=project_root)
+_install_claude = _claude._install_claude
+_uninstall_claude = _claude._uninstall_claude
+_install_codex = _codex._install_codex
+_uninstall_codex = _codex._uninstall_codex
+_install_opencode = _opencode._install_opencode
+_uninstall_opencode = _opencode._uninstall_opencode
+_install_cursor = _cursor._install_cursor
+_uninstall_cursor = _cursor._uninstall_cursor
 
 install_suite = _suite.install_suite
 SuiteInstallOptions = _suite.SuiteInstallOptions
 SuiteUninstallOptions = _suite.SuiteUninstallOptions
+SuiteUpdateOptions = _suite.SuiteUpdateOptions
 uninstall_autoupdate = _suite.uninstall_autoupdate
 uninstall_suite = _suite.uninstall_suite
 update_suite = _suite.update_suite
 
 _INSTALLERS = {
-    "claude": (_install_claude, _uninstall_claude),
-    "codex": (_install_codex, _uninstall_codex),
-    "cursor": (_install_cursor, _uninstall_cursor),
-    "opencode": (_install_opencode, _uninstall_opencode),
+    "claude": (_claude._install_claude, _claude._uninstall_claude),
+    "codex": (_codex._install_codex, _codex._uninstall_codex),
+    "cursor": (_cursor._install_cursor, _cursor._uninstall_cursor),
+    "opencode": (_opencode._install_opencode, _opencode._uninstall_opencode),
 }
 
 
@@ -188,6 +122,7 @@ __all__ = [
     "install_suite",
     "SuiteInstallOptions",
     "SuiteUninstallOptions",
+    "SuiteUpdateOptions",
     "uninstall_autoupdate",
     "uninstall_platform",
     "uninstall_suite",

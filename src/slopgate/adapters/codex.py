@@ -13,6 +13,10 @@ from slopgate._types import (
     object_dict,
     string_value,
 )
+from slopgate.adapters._payload_fields import (
+    merge_standard_session_fields,
+    sync_tool_result_fields,
+)
 from slopgate.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
@@ -192,18 +196,8 @@ class CodexAdapter(PlatformAdapter):
         event_name = _canonical_codex_event(raw)
         if event_name:
             canonical["hook_event_name"] = event_name
-        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
-        if session_id:
-            canonical["session_id"] = session_id
-        cwd = string_value(raw.get("cwd")) or string_value(raw.get("workspace_root"))
-        if cwd:
-            canonical["cwd"] = cwd
-        if "tool_output" in canonical and "tool_result" not in canonical:
-            canonical["tool_result"] = canonical["tool_output"]
-        if "tool_response" in canonical and "tool_result" not in canonical:
-            canonical["tool_result"] = canonical["tool_response"]
-        elif "tool_result" in canonical and "tool_response" not in canonical:
-            canonical["tool_response"] = canonical["tool_result"]
+        merge_standard_session_fields(raw, canonical)
+        sync_tool_result_fields(canonical)
         return canonical
 
     @override

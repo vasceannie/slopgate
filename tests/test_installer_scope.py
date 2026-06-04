@@ -12,11 +12,19 @@ import slopgate.installer._claude as claude_installer
 import slopgate.installer._codex as codex_installer
 import slopgate.installer._cursor as cursor_installer
 import slopgate.installer._opencode as opencode_installer
+import slopgate.installer._shared as installer_shared
+from slopgate.installer._install_scope import (
+    ResidualInstallScopeWarning,
+    normalize_install_scope,
+    resolve_project_root,
+    scope_paths,
+    warn_residual_install_scope,
+)
 from slopgate.installer._opencode import _PLUGIN_OWNERSHIP_MARKERS
 
 
 def test_claude_project_scope_writes_repo_settings(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setattr(claude_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     assert claude_installer._install_claude(dry_run=False, scope="project") == 0
@@ -32,7 +40,7 @@ def test_claude_project_scope_writes_repo_settings(tmp_path: Path, monkeypatch: 
 
 
 def test_codex_project_scope_writes_repo_hooks(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setattr(codex_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     assert codex_installer._install_codex(dry_run=False, scope="project") == 0
@@ -42,7 +50,7 @@ def test_codex_project_scope_writes_repo_hooks(tmp_path: Path, monkeypatch: Any)
 
 
 def test_opencode_project_scope_writes_repo_plugin(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setattr(opencode_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     assert opencode_installer._install_opencode(dry_run=False, scope="project") == 0
@@ -52,7 +60,7 @@ def test_opencode_project_scope_writes_repo_plugin(tmp_path: Path, monkeypatch: 
 
 
 def test_cursor_project_scope_still_supported(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setattr(cursor_installer, "find_binary", lambda: "/tmp/slopgate")
+    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
 
     assert cursor_installer._install_cursor(dry_run=False, scope="project") == 0
@@ -67,3 +75,41 @@ def test_install_platform_rejects_invalid_scope(capsys: Any) -> None:
 def test_uninstall_platform_rejects_invalid_scope(capsys: Any) -> None:
     assert uninstall_platform("claude", install_scope="global") == 1
     assert "install scope must be one of" in capsys.readouterr().out
+
+
+def test_install_scope_helpers_normalize_and_resolve_paths(tmp_path: Path) -> None:
+    assert normalize_install_scope("both") == "both"
+    assert resolve_project_root(tmp_path) == tmp_path.resolve()
+    user_path = tmp_path / "user.json"
+    project_path = tmp_path / "project.json"
+    assert scope_paths(
+        "both",
+        user_path=user_path,
+        project_path=project_path,
+    ) == [user_path, project_path]
+
+
+def test_warn_residual_install_scope_notes_project_hooks(
+    tmp_path: Path, capsys: Any
+) -> None:
+    user_path = tmp_path / "user" / "hooks.json"
+    project_path = tmp_path / "project" / "hooks.json"
+    user_path.parent.mkdir(parents=True)
+    project_path.parent.mkdir(parents=True)
+    user_path.write_text('{"hooks": {}}', encoding="utf-8")
+    project_path.write_text('{"hooks": {}}', encoding="utf-8")
+
+    warn_residual_install_scope(
+        ResidualInstallScopeWarning(
+            platform_label="cursor",
+            scope="user",
+            user_path=user_path,
+            project_path=project_path,
+            project_root=tmp_path,
+            has_owned=lambda path: path == project_path,
+        )
+    )
+
+    captured = capsys.readouterr()
+    assert "remain at" in captured.out
+    assert str(project_path) in captured.out

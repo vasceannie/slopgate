@@ -10,7 +10,10 @@ import slopgate.installer._suite as suite
 from slopgate.cli.commands import cmd_install
 from slopgate.cli.parsers import build_parser
 
-from tests.test_suite_autoupdate import _record_suite_subprocess_run
+from tests.test_suite_autoupdate import (
+    _record_suite_subprocess_run,
+    _windows_owned_task_install_snapshot,
+)
 
 
 def _linux_autoupdate_units(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path]:
@@ -204,26 +207,17 @@ def test_windows_autoupdate_install_exports_owned_existing_task_before_force_cre
     script = _windows_autoupdate_context(tmp_path, monkeypatch)
     script.parent.mkdir(parents=True)
     script.write_text(f"# {suite._AUTOUPDATE_MARKER}\nold script\n", encoding="utf-8")
-    run_commands: list[list[str]] = []
     xml = f"<Task><Actions><Exec><Arguments>{script}</Arguments></Exec></Actions></Task>"
 
-    def fake_run(command: list[str], **kwargs: object) -> Any:
-        run_commands.append(command)
-        if command[:2] == ["schtasks", "/Query"]:
-            return suite.subprocess.CompletedProcess(command, 0, stdout=xml)
-        if command[:2] == ["schtasks", "/Create"]:
-            return suite.subprocess.CompletedProcess(command, 0)
-        raise AssertionError(f"unexpected command: {command}")
+    snapshot = _windows_owned_task_install_snapshot(script, monkeypatch, xml=xml)
 
-    monkeypatch.setattr(suite.subprocess, "run", fake_run)
-
-    assert suite.install_autoupdate(dry_run=False) == 0
-
-    task_backups = sorted(script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*"))
-    assert len(task_backups) == 1
-    assert task_backups[0].read_text(encoding="utf-8") == xml
-    assert run_commands[0] == ["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"]
-    assert run_commands[1][:3] == ["schtasks", "/Create", "/F"]
+    assert snapshot == {
+        "status": 0,
+        "backup_count": 1,
+        "backup_xml": xml,
+        "query_command": ["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"],
+        "create_prefix": ["schtasks", "/Create", "/F"],
+    }
 
 
 def _macos_uninstall_backup_snapshot(run_commands: list[list[str]]) -> dict[str, object]:
@@ -318,7 +312,10 @@ def test_update_suite_dry_run_reports_package_update_and_hook_refresh(
     (tmp_path / ".claude").mkdir()
 
     status = installer_module.update_suite(
-        dry_run=True, source="git+https://example.invalid/vf.git@main"
+        installer_module.SuiteUpdateOptions(
+            dry_run=True,
+            source="git+https://example.invalid/vf.git@main",
+        )
     )
 
     output = capsys.readouterr().out

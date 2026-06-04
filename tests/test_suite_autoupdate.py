@@ -11,6 +11,34 @@ from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_s
 from slopgate.cli.parsers import build_parser
 
 
+def _windows_owned_task_install_snapshot(
+    script: Path,
+    monkeypatch: Any,
+    *,
+    xml: str,
+) -> dict[str, object]:
+    run_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> Any:
+        run_commands.append(command)
+        if command[:2] == ["schtasks", "/Query"]:
+            return suite.subprocess.CompletedProcess(command, 0, stdout=xml)
+        if command[:2] == ["schtasks", "/Create"]:
+            return suite.subprocess.CompletedProcess(command, 0)
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+    status = suite.install_autoupdate(dry_run=False)
+    task_backups = sorted(script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*"))
+    return {
+        "status": status,
+        "backup_count": len(task_backups),
+        "backup_xml": task_backups[0].read_text(encoding="utf-8") if task_backups else "",
+        "query_command": run_commands[0] if run_commands else [],
+        "create_prefix": run_commands[1][:3] if len(run_commands) > 1 else [],
+    }
+
+
 def _record_suite_subprocess_run(monkeypatch: Any) -> list[list[str]]:
     run_commands: list[list[str]] = []
 

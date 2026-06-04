@@ -27,6 +27,14 @@ def test_expand_uses_default_when_path_is_none(tmp_path: Path) -> None:
     assert result == default
 
 
+def test_expand_uses_default_when_path_is_blank(tmp_path: Path) -> None:
+    default = tmp_path / "default_dir"
+
+    result = expand("  ", default=default)
+
+    assert result == default
+
+
 def test_expand_raises_isx_error_when_none_and_no_default() -> None:
     with pytest.raises(IsxError, match="missing path"):
         expand(None, default=None)

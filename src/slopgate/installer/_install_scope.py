@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
+from slopgate.constants import METADATA_COMMAND
 from slopgate.installer._shared import command_is_slopgate_hook, remove_owned_hooks
 
 InstallScope = Literal["user", "project", "both"]
@@ -26,7 +28,12 @@ def normalize_install_scope(scope: str) -> InstallScope:
 
 
 def resolve_project_root(project_root: Path | None) -> Path:
-    return (project_root or Path.cwd()).resolve()
+    if project_root is None:
+        return Path.cwd().resolve()
+    expanded = project_root.expanduser()
+    if expanded.is_absolute():
+        return expanded.resolve()
+    return (Path.cwd() / expanded).resolve()
 
 
 def scope_paths(
@@ -52,7 +59,7 @@ def _hooks_dict_has_owned_slopgate(hooks: dict[object, object]) -> bool:
             continue
         for entry in entries:
             if isinstance(entry, dict) and command_is_slopgate_hook(
-                cast(dict[object, object], entry).get("command")
+                cast(dict[object, object], entry).get(METADATA_COMMAND)
             ):
                 return True
     return False
@@ -83,32 +90,40 @@ def _opencode_plugin_has_owned_slopgate(path: Path) -> bool:
     return "OpenCode Slopgate Plugin" in content and "const SLOPGATE_BIN" in content
 
 
-def warn_residual_install_scope(
-    *,
-    platform_label: str,
-    scope: str,
-    user_path: Path,
-    project_path: Path,
-    project_root: Path | None,
-    has_owned: Callable[[Path], bool],
-) -> None:
+@dataclass(frozen=True, slots=True)
+class ResidualInstallScopeWarning:
+    """Inputs for uninstall scope residual-hook warnings."""
+
+    platform_label: str
+    scope: str
+    user_path: Path
+    project_path: Path
+    project_root: Path | None
+    has_owned: Callable[[Path], bool]
+
+
+def warn_residual_install_scope(warning: ResidualInstallScopeWarning) -> None:
     """Warn when uninstall scope leaves slopgate hooks in the other location."""
     try:
-        install_scope = normalize_install_scope(scope)
+        install_scope = normalize_install_scope(warning.scope)
     except ValueError:
         return
-    root = resolve_project_root(project_root)
-    resolved_project = project_path if project_path.is_absolute() else root / project_path
+    root = resolve_project_root(warning.project_root)
+    resolved_project = (
+        warning.project_path
+        if warning.project_path.is_absolute()
+        else root / warning.project_path
+    )
 
     if install_scope == "both":
         return
-    if install_scope == "project" and has_owned(user_path):
+    if install_scope == "project" and warning.has_owned(warning.user_path):
         print(
-            f"Note: slopgate {platform_label} hooks remain at {user_path} "
+            f"Note: slopgate {warning.platform_label} hooks remain at {warning.user_path} "
             f"(re-run uninstall with --install-scope user or both)"
         )
-    if install_scope == "user" and has_owned(resolved_project):
+    if install_scope == "user" and warning.has_owned(resolved_project):
         print(
-            f"Note: slopgate {platform_label} hooks remain at {resolved_project} "
+            f"Note: slopgate {warning.platform_label} hooks remain at {resolved_project} "
             f"(re-run uninstall with --install-scope project or both)"
         )

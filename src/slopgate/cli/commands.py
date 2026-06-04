@@ -25,7 +25,17 @@ class CliInputError(ValueError):
     """Clean user-facing CLI input error."""
 
 
+def _stdin_is_interactive() -> bool:
+    isatty = getattr(sys.stdin, "isatty", None)
+    return bool(isatty()) if callable(isatty) else False
+
+
 def _load_stdin_json() -> ObjectDict:
+    if _stdin_is_interactive():
+        raise CliInputError(
+            "No JSON payload on stdin. 'slopgate handle' is a hook entrypoint; "
+            "pipe a harness payload, e.g. echo '{}' | slopgate handle --platform cursor"
+        )
     raw = sys.stdin.read()
     if not raw.strip():
         return {}
@@ -281,14 +291,16 @@ def cmd_install_suite(args: argparse.Namespace) -> int:
 
 
 def cmd_update_suite(args: argparse.Namespace) -> int:
-    from slopgate.installer import update_suite
+    from slopgate.installer import SuiteUpdateOptions, update_suite
 
     return update_suite(
-        dry_run=_bool_arg(args, "dry_run"),
-        source=_string_arg(args, "source"),
-        include_missing=_bool_arg(args, "include_missing"),
-        install_scope=_string_arg(args, "install_scope", "user"),
-        project_root=_project_root_arg(args),
+        SuiteUpdateOptions(
+            dry_run=_bool_arg(args, "dry_run"),
+            source=_string_arg(args, "source"),
+            include_missing=_bool_arg(args, "include_missing"),
+            install_scope=_string_arg(args, "install_scope", "user"),
+            project_root=_project_root_arg(args),
+        )
     )
 
 

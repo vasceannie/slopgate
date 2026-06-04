@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from slopgate._types import ObjectDict
-from slopgate.constants import SELFTEST_SEPARATOR_WIDTH
+from slopgate.constants import SELFTEST_SEPARATOR_WIDTH, SESSION_ID
 from slopgate.models import EngineResult
 
 PlatformName = str
@@ -25,7 +25,7 @@ def _run_one_test(
         "tool_name": tool,
         "tool_input": tool_input,
         "cwd": cwd,
-        "session_id": f"self-test-{platform}-{label}",
+        SESSION_ID: f"self-test-{platform}-{label}",
     }
     result = evaluate_payload(payload, platform)
     deny_count = sum(1 for f in result.findings if f.decision in {"deny", "block"})
