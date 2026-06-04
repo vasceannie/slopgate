@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from vibeforcer._types import object_dict, object_list, string_value
-from vibeforcer.constants import (
+from slopgate._types import object_dict, object_list, string_value
+from slopgate.constants import (
     DENY,
     METADATA_PATH,
     POST_TOOL_USE,
     PRODUCTION_SYMBOL_PREVIEW_LIMIT,
 )
-from vibeforcer.context import HookContext
-from vibeforcer.models import RuleFinding
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.context import HookContext
+from slopgate.models import RuleFinding
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
 
 _REPLAN_PROMPT = (
     "If a hook denies or blocks your change, do not immediately retry the same edit pattern. "
@@ -92,7 +92,7 @@ _RULE_HINTS: dict[str, str] = {
     ),
     "QA-PATH-003": (
         "Next step: do not edit quality tests. Fix the source rule implementation "
-        "under `src/vibeforcer/...`; if expected output legitimately changed, "
+        "under `src/slopgate/...`; if expected output legitimately changed, "
         "update only `tests/quality/baselines.json`, then run "
         "`python -m pytest -q tests/quality`."
     ),
@@ -127,7 +127,7 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
         "Do not continue feature work. Next action: 1) reread the touched file, "
         "2) fix only the reported collector/hit, 3) verify from the project root "
         "with the smallest repo-root quality command: "
-        "from the repo root, run `vibeforcer lint check` (no file/path argument), "
+        "from the repo root, run `slopgate lint check` (no file/path argument), "
         "4) if no path is available, inspect the last edited file from tool context."
         f"{pathless_note}"
     )
@@ -221,7 +221,7 @@ def _untested_production_code_hint(item: RuleFinding) -> str:
         f"{_preview_label('Paths', _quality_lint_paths(item))}"
         f"{_preview_label('Symbols', _quality_lint_symbols(item))} "
         "Run the focused pytest target you changed, then, from the repo root, run "
-        "`vibeforcer lint check` with no file/path argument."
+        "`slopgate lint check` with no file/path argument."
     )
 
 

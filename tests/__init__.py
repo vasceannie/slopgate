@@ -1,1 +1,1 @@
-"""Test package for vibeforcer."""
+"""Test package for slopgate."""

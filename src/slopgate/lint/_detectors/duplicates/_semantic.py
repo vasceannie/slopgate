@@ -11,9 +11,9 @@ from collections.abc import Callable, Hashable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard, TypeVar, cast
 from typing_extensions import override
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._config import get_config
+from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_source_files,
@@ -151,7 +151,7 @@ def _import_section(stmt: ast.Import | ast.ImportFrom) -> tuple[int, str]:
         module_name = stmt.names[0].name
 
     top = module_name.split(".", 1)[0]
-    if top == "vibeforcer":
+    if top == "slopgate":
         return 3, "first-party"
     if top in sys.stdlib_module_names:
         return 1, "stdlib"

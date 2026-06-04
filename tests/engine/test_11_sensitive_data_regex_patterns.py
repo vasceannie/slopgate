@@ -11,7 +11,7 @@ class TestSensitiveDataRegexPatterns:
 
     @staticmethod
     def _compile_sensitive_patterns() -> Callable[[list[str]], list[re.Pattern[str]]]:
-        from vibeforcer.rules import common as common_rules
+        from slopgate.rules import common as common_rules
 
         return cast(
             Callable[[list[str]], list[re.Pattern[str]]],
@@ -52,7 +52,7 @@ class TestSensitiveDataRegexPatterns:
 
     def test_safe_suffixes_constant(self) -> None:
         """Verify the safe suffixes list includes expected entries."""
-        from vibeforcer.rules.common import SensitiveDataRule
+        from slopgate.rules.common import SensitiveDataRule
 
         rule = SensitiveDataRule()
         expected = {

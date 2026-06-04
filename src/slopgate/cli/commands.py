@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
-from vibeforcer.cli._claude_retry import claude_team_event_feedback
-from vibeforcer.cli._config_commands import (
+from slopgate._types import ObjectDict, ObjectMapping, object_dict
+from slopgate.cli._claude_retry import claude_team_event_feedback
+from slopgate.cli._config_commands import (
     cmd_config_init as cmd_config_init,
     cmd_config_path as cmd_config_path,
     cmd_config_show as cmd_config_show,
@@ -56,6 +56,13 @@ def _int_arg(args: argparse.Namespace, name: str) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _project_root_arg(args: argparse.Namespace) -> Path | None:
+    value = _string_arg(args, "project_root")
+    if not value.strip():
+        return None
+    return Path(value).expanduser().resolve()
+
+
 def _dump_output(output: ObjectMapping | None) -> int:
     if output:
         _ = sys.stdout.write(json.dumps(output, separators=(",", ":")) + "\n")
@@ -63,7 +70,7 @@ def _dump_output(output: ObjectMapping | None) -> int:
 
 
 def cmd_handle(args: argparse.Namespace) -> int:
-    from vibeforcer.engine import evaluate_payload
+    from slopgate.engine import evaluate_payload
 
     try:
         payload = _load_stdin_json()
@@ -82,7 +89,7 @@ def cmd_handle(args: argparse.Namespace) -> int:
 
 
 def cmd_handle_async(_args: argparse.Namespace) -> int:
-    from vibeforcer.async_jobs import run_async_jobs
+    from slopgate.async_jobs import run_async_jobs
 
     try:
         payload = _load_stdin_json()
@@ -95,7 +102,7 @@ def cmd_handle_async(_args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    from vibeforcer.config import (
+    from slopgate.config import (
         is_path_skipped,
         is_repo_disabled,
         load_config,
@@ -146,7 +153,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_enroll(args: argparse.Namespace) -> int:
-    from vibeforcer.config import enroll_repo, list_git_worktrees
+    from slopgate.config import enroll_repo, list_git_worktrees
 
     target = Path(_string_arg(args, "path", ".")).resolve()
     include_worktrees = not _bool_arg(args, "no_worktrees")
@@ -172,7 +179,7 @@ def cmd_enroll(args: argparse.Namespace) -> int:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    from vibeforcer.engine import evaluate_payload
+    from slopgate.engine import evaluate_payload
 
     payload_path = Path(_string_arg(args, "payload")).resolve()
     parsed = cast(object, json.loads(payload_path.read_text(encoding="utf-8")))
@@ -187,8 +194,8 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import SuiteInstallOptions, install_platform, install_suite
-    from vibeforcer.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES, install_autoupdate
+    from slopgate.installer import SuiteInstallOptions, install_platform, install_suite
+    from slopgate.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES, install_autoupdate
 
     platform = _string_arg(args, "platform")
     if platform == "all":
@@ -201,10 +208,17 @@ def cmd_install(args: argparse.Namespace) -> int:
                 interval_minutes=(
                     _int_arg(args, "interval_minutes") or DEFAULT_UPDATE_INTERVAL_MINUTES
                 ),
+                install_scope=_string_arg(args, "install_scope", "user"),
+                project_root=_project_root_arg(args),
             )
         )
 
-    status = install_platform(platform, dry_run=_bool_arg(args, "dry_run"))
+    status = install_platform(
+        platform,
+        dry_run=_bool_arg(args, "dry_run"),
+        install_scope=_string_arg(args, "install_scope", "user"),
+        project_root=_project_root_arg(args),
+    )
     if not _bool_arg(args, "with_autoupdate") or status != 0:
         return status
     return install_autoupdate(
@@ -218,7 +232,7 @@ def cmd_install(args: argparse.Namespace) -> int:
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import (
+    from slopgate.installer import (
         SuiteUninstallOptions,
         uninstall_autoupdate,
         uninstall_platform,
@@ -231,18 +245,25 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
             SuiteUninstallOptions(
                 dry_run=_bool_arg(args, "dry_run"),
                 with_autoupdate=_bool_arg(args, "with_autoupdate"),
+                install_scope=_string_arg(args, "install_scope", "user"),
+                project_root=_project_root_arg(args),
             )
         )
 
-    status = uninstall_platform(platform, dry_run=_bool_arg(args, "dry_run"))
+    status = uninstall_platform(
+        platform,
+        dry_run=_bool_arg(args, "dry_run"),
+        install_scope=_string_arg(args, "install_scope", "user"),
+        project_root=_project_root_arg(args),
+    )
     if not _bool_arg(args, "with_autoupdate"):
         return status
     return uninstall_autoupdate(dry_run=_bool_arg(args, "dry_run")) or status
 
 
 def cmd_install_suite(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import SuiteInstallOptions, install_suite
-    from vibeforcer.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES
+    from slopgate.installer import SuiteInstallOptions, install_suite
+    from slopgate.installer._suite import DEFAULT_UPDATE_INTERVAL_MINUTES
 
     return install_suite(
         SuiteInstallOptions(
@@ -253,22 +274,26 @@ def cmd_install_suite(args: argparse.Namespace) -> int:
             interval_minutes=(
                 _int_arg(args, "interval_minutes") or DEFAULT_UPDATE_INTERVAL_MINUTES
             ),
+            install_scope=_string_arg(args, "install_scope", "user"),
+            project_root=_project_root_arg(args),
         )
     )
 
 
 def cmd_update_suite(args: argparse.Namespace) -> int:
-    from vibeforcer.installer import update_suite
+    from slopgate.installer import update_suite
 
     return update_suite(
         dry_run=_bool_arg(args, "dry_run"),
         source=_string_arg(args, "source"),
         include_missing=_bool_arg(args, "include_missing"),
+        install_scope=_string_arg(args, "install_scope", "user"),
+        project_root=_project_root_arg(args),
     )
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
-    from vibeforcer.stats import run_stats
+    from slopgate.stats import run_stats
 
     return run_stats(
         log_path=_string_arg(args, "log") or None,
@@ -278,13 +303,13 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 
 def cmd_test(args: argparse.Namespace) -> int:
-    from vibeforcer.cli._self_test import cmd_test as _cmd_test
+    from slopgate.cli._self_test import cmd_test as _cmd_test
 
     return _cmd_test(args)
 
 
 def cmd_version(_args: argparse.Namespace) -> int:
-    from vibeforcer import __version__
+    from slopgate import __version__
 
-    print(f"vibeforcer {__version__}")
+    print(f"slopgate {__version__}")
     return 0

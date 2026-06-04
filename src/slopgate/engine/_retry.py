@@ -5,12 +5,12 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict, object_list
-from vibeforcer.constants import DENY, METADATA_PATH, PERMISSION_REQUEST, PRE_TOOL_USE
-from vibeforcer.context import HookContext
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.state import RetryLockPayload
-from vibeforcer.util.payloads import is_edit_like_tool
+from slopgate._types import ObjectDict, object_list
+from slopgate.constants import DENY, METADATA_PATH, PERMISSION_REQUEST, PRE_TOOL_USE
+from slopgate.context import HookContext
+from slopgate.models import RuleFinding, Severity
+from slopgate.state import RetryLockPayload
+from slopgate.util.payloads import is_edit_like_tool
 
 from ._hints import (
     _REPLAN_PROMPT,

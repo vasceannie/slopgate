@@ -4,11 +4,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.adapters import get_adapter
-from vibeforcer.config import resolve_repo_root
-from vibeforcer.context import HookContext, build_context
-from vibeforcer.models import EngineResult
+from slopgate._types import ObjectDict
+from slopgate.adapters import get_adapter
+from slopgate.config import resolve_repo_root
+from slopgate.context import HookContext, build_context
+from slopgate.models import EngineResult
 
 from ._render import _serialize_findings, render_output
 from ._retry import (

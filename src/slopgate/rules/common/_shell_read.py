@@ -1,4 +1,4 @@
-"""Common Vibeforcer runtime rules."""
+"""Common Slopgate runtime rules."""
 
 from __future__ import annotations
 
@@ -8,22 +8,22 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     DENY,
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     SAFE_READ_SHELL_VERBS,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.payloads import (
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.payloads import (
     is_shell_tool,
     path_matches_glob,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 _FIND_MUTATING_ACTIONS = frozenset({"-delete", "-exec", "-execdir", "-ok", "-okdir"})
@@ -250,7 +250,7 @@ class FullFileReadRule(Rule):
 
 
 def _is_readonly_tool(tool_name: str | None) -> bool:
-    from vibeforcer.constants import READ_TOOL_NAMES
+    from slopgate.constants import READ_TOOL_NAMES
 
     return bool(tool_name and tool_name.lower() in READ_TOOL_NAMES)
 

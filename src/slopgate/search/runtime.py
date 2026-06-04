@@ -11,15 +11,15 @@ import urllib.request
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict, object_list, string_value
-from vibeforcer.search.config import (
+from slopgate._types import object_dict, object_list, string_value
+from slopgate.search.config import (
     DEFAULT_INDEXES_PATH,
     DEFAULT_ISLANDS_CONFIG,
     IsxError,
     SearchConfig,
     expand,
 )
-from vibeforcer.search.config import (
+from slopgate.search.config import (
     PREFERRED_LITELLM_MODELS,
 )
 
@@ -109,7 +109,7 @@ def render_islands_yaml(model: str) -> str:
         "  sync_interval_secs: 300",
         "  index_extensions:",
     ]
-    from vibeforcer.search.config import DEFAULT_EXTENSIONS
+    from slopgate.search.config import DEFAULT_EXTENSIONS
 
     lines.extend(f"  - {ext}" for ext in DEFAULT_EXTENSIONS)
     lines.extend(
@@ -201,7 +201,7 @@ def current_islands_config_path(cfg: SearchConfig) -> Path:
 
 def save_runtime_model(cfg: SearchConfig, model: str) -> None:
     """Persist a model change to both isx config and islands YAML."""
-    from vibeforcer.search.config import save_config
+    from slopgate.search.config import save_config
 
     cfg["model"] = model
     save_config(cfg)

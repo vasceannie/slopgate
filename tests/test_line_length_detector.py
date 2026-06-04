@@ -3,8 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeforcer.lint._detectors.line_length import detect_long_lines
-from vibeforcer.lint._helpers import (
+from slopgate.lint._detectors.line_length import detect_long_lines
+from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,

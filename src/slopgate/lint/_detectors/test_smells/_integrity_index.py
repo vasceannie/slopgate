@@ -7,8 +7,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer.constants import METADATA_FUNCTION
-from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, find_test_files
+from slopgate.constants import METADATA_FUNCTION
+from slopgate.lint._helpers import ParsedFile, ensure_parsed, find_test_files
 
 from ._assertion_core import _call_tail as _call_tail
 from ._production_symbols import (

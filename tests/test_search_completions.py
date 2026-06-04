@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from vibeforcer.search.completions import print_completion
-from vibeforcer.search.config import IsxError
+from slopgate.search.completions import print_completion
+from slopgate.search.config import IsxError
 
 
 @pytest.mark.parametrize(

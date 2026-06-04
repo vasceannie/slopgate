@@ -8,9 +8,9 @@ from tempfile import TemporaryDirectory
 from hypothesis import given, strategies
 import pytest
 
-from vibeforcer.search import index_ops
-from vibeforcer.search.config import SearchConfig
-from vibeforcer.search.index_ops import (
+from slopgate.search import index_ops
+from slopgate.search.config import SearchConfig
+from slopgate.search.index_ops import (
     find_local_index,
     local_indexes,
     resolve_reindex_target,

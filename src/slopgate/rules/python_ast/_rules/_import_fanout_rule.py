@@ -6,22 +6,22 @@ import ast
 from collections import defaultdict
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
     IMPORT_FANOUT_PREVIEW_LIMIT,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 from .._helpers import (
     detect_family_prefix,
     evaluate_common,
     parse_module,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 class PythonImportFanoutRule(Rule):

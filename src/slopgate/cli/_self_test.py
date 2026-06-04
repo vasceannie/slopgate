@@ -7,9 +7,9 @@ import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.constants import SELFTEST_SEPARATOR_WIDTH
-from vibeforcer.models import EngineResult
+from slopgate._types import ObjectDict
+from slopgate.constants import SELFTEST_SEPARATOR_WIDTH
+from slopgate.models import EngineResult
 
 PlatformName = str
 SelfTestCase = tuple[str, str, str, ObjectDict, PlatformName, bool, str]
@@ -72,14 +72,14 @@ def _self_test_cases(strict_cwd: str, outside_cwd: str) -> list[SelfTestCase]:
 
 
 def cmd_test(_args: argparse.Namespace) -> int:
-    from vibeforcer.engine import evaluate_payload
+    from slopgate.engine import evaluate_payload
 
-    print("vibeforcer self-test")
+    print("slopgate self-test")
     print("=" * SELFTEST_SEPARATOR_WIDTH)
-    with tempfile.TemporaryDirectory(prefix="vibeforcer-self-test-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="slopgate-self-test-") as tmpdir:
         strict_repo = Path(tmpdir)
-        (strict_repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n",
+        (strict_repo / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n",
             encoding="utf-8",
         )
         cases = _self_test_cases(str(strict_repo), tempfile.gettempdir())

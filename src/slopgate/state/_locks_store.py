@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
     bool_value,
     object_list,

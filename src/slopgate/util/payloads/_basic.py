@@ -4,9 +4,9 @@ import fnmatch
 from collections.abc import Iterable
 from pathlib import Path
 
-from vibeforcer._types import ObjectMapping
-from vibeforcer.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
-from vibeforcer.util.platform import lower_path_for_match as lower_path
+from slopgate._types import ObjectMapping
+from slopgate.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
+from slopgate.util.platform import lower_path_for_match as lower_path
 
 
 def first_present(

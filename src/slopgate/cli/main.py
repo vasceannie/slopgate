@@ -6,8 +6,8 @@ import sys
 from collections.abc import Callable
 from typing import cast
 
-from vibeforcer.cli.parsers import build_parser
-from vibeforcer.constants import EXIT_KEYBOARD_INTERRUPT
+from slopgate.cli.parsers import build_parser
+from slopgate.constants import EXIT_KEYBOARD_INTERRUPT
 
 
 CommandFunc = Callable[[argparse.Namespace], int]
@@ -39,7 +39,7 @@ def _string_list_attr(args: argparse.Namespace, name: str) -> list[str] | None:
 
 
 def _search_subcommands() -> set[str]:
-    from vibeforcer.search._cli_parser import SEARCH_SUBCOMMANDS
+    from slopgate.search._cli_parser import SEARCH_SUBCOMMANDS
 
     return set(SEARCH_SUBCOMMANDS)
 
@@ -70,7 +70,7 @@ def _normalize_isx_argv(argv: list[str] | None) -> list[str] | None:
 
 
 def _run_search_func(args: argparse.Namespace) -> int:
-    from vibeforcer.search.config import IsxError
+    from slopgate.search.config import IsxError
 
     try:
         func = _callable_attr(args, "func")
@@ -93,7 +93,7 @@ def _run_default_search_query(args: argparse.Namespace) -> int | None:
     query_args = _string_list_attr(args, "query_args")
     if not query_args:
         return None
-    from vibeforcer.search.cli import cmd_search
+    from slopgate.search.cli import cmd_search
 
     args.query = query_args
     args.func = cmd_search
@@ -108,7 +108,7 @@ def _dispatch_search(args: argparse.Namespace) -> int:
 
 
 def _isx_main(argv: list[str] | None = None) -> int:
-    from vibeforcer.search.cli import build_search_parser
+    from slopgate.search.cli import build_search_parser
 
     parser = build_search_parser(subparsers=None)
     args = parser.parse_args(_normalize_isx_argv(argv))
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(_normalize_search_argv(raw_argv))
     if _bool_attr(args, "version"):
-        from vibeforcer.cli.commands import cmd_version
+        from slopgate.cli.commands import cmd_version
 
         return cmd_version(args)
     command = _string_attr(args, "command")

@@ -5,14 +5,14 @@ from tempfile import TemporaryDirectory
 
 from hypothesis import given, strategies
 
-from vibeforcer.lint._detectors.test_smells import (
+from slopgate.lint._detectors.test_smells import (
     detect_hand_built_test_payloads,
     detect_mock_theater,
     detect_mocked_integration_tests,
     detect_schema_bypasses,
     detect_weak_assertions,
 )
-from vibeforcer.lint._helpers import ParsedFile, parse_files
+from slopgate.lint._helpers import ParsedFile, parse_files
 
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z_]{0,12}", fullmatch=True)
 

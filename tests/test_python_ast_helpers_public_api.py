@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 
-from vibeforcer.rules.python_ast._helpers import (
+from slopgate.rules.python_ast._helpers import (
     decision_for_context,
     detect_family_prefix,
     evaluate_common,
@@ -58,8 +58,8 @@ def test_detect_family_prefix_returns_none_for_empty_list() -> None:
 
 
 def _evaluate_common_when_rule_disabled() -> list[object]:
-    from vibeforcer.models import RuleFinding
-    from vibeforcer.rules.base import Rule
+    from slopgate.models import RuleFinding
+    from slopgate.rules.base import Rule
 
     class _StubRule(Rule):
         rule_id: str = "TEST-RULE-999"
@@ -74,7 +74,7 @@ def _evaluate_common_when_rule_disabled() -> list[object]:
     ctx_patch.config.python_ast_enabled = True
     ctx_patch.config.enabled_rules = {}
 
-    import vibeforcer.rules.base as base_mod
+    import slopgate.rules.base as base_mod
 
     original = base_mod.is_rule_enabled
 

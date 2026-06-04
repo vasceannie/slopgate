@@ -8,7 +8,7 @@ from typing import cast
 from hypothesis import given
 from hypothesis import strategies as st
 
-from vibeforcer.lint._detectors.declarative import (
+from slopgate.lint._detectors.declarative import (
     is_constant_name,
     is_declarative_constant_stmt,
     is_declarative_constant_value,

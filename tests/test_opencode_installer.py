@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vibeforcer.installer import _opencode as opencode_installer
-from vibeforcer.resources import resource_path
-from vibeforcer.util import platform as platform_utils
+from slopgate.installer import _opencode as opencode_installer
+from slopgate.resources import resource_path
+from slopgate.util import platform as platform_utils
 
 
 def _opencode_plugin_source() -> str:
@@ -28,18 +28,18 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
     monkeypatch.setenv("APPDATA", str(appdata))
 
     assert opencode_installer._opencode_plugin_path() == (
-        appdata / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+        appdata / "opencode" / "plugins" / "slopgate-plugin.ts"
     )
 
 
 def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
-    binary = 'C:\\Users\\Trav App\\bin\\vibeforcer "quoted".exe'
+    binary = 'C:\\Users\\Trav App\\bin\\slopgate "quoted".exe'
     template = _opencode_plugin_source()
 
     rendered = opencode_installer._render_opencode_plugin(template, binary)
 
-    assert f"Bun.env.VIBEFORCER_BIN || {json.dumps(binary)}" in rendered
-    assert '"__VIBEFORCER_BIN__"' not in rendered
+    assert f"Bun.env.SLOPGATE_BIN || {json.dumps(binary)}" in rendered
+    assert '"__SLOPGATE_BIN__"' not in rendered
 
 
 def test_opencode_install_backs_up_existing_plugin_before_overwrite(
@@ -51,19 +51,19 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     monkeypatch.setattr(
         opencode_installer,
         "find_binary",
-        lambda: "/tmp/Vibeforcer Bin/vibeforcer",
+        lambda: "/tmp/Slopgate Bin/slopgate",
     )
-    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text("custom plugin\n", encoding="utf-8")
 
     assert opencode_installer._install_opencode(dry_run=False) == 0
 
-    backups = sorted(target.parent.glob("vibeforcer-plugin.ts.vibeforcer-bak-*"))
+    backups = sorted(target.parent.glob("slopgate-plugin.ts.slopgate-bak-*"))
     assert len(backups) == 1
     assert backups[0].read_text(encoding="utf-8") == "custom plugin\n"
     installed = target.read_text(encoding="utf-8")
-    assert 'Bun.env.VIBEFORCER_BIN || "/tmp/Vibeforcer Bin/vibeforcer"' in installed
+    assert 'Bun.env.SLOPGATE_BIN || "/tmp/Slopgate Bin/slopgate"' in installed
 
 
 def test_opencode_uninstall_refuses_unrecognized_plugin(
@@ -72,7 +72,7 @@ def test_opencode_uninstall_refuses_unrecognized_plugin(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text("custom plugin\n", encoding="utf-8")
 
@@ -86,10 +86,10 @@ def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(platform_utils, "is_windows", lambda: False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    target = tmp_path / ".config" / "opencode" / "plugins" / "vibeforcer-plugin.ts"
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text(
-        "// docs mention vibeforcer handle --platform opencode, but this is custom\n",
+        "// docs mention slopgate handle --platform opencode, but this is custom\n",
         encoding="utf-8",
     )
 

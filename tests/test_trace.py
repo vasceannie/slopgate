@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from vibeforcer.trace import TraceWriter, make_record
+from slopgate.trace import TraceWriter, make_record
 
 
 class TestMakeRecord:

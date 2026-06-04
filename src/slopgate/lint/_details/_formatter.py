@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._details._metadata import _location, _metadata_lines, _signature
-from vibeforcer.lint._details._prognosis import _prognosis
-from vibeforcer.lint._details._test_context import _test_context_lines
+from slopgate.lint._baseline import Violation
+from slopgate.lint._details._metadata import _location, _metadata_lines, _signature
+from slopgate.lint._details._prognosis import _prognosis
+from slopgate.lint._details._test_context import _test_context_lines
 
 def format_violation_details(
     rule_name: str,

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.adapters import get_adapter
-from vibeforcer.adapters.base import PlatformAdapter
-from vibeforcer.constants import DENY
-from vibeforcer.context import HookContext
-from vibeforcer.models import RuleFinding
+from slopgate._types import ObjectDict
+from slopgate.adapters import get_adapter
+from slopgate.adapters.base import PlatformAdapter
+from slopgate.constants import DENY
+from slopgate.context import HookContext
+from slopgate.models import RuleFinding
 
 DECISION_ORDER: dict[str | None, int] = {
     DENY: 4,

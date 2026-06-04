@@ -6,24 +6,24 @@ from pathlib import Path
 import pytest
 from hypothesis import given, strategies
 
-import vibeforcer.lint._baseline
-from vibeforcer.adapters.base import (
+import slopgate.lint._baseline
+from slopgate.adapters.base import (
     hook_specific_context_output,
     render_permission_request_output,
 )
-from vibeforcer.lint._baseline import (
+from slopgate.lint._baseline import (
     BaselineResult,
     Violation,
     content_hash,
     load_baseline,
     save_baseline,
 )
-from vibeforcer.state._models import RetryLockPayload
-from vibeforcer.util.payloads._patches import (
+from slopgate.state._models import RetryLockPayload
+from slopgate.util.payloads._patches import (
     extract_added_patch_content,
     parse_patch_candidate_paths,
 )
-from vibeforcer.util.subprocesses import CommandResult, run_shell
+from slopgate.util.subprocesses import CommandResult, run_shell
 
 
 def test_retry_lock_payload_keeps_retry_state_fields() -> None:
@@ -122,7 +122,7 @@ def test_save_baseline_writes_sorted_stable_ids(
 ) -> None:
     baseline_path = tmp_path / "baselines.json"
     monkeypatch.setattr(
-        vibeforcer.lint._baseline,
+        slopgate.lint._baseline,
         "_baseline_path",
         lambda: baseline_path,
     )
@@ -145,7 +145,7 @@ def test_load_baseline_reads_rule_sets(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        vibeforcer.lint._baseline,
+        slopgate.lint._baseline,
         "_baseline_path",
         lambda: baseline_path,
     )

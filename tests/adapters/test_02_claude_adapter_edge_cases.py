@@ -14,6 +14,27 @@ from tests.test_adapters import (
 class TestClaudeAdapterEdgeCases:
     """Claude adapter — edge cases: failures, context-only, unknown events."""
 
+    def test_subagent_start_renders_hook_specific_permission(self) -> None:
+        adapter = ClaudeAdapter()
+        finding = RuleFinding(
+            rule_id="SUB-001",
+            title="blocked",
+            severity=Severity.HIGH,
+            decision="deny",
+            message="Subagent blocked.",
+        )
+        output = require_rendered(
+            adapter.render_output("SubagentStart", [finding], decision="deny"),
+        )
+        specific = require_nested(output, "hookSpecificOutput")
+        assert {
+            "hookEventName": specific["hookEventName"],
+            "permissionDecision": specific["permissionDecision"],
+        } == {
+            "hookEventName": "SubagentStart",
+            "permissionDecision": "deny",
+        }
+
     def test_permission_request_block_maps_to_deny(self) -> None:
         """Engine can escalate to block; PermissionRequest must fail closed."""
         adapter = ClaudeAdapter()

@@ -1,4 +1,4 @@
-"""Non-destructive config updater for quality_gate.toml.
+"""Non-destructive config updater for slopgate.toml.
 
 `quality-gate update` merges new defaults into an existing config file
 without overwriting user-customised values.  New keys are injected at
@@ -12,8 +12,8 @@ import re
 from pathlib import Path
 from typing import Protocol, cast
 
-from vibeforcer.lint import __version__
-from vibeforcer.policy_defaults import (
+from slopgate.lint import __version__
+from slopgate.policy_defaults import (
     LINT_DEPRECATED_PATTERNS_DEFAULTS,
     LINT_EXCEPTION_SAFETY_DEFAULTS,
     LINT_MAGIC_DEFAULTS,
@@ -46,7 +46,7 @@ for module_name in ("tomllib", "tomli"):
 # ---------------------------------------------------------------------------
 
 CANONICAL_DEFAULTS: dict[str, dict[str, object]] = {
-    "quality_gate": {
+    "slopgate": {
         "version": __version__,
     },
     "paths": {
@@ -87,21 +87,21 @@ CANONICAL_DEFAULTS: dict[str, dict[str, object]] = {
 }
 
 
-def render_quality_gate_toml(*, version: str | None = None) -> str:
+def render_slopgate_toml(*, version: str | None = None) -> str:
     """Render a canonical quality-gate TOML body from defaults.
 
-    This keeps ``vibeforcer lint init`` coupled to the central defaults.
+    This keeps ``slopgate lint init`` coupled to the central defaults.
     """
     defaults = CANONICAL_DEFAULTS
     if version is not None:
         defaults = dict(defaults)
-        quality_gate = dict(defaults["quality_gate"])
+        quality_gate = dict(defaults["slopgate"])
         quality_gate["version"] = version
-        defaults["quality_gate"] = quality_gate
+        defaults["slopgate"] = quality_gate
 
     lines: list[str] = [
         "# Quality Gate Configuration",
-        "# vibeforcer lint",
+        "# slopgate lint",
         "",
     ]
     for section, keys in defaults.items():
@@ -285,7 +285,7 @@ def _write_updated(path: Path, lines: list[str], append_new: list[str]) -> None:
 def update_toml_file(
     path: Path, *, dry_run: bool = False
 ) -> dict[str, dict[str, object]]:
-    """Merge missing defaults into an existing quality_gate.toml.
+    """Merge missing defaults into an existing slopgate.toml.
 
     - New keys for existing sections are injected at the end of that section.
     - Entirely new sections are appended at the end of the file.

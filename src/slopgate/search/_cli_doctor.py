@@ -6,9 +6,9 @@ import argparse
 import os
 import urllib.error
 
-from vibeforcer._types import string_value
-from vibeforcer.search.config import APP_CONFIG, IsxError, SearchConfig, load_config
-from vibeforcer.search.runtime import (
+from slopgate._types import string_value
+from slopgate.search.config import APP_CONFIG, IsxError, SearchConfig, load_config
+from slopgate.search.runtime import (
     embedding_like,
     fetch_runtime_models,
     islands_binary,

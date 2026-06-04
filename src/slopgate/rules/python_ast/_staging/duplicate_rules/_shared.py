@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeforcer.models import RuleFinding
+from slopgate.models import RuleFinding
 
 _MIN_BLOCK_SIZE = 3
 

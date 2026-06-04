@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings, strategies
 
-from vibeforcer.stats import analyze, load_entries, print_report, run_stats
+from slopgate.stats import analyze, load_entries, print_report, run_stats
 
 
 def test_load_entries_skips_invalid_json_lines(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_print_report_renders_analyzed_stats(capsys: pytest.CaptureFixture[str])
     print_report(stats)
 
     output = capsys.readouterr().out
-    assert "VIBEFORCER HOOK ACTIVITY REPORT" in output
+    assert "SLOPGATE HOOK ACTIVITY REPORT" in output
     assert "Total hook events: 1" in output
     assert "deny" in output
 

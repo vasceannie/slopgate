@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule
 
 from ._helpers import decision_for_context, evaluate_common, parse_module
 from ._pytest_asyncio_config import (
@@ -32,7 +32,7 @@ from ._pytest_asyncio_scope import (
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 def _is_pytest_path(path_value: str) -> bool:

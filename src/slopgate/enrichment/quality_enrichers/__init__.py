@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeforcer.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
-from vibeforcer.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
+from slopgate.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
+from slopgate.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
 
 __all__ = ["enrich_hardcoded_paths", "enrich_magic_numbers"]

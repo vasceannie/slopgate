@@ -1,10 +1,10 @@
-"""Doc-derived schema/context contract for harness docs used by Vibeforcer tests.
+"""Doc-derived schema/context contract for harness docs used by Slopgate tests.
 
 Regenerate with:
 python3 <skill>/scripts/harness_schema_context.py --write-tests --format markdown
 
 These tests bind a generated fixture to official-source metadata, source-specific
-doc evidence, and Vibeforcer's adapter contracts. They are not a replacement for
+doc evidence, and Slopgate's adapter contracts. They are not a replacement for
 focused behavior tests.
 """
 
@@ -19,12 +19,12 @@ from tests.harness_schema_support import (
     assert_official_source,
     strings,
 )
-from vibeforcer.adapters import ADAPTERS
-from vibeforcer.adapters.claude import ClaudeAdapter
-from vibeforcer.adapters.codex import CODEX_EVENTS, CodexAdapter
-from vibeforcer.adapters.opencode import OPENCODE_EVENT_MAP, OpenCodeAdapter
-from vibeforcer.installer import _CLAUDE_EVENTS
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.adapters import ADAPTERS
+from slopgate.adapters.claude import ClaudeAdapter
+from slopgate.adapters.codex import CODEX_EVENTS, CodexAdapter
+from slopgate.adapters.opencode import OPENCODE_EVENT_MAP, OpenCodeAdapter
+from slopgate.installer import _CLAUDE_EVENTS
+from slopgate.models import RuleFinding, Severity
 
 EXPECTED_CLAUDE_OFFICIAL_EVENTS = set(
     """
@@ -189,7 +189,7 @@ def _assert_claude_event_surface_matches_contract(data: dict[str, Any]) -> None:
     claude_surface = data["harness_event_surfaces"]["claude"]
 
     official_events = set(claude_surface["official_events"])
-    installed_events = set(claude_surface["vibeforcer_installed_events"])
+    installed_events = set(claude_surface["slopgate_installed_events"])
     intentionally_not_installed = set(claude_surface["intentionally_not_installed_events"])
 
     assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS
@@ -202,7 +202,7 @@ def _assert_claude_event_surface_matches_contract(data: dict[str, Any]) -> None:
     assert claude_surface["extraction_method"] == "claude-hooks-table"
     assert claude_surface["unknown_official_events"] == []
     assert claude_surface["installed_source"] == {
-        "path": "src/vibeforcer/installer/_claude.py",
+        "path": "src/slopgate/installer/_claude.py",
         "symbol": "_CLAUDE_EVENTS",
         "load_method": "ast-literal",
     }

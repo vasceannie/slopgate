@@ -6,22 +6,22 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     DENY,
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._infra_security import _is_modifying_tool as _is_modifying_tool, _is_safe_bash_for_path as _is_safe_bash_for_path
 
 
-_ENROLLMENT_SENTINELS = frozenset({".noqualitygate", ".no-quality-gate"})
-_ENROLLMENT_MARKER = "quality_gate.toml"
+_ENROLLMENT_SENTINELS = frozenset({".noslopgate", ".no-slop-gate"})
+_ENROLLMENT_MARKER = "slopgate.toml"
 _QUALITY_GATE_DISABLE_RE = re.compile(r"\benabled\s*=\s*false\b", re.IGNORECASE)
 
 
@@ -115,7 +115,7 @@ def _repo_enrollment_patch_finding(ctx: HookContext) -> RuleFinding | None:
         severity=Severity.HIGH,
         decision=DENY,
         message=(
-            "Patch edits to quality_gate.toml are blocked. "
+            "Patch edits to slopgate.toml are blocked. "
             "Do not relax quality gates to make lint pass; fix the code "
             "or use a human-reviewed config migration."
         ),

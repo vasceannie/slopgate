@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._details._metadata import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._details._metadata import (
     _ASSERT_CALL_NAMES,
     _TEST_INTEGRITY_RULES,
     _line_number,
@@ -14,7 +14,7 @@ from vibeforcer.lint._details._metadata import (
 
 def _project_file(relative_path: str) -> Path:
     try:
-        from vibeforcer.lint._config import get_config
+        from slopgate.lint._config import get_config
 
         return get_config().project_root / relative_path
     except Exception:

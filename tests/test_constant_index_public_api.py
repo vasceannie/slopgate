@@ -5,8 +5,8 @@ from pathlib import Path
 from hypothesis import given, strategies
 import pytest
 
-from vibeforcer.quality import constant_index
-from vibeforcer.quality.constant_index import (
+from slopgate.quality import constant_index
+from slopgate.quality.constant_index import (
     ConstantIndex,
     StringConstantMatch,
     build_project_constant_index,

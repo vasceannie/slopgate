@@ -16,7 +16,7 @@ from tests.test_engine import (
     _pretool_write_payload,
     _strict_rule_id_sets,
     _write_config_from_defaults,
-    _write_quality_gate,
+    _write_slopgate,
     _write_skip_paths_config,
     assert_blocked,
     assert_denied_by,
@@ -31,8 +31,8 @@ def _repo_with_touched_source_coverage(tmp_path: Path) -> Path:
     tests_dir = repo / "tests"
     src_dir.mkdir(parents=True)
     tests_dir.mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
     _ = (src_dir / "__init__.py").write_text("", encoding="utf-8")
     _ = (src_dir / "config.py").write_text(
@@ -74,7 +74,7 @@ class TestEnforcementModes:
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(protected)
 
     def test_enrolled_repo_runs_full_strict_stack(self, tmp_path: Path) -> None:
-        repo = _write_quality_gate(tmp_path / "repo_strict")
+        repo = _write_slopgate(tmp_path / "repo_strict")
         always_on_ids, strict_ids = _strict_rule_id_sets(repo)
 
         assert "BUILTIN-PROTECTED-PATHS" in always_on_ids, (
@@ -92,8 +92,8 @@ class TestEnforcementModes:
         repo = tmp_path / "repo_strict_subdir"
         subdir = repo / "src"
         subdir.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        _ = (repo / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n", encoding="utf-8"
         )
 
         candidate = evaluate_payload(
@@ -103,7 +103,7 @@ class TestEnforcementModes:
 
     def test_worktree_auto_enrolls_from_repo_marker(self, tmp_path: Path) -> None:
         repo, worktree = _init_git_worktree(tmp_path)
-        worktree_marker = worktree / "quality_gate.toml"
+        worktree_marker = worktree / "slopgate.toml"
         worktree_marker.unlink()
 
         result = evaluate_payload(
@@ -114,8 +114,8 @@ class TestEnforcementModes:
         assert "GIT-001" in finding_ids(result)
 
     def test_enrolled_repo_with_noqualitygate_is_relaxed(self, tmp_path: Path) -> None:
-        repo = _write_quality_gate(tmp_path / "repo_relaxed")
-        _ = (repo / ".noqualitygate").write_text("", encoding="utf-8")
+        repo = _write_slopgate(tmp_path / "repo_relaxed")
+        _ = (repo / ".noslopgate").write_text("", encoding="utf-8")
 
         strict_candidate = _evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
         assert "GIT-001" not in finding_ids(strict_candidate)
@@ -126,7 +126,7 @@ class TestEnforcementModes:
     def test_skip_paths_suppresses_strict_not_safety(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        repo = _write_quality_gate(tmp_path / "repo_skip")
+        repo = _write_slopgate(tmp_path / "repo_skip")
         _write_skip_paths_config(tmp_path, monkeypatch, repo)
 
         strict_candidate = _evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
@@ -136,7 +136,7 @@ class TestEnforcementModes:
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(safety_candidate)
 
     def test_post_edit_quality_runs_from_repo_root(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-        repo = _write_quality_gate(tmp_path / "repo_quality_cwd")
+        repo = _write_slopgate(tmp_path / "repo_quality_cwd")
         subdir = repo / "nested"
         subdir.mkdir(parents=True)
         _write_config_from_defaults(
@@ -154,10 +154,10 @@ class TestEnforcementModes:
     def test_repo_toml_can_enable_post_edit_quality(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        repo = _write_quality_gate(
+        repo = _write_slopgate(
             tmp_path / "repo_quality_gate_runtime",
             (
-                "[quality_gate]\n"
+                "[slopgate]\n"
                 "enabled = true\n\n"
                 "[post_edit_quality]\n"
                 "enabled = true\n"
@@ -177,8 +177,8 @@ class TestEnforcementModes:
         repo = tmp_path / "repo_lint_touched"
         tests_dir = repo / "tests"
         tests_dir.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        _ = (repo / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n", encoding="utf-8"
         )
         _ = (tests_dir / "test_smell.py").write_text(
             "def test_smell():\n    x = 1\n",
@@ -211,8 +211,8 @@ class TestEnforcementModes:
         repo = tmp_path / "repo_ast_posttool"
         nested = repo / "nested"
         nested.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        _ = (repo / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n", encoding="utf-8"
         )
         _ = (nested / "bad.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
         payload = {
@@ -234,8 +234,8 @@ class TestEnforcementModes:
     ) -> None:
         repo = tmp_path / "repo_ast_glob_posttool"
         repo.mkdir(parents=True)
-        _ = (repo / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n",
+        _ = (repo / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n",
             encoding="utf-8",
         )
         payload = {

@@ -4,8 +4,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.context import HookContext
-from vibeforcer.rules.python_ast._rules import (
+from slopgate.context import HookContext
+from slopgate.rules.python_ast._rules import (
     PythonAstHealthRule,
     PythonBroadExceptLoggerRule,
     PythonCyclomaticComplexityRule,
@@ -229,7 +229,7 @@ def test_private_import_chain_rule_reports_stacked_private_import(
 ) -> None:
     source = """
 import hypothesis.strategies as st
-from vibeforcer.rules.python_ast._rules._private_imports import PrivateRule
+from slopgate.rules.python_ast._rules._private_imports import PrivateRule
 from service import item_alpha, item_beta, item_gamma
 """.lstrip()
     ctx = context_with_limits(tmp_path, source)
@@ -237,7 +237,7 @@ from service import item_alpha, item_beta, item_gamma
     findings = PythonPrivateImportChainRule().evaluate(ctx)
 
     assert [(item.rule_id, item.metadata.get("target")) for item in findings] == [
-        ("PY-IMPORT-003", "vibeforcer.rules.python_ast._rules._private_imports")
+        ("PY-IMPORT-003", "slopgate.rules.python_ast._rules._private_imports")
     ]
 
 

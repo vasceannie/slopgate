@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from vibeforcer._types import ObjectDict, object_dict, object_list
-from vibeforcer.stats import analyze, parse_timestamp
+from slopgate._types import ObjectDict, object_dict, object_list
+from slopgate.stats import analyze, parse_timestamp
 
 
 def _analyze(entries: list[ObjectDict]) -> ObjectDict:

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.engine import evaluate_payload
+from slopgate._types import ObjectDict
+from slopgate.engine import evaluate_payload
 from tests.support import WriteBuilder, assert_denied_by, assert_not_denied, finding_ids
 
 

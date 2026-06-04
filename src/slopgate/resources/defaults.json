@@ -6,7 +6,7 @@
   ],
   "search_reminder_message": "Remember you also have Grep, Read, Glob, prompt hooks, and agent hooks available. Prefer deterministic search before spawning a verifier agent.",
   "protected_paths": [
-    "*/.config/vibeforcer/config.json",
+    "*/.config/slopgate/config.json",
     ".claude/",
     "*/.claude/settings.json",
     "*/.claude/settings.local.json",
@@ -28,7 +28,7 @@
     "prettier.config.*",
     "tests/quality/",
     "src/test/code-quality.test.ts",
-    "src/vibeforcer/rules/python_ast/_staging/"
+    "src/slopgate/rules/python_ast/_staging/"
   ],
   "sensitive_path_patterns": [
     "/.env",
@@ -788,7 +788,7 @@
         "tests/quality/(?!baselines\\.json$)"
       ],
       "action": "deny",
-      "message": "Edits to tests/quality/ (except baselines.json) are blocked. Fix the source rule implementation under `src/vibeforcer/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
+      "message": "Edits to tests/quality/ (except baselines.json) are blocked. Fix the source rule implementation under `src/slopgate/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
       "case_sensitive": false,
       "multiline": false
     },
@@ -805,7 +805,7 @@
         "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*tests/quality/"
       ],
       "action": "deny",
-      "message": "Shell edits to tests/quality/ are blocked. Fix source under `src/vibeforcer/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
+      "message": "Shell edits to tests/quality/ are blocked. Fix source under `src/slopgate/...`; if expected output legitimately changed, update only `tests/quality/baselines.json`, then run `python -m pytest -q tests/quality`.",
       "case_sensitive": false,
       "multiline": false
     },
@@ -1087,7 +1087,7 @@
   ],
   "skip_paths": [],
   "skip_if_file_exists": [
-    ".noqualitygate",
-    ".no-quality-gate"
+    ".noslopgate",
+    ".no-slop-gate"
   ]
 }

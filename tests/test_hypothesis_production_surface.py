@@ -12,25 +12,25 @@ import pytest
 from hypothesis import given, settings, strategies
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.adapters.base import render_request_from_call
-from vibeforcer.cli import commands as cli_commands
-from vibeforcer.cli.main import main
-from vibeforcer.config._repo import enroll_repo
-from vibeforcer.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
-from vibeforcer.installer import _shared as installer_shared
-from vibeforcer.installer import _suite as installer_suite
-from vibeforcer.installer import _suite_autoupdate as suite_autoupdate
-from vibeforcer.lint import _collectors
-from vibeforcer.lint._detectors import code_smells, logging_conventions, stale_code, wrappers
-from vibeforcer.lint._detectors.test_smells import _basic_detection
-from vibeforcer.lint._helpers import ParsedFile, build_parent_map, compute_string_line_ranges
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import is_rule_enabled
-from vibeforcer.search import config as search_config
-from vibeforcer.search import runtime
-from vibeforcer.util.payloads import _basic as payload_basic
-from vibeforcer.util.payloads import _shell as payload_shell
-from vibeforcer.util.platform import normalize_path_for_match, resolve_path_for_match
+from slopgate.adapters.base import render_request_from_call
+from slopgate.cli import commands as cli_commands
+from slopgate.cli.main import main
+from slopgate.config._repo import enroll_repo
+from slopgate.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
+from slopgate.installer import _shared as installer_shared
+from slopgate.installer import _suite as installer_suite
+from slopgate.installer import _suite_autoupdate as suite_autoupdate
+from slopgate.lint import _collectors
+from slopgate.lint._detectors import code_smells, logging_conventions, stale_code, wrappers
+from slopgate.lint._detectors.test_smells import _basic_detection
+from slopgate.lint._helpers import ParsedFile, build_parent_map, compute_string_line_ranges
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import is_rule_enabled
+from slopgate.search import config as search_config
+from slopgate.search import runtime
+from slopgate.util.payloads import _basic as payload_basic
+from slopgate.util.payloads import _shell as payload_shell
+from slopgate.util.platform import normalize_path_for_match, resolve_path_for_match
 
 TEXT_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789 _.-/"
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z0-9_]{0,12}", fullmatch=True).filter(
@@ -121,7 +121,7 @@ def test_code_smell_detectors_accept_minimal_module_property(name: str) -> None:
 
 @given(name=IDENTIFIERS)
 def test_logging_detectors_accept_minimal_module_property(name: str) -> None:
-    source = "from vibeforcer.util.logger import make_logger\nlogger = make_logger(__name__)\n"
+    source = "from slopgate.util.logger import make_logger\nlogger = make_logger(__name__)\n"
     parsed = [_parsed(source.replace("make_logger", name), rel="src/logging_sample.py")]
 
     assert (
@@ -206,8 +206,8 @@ def test_cmd_handle_accepts_empty_payload_property(platform: str) -> None:
 
 
 @given(command=SHORT_TEXT)
-def test_command_is_vibeforcer_hook_detects_handle_invocation_property(command: str) -> None:
-    result = installer_shared.command_is_vibeforcer_hook(command)
+def test_command_is_slopgate_hook_detects_handle_invocation_property(command: str) -> None:
+    result = installer_shared.command_is_slopgate_hook(command)
 
     assert isinstance(result, bool)
 

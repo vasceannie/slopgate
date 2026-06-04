@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vibeforcer.lint._config import get_config
+from slopgate.lint._config import get_config
 
 
 # ---------------------------------------------------------------------------

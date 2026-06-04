@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.lint._detectors.test_smells import (
+from slopgate.lint._detectors.test_smells import (
     _hypothesis_obsolete,
     _production_detectors,
 )
-from vibeforcer.lint._detectors.test_smells._integrity_index import (
+from slopgate.lint._detectors.test_smells._integrity_index import (
     build_test_integrity_index,
 )
-from vibeforcer.lint._helpers import (
+from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,
@@ -146,8 +146,8 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
 def test_test_integrity_collectors_build_one_shared_index(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.lint import _collectors
-    from vibeforcer.lint._detectors import test_smells
+    from slopgate.lint import _collectors
+    from slopgate.lint._detectors import test_smells
 
     parsed_src, parsed_tests = _sample_inputs()
     calls = 0

@@ -87,7 +87,7 @@ class RuntimeConfig:
     post_edit_quality_commands: dict[str, list[str]]
     async_jobs_enabled: bool
     async_jobs_commands: dict[str, list[str]]
-    # -- quality_gate.toml overrides --
+    # -- slopgate.toml overrides --
     python_max_complexity: int = int(RUNTIME_POLICY_DEFAULTS["max_complexity"])
     python_max_nesting_depth: int = int(RUNTIME_POLICY_DEFAULTS["max_nesting_depth"])
     python_max_god_class_methods: int = int(
@@ -106,7 +106,7 @@ class RuntimeConfig:
     # Global skip / per-repo exception support
     skip_paths: list[str] = field(default_factory=list)
     skip_if_file_exists: list[str] = field(
-        default_factory=lambda: [".noqualitygate", ".no-quality-gate"]
+        default_factory=lambda: [".noslopgate", ".no-slop-gate"]
     )
     disabled_rules: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)

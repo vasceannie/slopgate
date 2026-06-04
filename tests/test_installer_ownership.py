@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-import vibeforcer.installer as installer_module
-import vibeforcer.installer._shared as installer_shared
-from vibeforcer.installer._shared import (
+import slopgate.installer as installer_module
+import slopgate.installer._shared as installer_shared
+from slopgate.installer._shared import (
     backup_existing_file,
     backup_existing_file_and_report,
     base_invocation,
@@ -32,40 +32,40 @@ def _hook_commands(settings_path: Path) -> list[str]:
 @pytest.mark.parametrize(
     "command",
     [
-        "vibeforcer handle",
-        "vibeforcer.exe handle",
-        "python -m vibeforcer handle",
+        "slopgate handle",
+        "slopgate.exe handle",
+        "python -m slopgate handle",
     ],
 )
-def test_command_ownership_recognizes_exact_vibeforcer_invocations(command: str) -> None:
-    assert installer_shared.command_is_vibeforcer_hook(command)
+def test_command_ownership_recognizes_exact_slopgate_invocations(command: str) -> None:
+    assert installer_shared.command_is_slopgate_hook(command)
 
 
 def test_command_ownership_recognizes_windows_powershell_hook_command() -> None:
     command = installer_shared.hook_command(
-        r"C:\\Tools\\Vibeforcer Bin\\vibeforcer.exe", "handle", windows=True
+        r"C:\\Tools\\Slopgate Bin\\slopgate.exe", "handle", windows=True
     )
 
-    assert installer_shared.command_is_vibeforcer_hook(command)
+    assert installer_shared.command_is_slopgate_hook(command)
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        "my-vibeforcer-helper handle",
-        "/opt/not-vibeforcer handle",
-        "vibeforcer-doc handle",
+        "my-slopgate-helper handle",
+        "/opt/not-slopgate handle",
+        "slopgate-doc handle",
     ],
 )
-def test_command_ownership_preserves_unrelated_vibeforcer_named_helpers(
+def test_command_ownership_preserves_unrelated_slopgate_named_helpers(
     command: str,
 ) -> None:
-    assert not installer_shared.command_is_vibeforcer_hook(command)
+    assert not installer_shared.command_is_slopgate_hook(command)
 
 
 def _old_powershell_hook() -> str:
     return installer_shared.hook_command(
-        r"C:\\Old Tools\\vibeforcer.exe", "handle", windows=True
+        r"C:\\Old Tools\\slopgate.exe", "handle", windows=True
     )
 
 
@@ -104,15 +104,15 @@ def test_claude_reinstall_replaces_powershell_owned_hook_and_preserves_user_hook
 ) -> None:
     old_owned = _old_powershell_hook()
     settings_path = _seed_claude_hook_settings(
-        tmp_path, monkeypatch, "my-vibeforcer-helper handle", old_owned
+        tmp_path, monkeypatch, "my-slopgate-helper handle", old_owned
     )
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
+    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
 
     result = installer_module._install_claude(dry_run=False)
 
     assert {"result": result, "commands": _hook_commands(settings_path)} == {
         "result": 0,
-        "commands": ["my-vibeforcer-helper handle", "vibeforcer handle"],
+        "commands": ["my-slopgate-helper handle", "slopgate handle"],
     }
 
 
@@ -120,14 +120,14 @@ def test_claude_uninstall_removes_powershell_owned_hook_and_preserves_user_hooks
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     settings_path = _seed_claude_hook_settings(
-        tmp_path, monkeypatch, "vibeforcer-doc handle", _old_powershell_hook()
+        tmp_path, monkeypatch, "slopgate-doc handle", _old_powershell_hook()
     )
 
     result = installer_module._uninstall_claude(dry_run=False)
 
     assert {"result": result, "commands": _hook_commands(settings_path)} == {
         "result": 0,
-        "commands": ["vibeforcer-doc handle"],
+        "commands": ["slopgate-doc handle"],
     }
 
 
@@ -143,13 +143,13 @@ def test_base_invocation_returns_module_args_for_python_executable() -> None:
 
     result = base_invocation(sys.executable)
 
-    assert result == [sys.executable, "-m", "vibeforcer"]
+    assert result == [sys.executable, "-m", "slopgate"]
 
 
 def test_base_invocation_returns_direct_invocation_for_named_binary() -> None:
-    result = base_invocation("vibeforcer")
+    result = base_invocation("slopgate")
 
-    assert result == ["vibeforcer"]
+    assert result == ["slopgate"]
 
 
 def test_coerce_hook_entries_filters_non_dicts() -> None:
@@ -185,7 +185,7 @@ def test_require_json_object_returns_none_for_invalid_json(tmp_path: Path, capsy
 def test_merge_owned_hooks_into_replaces_hooks_key(tmp_path: Path) -> None:
     config: dict[str, object] = {"other": "value", "hooks": {}}
     managed: dict[str, list[dict[str, object]]] = {
-        "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "vibeforcer handle"}]}]
+        "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "slopgate handle"}]}]
     }
 
     merge_owned_hooks_into(config, managed)

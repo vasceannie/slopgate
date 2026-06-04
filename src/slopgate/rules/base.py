@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from vibeforcer.models import RuleFinding
+from slopgate.models import RuleFinding
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 class Rule(ABC):

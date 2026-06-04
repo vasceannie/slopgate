@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     METADATA_PATH,
 )
-from vibeforcer.models import RegexRuleConfig, RuleFinding, Severity
-from vibeforcer.rules.base import Rule
-from vibeforcer.util.payloads import any_path_matches
+from slopgate.models import RegexRuleConfig, RuleFinding, Severity
+from slopgate.rules.base import Rule
+from slopgate.util.payloads import any_path_matches
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 @dataclass(slots=True)

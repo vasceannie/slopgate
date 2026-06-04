@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from vibeforcer._argparse_types import SubparserRegistry
-from vibeforcer.lint.config_values import build_default_values
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import join_messages
+from slopgate._argparse_types import SubparserRegistry
+from slopgate.lint.config_values import build_default_values
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import join_messages
 
 RawFinding = tuple[str, Severity, str | None]
 

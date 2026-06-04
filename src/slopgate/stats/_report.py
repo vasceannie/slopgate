@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from vibeforcer._types import object_dict, object_list
+from slopgate._types import object_dict, object_list
 
 from ._analysis import analyze
 from ._load import _default_log_path, load_entries
@@ -33,7 +33,7 @@ def _pairs(stats: Mapping[str, object], key: str) -> _PairList:
 
 def print_report(stats: Mapping[str, object]) -> None:
     print("=" * 70)
-    print("VIBEFORCER HOOK ACTIVITY REPORT")
+    print("SLOPGATE HOOK ACTIVITY REPORT")
     print("=" * 70)
     print(f"\nDate range: {stats['date_range']}")
     print(f"Total hook events: {stats['total_events']:,}")

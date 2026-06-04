@@ -6,17 +6,17 @@ import ast
 from collections.abc import Set
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
-from vibeforcer.constants import (
+from slopgate.constants import (
     METADATA_PATH,
 )
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._config import get_config
+from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_source_files,
 )
-from vibeforcer.quality.constant_index import (
+from slopgate.quality.constant_index import (
     ConstantIndex,
     StringConstantMatch,
     build_project_constant_index,
@@ -24,7 +24,7 @@ from vibeforcer.quality.constant_index import (
     suggest_constant_name,
 )
 if TYPE_CHECKING:
-    from vibeforcer.lint._config import QualityConfig
+    from slopgate.lint._config import QualityConfig
 
 from ._semantic import _is_docstring_node as _is_docstring_node
 

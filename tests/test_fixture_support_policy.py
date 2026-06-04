@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.lint._config import load_config, reset_config
-from vibeforcer.lint._detectors.test_smells import detect_fixtures_outside_conftest
-from vibeforcer.lint._helpers import find_source_files, parse_files
-from vibeforcer.policy_defaults import LINT_PATH_DEFAULTS
+from slopgate.engine import evaluate_payload
+from slopgate.lint._config import load_config, reset_config
+from slopgate.lint._detectors.test_smells import detect_fixtures_outside_conftest
+from slopgate.lint._helpers import find_source_files, parse_files
+from slopgate.policy_defaults import LINT_PATH_DEFAULTS
 
 from tests import support as test_support
 
@@ -62,13 +62,13 @@ def test_default_lint_excludes_include_common_virtualenv_dirs() -> None:
     assert "env" in exclude_dirs
 
 
-def test_quality_gate_template_excludes_common_virtualenv_dirs() -> None:
+def test_slopgate_template_excludes_common_virtualenv_dirs() -> None:
     template_path = (
         Path(__file__).parents[1]
         / "src"
-        / "vibeforcer"
+        / "slopgate"
         / "resources"
-        / "quality_gate_template.toml"
+        / "slopgate_template.toml"
     )
     template = template_path.read_text(encoding="utf-8")
 
@@ -176,7 +176,7 @@ def test_hook_fixture_rule_config_keeps_support_modules_out_of_block_globs(
     bundle_root: Path,
 ) -> None:
     raw_config = json.loads(
-        (bundle_root / "src" / "vibeforcer" / "resources" / "defaults.json").read_text(
+        (bundle_root / "src" / "slopgate" / "resources" / "defaults.json").read_text(
             encoding="utf-8"
         )
     )

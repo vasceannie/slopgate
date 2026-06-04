@@ -8,13 +8,13 @@ from pathlib import Path
 from time import time
 from typing import TypedDict
 import pytest
-from vibeforcer._types import ObjectDict, object_dict, object_list, string_value
-from vibeforcer.adapters import get_adapter
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult, RuleFinding, Severity
-from vibeforcer.state import HookStateStore
+from slopgate._types import ObjectDict, object_dict, object_list, string_value
+from slopgate.adapters import get_adapter
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult, RuleFinding, Severity
+from slopgate.state import HookStateStore
 from tests.support import BUNDLE_ROOT, assert_denied_by, assert_not_denied, finding_ids
-_RESOURCES = BUNDLE_ROOT / "src" / "vibeforcer" / "resources"
+_RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
 class _SubprocessFinding(TypedDict):
     rule_id: str
     decision: str | None
@@ -67,7 +67,7 @@ def _normalize_subprocess_result(raw: object) -> _SubprocessResult:
 def _config_with_enabled_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *rule_ids: str
 ) -> None:
-    (tmp_path / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n")
+    (tmp_path / "slopgate.toml").write_text("[slopgate]\nenabled = true\n")
     raw = json.loads((_RESOURCES / "defaults.json").read_text(encoding="utf-8"))
     enabled = dict(raw.get("enabled_rules", {}))
     for rule_id in rule_ids:
@@ -75,7 +75,7 @@ def _config_with_enabled_rules(
     raw["enabled_rules"] = enabled
     config_path = tmp_path / "spec-config.json"
     config_path.write_text(json.dumps(raw), encoding="utf-8")
-    monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(config_path))
 def _enable_thin_wrapper_rule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -84,9 +84,9 @@ def _enable_loop_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _config_with_enabled_rules(tmp_path, monkeypatch, "PY-CODE-013", "PY-CODE-009")
 def _ensure_enrolled(cwd: str) -> None:
     root = Path(cwd)
-    marker = root / "quality_gate.toml"
+    marker = root / "slopgate.toml"
     if not marker.exists():
-        marker.write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+        marker.write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
 def _read_payload(
     file_path: str,
     *,
@@ -231,13 +231,13 @@ def _run_payload_in_subprocess(
     platform: str = "claude",
 ) -> _SubprocessResult:
     """Run one hook evaluation in a fresh Python process.
-    Vibeforcer hooks are invoked as subprocesses in production, so this helper keeps
+    Slopgate hooks are invoked as subprocesses in production, so this helper keeps
     the spec honest about persistence requirements.
     """
     script = """
 import json
 import sys
-from vibeforcer.engine import evaluate_payload
+from slopgate.engine import evaluate_payload
 payload = json.loads(sys.argv[1])
 platform = sys.argv[2]
 result = evaluate_payload(payload, platform=platform)
@@ -270,7 +270,7 @@ def _start_full_read_record_subprocess(
     script = """
 import sys
 from pathlib import Path
-from vibeforcer.state import HookStateStore
+from slopgate.state import HookStateStore
 store = HookStateStore(Path(sys.argv[1]))
 store.record_full_read(sys.argv[2], sys.argv[3])
 """.strip()

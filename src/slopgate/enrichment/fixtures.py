@@ -6,14 +6,14 @@ import ast
 from pathlib import Path
 import re
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     ENRICHMENT_FIXTURE_PARENT_DEPTH,
     ENRICHMENT_MAX_FIXTURES,
     ENRICHMENT_MAX_PARAMETRIZE_EXAMPLES,
     ENRICHMENT_MAX_PARAMETRIZE_SNIPPET,
 )
-from vibeforcer.enrichment._helpers import safe_parse, safe_read
-from vibeforcer.enrichment._types import FixtureInfo, ParametrizeExample
+from slopgate.enrichment._helpers import safe_parse, safe_read
+from slopgate.enrichment._types import FixtureInfo, ParametrizeExample
 
 
 _PARAMETRIZE_RE = re.compile(

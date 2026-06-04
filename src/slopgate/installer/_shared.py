@@ -12,9 +12,9 @@ from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import cast
 
-from vibeforcer._types import object_dict, object_list
-from vibeforcer.constants import METADATA_COMMAND
-from vibeforcer.util.platform import is_windows
+from slopgate._types import object_dict, object_list
+from slopgate.constants import METADATA_COMMAND
+from slopgate.util.platform import is_windows
 
 HOOK_TYPE_COMMAND = METADATA_COMMAND
 
@@ -24,8 +24,8 @@ HOOK_TIMEOUT_LONG = HOOK_TIMEOUT_STANDARD + HOOK_TIMEOUT_SHORT
 
 
 def find_binary() -> str:
-    """Find the vibeforcer binary on PATH."""
-    binary = shutil.which("vibeforcer")
+    """Find the slopgate binary on PATH."""
+    binary = shutil.which("slopgate")
     if binary:
         return binary
     return sys.executable
@@ -33,7 +33,7 @@ def find_binary() -> str:
 
 def base_invocation(binary: str) -> list[str]:
     if Path(binary).resolve() == Path(sys.executable).resolve():
-        return [binary, "-m", "vibeforcer"]
+        return [binary, "-m", "slopgate"]
     return [binary]
 
 
@@ -66,8 +66,24 @@ def _command_basename(token: str) -> str:
     return (windows_name if len(windows_name) < len(posix_name) else posix_name).lower()
 
 
-def _executable_is_vibeforcer(token: str) -> bool:
-    return _command_basename(token) in {"vibeforcer", "vibeforcer.exe"}
+def _executable_is_slopgate(token: str) -> bool:
+    return _command_basename(token) in {"slopgate", "slopgate.exe", "sgt", "sgt.exe"}
+
+
+_LEGACY_HOOK_EXECUTABLES = frozenset(
+    {
+        "slopgate",
+        "slopgate.exe",
+        "vfc",
+        "vfc.exe",
+        "isx",
+        "isx.exe",
+    }
+)
+
+
+def _executable_is_legacy_slopgate(token: str) -> bool:
+    return _command_basename(token) in _LEGACY_HOOK_EXECUTABLES
 
 
 def _executable_is_python(token: str) -> bool:
@@ -75,11 +91,15 @@ def _executable_is_python(token: str) -> bool:
     return basename == "python" or basename == "python.exe" or basename.startswith("python3")
 
 
-def _argv_invokes_vibeforcer_handle(argv: list[str]) -> bool:
-    if len(argv) >= 2 and _executable_is_vibeforcer(argv[0]):
+def _argv_invokes_slopgate_handle(argv: list[str]) -> bool:
+    if len(argv) >= 2 and _executable_is_slopgate(argv[0]):
+        return argv[1] == "handle"
+    if len(argv) >= 2 and _executable_is_legacy_slopgate(argv[0]):
         return argv[1] == "handle"
     if len(argv) >= 4 and _executable_is_python(argv[0]):
-        return argv[1:4] == ["-m", "vibeforcer", "handle"]
+        if argv[1:4] == ["-m", "slopgate", "handle"]:
+            return True
+        return argv[1:4] == ["-m", "slopgate", "handle"]
     return False
 
 
@@ -96,8 +116,8 @@ def _powershell_command_argv(argv: list[str]) -> list[str]:
     return []
 
 
-def command_is_vibeforcer_hook(command: object) -> bool:
-    """Return true only for hook commands installed by Vibeforcer."""
+def command_is_slopgate_hook(command: object) -> bool:
+    """Return true only for hook commands installed by Slopgate."""
 
     if not isinstance(command, str):
         return False
@@ -105,11 +125,11 @@ def command_is_vibeforcer_hook(command: object) -> bool:
         argv = shlex.split(command)
     except ValueError:
         return False
-    if _argv_invokes_vibeforcer_handle(argv):
+    if _argv_invokes_slopgate_handle(argv):
         return True
     if not argv or _command_basename(argv[0]) not in {"powershell.exe", "powershell"}:
         return False
-    return _argv_invokes_vibeforcer_handle(_powershell_command_argv(argv))
+    return _argv_invokes_slopgate_handle(_powershell_command_argv(argv))
 
 
 def filter_owned_hook_commands(entry: object) -> dict[str, object] | None:
@@ -124,7 +144,7 @@ def filter_owned_hook_commands(entry: object) -> dict[str, object] | None:
         hook_dict = object_dict(hook)
         if not hook_dict:
             continue
-        if not command_is_vibeforcer_hook(hook_dict.get(METADATA_COMMAND)):
+        if not command_is_slopgate_hook(hook_dict.get(METADATA_COMMAND)):
             kept_hooks.append(hook_dict)
     if not kept_hooks:
         return None
@@ -191,7 +211,7 @@ def require_json_object(path: Path, label: str, *, action: str) -> dict[str, obj
 def merge_owned_hooks_into(
     config: dict[str, object], managed_hooks: dict[str, list[dict[str, object]]]
 ) -> None:
-    """Replace only vibeforcer-owned hook entries in a config document."""
+    """Replace only slopgate-owned hook entries in a config document."""
     config["hooks"] = merge_owned_hooks(config.get("hooks"), managed_hooks)
 
 
@@ -200,7 +220,7 @@ def backup_existing_file(path: Path) -> Path | None:
     if not path.exists():
         return None
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    backup_path = path.with_name(f"{path.name}.vibeforcer-bak-{timestamp}")
+    backup_path = path.with_name(f"{path.name}.slopgate-bak-{timestamp}")
     _ = shutil.copy2(path, backup_path)
     return backup_path
 
@@ -231,12 +251,12 @@ def uninstall_hooks_file(
     remove_owned: Callable[[object], dict[str, list[dict[str, object]]]],
     dry_run: bool = False,
 ) -> int:
-    """Remove vibeforcer-owned hook entries from a platform hooks.json file."""
+    """Remove slopgate-owned hook entries from a platform hooks.json file."""
     if not hooks_path.exists():
         print(f"No {label} hooks found.")
         return 0
     if dry_run:
-        print(f"Would remove vibeforcer hook entries from {hooks_path}")
+        print(f"Would remove slopgate hook entries from {hooks_path}")
         return 0
 
     existing = require_json_object(hooks_path, f"{label} hooks", action="modify")
@@ -247,13 +267,13 @@ def uninstall_hooks_file(
     if remaining_hooks:
         existing["hooks"] = remaining_hooks
         write_json_with_backup(hooks_path, existing, "hooks")
-        print(f"Removed vibeforcer hooks from {hooks_path}")
+        print(f"Removed slopgate hooks from {hooks_path}")
         return 0
 
     existing.pop("hooks", None)
     if existing:
         write_json_with_backup(hooks_path, existing, "hooks")
-        print(f"Removed vibeforcer hooks from {hooks_path}")
+        print(f"Removed slopgate hooks from {hooks_path}")
         return 0
 
     remove_file_with_backup(hooks_path, "hooks")

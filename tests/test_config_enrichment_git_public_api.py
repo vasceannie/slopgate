@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from hypothesis import given, strategies
 
-from vibeforcer.config._discovery import config_dir, detect_root, resolve_config_path
-from vibeforcer.config._repo import (
+from slopgate.config._discovery import config_dir, detect_root, resolve_config_path
+from slopgate.config._repo import (
     ensure_worktree_enrollment,
     is_path_skipped,
     is_repo_disabled,
@@ -15,14 +15,14 @@ from vibeforcer.config._repo import (
     resolve_main_git_repo_root,
     resolve_repo_root,
 )
-from vibeforcer.config._settings import ensure_trace_directories
-from vibeforcer.enrichment._types import FixtureInfo, ParametrizeExample
-from vibeforcer.enrichment.quality_enrichers._models import (
+from slopgate.config._settings import ensure_trace_directories
+from slopgate.enrichment._types import FixtureInfo, ParametrizeExample
+from slopgate.enrichment.quality_enrichers._models import (
     ImportableConstant,
     MagicNumberHint,
 )
-from vibeforcer.models import RuntimeConfig
-from vibeforcer.search.git_utils import normalize_clone_url, resolve_add_repo, urls_match
+from slopgate.models import RuntimeConfig
+from slopgate.search.git_utils import normalize_clone_url, resolve_add_repo, urls_match
 
 
 def test_enrichment_metadata_models_preserve_discovered_fields(tmp_path: Path) -> None:
@@ -78,7 +78,7 @@ def test_config_dir_prefers_explicit_environment_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     explicit_config_dir = tmp_path / "config-home"
-    monkeypatch.setenv("VIBEFORCER_CONFIG_DIR", str(explicit_config_dir))
+    monkeypatch.setenv("SLOPGATE_CONFIG_DIR", str(explicit_config_dir))
 
     assert config_dir() == explicit_config_dir
 
@@ -106,7 +106,7 @@ def test_git_url_helpers_normalize_and_pass_through_non_local_repo() -> None:
 def test_resolve_repo_root_finds_quality_gate_ancestor(tmp_path: Path) -> None:
     repo = tmp_path / "myrepo"
     repo.mkdir()
-    _ = (repo / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
     nested = repo / "src" / "pkg"
     nested.mkdir(parents=True)
 
@@ -121,7 +121,7 @@ def test_resolve_repo_root_returns_none_outside_enrolled_repo(tmp_path: Path) ->
 
 
 def test_is_repo_enrolled_true_when_quality_gate_present(tmp_path: Path) -> None:
-    _ = (tmp_path / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+    _ = (tmp_path / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
 
     assert is_repo_enrolled(tmp_path)
 
@@ -131,7 +131,7 @@ def test_is_repo_enrolled_false_when_quality_gate_absent(tmp_path: Path) -> None
 
 
 def test_is_repo_disabled_true_when_noqualitygate_sentinel_present(tmp_path: Path) -> None:
-    _ = (tmp_path / ".noqualitygate").write_text("", encoding="utf-8")
+    _ = (tmp_path / ".noslopgate").write_text("", encoding="utf-8")
 
     assert is_repo_disabled(tmp_path)
 
@@ -182,18 +182,18 @@ def test_resolve_config_path_prefers_explicit_env_var(
 ) -> None:
     cfg = tmp_path / "myconfig.json"
     cfg.write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("VIBEFORCER_CONFIG", str(cfg))
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(cfg))
 
     result = resolve_config_path()
 
     assert result == cfg.resolve()
 
 
-def test_detect_root_prefers_explicit_vibeforcer_root_env_var(
+def test_detect_root_prefers_explicit_slopgate_root_env_var(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("VIBEFORCER_ROOT", str(tmp_path))
+    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path))
 
     result = detect_root()
 

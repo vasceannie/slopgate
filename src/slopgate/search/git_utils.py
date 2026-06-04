@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from vibeforcer.search.config import IsxError
+from slopgate.search.config import IsxError
 
 
 def _host_path_from_match(pattern: str, raw: str) -> str | None:

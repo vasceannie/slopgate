@@ -1,4 +1,4 @@
-"""Argparse construction for vibeforcer search commands."""
+"""Argparse construction for slopgate search commands."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from vibeforcer._argparse_types import SubparserRegistry
-from vibeforcer.search.config import DEFAULT_SKILL_NAME
+from slopgate._argparse_types import SubparserRegistry
+from slopgate.search.config import DEFAULT_SKILL_NAME
 
 CommandFunc = Callable[[argparse.Namespace], int]
 
@@ -87,7 +87,7 @@ def _create_search_root(
 
 
 def _register_all_subcommands(sub: SubparserRegistry) -> None:
-    from vibeforcer.search import cli as commands_module
+    from slopgate.search import cli as commands_module
 
     commands = cast(_SearchCommands, commands_module)
     _register_init_subcommand(sub, commands.cmd_init)

@@ -6,10 +6,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import vibeforcer.installer as installer_module
-import vibeforcer.installer._suite as suite
-from vibeforcer.cli.commands import cmd_install, cmd_install_suite, cmd_uninstall, cmd_update_suite
-from vibeforcer.cli.parsers import build_parser
+import slopgate.installer._suite as suite
+from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
+from slopgate.cli.parsers import build_parser
 
 
 def _record_suite_subprocess_run(monkeypatch: Any) -> list[list[str]]:
@@ -108,7 +107,7 @@ def test_discover_install_sites_respects_current_device_home(
         [site.platform for site in suite.discover_install_sites(include_missing=True)],
     ) == (
         [("claude", True), ("opencode", True)],
-        ["claude", "codex", "opencode"],
+        ["claude", "codex", "opencode", "cursor"],
     )
 
 
@@ -119,10 +118,10 @@ def test_linux_scheduler_plan_uses_systemd_user_timer(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "linux")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/vibeforcer bin")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/slopgate bin")
 
     plan = suite.build_scheduler_plan(
-        "git+https://github.com/example/vibeforcer.git@master",
+        "git+https://github.com/example/slopgate.git@master",
         include_missing=True,
         interval_minutes=17,
     )
@@ -132,10 +131,10 @@ def test_linux_scheduler_plan_uses_systemd_user_timer(
         plan.target_path,
         "OnUnitActiveSec=17min" in plan.content,
         "--include-missing" in plan.content,
-        "vibeforcer-auto-update.timer" in (plan.enable_command or []),
+        "slopgate-auto-update.timer" in (plan.enable_command or []),
     ) == (
         "systemd-user",
-        tmp_path / ".config/systemd/user/vibeforcer-auto-update.timer",
+        tmp_path / ".config/systemd/user/slopgate-auto-update.timer",
         True,
         True,
         True,
@@ -148,7 +147,7 @@ def test_macos_scheduler_plan_uses_launch_agent(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/vibeforcer")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
 
     plan = suite.build_scheduler_plan(interval_minutes=20)
 
@@ -159,7 +158,7 @@ def test_macos_scheduler_plan_uses_launch_agent(
         plan.enable_command,
     ) == (
         "launchd",
-        tmp_path / "Library/LaunchAgents/rocks.baked.vibeforcer.autoupdate.plist",
+        tmp_path / "Library/LaunchAgents/rocks.baked.slopgate.autoupdate.plist",
         True,
         ["launchctl", "load", "-w", str(plan.target_path)],
     )
@@ -176,19 +175,19 @@ def test_windows_scheduler_plan_uses_schtasks(
         return tmp_path / "LocalAppData" / app_name
 
     monkeypatch.setattr(suite, "user_data_dir", fake_user_data_dir)
-    monkeypatch.setattr(suite, "find_binary", lambda: "C:\\Tools\\vibeforcer.exe")
+    monkeypatch.setattr(suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe")
 
     plan = suite.build_scheduler_plan(interval_minutes=11)
 
     assert (
         plan.kind,
         plan.target_path,
-        "C:\\Tools\\vibeforcer.exe" in plan.content,
+        "C:\\Tools\\slopgate.exe" in plan.content,
         "/MO" in (plan.enable_command or []),
         "11" in (plan.enable_command or []),
     ) == (
         "windows-schtasks",
-        tmp_path / "LocalAppData/vibeforcer/vibeforcer-auto-update.ps1",
+        tmp_path / "LocalAppData/slopgate/slopgate-auto-update.ps1",
         True,
         True,
         True,
@@ -207,7 +206,7 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
     plan = suite.build_scheduler_plan()
 
     exec_start = next(line for line in plan.content.splitlines() if line.startswith("ExecStart="))
-    assert " -m vibeforcer update-suite " in exec_start
+    assert " -m slopgate update-suite " in exec_start
 
 
 def test_scheduler_plan_rejects_newline_source_for_systemd_units(
@@ -232,7 +231,7 @@ def test_macos_scheduler_plan_escapes_plist_arguments(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/vibeforcer")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
 
     plan = suite.build_scheduler_plan("git+https://example.invalid/vf.git?x=1&y=<two>")
 

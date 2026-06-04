@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 
-from vibeforcer.rules.common._shell_read import (
+from slopgate.rules.common._shell_read import (
     FullFileReadRule,
     PromptContextRule,
     ProtectedPathsRule,
@@ -54,7 +54,7 @@ def test_full_file_read_rule_returns_empty_for_non_read_tool() -> None:
     ctx = _make_ctx(tool_name="Write", candidate_paths=["src/app.py"])
     ctx.config.enabled_rules = {}
 
-    import vibeforcer.rules.base as base_mod
+    import slopgate.rules.base as base_mod
 
     original = base_mod.is_rule_enabled
     base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
@@ -80,7 +80,7 @@ def test_protected_paths_rule_returns_empty_when_no_patterns_configured() -> Non
         protected_paths=[],
     )
 
-    import vibeforcer.rules.base as base_mod
+    import slopgate.rules.base as base_mod
 
     original = base_mod.is_rule_enabled
     base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
@@ -94,7 +94,7 @@ def test_protected_paths_rule_returns_empty_when_no_patterns_configured() -> Non
 
 def test_protected_paths_rule_denies_matching_path(tmp_path: Path) -> None:
     rule = ProtectedPathsRule()
-    target = str(tmp_path / "quality_gate.toml")
+    target = str(tmp_path / "slopgate.toml")
     ctx = _make_ctx(
         tool_name="Write",
         candidate_paths=[target],
@@ -102,7 +102,7 @@ def test_protected_paths_rule_denies_matching_path(tmp_path: Path) -> None:
     )
     ctx.state = MagicMock()
 
-    import vibeforcer.rules.base as base_mod
+    import slopgate.rules.base as base_mod
 
     original_enabled = base_mod.is_rule_enabled
 

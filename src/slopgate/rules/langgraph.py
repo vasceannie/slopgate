@@ -15,15 +15,15 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 _DEPENDENCY_FILES = (

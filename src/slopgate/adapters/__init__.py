@@ -1,4 +1,4 @@
-"""Platform adapters for the vibeforcer engine.
+"""Platform adapters for the slopgate engine.
 
 Each adapter translates between a specific CLI tool's hook protocol
 and the enforcer's internal canonical representation.
@@ -12,11 +12,11 @@ Supported platforms:
 
 from __future__ import annotations
 
-from vibeforcer.adapters.base import PlatformAdapter
-from vibeforcer.adapters.claude import ClaudeAdapter
-from vibeforcer.adapters.codex import CodexAdapter
-from vibeforcer.adapters.cursor import CursorAdapter
-from vibeforcer.adapters.opencode import OpenCodeAdapter
+from slopgate.adapters.base import PlatformAdapter
+from slopgate.adapters.claude import ClaudeAdapter
+from slopgate.adapters.codex import CodexAdapter
+from slopgate.adapters.cursor import CursorAdapter
+from slopgate.adapters.opencode import OpenCodeAdapter
 
 ADAPTERS: dict[str, type[PlatformAdapter]] = {
     "claude": ClaudeAdapter,

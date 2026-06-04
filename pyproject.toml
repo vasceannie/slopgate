@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vibeforcer"
+name = "slopgate"
 version = "1.1.0"
 description = "Global CLI guardrails engine for AI coding agents — Claude Code, Codex, OpenCode"
 requires-python = ">=3.10"
@@ -28,9 +28,10 @@ dependencies = [
 ]
 
 [project.scripts]
-vibeforcer = "vibeforcer.cli:safe_main"
-vfc = "vibeforcer.cli:safe_main"
-isx = "vibeforcer.cli:safe_main"
+slopgate = "slopgate.cli:safe_main"
+sgt = "slopgate.cli:safe_main"
+vfc = "slopgate.cli:safe_main"
+isx = "slopgate.cli:safe_main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -39,7 +40,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-vibeforcer = ["resources/**/*"]
+slopgate = ["resources/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

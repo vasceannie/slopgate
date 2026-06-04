@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult, RuleFinding
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult, RuleFinding
 
 
 GOD_CLASS_RULE = "PY-CODE-014"
@@ -23,8 +23,8 @@ QUALITY_LINT_RULE = "QUALITY-LINT-001"
 def _enroll_repo(repo: Path) -> None:
     (repo / "src").mkdir(parents=True, exist_ok=True)
     (repo / "logs" / "async").mkdir(parents=True, exist_ok=True)
-    (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
 
 

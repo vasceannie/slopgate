@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.cli.lint import cmd_lint
-from vibeforcer.cli.parsers import build_parser
-from vibeforcer.lint._config import reset_config
+from slopgate.cli.lint import cmd_lint
+from slopgate.cli.parsers import build_parser
+from slopgate.lint._config import reset_config
 
 
 def _write_project(root: Path, test_body: str, *, test_name: str = "test_bad.py") -> None:
-    (root / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+    (root / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
     src = root / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("", encoding="utf-8")

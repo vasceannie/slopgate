@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict
+from slopgate._types import object_dict
 
 def _default_log_path() -> Path:
     """Find the results.jsonl log file."""
-    from vibeforcer.config import config_dir
+    from slopgate.config import config_dir
 
     xdg = config_dir() / "logs" / "results.jsonl"
     if xdg.exists():

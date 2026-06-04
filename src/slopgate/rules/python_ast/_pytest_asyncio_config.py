@@ -12,7 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised via subprocess impor
     import tomli as tomllib
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 class _PytestAsyncioConfig(NamedTuple):

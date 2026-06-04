@@ -10,11 +10,11 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeforcer.constants import ENRICHMENT_MAX_READ_BYTES
+from slopgate.constants import ENRICHMENT_MAX_READ_BYTES
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 
 _ast_parse_count = 0

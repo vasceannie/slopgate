@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from vibeforcer._types import ObjectMapping, object_dict, object_list
-from vibeforcer.models import ContentTarget
+from slopgate._types import ObjectMapping, object_dict, object_list
+from slopgate.models import ContentTarget
 
 from ._basic import extract_content_from_mapping, extract_path_from_mapping, first_present
 from ._patches import extract_added_patch_content, parse_patch_candidate_paths

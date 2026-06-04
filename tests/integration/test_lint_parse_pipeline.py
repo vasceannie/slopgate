@@ -5,10 +5,10 @@ from tempfile import TemporaryDirectory
 
 from hypothesis import given, strategies as st
 
-from vibeforcer.lint._config import load_config, reset_config, set_config
-from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-from vibeforcer.lint._helpers import ParsedFile, ensure_parsed, parse_files
-from vibeforcer.lint._parse_errors import detect_python_parse_errors
+from slopgate.lint._config import load_config, reset_config, set_config
+from slopgate.lint._detectors.duplicates import detect_repeated_literals
+from slopgate.lint._helpers import ParsedFile, ensure_parsed, parse_files
+from slopgate.lint._parse_errors import detect_python_parse_errors
 
 
 @given(value=st.integers(min_value=-100, max_value=100))

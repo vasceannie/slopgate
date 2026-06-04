@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 
-from vibeforcer._argparse_types import SubparserRegistry
+from slopgate._argparse_types import SubparserRegistry
 
-from vibeforcer.cli.commands import (
+from slopgate.cli._migrate import cmd_migrate
+from slopgate.cli.commands import (
     INSTALL_TARGETS,
     PLATFORM_HELP,
     VALID_PLATFORMS,
@@ -25,7 +26,7 @@ from vibeforcer.cli.commands import (
     cmd_update_suite,
     cmd_version,
 )
-from vibeforcer.cli.lint import cmd_lint
+from slopgate.cli.lint import cmd_lint
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,7 @@ def _add_details_argument(parser: argparse.ArgumentParser, *, help_text: str) ->
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="vibeforcer",
+        prog="slopgate",
         description="Global CLI guardrails engine for AI coding agents",
     )
     _ = parser.add_argument(
@@ -74,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config_parsers(sub)
     _add_lint_parsers(sub)
 
-    from vibeforcer.search.cli import build_search_parser
+    from slopgate.search.cli import build_search_parser
 
     _ = build_search_parser(sub)
     version = sub.add_parser("version", help="Print version")
@@ -106,6 +107,25 @@ def _add_path_command_parser(
     return parser
 
 
+def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument(
+        "--install-scope",
+        "--cursor-scope",
+        dest="install_scope",
+        choices=("user", "project", "both"),
+        default="user",
+        help=(
+            "Hook install target: user config dir, project dir (./.claude, ./.codex, "
+            "./.cursor, ./.opencode), or both"
+        ),
+    )
+    _ = parser.add_argument(
+        "--project-root",
+        default="",
+        help="Project root for --install-scope project/both (default: current directory)",
+    )
+
+
 def _add_platform_install_parser(
     sub: SubparserRegistry,
     name: str,
@@ -126,6 +146,7 @@ def _add_platform_install_parser(
         action="store_true",
         help="Also install/remove the current OS's periodic GitHub updater",
     )
+    _add_install_scope_arguments(parser)
     if name == "uninstall":
         return
     _ = parser.add_argument(
@@ -143,7 +164,7 @@ def _add_suite_update_arguments(
         _add_dry_run_argument(parser)
     _ = parser.add_argument(
         "--source",
-        default="git+https://github.com/vasceannie/vibeforcer.git@master",
+        default="git+https://github.com/vasceannie/slopgate.git@master",
         help="Package source used by auto-update clients",
     )
     _ = parser.add_argument(
@@ -161,6 +182,7 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
         func=cmd_install_suite,
     )
     _add_suite_update_arguments(install_suite)
+    _add_install_scope_arguments(install_suite)
     _ = install_suite.add_argument(
         "--with-autoupdate",
         action="store_true",
@@ -176,10 +198,11 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
     update_suite = _add_command_parser(
         sub,
         "update-suite",
-        help_text="Update Vibeforcer from GitHub and refresh detected hook sites",
+        help_text="Update Slopgate from GitHub and refresh detected hook sites",
         func=cmd_update_suite,
     )
     _add_suite_update_arguments(update_suite)
+    _add_install_scope_arguments(update_suite)
 
 
 def _add_core_parsers(sub: SubparserRegistry) -> None:
@@ -227,6 +250,29 @@ def _add_core_parsers(sub: SubparserRegistry) -> None:
     _ = stats.add_argument("--json", action="store_true")
 
     _add_command_parser(sub, "test", help_text="Run self-test / smoke test", func=cmd_test)
+
+    migrate = _add_path_command_parser(
+        sub,
+        "migrate",
+        help_text="Migrate legacy slopgate config and quality_gate.toml to slopgate",
+        func=cmd_migrate,
+    )
+    _ = migrate.add_argument("--dry-run", action="store_true")
+    _ = migrate.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace existing ~/.config/slopgate when migrating user config",
+    )
+    _ = migrate.add_argument(
+        "--user-only",
+        action="store_true",
+        help="Only migrate user config and OpenCode plugin",
+    )
+    _ = migrate.add_argument(
+        "--repo-only",
+        action="store_true",
+        help="Only migrate repo slopgate.toml and disable sentinels",
+    )
 
 
 def _add_config_parsers(sub: SubparserRegistry) -> None:
@@ -305,7 +351,7 @@ def _add_lint_baseline_parser(lint_sub: SubparserRegistry) -> None:
 
 
 def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
-    init = lint_sub.add_parser("init", help="Scaffold quality_gate.toml")
+    init = lint_sub.add_parser("init", help="Scaffold slopgate.toml")
     _add_optional_path_argument(init)
     init.set_defaults(func=cmd_lint, lint_command="init")
 

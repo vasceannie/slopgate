@@ -5,9 +5,9 @@ from __future__ import annotations
 import ast
 from collections.abc import Sequence
 from pathlib import Path
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._config import get_config
+from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_test_files,

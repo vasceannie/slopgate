@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult
-from vibeforcer.rules.python_ast._rules._boundary_rule import PythonBoundaryLoggingRule
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult
+from slopgate.rules.python_ast._rules._boundary_rule import PythonBoundaryLoggingRule
 
 
 def test_boundary_logging_rule_keeps_stable_rule_id() -> None:
@@ -14,8 +14,8 @@ def test_boundary_logging_rule_keeps_stable_rule_id() -> None:
 def _enrolled_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     (repo / "src" / "orders").mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     return repo

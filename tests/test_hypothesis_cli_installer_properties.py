@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from hypothesis import given, strategies
 
-from vibeforcer.cli.commands import cmd_handle
-from vibeforcer.cli.main import main
-from vibeforcer.installer._shared import (
-    command_is_vibeforcer_hook,
+from slopgate.cli.commands import cmd_handle
+from slopgate.cli.main import main
+from slopgate.installer._shared import (
+    command_is_slopgate_hook,
     filter_owned_hook_commands,
     merge_owned_hooks,
 )
-from vibeforcer.installer._suite import update_suite
-from vibeforcer.installer._suite_autoupdate import install_autoupdate, uninstall_autoupdate
+from slopgate.installer._suite import update_suite
+from slopgate.installer._suite_autoupdate import install_autoupdate, uninstall_autoupdate
 
 _SHORT_TEXT = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 /-_.",
@@ -29,18 +29,18 @@ def test_main_is_callable_property(_: None) -> None:
 
 
 @given(_SHORT_TEXT)
-def test_command_is_vibeforcer_hook_returns_bool_for_arbitrary_text_property(
+def test_command_is_slopgate_hook_returns_bool_for_arbitrary_text_property(
     command: str,
 ) -> None:
-    result = command_is_vibeforcer_hook(command)
+    result = command_is_slopgate_hook(command)
     assert isinstance(result, bool), "must return bool"
 
 
 @given(strategies.just(None))
-def test_command_is_vibeforcer_hook_rejects_non_string_inputs_property(_: None) -> None:
-    assert command_is_vibeforcer_hook(42) is False
-    assert command_is_vibeforcer_hook(None) is False
-    assert command_is_vibeforcer_hook([]) is False
+def test_command_is_slopgate_hook_rejects_non_string_inputs_property(_: None) -> None:
+    assert command_is_slopgate_hook(42) is False
+    assert command_is_slopgate_hook(None) is False
+    assert command_is_slopgate_hook([]) is False
 
 
 @given(strategies.just(True))
@@ -64,7 +64,7 @@ def test_uninstall_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> No
 @given(strategies.sampled_from(["PreToolUse", "PostToolUse"]))
 def test_merge_owned_hooks_preserves_unrelated_events_property(event: str) -> None:
     existing: dict[str, object] = {"hooks": {event: [{"hooks": [{"command": "echo keep"}]}]}}
-    managed = {event: [{"hooks": [{"command": "vibeforcer handle --platform claude"}]}]}
+    managed = {event: [{"hooks": [{"command": "slopgate handle --platform claude"}]}]}
     merged = merge_owned_hooks(existing, managed)
 
     assert event in merged
@@ -75,7 +75,7 @@ def test_filter_owned_hook_commands_keeps_external_hooks_property(_: None) -> No
     entry = {
         "matcher": "Write",
         "hooks": [
-            {"command": "vibeforcer handle"},
+            {"command": "slopgate handle"},
             {"command": "echo external"},
         ],
     }

@@ -13,11 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import ObjectDict
+from slopgate._types import ObjectDict
 
 from typing_extensions import override
 
-from vibeforcer.lint._config import get_config
+from slopgate.lint._config import get_config
 
 SCHEMA_VERSION = 1
 

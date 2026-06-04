@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._helpers import ParsedFile, parse_files
-from vibeforcer.lint._parse_errors import detect_python_parse_errors
+from slopgate.lint._baseline import Violation
+from slopgate.lint._helpers import ParsedFile, parse_files
+from slopgate.lint._parse_errors import detect_python_parse_errors
 
 SourceAnalysis = tuple[
     list[ParsedFile],
@@ -23,22 +23,22 @@ def _ast_src_collectors(
     parsed_src: list[ParsedFile],
 ) -> list[tuple[str, list[Violation]]]:
     """Collect AST-based source violations (type safety, exceptions, logging, etc.)."""
-    from vibeforcer.lint._detectors.exception_safety import (
+    from slopgate.lint._detectors.exception_safety import (
         detect_broad_except_swallow,
         detect_silent_except,
         detect_silent_fallback,
     )
-    from vibeforcer.lint._detectors.line_length import detect_long_lines
-    from vibeforcer.lint._detectors.logging_conventions import (
+    from slopgate.lint._detectors.line_length import detect_long_lines
+    from slopgate.lint._detectors.logging_conventions import (
         detect_direct_get_logger,
         detect_wrong_logger_name,
     )
-    from vibeforcer.lint._detectors.stale_code import detect_stale_patterns
-    from vibeforcer.lint._detectors.type_safety import (
+    from slopgate.lint._detectors.stale_code import detect_stale_patterns
+    from slopgate.lint._detectors.type_safety import (
         detect_any_usage,
         detect_type_suppressions,
     )
-    from vibeforcer.lint._detectors.wrappers import detect_unnecessary_wrappers
+    from slopgate.lint._detectors.wrappers import detect_unnecessary_wrappers
     return [
         ("unnecessary-wrapper", detect_unnecessary_wrappers(parsed_src)),
         ("deprecated-pattern", detect_stale_patterns(parsed_src)),
@@ -60,14 +60,14 @@ def _structure_src_collectors(
     literals: list[Violation],
 ) -> list[tuple[str, list[Violation]]]:
     """Collect structure/complexity/duplicate source violations."""
-    from vibeforcer.lint._detectors.code_smells import (
+    from slopgate.lint._detectors.code_smells import (
         detect_deep_nesting,
         detect_god_classes,
         detect_high_complexity,
         detect_long_methods,
         detect_too_many_params,
     )
-    from vibeforcer.lint._detectors.duplicates import (
+    from slopgate.lint._detectors.duplicates import (
         detect_duplicate_call_sequences,
         detect_repeated_blocks,
         detect_semantic_clones,
@@ -93,7 +93,7 @@ def _test_collectors(
     parsed_tests: list[ParsedFile],
 ) -> list[tuple[str, list[Violation]]]:
     """Collect all test-file violation pairs."""
-    from vibeforcer.lint._detectors.test_smells import (
+    from slopgate.lint._detectors.test_smells import (
         detect_assertion_free_tests,
         detect_assertion_roulette,
         detect_conditional_assertions,
@@ -118,7 +118,7 @@ def _test_integrity_collectors(
     parsed_test_targets: list[ParsedFile] | None = None,
 ) -> list[tuple[str, list[Violation]]]:
     """Collect bad-test-efficacy and holistic suite-quality indicators."""
-    from vibeforcer.lint._detectors.test_smells import (
+    from slopgate.lint._detectors.test_smells import (
         build_test_integrity_index,
         detect_hand_built_test_payloads,
         detect_hypothesis_candidates,
@@ -150,10 +150,10 @@ def _source_analysis(
     src_files: list[Path],
     test_files: list[Path],
 ) -> SourceAnalysis:
-    from vibeforcer.lint._config import get_config
-    from vibeforcer.lint._detectors.code_smells import detect_oversized_modules
-    from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-    from vibeforcer.quality.constant_index import (
+    from slopgate.lint._config import get_config
+    from slopgate.lint._detectors.code_smells import detect_oversized_modules
+    from slopgate.lint._detectors.duplicates import detect_repeated_literals
+    from slopgate.quality.constant_index import (
         build_project_constant_index,
         set_session_constant_index,
     )

@@ -7,8 +7,8 @@ from tempfile import TemporaryDirectory
 from hypothesis import given, strategies
 import pytest
 
-from vibeforcer.search import scaffolds
-from vibeforcer.search.scaffolds import (
+from slopgate.search import scaffolds
+from slopgate.search.scaffolds import (
     append_unique_json_list,
     render_isx_skill,
     render_opencode_plugin,

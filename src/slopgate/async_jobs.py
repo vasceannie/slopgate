@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE
-from vibeforcer.context import build_context
-from vibeforcer.util.subprocesses import run_shell
+from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE
+from slopgate.context import build_context
+from slopgate.util.subprocesses import run_shell
 
 
 def run_async_jobs(payload_dict: Mapping[str, object]) -> tuple[str, list[str]]:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import cast
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.lint._baseline import Violation
+from slopgate._types import ObjectDict
+from slopgate.lint._baseline import Violation
 
 _LINE_RE = re.compile(r"\bline(?:s)?[ =:-]*(\d+)(?:\s*[-:]\s*(\d+))?", re.IGNORECASE)
 

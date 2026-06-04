@@ -1,4 +1,4 @@
-"""Common Vibeforcer runtime rules."""
+"""Common Slopgate runtime rules."""
 
 from __future__ import annotations
 
@@ -6,21 +6,21 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     DENY,
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     METADATA_COMMAND,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import (
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.payloads import (
     lower_path,
     shell_command_executable_paths,
 )
-from vibeforcer.util.platform import resolve_path_for_match
+from slopgate.util.platform import resolve_path_for_match
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._shell_read import _GIT_NO_VERIFY_SHORTCUT as _GIT_NO_VERIFY_SHORTCUT, _shell_tokens as _shell_tokens
 

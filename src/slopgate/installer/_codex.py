@@ -8,8 +8,15 @@ import tomllib
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.installer._shared import (
+from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.installer._install_scope import (
+    _json_has_owned_slopgate_hooks,
+    normalize_install_scope,
+    resolve_project_root,
+    scope_paths,
+    warn_residual_install_scope,
+)
+from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
     backup_existing_file_and_report,
     find_binary,
@@ -31,26 +38,42 @@ _CODEX_EVENTS: dict[str, _CodeHookMeta] = {
     "SessionStart": {
         "matcher": "startup|resume|clear",
         "timeout": 10,
-        "statusMessage": "Loading vibeforcer context",
+        "statusMessage": "Loading slopgate context",
     },
     PRE_TOOL_USE: {
         "matcher": "Bash|apply_patch|Edit|Write",
         "timeout": 10,
-        "statusMessage": "vibeforcer: checking tool use",
+        "statusMessage": "slopgate: checking tool use",
     },
     "PermissionRequest": {
         "matcher": "Bash|apply_patch|Edit|Write",
         "timeout": 10,
-        "statusMessage": "vibeforcer: checking approval request",
+        "statusMessage": "slopgate: checking approval request",
     },
     POST_TOOL_USE: {
         "matcher": "Bash|apply_patch|Edit|Write",
         "timeout": 10,
-        "statusMessage": "vibeforcer: reviewing tool output",
+        "statusMessage": "slopgate: reviewing tool output",
     },
     "UserPromptSubmit": {"timeout": 10},
     "Stop": {"timeout": 30},
 }
+
+
+def _codex_user_hooks_path() -> Path:
+    return Path.home() / ".codex" / "hooks.json"
+
+
+def _codex_project_hooks_path(project_root: Path) -> Path:
+    return project_root / ".codex" / "hooks.json"
+
+
+def _codex_hooks_path() -> Path:
+    return _codex_user_hooks_path()
+
+
+def _codex_config_path_for_hooks(hooks_path: Path) -> Path:
+    return hooks_path.parent / "config.toml"
 
 
 def _codex_hooks_block(binary: str) -> _CodeHooks:
@@ -179,11 +202,7 @@ def _enable_codex_hooks_toml(config_path: Path) -> None:
     _write_codex_toml_lines(config_path, lines)
 
 
-def _install_codex(dry_run: bool = False) -> int:
-    binary = find_binary()
-    hooks_path = Path.home() / ".codex" / "hooks.json"
-    hooks = _codex_hooks_block(binary)
-
+def _install_codex_at(hooks_path: Path, hooks: _CodeHooks, binary: str, *, dry_run: bool) -> int:
     if dry_run:
         print(f"Would write: {hooks_path}")
         print(json.dumps({"hooks": hooks}, indent=2))
@@ -195,27 +214,94 @@ def _install_codex(dry_run: bool = False) -> int:
     elif (existing := require_json_object(hooks_path, "Codex hooks", action="overwrite")) is None:
         return 1
 
-    config_path = Path.home() / ".codex" / "config.toml"
-    if not _existing_codex_toml_is_valid(config_path):
-        return 1
-
     merge_owned_hooks_into(existing, cast(dict[str, list[dict[str, object]]], hooks))
     write_json_with_backup(hooks_path, existing, "hooks")
 
-    backup_existing_file_and_report(config_path, "config")
+    config_path = _codex_config_path_for_hooks(hooks_path)
+    if not _existing_codex_toml_is_valid(config_path):
+        return 1
+    if config_path.exists():
+        backup_existing_file_and_report(config_path, "config")
     _enable_codex_hooks_toml(config_path)
     print_binary_install_summary(
-        f"Installed vibeforcer hooks into {hooks_path}\n"
+        f"Installed slopgate hooks into {hooks_path}\n"
         f"Enabled hooks feature flag in {config_path}",
         binary,
     )
     return 0
 
 
-def _uninstall_codex(dry_run: bool = False) -> int:
-    return uninstall_hooks_file(
-        Path.home() / ".codex" / "hooks.json",
-        label="Codex",
-        remove_owned=remove_owned_hooks,
-        dry_run=dry_run,
+def _install_codex(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    install_scope = normalize_install_scope(scope)
+    binary = find_binary()
+    hooks = _codex_hooks_block(binary)
+    root = resolve_project_root(project_root)
+    paths = scope_paths(
+        install_scope,
+        user_path=_codex_user_hooks_path(),
+        project_path=_codex_project_hooks_path(root),
     )
+
+    for hooks_path in paths:
+        if not _existing_codex_toml_is_valid(_codex_config_path_for_hooks(hooks_path)):
+            return 1
+
+    completed: list[Path] = []
+    last_status = 0
+    for hooks_path in paths:
+        status = _install_codex_at(hooks_path, hooks, binary, dry_run=dry_run)
+        if status != 0:
+            if not dry_run:
+                for rollback_path in completed:
+                    _ = uninstall_hooks_file(
+                        rollback_path,
+                        label="Codex",
+                        remove_owned=remove_owned_hooks,
+                        dry_run=False,
+                    )
+            return status
+        completed.append(hooks_path)
+        last_status = status
+    return last_status
+
+
+def _uninstall_codex(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    install_scope = normalize_install_scope(scope)
+    root = resolve_project_root(project_root)
+    paths = scope_paths(
+        install_scope,
+        user_path=_codex_user_hooks_path(),
+        project_path=_codex_project_hooks_path(root),
+    )
+
+    last_status = 0
+    for hooks_path in paths:
+        status = uninstall_hooks_file(
+            hooks_path,
+            label="Codex",
+            remove_owned=remove_owned_hooks,
+            dry_run=dry_run,
+        )
+        if status != 0:
+            return status
+        last_status = status
+    if not dry_run:
+        warn_residual_install_scope(
+            platform_label="Codex",
+            scope=scope,
+            user_path=_codex_user_hooks_path(),
+            project_path=_codex_project_hooks_path(root),
+            project_root=project_root,
+            has_owned=_json_has_owned_slopgate_hooks,
+        )
+    return last_status

@@ -26,7 +26,7 @@ def _copy_prompt_context(base_dir: Path, resource_path: Callable[[str], Path]) -
 
 
 def cmd_config_show(_args: argparse.Namespace) -> int:
-    from vibeforcer.config import load_config, resolve_config_path
+    from slopgate.config import load_config, resolve_config_path
 
     config_path = resolve_config_path()
     config = load_config()
@@ -58,9 +58,9 @@ def cmd_config_show(_args: argparse.Namespace) -> int:
 
 
 def cmd_config_init(args: argparse.Namespace) -> int:
-    from vibeforcer.config import config_dir
-    from vibeforcer.installer._shared import backup_existing_file_and_report
-    from vibeforcer.resources import resource_path
+    from slopgate.config import config_dir
+    from slopgate.installer._shared import backup_existing_file_and_report
+    from slopgate.resources import resource_path
 
     target = config_dir() / "config.json"
     if target.exists() and not _bool_arg(args, "force"):
@@ -83,7 +83,7 @@ def cmd_config_init(args: argparse.Namespace) -> int:
 
 
 def cmd_config_path(_args: argparse.Namespace) -> int:
-    from vibeforcer.config import resolve_config_path
+    from slopgate.config import resolve_config_path
 
     print(resolve_config_path())
     return 0

@@ -1,7 +1,7 @@
-"""Shell completion scripts for isx / vibeforcer search."""
+"""Shell completion scripts for isx / slopgate search."""
 from __future__ import annotations
 
-from vibeforcer.search.config import IsxError
+from slopgate.search.config import IsxError
 
 BASH_COMPLETION = r'''_isx() {
   local cur prev words cword

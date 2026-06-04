@@ -10,12 +10,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from time import time
 from typing import TextIO
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
     ObjectMapping,
     object_dict,
 )
-from vibeforcer.util.logger import warning
+from slopgate.util.logger import warning
 
 from ._models import _HookStateSnapshot as _HookStateSnapshot, fcntl as fcntl, msvcrt as msvcrt
 

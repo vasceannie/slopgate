@@ -1,4 +1,4 @@
-"""vibeforcer lint — batch code quality analysis with baseline tracking.
+"""slopgate lint — batch code quality analysis with baseline tracking.
 
 Absorbed from the standalone quality-gate tool.
 """
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from vibeforcer.lint._baseline import (
+from slopgate.lint._baseline import (
     BaselineResult,
     Violation,
     assert_no_new_violations,
@@ -14,8 +14,8 @@ from vibeforcer.lint._baseline import (
     load_baseline,
     save_baseline,
 )
-from vibeforcer.lint._config import QualityConfig, get_config, load_config, reset_config, set_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._config import QualityConfig, get_config, load_config, reset_config, set_config
+from slopgate.lint._helpers import (
     find_all_python_files,
     find_source_files,
     find_test_files,

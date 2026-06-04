@@ -1,7 +1,7 @@
 # Quality Gate Configuration
-# vibeforcer lint
+# slopgate lint
 
-[quality_gate]
+[slopgate]
 version = "{version}"
 
 [paths]

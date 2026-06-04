@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from vibeforcer._types import object_dict, string_value
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult
+from slopgate._types import object_dict, string_value
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult
 
 
 def _permission_reason(result: EngineResult) -> str:
@@ -85,8 +85,8 @@ class TestPrivateImportChainRule(unittest.TestCase):
             repo = Path(tmp_dir) / "repo"
             target = repo / "src/cli/auth/_orchestrate/_core.py"
             target.parent.mkdir(parents=True)
-            _ = (repo / "quality_gate.toml").write_text(
-                "[quality_gate]\nenabled = true\n",
+            _ = (repo / "slopgate.toml").write_text(
+                "[slopgate]\nenabled = true\n",
                 encoding="utf-8",
             )
             _ = target.write_text("VALUE = 1\n", encoding="utf-8")

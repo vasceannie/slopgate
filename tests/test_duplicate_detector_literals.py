@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import cast
 
 from tests.test_duplicate_detector import _make_parsed
-from vibeforcer.lint._detectors.duplicates import _collect_block_windows
-from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-from vibeforcer.lint._config import load_config, set_config
+from slopgate.lint._detectors.duplicates import _collect_block_windows
+from slopgate.lint._detectors.duplicates import detect_repeated_literals
+from slopgate.lint._config import load_config, set_config
 
 class TestRepeatedStringLiteralMetadata:
     def test_records_existing_locations_for_repeated_literals(
@@ -134,7 +134,7 @@ class TestRepeatedStringLiteralMetadata:
         source_b = (
             "import requests\n"
             "from pathlib import Path\n"
-            "from vibeforcer.engine import evaluate_payload\n"
+            "from slopgate.engine import evaluate_payload\n"
             "x = normalize(payload)\n"
             "y = x + 1\n"
             "return y\n"

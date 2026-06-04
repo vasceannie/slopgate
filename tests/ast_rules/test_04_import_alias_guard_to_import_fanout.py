@@ -101,7 +101,7 @@ class TestImportFanout(unittest.TestCase):
 
     def test_family_prefix_detected(self) -> None:
         """Shared parse_ prefix family elevates severity to MEDIUM."""
-        from vibeforcer.models import Severity
+        from slopgate.models import Severity
 
         code = (
             "from myparser import "

@@ -112,7 +112,7 @@ Goal: keep hard blocks for real guardrail weakening while reducing false positiv
 
 - Comment-only mentions in non-hook source files are allowed.
 - Example code in fenced markdown blocks is allowed.
-- Hook and vibeforcer implementation paths remain protected by the stronger infra rules.
+- Hook and slopgate implementation paths remain protected by the stronger infra rules.
 
 ## 5. Cross-Platform Invariants
 

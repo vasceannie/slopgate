@@ -2,7 +2,7 @@
 
 ## Adding a regex rule
 
-Edit `~/.config/vibeforcer/config.json` (or the bundled `defaults.json` for permanent rules) and add an entry under `regex_rules`.
+Edit `~/.config/slopgate/config.json` (or the bundled `defaults.json` for permanent rules) and add an entry under `regex_rules`.
 
 ### Example
 
@@ -48,18 +48,18 @@ Edit `~/.config/vibeforcer/config.json` (or the bundled `defaults.json` for perm
 
 ## Adding a Python rule
 
-1. Create a file in `src/vibeforcer/rules/` (or add to an existing one)
-2. Subclass `Rule` from `vibeforcer.rules.base`
+1. Create a file in `src/slopgate/rules/` (or add to an existing one)
+2. Subclass `Rule` from `slopgate.rules.base`
 3. Set `rule_id`, `title`, and `events`
 4. Implement `evaluate()` returning `list[RuleFinding]`
-5. Register in `src/vibeforcer/rules/__init__.py`
+5. Register in `src/slopgate/rules/__init__.py`
 6. Add tests
 
 ### Example
 
 ```python
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule
 
 class NoSleepInTestsRule(Rule):
     rule_id = "CUSTOM-TEST-001"
@@ -97,14 +97,14 @@ class NoSleepInTestsRule(Rule):
 
 ## Per-repo overrides
 
-Projects can override rules via `quality_gate.toml` in their root:
+Projects can override rules via `slopgate.toml` in their root:
 
 ```toml
-[quality_gate]
+[slopgate]
 enabled = true                     # false = disable all rules for this repo
 disabled_rules = ["PY-CODE-013"]   # disable specific rules
 
-[quality_gate.severity_overrides]
+[slopgate.severity_overrides]
 "PY-CODE-008" = "warn"            # downgrade to advisory
 
 [thresholds]
@@ -116,7 +116,7 @@ max_complexity = 15                # override default 10
 Or opt out entirely with a sentinel file:
 
 ```bash
-touch .noqualitygate
+touch .noslopgate
 ```
 
 ## Tips
@@ -126,4 +126,4 @@ touch .noqualitygate
 - Put repo-specific paths/patterns in config, not hardcoded in rules
 - Use `additional_context` for helpful guidance that doesn't block
 - Always add metadata to findings — it powers enrichment and log analysis
-- Test with `vibeforcer replay --payload fixture.json --pretty`
+- Test with `slopgate replay --payload fixture.json --pretty`

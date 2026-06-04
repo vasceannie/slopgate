@@ -25,8 +25,8 @@ from tests.test_engine import (
 
 class TestBaselineGuard:
     def _write_baseline(self, tmp_path: Path, rules: dict[str, list[str]]) -> Path:
-        _ = (tmp_path / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        _ = (tmp_path / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n", encoding="utf-8"
         )
         p = tmp_path / "baselines.json"
         _ = p.write_text(
@@ -85,8 +85,8 @@ class TestBaselineGuard:
         assert "BASELINE-001" in finding_ids(result)
 
     def test_new_nonempty_baseline_creation_blocked(self, tmp_path: Path) -> None:
-        _ = (tmp_path / "quality_gate.toml").write_text(
-            "[quality_gate]\nenabled = true\n", encoding="utf-8"
+        _ = (tmp_path / "slopgate.toml").write_text(
+            "[slopgate]\nenabled = true\n", encoding="utf-8"
         )
         new_content = json.dumps(
             {
@@ -114,13 +114,13 @@ class TestBaselineGuard:
         "command",
         [
             "quality-gate baseline .",
-            "vibeforcer lint baseline .",
-            "vibeforcer   lint baseline .",
-            "vibeforcer lint    baseline .",
-            "QUALITY_GENERATE_BASELINE=1 vibeforcer lint baseline .",
-            "env QUALITY_GENERATE_BASELINE=1 /home/trav/.local/bin/vibeforcer lint baseline .",
-            "python -m vibeforcer lint baseline .",
-            "python3 -m vibeforcer lint baseline .",
+            "slopgate lint baseline .",
+            "slopgate   lint baseline .",
+            "slopgate lint    baseline .",
+            "QUALITY_GENERATE_BASELINE=1 slopgate lint baseline .",
+            "env QUALITY_GENERATE_BASELINE=1 /home/trav/.local/bin/slopgate lint baseline .",
+            "python -m slopgate lint baseline .",
+            "python3 -m slopgate lint baseline .",
             "vfc lint baseline .",
         ],
     )

@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeforcer.enrichment._helpers import relative_path, safe_read
+from slopgate.enrichment._helpers import relative_path, safe_read
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 def find_local_call_sites(

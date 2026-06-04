@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict, ObjectMapping
-from vibeforcer.config import load_config
-from vibeforcer.models import ContentTarget, RuntimeConfig
-from vibeforcer.state import HookStateStore
-from vibeforcer.trace import TraceWriter
-from vibeforcer.util.payloads import HookPayload
+from slopgate._types import ObjectDict, ObjectMapping
+from slopgate.config import load_config
+from slopgate.models import ContentTarget, RuntimeConfig
+from slopgate.state import HookStateStore
+from slopgate.trace import TraceWriter
+from slopgate.util.payloads import HookPayload
 
 
 class _CoreContextProperties:

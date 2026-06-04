@@ -1,4 +1,4 @@
-wing: vibeforcer
+wing: slopgate
 rooms:
 - name: testing
   description: Files from tests/

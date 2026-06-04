@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.adapters.base import (
+from slopgate.adapters.base import (
     hook_specific_context_output,
     render_permission_request_output,
 )
-from vibeforcer.enrichment._helpers import first_target_content, safe_read
-from vibeforcer.lint._updater import render_quality_gate_toml
-from vibeforcer.util.payloads._patches import parse_patch_candidate_paths
+from slopgate.enrichment._helpers import first_target_content, safe_read
+from slopgate.lint._updater import render_slopgate_toml
+from slopgate.util.payloads._patches import parse_patch_candidate_paths
 
 
 def test_enrichment_helper_pipeline_reads_context_and_files(tmp_path: Path) -> None:
@@ -59,7 +59,7 @@ diff --git a/src/old.py b/src/new.py
 
     observed = {
         "config_has_version": 'version = "9.9.9"'
-        in render_quality_gate_toml(version="9.9.9"),
+        in render_slopgate_toml(version="9.9.9"),
         "paths": parse_patch_candidate_paths(patch_blob),
     }
 

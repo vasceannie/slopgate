@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from vibeforcer._types import object_dict, string_value
-from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule
-from vibeforcer.util.payloads import is_shell_tool
+from slopgate._types import object_dict, string_value
+from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule
+from slopgate.util.payloads import is_shell_tool
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 # ── Command classification ───────────────────────────────────────────────
@@ -224,7 +224,7 @@ _ERROR_CONTEXT = (
 )
 _QUALITY_COMMAND_CONTEXT = (
     "⚠️ ERRORS-BASH-001 — quality-command output/finding visibility: a lint or quality command exited 0 but printed violation/error-looking findings.\n"
-    "Next action: Rerun the full quality command from the repo root without tail-only snippets; use `vibeforcer lint check --details` when you need exact repair context.",
+    "Next action: Rerun the full quality command from the repo root without tail-only snippets; use `slopgate lint check --details` when you need exact repair context.",
     "these findings are 'pre-existing' or 'introduced by your changes'.",
     "Do NOT summarize only the tail output or continue before the full lint/details view has been inspected.",
 )
@@ -295,7 +295,7 @@ class BashOutputErrorRule(Rule):
         output = _extract_bash_output(ctx)
         if not output or not _has_error_signals(output):
             return []
-        quality_command = re.search(r"\b(?:vibeforcer|vfc|isx)\s+lint\s+", command, re.IGNORECASE)
+        quality_command = re.search(r"\b(?:slopgate|vfc|isx)\s+lint\s+", command, re.IGNORECASE)
         context_template = _QUALITY_COMMAND_CONTEXT if quality_command else _ERROR_CONTEXT
         return [
             RuleFinding(

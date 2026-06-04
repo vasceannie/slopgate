@@ -7,8 +7,8 @@ import textwrap
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import ObjectDict, object_dict, object_list
-from vibeforcer.search.config import (
+from slopgate._types import ObjectDict, object_dict, object_list
+from slopgate.search.config import (
     DEFAULT_CLAUDE_SKILLS_DIR,
     DEFAULT_OPENCODE_CONFIG,
     DEFAULT_OPENCODE_PLUGIN_PATH,
@@ -16,7 +16,7 @@ from vibeforcer.search.config import (
     DEFAULT_SKILL_NAME,
     IsxError,
 )
-from vibeforcer.search.opencode_scaffold import render_opencode_plugin
+from slopgate.search.opencode_scaffold import render_opencode_plugin
 
 
 def write_text_file(path: Path, content: str, force: bool) -> None:

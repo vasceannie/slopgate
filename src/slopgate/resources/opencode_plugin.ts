@@ -1,16 +1,16 @@
 /**
- * OpenCode Vibeforcer Plugin
+ * OpenCode Slopgate Plugin
  *
  * Thin TypeScript shim that bridges OpenCode's plugin system to the
- * vibeforcer hook engine via subprocess.
+ * slopgate hook engine via subprocess.
  *
  * The plugin intercepts tool.execute.before and tool.execute.after events,
  * listens to session lifecycle and permission events, translates them into
- * vibeforcer's canonical JSON format, and applies the engine's decisions
+ * slopgate's canonical JSON format, and applies the engine's decisions
  * (block, modify args, or allow with context).
  *
  * Platform limitations (vs Claude Code / Codex):
- *   - session.idle (Stop): vibeforcer can advise "continue" but OpenCode's
+ *   - session.idle (Stop): slopgate can advise "continue" but OpenCode's
  *     plugin system has no mechanism to force continuation. Findings are
  *     logged as warnings.
  *   - permission.asked: blocking is handled at tool.execute.before; the
@@ -33,7 +33,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-const VIBEFORCER_BIN = Bun.env.VIBEFORCER_BIN || "__VIBEFORCER_BIN__"
+const SLOPGATE_BIN = Bun.env.SLOPGATE_BIN || "__SLOPGATE_BIN__"
 
 // Generate a unique session ID per plugin load (= per OpenCode session).
 const SESSION_ID = `opencode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -118,7 +118,7 @@ function takeRememberedToolArgs(tool: unknown, cwd: string): Record<string, unkn
 function findManagedRepoRoot(start: string): string | null {
   let current = start
   while (true) {
-    if (existsSync(join(current, "quality_gate.toml"))) {
+    if (existsSync(join(current, "slopgate.toml"))) {
       return current
     }
     const parent = dirname(current)
@@ -134,7 +134,7 @@ async function callEnforcer(
   try {
     const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
     const proc = Bun.spawn(
-      [VIBEFORCER_BIN, "handle", "--platform", "opencode"],
+      [SLOPGATE_BIN, "handle", "--platform", "opencode"],
       {
         env: Bun.env,
         cwd: payloadCwd,
@@ -157,29 +157,29 @@ async function callEnforcer(
     const exitCode = await proc.exited
 
     if (exitCode !== 0) {
-      console.error(`[vibeforcer] exit ${exitCode}: ${stderr}`)
+      console.error(`[slopgate] exit ${exitCode}: ${stderr}`)
       if (managedRepo) {
         return {
           action: "block",
-          reason: "vibeforcer degraded mode: enforcer subprocess failed in managed repo.",
+          reason: "slopgate degraded mode: enforcer subprocess failed in managed repo.",
         }
       }
       return null
     }
 
     const trimmed = output.trim()
-    // vibeforcer exits 0 with no stdout when no rule rendered an OpenCode action.
+    // slopgate exits 0 with no stdout when no rule rendered an OpenCode action.
     // That is a clean allow/no-op, not a degraded enforcer response.
     if (!trimmed) return null
 
     return JSON.parse(trimmed) as EnforcerResult
   } catch (err) {
     // Catch subprocess failures, JSON parse errors, Bun API changes, etc.
-    console.error(`[vibeforcer] callEnforcer failed: ${err}`)
+    console.error(`[slopgate] callEnforcer failed: ${err}`)
     if (managedRepo) {
       return {
         action: "block",
-        reason: "vibeforcer degraded mode: enforcer call failed in managed repo.",
+        reason: "slopgate degraded mode: enforcer call failed in managed repo.",
       }
     }
     return null
@@ -194,9 +194,9 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
 
   await client.app.log({
     body: {
-      service: "vibeforcer",
+      service: "slopgate",
       level: "info",
-      message: `Vibeforcer plugin loaded (${VIBEFORCER_BIN}, session: ${SESSION_ID})`,
+      message: `Slopgate plugin loaded (${SLOPGATE_BIN}, session: ${SESSION_ID})`,
     },
   })
 
@@ -232,7 +232,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
 
       switch (result.action) {
         case "block":
-          throw new Error(`[vibeforcer] ${result.reason || "Blocked by policy"}`)
+          throw new Error(`[slopgate] ${result.reason || "Blocked by policy"}`)
 
         case "allow":
           if (result.updated_args) {
@@ -245,7 +245,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           if (result.context) {
             await client.app.log({
               body: {
-                service: "vibeforcer",
+                service: "slopgate",
                 level: "info",
                 message: result.context,
               },
@@ -286,7 +286,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
       if (!result) return
 
       if (result.action === "block") {
-        throw new Error(`[vibeforcer-posttool] ${result.reason || "Post-tool policy violation"}`)
+        throw new Error(`[slopgate-posttool] ${result.reason || "Post-tool policy violation"}`)
       }
 
       if (result.action === "warn" || result.action === "context") {
@@ -294,7 +294,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         if (message) {
           await client.app.log({
             body: {
-              service: "vibeforcer",
+              service: "slopgate",
               level: "warn",
               message,
             },
@@ -323,7 +323,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         if (result?.context) {
           await client.app.log({
             body: {
-              service: "vibeforcer",
+              service: "slopgate",
               level: "info",
               message: `[session-start] ${result.context}`,
             },
@@ -352,15 +352,15 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           // Can't force continuation — log as a prominent warning
           await client.app.log({
             body: {
-              service: "vibeforcer",
+              service: "slopgate",
               level: "warn",
-              message: `[stop-advisory] Vibeforcer recommends continuing: ${result.reason || "unfinished work detected"}`,
+              message: `[stop-advisory] Slopgate recommends continuing: ${result.reason || "unfinished work detected"}`,
             },
           })
         } else if (result.context) {
           await client.app.log({
             body: {
-              service: "vibeforcer",
+              service: "slopgate",
               level: "info",
               message: `[stop] ${result.context}`,
             },
@@ -393,9 +393,9 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         if (result.action === "block") {
           await client.app.log({
             body: {
-              service: "vibeforcer",
+              service: "slopgate",
               level: "error",
-              message: `[permission-advisory] Vibeforcer would deny this permission: ${result.reason}`,
+              message: `[permission-advisory] Slopgate would deny this permission: ${result.reason}`,
             },
           })
         }

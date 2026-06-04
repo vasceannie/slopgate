@@ -6,9 +6,9 @@ import argparse
 
 import pytest
 
-from vibeforcer.cli.cli import build_parser
-from vibeforcer.cli.commands import cmd_test
-from vibeforcer._types import object_dict, string_value
+from slopgate.cli.cli import build_parser
+from slopgate.cli.commands import cmd_test
+from slopgate._types import object_dict, string_value
 
 
 def _parse_lint(argv: list[str]) -> tuple[str, str | None]:

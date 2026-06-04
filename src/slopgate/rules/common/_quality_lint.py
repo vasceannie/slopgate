@@ -1,11 +1,11 @@
-"""Common Vibeforcer runtime rules."""
+"""Common Slopgate runtime rules."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     POST_TOOL_USE,
     PRE_TOOL_USE,
     BLOCK,
@@ -14,17 +14,17 @@ from vibeforcer.constants import (
     PYTEST_TEST_PREFIX,
     QUALITY_FAILURE_PREVIEW_LIMIT,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.payloads import (
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.payloads import (
     is_edit_like_tool,
     is_shell_tool,
     lower_path,
 )
-from vibeforcer.util.subprocesses import run_shell
+from slopgate.util.subprocesses import run_shell
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._quality_lint_guidance import (
     _has_oversized_module_failure,
@@ -167,7 +167,7 @@ def _touched_reference_test_files(src_files: list[Path], test_files: list[Path])
     """Return suite test references when touched source files need coverage context."""
     if not src_files:
         return None
-    from vibeforcer.lint._helpers import tests_root
+    from slopgate.lint._helpers import tests_root
 
     by_resolved = {path.resolve(): path for path in tests_root().rglob("*.py") if path.is_file()}
     for path in test_files:
@@ -177,7 +177,7 @@ def _touched_reference_test_files(src_files: list[Path], test_files: list[Path])
 
 def _touched_lint_relative_paths(src_files: list[Path], test_files: list[Path]) -> set[str]:
     """Return relative lint paths allowed to report from a post-edit hook."""
-    from vibeforcer.lint._helpers import relative_path
+    from slopgate.lint._helpers import relative_path
 
     touched = {relative_path(path) for path in [*src_files, *test_files]}
     if src_files:
@@ -191,10 +191,10 @@ def _collect_touched_lint_failures(
     src_files, test_files = _resolve_python_candidates(ctx)
     if not src_files and not test_files:
         return [], [], []
-    from vibeforcer.lint._collectors import run_touched_collectors
-    from vibeforcer.lint._config import load_config as load_lint_config
-    from vibeforcer.lint._config import set_config as set_lint_config
-    from vibeforcer.lint._details import format_violation_details
+    from slopgate.lint._collectors import run_touched_collectors
+    from slopgate.lint._config import load_config as load_lint_config
+    from slopgate.lint._config import set_config as set_lint_config
+    from slopgate.lint._details import format_violation_details
 
     lint_cfg = load_lint_config(ctx.config.repo_root)
     set_lint_config(lint_cfg)

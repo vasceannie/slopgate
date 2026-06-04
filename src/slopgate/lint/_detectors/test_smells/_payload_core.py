@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     TEST_PAYLOAD_DEFAULT_THRESHOLD,
     TEST_PAYLOAD_METADATA_THRESHOLD,
     TYPE_NARROWING_GUARD_LINE_WINDOW,

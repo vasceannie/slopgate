@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from vibeforcer.context import HookContext
-from vibeforcer.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule
-from vibeforcer.util.payloads import is_edit_like_tool
-from vibeforcer.rules.common import (
+from slopgate.context import HookContext
+from slopgate.constants import DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule
+from slopgate.util.payloads import is_edit_like_tool
+from slopgate.rules.common import (
     FullFileReadRule,
     GitNoVerifyRule,
     PostEditQualityRule,
@@ -16,18 +16,18 @@ from vibeforcer.rules.common import (
     SensitiveDataRule,
     SystemProtectionRule,
 )
-from vibeforcer.rules.regex_rule import RegexRule
-from vibeforcer.rules.langgraph import (
+from slopgate.rules.regex_rule import RegexRule
+from slopgate.rules.langgraph import (
     LangGraphDeprecatedAPIRule,
     LangGraphStateMutationRule,
     LangGraphStateReducerRule,
 )
-from vibeforcer.rules.baseline_guard import BaselineGuardRule
-from vibeforcer.rules.error_rules import (
+from slopgate.rules.baseline_guard import BaselineGuardRule
+from slopgate.rules.error_rules import (
     BashFailureReinforcementRule,
     BashOutputErrorRule,
 )
-from vibeforcer.rules.stop_rules import (
+from slopgate.rules.stop_rules import (
     ConfigChangeGuardRule,
     HookInfraExecProtectionRule,
     IgnorePreexistingRule,
@@ -69,7 +69,7 @@ class PythonAstImportFailureRule(Rule):
                 message=(
                     "Python AST checks are unavailable due to import failure. "
                     "Non-edit commands may continue; Python edits remain blocked "
-                    "until Vibeforcer's AST rule package imports cleanly."
+                    "until Slopgate's AST rule package imports cleanly."
                 ),
                 additional_context=repr(self._error),
                 metadata={"kind": "import_error", "blocking": blocking},
@@ -108,7 +108,7 @@ def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
 
 
 def _import_python_ast_rule_classes() -> tuple[type[Rule], ...]:
-    from vibeforcer.rules.python_ast import (
+    from slopgate.rules.python_ast import (
         PythonAstHealthRule,
         PythonBoundaryLoggingRule,
         PythonBroadExceptLoggerRule,

@@ -5,9 +5,9 @@ from pathlib import Path
 from hypothesis import example, given
 from hypothesis import strategies
 
-from vibeforcer.config import load_config
-from vibeforcer.lint._detectors.code_smells import detect_god_classes
-from vibeforcer.util.payloads import (
+from slopgate.config import load_config
+from slopgate.lint._detectors.code_smells import detect_god_classes
+from slopgate.util.payloads import (
     HookPayload,
     any_path_matches,
     detect_language,
@@ -16,7 +16,7 @@ from vibeforcer.util.payloads import (
     first_present,
     path_matches_glob,
 )
-from vibeforcer.util.payloads._properties import HookPayloadProperties
+from slopgate.util.payloads._properties import HookPayloadProperties
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -136,7 +136,7 @@ def test_hook_payload_uses_properties_mixin() -> None:
 
 
 def test_hook_payload_properties_module_has_no_god_class_regression() -> None:
-    source_path = PROJECT_ROOT / "src/vibeforcer/util/payloads/_properties.py"
+    source_path = PROJECT_ROOT / "src/slopgate/util/payloads/_properties.py"
 
     violations = [
         violation
@@ -148,7 +148,7 @@ def test_hook_payload_properties_module_has_no_god_class_regression() -> None:
 
 
 def test_hook_context_module_has_no_god_class_regression() -> None:
-    source_path = PROJECT_ROOT / "src/vibeforcer/context.py"
+    source_path = PROJECT_ROOT / "src/slopgate/context.py"
 
     violations = [
         violation

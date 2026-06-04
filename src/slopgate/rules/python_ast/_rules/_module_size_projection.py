@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, NamedTuple, final
 
 from typing_extensions import override
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     LINT_MAX_MODULE_LINES_HARD,
     LINT_MAX_MODULE_LINES_SOFT,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule
 
 from .._helpers import decision_for_context
 from ._module_size_guidance import (
@@ -39,7 +39,7 @@ from ._source_parse import (
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 class _LineCountCamouflageFinding(NamedTuple):

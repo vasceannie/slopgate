@@ -6,8 +6,15 @@ import json
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.installer._shared import (
+from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.installer._install_scope import (
+    _json_has_owned_slopgate_hooks,
+    normalize_install_scope,
+    resolve_project_root,
+    scope_paths,
+    warn_residual_install_scope,
+)
+from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
     find_binary,
     hook_command,
@@ -26,6 +33,7 @@ _CLAUDE_EVENTS = (
     POST_TOOL_USE,
     "PostToolUseFailure",
     "Stop",
+    "SubagentStart",
     "SubagentStop",
     "TaskCompleted",
     "TeammateIdle",
@@ -36,6 +44,14 @@ _CLAUDE_EVENTS = (
 _ClaudeHookCommand = dict[str, str]
 _ClaudeHookEntry = dict[str, str | list[_ClaudeHookCommand]]
 _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
+
+
+def _claude_user_settings_path() -> Path:
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _claude_project_settings_path(project_root: Path) -> Path:
+    return project_root / ".claude" / "settings.json"
 
 
 def _claude_hooks_block(binary: str) -> _ClaudeHooks:
@@ -54,14 +70,9 @@ def _claude_hooks_block(binary: str) -> _ClaudeHooks:
     return hooks
 
 
-def _install_claude(dry_run: bool = False) -> int:
-    binary = find_binary()
-    settings_path = Path.home() / ".claude" / "settings.json"
-    hooks = _claude_hooks_block(binary)
-
+def _install_claude_at(settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool) -> int:
     if dry_run:
         print(f"Would patch: {settings_path}")
-        print(f"Binary: {binary}")
         print(json.dumps({"hooks": hooks}, indent=2))
         return 0
 
@@ -73,27 +84,59 @@ def _install_claude(dry_run: bool = False) -> int:
 
     merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
     write_json_with_backup(settings_path, settings, "settings")
-    print(f"Installed vibeforcer hooks into {settings_path}")
-    print(f"Binary: {binary}")
-    print(f"Events: {len(_CLAUDE_EVENTS)}")
+    print(f"Installed slopgate hooks into {settings_path}")
     return 0
 
 
-def _uninstall_claude(dry_run: bool = False) -> int:
-    settings_path = Path.home() / ".claude" / "settings.json"
+def _install_claude(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    install_scope = normalize_install_scope(scope)
+    binary = find_binary()
+    hooks = _claude_hooks_block(binary)
+    root = resolve_project_root(project_root)
+    paths = scope_paths(
+        install_scope,
+        user_path=_claude_user_settings_path(),
+        project_path=_claude_project_settings_path(root),
+    )
+
+    if dry_run:
+        print(f"Binary: {binary}")
+        print(f"Events: {len(_CLAUDE_EVENTS)}")
+
+    completed: list[Path] = []
+    last_status = 0
+    for settings_path in paths:
+        status = _install_claude_at(settings_path, hooks, dry_run=dry_run)
+        if status != 0:
+            if not dry_run:
+                for rollback_path in completed:
+                    _ = _uninstall_claude_at(rollback_path, dry_run=False)
+            return status
+        completed.append(settings_path)
+        last_status = status
+    if not dry_run and last_status == 0:
+        print(f"Binary: {binary}")
+        print(f"Events: {len(_CLAUDE_EVENTS)}")
+    return last_status
+
+
+def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
     if not settings_path.exists():
-        print("No Claude settings found.")
         return 0
 
     settings = require_json_object(settings_path, "Claude settings", action="modify")
     if settings is None:
         return 1
     if "hooks" not in settings:
-        print("No hooks found in Claude settings.")
         return 0
 
     if dry_run:
-        print(f"Would remove vibeforcer hook entries from {settings_path}")
+        print(f"Would remove slopgate hook entries from {settings_path}")
         return 0
 
     remaining_hooks = remove_owned_hooks(settings.get("hooks"))
@@ -102,5 +145,43 @@ def _uninstall_claude(dry_run: bool = False) -> int:
     else:
         del settings["hooks"]
     write_json_with_backup(settings_path, settings, "settings")
-    print(f"Removed vibeforcer hooks from {settings_path}")
+    print(f"Removed slopgate hooks from {settings_path}")
     return 0
+
+
+def _uninstall_claude(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    install_scope = normalize_install_scope(scope)
+    root = resolve_project_root(project_root)
+    paths = scope_paths(
+        install_scope,
+        user_path=_claude_user_settings_path(),
+        project_path=_claude_project_settings_path(root),
+    )
+
+    any_found = False
+    last_status = 0
+    for settings_path in paths:
+        if settings_path.exists():
+            any_found = True
+        status = _uninstall_claude_at(settings_path, dry_run=dry_run)
+        if status != 0:
+            return status
+        last_status = status
+
+    if not any_found and install_scope == "user":
+        print("No Claude settings found.")
+    if not dry_run:
+        warn_residual_install_scope(
+            platform_label="Claude",
+            scope=scope,
+            user_path=_claude_user_settings_path(),
+            project_path=_claude_project_settings_path(root),
+            project_root=project_root,
+            has_owned=_json_has_owned_slopgate_hooks,
+        )
+    return last_status

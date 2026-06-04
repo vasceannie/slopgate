@@ -7,14 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeforcer.constants import MAX_LINT_VIOLATIONS_SHOWN
-from vibeforcer.lint._baseline import Violation
+from slopgate.constants import MAX_LINT_VIOLATIONS_SHOWN
+from slopgate.lint._baseline import Violation
 
 if TYPE_CHECKING:
-    from vibeforcer.lint._config import QualityConfig
+    from slopgate.lint._config import QualityConfig
 
 BASELINE_DISABLED_MESSAGE = (
-    "`vibeforcer lint baseline` is disabled. Repo-wide rebaselining hides technical debt. "
+    "`slopgate lint baseline` is disabled. Repo-wide rebaselining hides technical debt. "
     "Fix violations directly, or make a deliberate, human-reviewed baselines.json change that only reduces debt."
 )
 
@@ -99,7 +99,7 @@ def _print_detailed_violations(
     violations: list[Violation],
     counts: _RuleCounts,
 ) -> None:
-    from vibeforcer.lint._details import format_violation_details
+    from slopgate.lint._details import format_violation_details
 
     for violation in violations:
         status = "NEW" if getattr(violation, "stable_id") in counts.new_ids else "BASELINED"
@@ -158,7 +158,7 @@ def _discover_project_root(start: Path) -> Path:
     current = start.resolve()
     if current.is_file():
         current = current.parent
-    markers = ("quality_gate.toml", "pyproject.toml", ".git")
+    markers = ("slopgate.toml", "pyproject.toml", ".git")
     for candidate in (current, *current.parents):
         if any((candidate / marker).exists() for marker in markers):
             return candidate
@@ -184,9 +184,9 @@ def _configured_lint_files(
     *,
     force_all_scope: bool,
 ) -> _LintFiles:
-    from vibeforcer.lint._config import load_config as load_qg_config
-    from vibeforcer.lint._config import set_config as set_qg_config
-    from vibeforcer.lint._helpers import find_source_files, find_test_files
+    from slopgate.lint._config import load_config as load_qg_config
+    from slopgate.lint._config import set_config as set_qg_config
+    from slopgate.lint._helpers import find_source_files, find_test_files
 
     root = _discover_project_root(root)
     old_quality_scope = os.environ.get("QUALITY_SCOPE")
@@ -207,7 +207,7 @@ def _print_lint_header(
     files: _LintFiles,
 ) -> None:
     suffix = f" {label}" if label else ""
-    print(f"vibeforcer lint {lint_version}{suffix}")
+    print(f"slopgate lint {lint_version}{suffix}")
     print(f"  project: {files.cfg.project_root}")
     print(f"  src:     {files.cfg.src_root}  ({len(files.src_files)} files)")
     print(f"  tests:   {files.cfg.tests_root}  ({len(files.test_files)} files)")
@@ -232,9 +232,9 @@ def _print_collector_results(
 
 
 def _lint_check(root: Path, *, details: bool = False) -> int:
-    from vibeforcer.lint import __version__ as lint_version
-    from vibeforcer.lint._baseline import load_baseline
-    from vibeforcer.lint._collectors import run_all_collectors
+    from slopgate.lint import __version__ as lint_version
+    from slopgate.lint._baseline import load_baseline
+    from slopgate.lint._collectors import run_all_collectors
 
     files = _configured_lint_files(root, force_all_scope=True)
     _print_lint_header(lint_version, "", files)
@@ -248,9 +248,9 @@ def _lint_baseline(_root: Path) -> int:
 
 
 def _lint_test_integrity(root: Path, *, details: bool = False) -> int:
-    from vibeforcer.lint import __version__ as lint_version
-    from vibeforcer.lint._baseline import load_baseline
-    from vibeforcer.lint._collectors import run_test_integrity_collectors
+    from slopgate.lint import __version__ as lint_version
+    from slopgate.lint._baseline import load_baseline
+    from slopgate.lint._collectors import run_test_integrity_collectors
 
     files = _configured_lint_files(root, force_all_scope=False)
     _print_lint_header(lint_version, "test-integrity", files)
@@ -259,31 +259,31 @@ def _lint_test_integrity(root: Path, *, details: bool = False) -> int:
 
 
 def _lint_init(root: Path) -> int:
-    from vibeforcer.lint import __version__ as lint_version
-    from vibeforcer.lint._updater import render_quality_gate_toml
+    from slopgate.lint import __version__ as lint_version
+    from slopgate.lint._updater import render_slopgate_toml
 
     root.mkdir(parents=True, exist_ok=True)
-    destination = root / "quality_gate.toml"
+    destination = root / "slopgate.toml"
     if destination.exists():
         print(f"Already exists: {destination}")
-        print("  To add missing keys, run: vibeforcer lint update")
+        print("  To add missing keys, run: slopgate lint update")
         return 1
 
     _ = destination.write_text(
-        render_quality_gate_toml(version=lint_version), encoding="utf-8"
+        render_slopgate_toml(version=lint_version), encoding="utf-8"
     )
     print(f"✓ Created {destination}")
-    print("  Edit it to match your project, then run: vibeforcer lint check")
+    print("  Edit it to match your project, then run: slopgate lint check")
     return 0
 
 
 def _lint_update(root: Path, *, dry_run: bool = False) -> int:
-    from vibeforcer.lint._updater import update_toml_file
+    from slopgate.lint._updater import update_toml_file
 
-    destination = root / "quality_gate.toml"
+    destination = root / "slopgate.toml"
     if not destination.exists():
-        print(f"No quality_gate.toml found at {root}")
-        print("  Run `vibeforcer lint init` first.")
+        print(f"No slopgate.toml found at {root}")
+        print("  Run `slopgate lint init` first.")
         return 1
 
     missing = update_toml_file(destination, dry_run=dry_run)

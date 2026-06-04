@@ -5,13 +5,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
-from vibeforcer.rules.base import is_rule_enabled
-from vibeforcer.util.payloads import is_edit_like_tool
+from slopgate.rules.base import is_rule_enabled
+from slopgate.util.payloads import is_edit_like_tool
 from .._helpers import (
     parse_module,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 def _parse_strict(source: str, max_chars: int) -> ast.Module | None:

@@ -6,21 +6,21 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
     ObjectMapping,
     is_object_dict,
     object_dict,
     string_value,
 )
-from vibeforcer.adapters.base import (
+from slopgate.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
     render_request_from_call,
     render_permission_request_output,
 )
-from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.models import RuleFinding, Severity
 
 CODEX_EVENTS = {
     "SessionStart",
@@ -30,6 +30,24 @@ CODEX_EVENTS = {
     "UserPromptSubmit",
     "Stop",
 }
+
+_CODEX_EVENT_ALIASES: dict[str, str] = {
+    "sessionstart": "SessionStart",
+    "pretooluse": PRE_TOOL_USE,
+    "permissionrequest": PERMISSION_REQUEST,
+    "posttooluse": POST_TOOL_USE,
+    "userpromptsubmit": "UserPromptSubmit",
+    "stop": "Stop",
+}
+
+
+def _canonical_codex_event(raw: ObjectMapping) -> str:
+    event = string_value(raw.get("hook_event_name")) or string_value(raw.get("hookEventName"))
+    if not event:
+        return ""
+    if event in CODEX_EVENTS:
+        return event
+    return _CODEX_EVENT_ALIASES.get(event.lower().replace("-", ""), event)
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,9 +188,23 @@ class CodexAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
-        if is_object_dict(raw):
-            return raw
-        return object_dict(raw)
+        canonical = object_dict(raw) if is_object_dict(raw) else object_dict(raw)
+        event_name = _canonical_codex_event(raw)
+        if event_name:
+            canonical["hook_event_name"] = event_name
+        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
+        if session_id:
+            canonical["session_id"] = session_id
+        cwd = string_value(raw.get("cwd")) or string_value(raw.get("workspace_root"))
+        if cwd:
+            canonical["cwd"] = cwd
+        if "tool_output" in canonical and "tool_result" not in canonical:
+            canonical["tool_result"] = canonical["tool_output"]
+        if "tool_response" in canonical and "tool_result" not in canonical:
+            canonical["tool_result"] = canonical["tool_response"]
+        elif "tool_result" in canonical and "tool_response" not in canonical:
+            canonical["tool_response"] = canonical["tool_result"]
+        return canonical
 
     @override
     def render_output(

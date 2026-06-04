@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Literal, TypedDict
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
 )
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.engine import evaluate_payload
+from slopgate.engine import evaluate_payload
 from tests.support import finding_ids
 
 

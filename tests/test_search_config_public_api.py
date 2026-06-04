@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.search.config import (
+from slopgate.search.config import (
     IsxError,
     detect_provider,
     expand,
@@ -33,7 +33,7 @@ def test_expand_raises_isx_error_when_none_and_no_default() -> None:
 
 
 def test_save_config_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import vibeforcer.search.config as config_mod
+    import slopgate.search.config as config_mod
 
     app_dir = tmp_path / "isx"
     app_config = app_dir / "config.json"

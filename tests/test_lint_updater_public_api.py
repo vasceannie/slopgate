@@ -4,14 +4,14 @@ from pathlib import Path
 
 from hypothesis import given, strategies
 
-from vibeforcer.lint._updater import (
+from slopgate.lint._updater import (
     diff_config,
-    render_quality_gate_toml,
+    render_slopgate_toml,
     update_toml_file,
 )
 
 SECTION_NAMES = strategies.sampled_from(
-    ["quality_gate", "duplicates", "tests", "pytest", "unknown"]
+    ["slopgate", "duplicates", "tests", "pytest", "unknown"]
 )
 KEY_VALUES = strategies.dictionaries(
     keys=strategies.text(alphabet="abc_", min_size=1, max_size=8),
@@ -20,18 +20,18 @@ KEY_VALUES = strategies.dictionaries(
 )
 
 
-def test_render_quality_gate_toml_includes_version_and_defaults() -> None:
-    rendered = render_quality_gate_toml(version="1.2.3")
+def test_render_slopgate_toml_includes_version_and_defaults() -> None:
+    rendered = render_slopgate_toml(version="1.2.3")
 
     assert {
         "header": rendered.startswith("# Quality Gate Configuration\n"),
         "version": 'version = "1.2.3"' in rendered,
-        "quality_gate": "[quality_gate]" in rendered,
+        "slopgate": "[slopgate]" in rendered,
         "thresholds": "[thresholds]" in rendered,
     } == {
         "header": True,
         "version": True,
-        "quality_gate": True,
+        "slopgate": True,
         "thresholds": True,
     }
 
@@ -39,14 +39,14 @@ def test_render_quality_gate_toml_includes_version_and_defaults() -> None:
 def test_diff_config_returns_only_missing_sections_and_keys() -> None:
     missing = diff_config(
         {
-            "quality_gate": {"enabled": False},
+            "slopgate": {"enabled": False},
             "thresholds": {"max_complexity": 99},
         }
     )
 
     assert {
-        "quality_gate_enabled": missing["quality_gate"].get("enabled"),
-        "quality_gate_version": "version" in missing["quality_gate"],
+        "quality_gate_enabled": missing["slopgate"].get("enabled"),
+        "quality_gate_version": "version" in missing["slopgate"],
         "threshold_max_complexity": missing["thresholds"].get("max_complexity"),
         "threshold_max_params": missing["thresholds"]["max_params"],
         "paths": "paths" in missing,
@@ -62,8 +62,8 @@ def test_diff_config_returns_only_missing_sections_and_keys() -> None:
 def test_update_toml_file_preserves_existing_values_and_injects_missing(
     tmp_path: Path,
 ) -> None:
-    config_path = tmp_path / "quality_gate.toml"
-    config_path.write_text("[quality_gate]\nenabled = false\n", encoding="utf-8")
+    config_path = tmp_path / "slopgate.toml"
+    config_path.write_text("[slopgate]\nenabled = false\n", encoding="utf-8")
 
     missing = update_toml_file(config_path)
     updated = config_path.read_text(encoding="utf-8")
@@ -72,7 +72,7 @@ def test_update_toml_file_preserves_existing_values_and_injects_missing(
         "enabled": "enabled = false" in updated,
         "version_added": 'version = "0.1.0"' in updated,
         "thresholds_added": "[thresholds]" in updated,
-        "missing_quality_gate": "version" in missing["quality_gate"],
+        "missing_quality_gate": "version" in missing["slopgate"],
     } == {
         "enabled": True,
         "version_added": True,
@@ -82,15 +82,15 @@ def test_update_toml_file_preserves_existing_values_and_injects_missing(
 
 
 def test_update_toml_file_dry_run_reports_without_writing(tmp_path: Path) -> None:
-    config_path = tmp_path / "quality_gate.toml"
-    original = "[quality_gate]\nenabled = false\n"
+    config_path = tmp_path / "slopgate.toml"
+    original = "[slopgate]\nenabled = false\n"
     config_path.write_text(original, encoding="utf-8")
 
     missing = update_toml_file(config_path, dry_run=True)
 
     assert {
         "unchanged": config_path.read_text(encoding="utf-8"),
-        "reported": "version" in missing["quality_gate"],
+        "reported": "version" in missing["slopgate"],
     } == {
         "unchanged": original,
         "reported": True,

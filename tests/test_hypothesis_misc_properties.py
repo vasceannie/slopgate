@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from hypothesis import given, strategies
 
-from vibeforcer.engine._render import render_output
-from vibeforcer.enrichment.fixtures import discover_fixtures, find_parametrize_examples
-from vibeforcer.installer._shared import (
+from slopgate.engine._render import render_output
+from slopgate.enrichment.fixtures import discover_fixtures, find_parametrize_examples
+from slopgate.installer._shared import (
     filter_owned_hook_commands,
     merge_owned_hooks,
     remove_owned_hooks,
 )
-from vibeforcer.rules.common._shell_read import is_safe_read_shell_command
-from vibeforcer.rules.python_ast._helpers import parse_module
+from slopgate.rules.common._shell_read import is_safe_read_shell_command
+from slopgate.rules.python_ast._helpers import parse_module
 
 _SHORT_CMD = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 /-_.",

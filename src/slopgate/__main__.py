@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vibeforcer.cli import safe_main
+from slopgate.cli import safe_main
 
 
 if __name__ == "__main__":

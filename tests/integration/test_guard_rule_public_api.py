@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer import rules
-from vibeforcer.config import load_config
-from vibeforcer.context import HookContext
-from vibeforcer.rules.common import _quality_lint
-from vibeforcer.rules.python_ast import PythonPytestAsyncioRule
-from vibeforcer.state import HookStateStore
-from vibeforcer.trace import TraceWriter
-from vibeforcer.util.payloads import HookPayload
+from slopgate import rules
+from slopgate.config import load_config
+from slopgate.context import HookContext
+from slopgate.rules.common import _quality_lint
+from slopgate.rules.python_ast import PythonPytestAsyncioRule
+from slopgate.state import HookStateStore
+from slopgate.trace import TraceWriter
+from slopgate.util.payloads import HookPayload
 
 
 def context_for_payload(
@@ -28,7 +28,7 @@ def context_for_payload(
     )
     if overrides:
         config = replace(config, **overrides)
-    trace = TraceWriter(tmp_path / ".vibeforcer" / "trace")
+    trace = TraceWriter(tmp_path / ".slopgate" / "trace")
     return HookContext(
         payload=HookPayload(payload, config),
         config=config,
@@ -202,7 +202,7 @@ def test_pytest_asyncio_rule_reports_unmarked_async_test(tmp_path: Path) -> None
 def test_repo_enrollment_rule_blocks_disable_sentinel_delete(tmp_path: Path) -> None:
     ctx = context_for_payload(
         tmp_path,
-        write_payload("quality_gate.toml", "[quality_gate]\nenabled = false\n"),
+        write_payload("slopgate.toml", "[slopgate]\nenabled = false\n"),
     )
 
     findings = rules.RepoEnrollmentProtectionRule().evaluate(ctx)

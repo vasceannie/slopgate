@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vibeforcer.util.platform import normalize_path_for_match as normalize_path
+from slopgate.util.platform import normalize_path_for_match as normalize_path
 
 from ._basic import (
     any_path_matches,

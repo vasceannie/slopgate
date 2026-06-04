@@ -1,4 +1,4 @@
-"""vibeforcer — global CLI guardrails engine for AI coding agents."""
+"""slopgate — global CLI guardrails engine for AI coding agents."""
 
 __version__ = "1.1.0"
 

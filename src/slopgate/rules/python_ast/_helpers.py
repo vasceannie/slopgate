@@ -6,13 +6,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeforcer.models import RuleFinding
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.payloads import is_edit_like_tool, is_shell_tool
+from slopgate.models import RuleFinding
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
     CheckFn = Callable[[str, str, "HookContext"], list[RuleFinding]]
 

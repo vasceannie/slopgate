@@ -98,7 +98,7 @@ class TestInlinePayloadDenies:
     ) -> None:
         result = evaluate_payload(
             pretool_write(
-                "src/vibeforcer/rules/python_ast/_staging/duplicate_rules.py",
+                "src/slopgate/rules/python_ast/_staging/duplicate_rules.py",
                 "from __future__ import annotations\n",
             )
         )
@@ -190,7 +190,7 @@ class TestInlinePayloadDenies:
     def test_exec_protection_bash_write_staging_rule(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(
             pretool_bash(
-                "echo '# temp' > src/vibeforcer/rules/python_ast/_staging/test_smell_rules.py"
+                "echo '# temp' > src/slopgate/rules/python_ast/_staging/test_smell_rules.py"
             )
         )
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")

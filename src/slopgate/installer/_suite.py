@@ -10,16 +10,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer.cli.commands import VALID_PLATFORMS
-from vibeforcer.installer import _suite_autoupdate
-from vibeforcer.installer._suite_autoupdate import (
+from slopgate.cli.commands import VALID_PLATFORMS
+from slopgate.installer import _suite_autoupdate
+from slopgate.installer._suite_autoupdate import (
     DEFAULT_UPDATE_INTERVAL_MINUTES as DEFAULT_UPDATE_INTERVAL_MINUTES,
     DEFAULT_UPDATE_SOURCE as DEFAULT_UPDATE_SOURCE,
     SchedulerPlan as SchedulerPlan,
     _AUTOUPDATE_MARKER as _AUTOUPDATE_MARKER,
 )
-from vibeforcer.installer._shared import find_binary, shell_command
-from vibeforcer.util.platform import is_windows, user_config_dir, user_data_dir
+from slopgate.installer._shared import find_binary, shell_command
+from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
 _INSTALL_TARGETS = VALID_PLATFORMS
 CLAUDE_PLATFORM, CODEX_PLATFORM, OPENCODE_PLATFORM, CURSOR_PLATFORM = _INSTALL_TARGETS
@@ -34,6 +34,8 @@ class SuiteInstallOptions:
     with_autoupdate: bool = False
     source: str = DEFAULT_UPDATE_SOURCE
     interval_minutes: int = DEFAULT_UPDATE_INTERVAL_MINUTES
+    install_scope: str = "user"
+    project_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,8 @@ class SuiteUninstallOptions:
     dry_run: bool = False
     include_missing: bool = False
     with_autoupdate: bool = False
+    install_scope: str = "user"
+    project_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -77,7 +81,7 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
         ),
         InstallSite(
             OPENCODE_PLATFORM,
-            user_config_dir(OPENCODE_PLATFORM) / "plugins" / "vibeforcer-plugin.ts",
+            user_config_dir(OPENCODE_PLATFORM) / "plugins" / "slopgate-plugin.ts",
             user_config_dir(OPENCODE_PLATFORM).exists(),
         ),
         InstallSite(
@@ -148,8 +152,8 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
 
 
 def install_suite(options: SuiteInstallOptions | None = None) -> int:
-    """Install Vibeforcer hooks for all detected harnesses on this device."""
-    from vibeforcer.installer import install_platform
+    """Install Slopgate hooks for all detected harnesses on this device."""
+    from slopgate.installer import install_platform
 
     resolved_options = options or SuiteInstallOptions()
     sites = discover_install_sites(include_missing=resolved_options.include_missing)
@@ -165,7 +169,15 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
         if resolved_options.dry_run:
             print(f"Would install: {site.platform}")
             continue
-        status = install_platform(site.platform, dry_run=False) or status
+        status = (
+            install_platform(
+                site.platform,
+                dry_run=False,
+                install_scope=resolved_options.install_scope,
+                project_root=resolved_options.project_root,
+            )
+            or status
+        )
     if resolved_options.with_autoupdate and status == 0:
         status = install_autoupdate(
             dry_run=resolved_options.dry_run,
@@ -177,8 +189,8 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
 
 
 def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
-    """Remove Vibeforcer hooks for all detected harnesses on this device."""
-    from vibeforcer.installer import uninstall_platform
+    """Remove Slopgate hooks for all detected harnesses on this device."""
+    from slopgate.installer import uninstall_platform
 
     resolved_options = options or SuiteUninstallOptions()
     sites = discover_install_sites(include_missing=resolved_options.include_missing)
@@ -189,7 +201,15 @@ def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
         if resolved_options.dry_run:
             print(f"Would uninstall: {site.platform}")
             continue
-        status = uninstall_platform(site.platform, dry_run=False) or status
+        status = (
+            uninstall_platform(
+                site.platform,
+                dry_run=False,
+                install_scope=resolved_options.install_scope,
+                project_root=resolved_options.project_root,
+            )
+            or status
+        )
     if resolved_options.with_autoupdate:
         status = uninstall_autoupdate(dry_run=resolved_options.dry_run) or status
     return status
@@ -200,9 +220,11 @@ def update_suite(
     dry_run: bool = False,
     source: str = DEFAULT_UPDATE_SOURCE,
     include_missing: bool = False,
+    install_scope: str = "user",
+    project_root: Path | None = None,
 ) -> int:
-    """Update Vibeforcer from GitHub, then refresh detected local hook sites."""
-    from vibeforcer.installer import install_platform
+    """Update Slopgate from GitHub, then refresh detected local hook sites."""
+    from slopgate.installer import install_platform
 
     print(f"Device: {current_device_label()}")
     update_command = _package_update_command(source)
@@ -222,5 +244,13 @@ def update_suite(
         if dry_run:
             print(f"Would install: {site.platform}")
             continue
-        status = install_platform(site.platform, dry_run=False) or status
+        status = (
+            install_platform(
+                site.platform,
+                dry_run=False,
+                install_scope=install_scope,
+                project_root=project_root,
+            )
+            or status
+        )
     return status

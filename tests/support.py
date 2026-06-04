@@ -6,8 +6,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.models import EngineResult
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 

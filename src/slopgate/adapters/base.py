@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from vibeforcer._types import ObjectDict, ObjectMapping, object_dict
-from vibeforcer.constants import BLOCK, DENY
-from vibeforcer.models import RuleFinding
-from vibeforcer.rules.base import join_messages as _join_messages
+from slopgate._types import ObjectDict, ObjectMapping, object_dict
+from slopgate.constants import BLOCK, DENY
+from slopgate.models import RuleFinding
+from slopgate.rules.base import join_messages as _join_messages
 
 _PERMISSION_REQUEST_DECISIONS = frozenset({DENY, "allow", BLOCK, "ask"})
 

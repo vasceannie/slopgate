@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import vibeforcer.installer as installer_module
-import vibeforcer.installer._suite as suite
-from vibeforcer.cli.commands import cmd_install
-from vibeforcer.cli.parsers import build_parser
+import slopgate.installer as installer_module
+import slopgate.installer._suite as suite
+from slopgate.cli.commands import cmd_install
+from slopgate.cli.parsers import build_parser
 
 from tests.test_suite_autoupdate import _record_suite_subprocess_run
 
@@ -18,8 +18,8 @@ def _linux_autoupdate_units(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Pat
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "linux")
-    service = tmp_path / ".config/systemd/user/vibeforcer-auto-update.service"
-    timer = tmp_path / ".config/systemd/user/vibeforcer-auto-update.timer"
+    service = tmp_path / ".config/systemd/user/slopgate-auto-update.service"
+    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
     service.parent.mkdir(parents=True)
     return service, timer
 
@@ -28,7 +28,7 @@ def _macos_autoupdate_context(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/vibeforcer")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
 
 
 def test_linux_autoupdate_install_refuses_unowned_existing_units(
@@ -42,7 +42,7 @@ def test_linux_autoupdate_install_refuses_unowned_existing_units(
         suite.install_autoupdate(dry_run=False),
         service.read_text(encoding="utf-8"),
         timer.read_text(encoding="utf-8"),
-        sorted(service.parent.glob("*.vibeforcer-bak-*")),
+        sorted(service.parent.glob("*.slopgate-bak-*")),
     ) == (1, "custom service\n", "custom timer\n", [])
 
 
@@ -53,14 +53,14 @@ def test_autoupdate_uninstall_refuses_incidental_scheduler_marker_text(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(suite, "is_windows", lambda: False)
     monkeypatch.setattr(suite.sys, "platform", "linux")
-    timer = tmp_path / ".config/systemd/user/vibeforcer-auto-update.timer"
+    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
     timer.parent.mkdir(parents=True)
-    timer.write_text("# custom comment mentions vibeforcer-auto-update\n[Timer]\n", encoding="utf-8")
+    timer.write_text("# custom comment mentions slopgate-auto-update\n[Timer]\n", encoding="utf-8")
 
     assert suite.uninstall_autoupdate(dry_run=False) == 1
 
     assert timer.exists()
-    assert not sorted(timer.parent.glob("*.vibeforcer-bak-*"))
+    assert not sorted(timer.parent.glob("*.slopgate-bak-*"))
 
 
 def test_install_with_autoupdate_stops_when_platform_install_fails(
@@ -69,7 +69,7 @@ def test_install_with_autoupdate_stops_when_platform_install_fails(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     calls: list[bool] = []
 
-    def fail_install(_platform: str, dry_run: bool = False) -> int:
+    def fail_install(_platform: str, dry_run: bool = False, **_kwargs: object) -> int:
         return 1
 
     def fake_autoupdate(**_kwargs: object) -> int:
@@ -92,7 +92,7 @@ def test_install_suite_with_autoupdate_stops_when_platform_install_fails(
     (tmp_path / ".claude").mkdir()
     calls: list[bool] = []
 
-    def fail_install(_platform: str, dry_run: bool = False) -> int:
+    def fail_install(_platform: str, dry_run: bool = False, **_kwargs: object) -> int:
         return 1
 
     def fake_autoupdate(**_kwargs: object) -> int:
@@ -116,7 +116,7 @@ def _linux_owned_unit_backup_snapshot(
     run_commands: list[list[str]],
 ) -> dict[str, object]:
     status = suite.install_autoupdate(dry_run=False)
-    backups = sorted(service.parent.glob("*.vibeforcer-bak-*"))
+    backups = sorted(service.parent.glob("*.slopgate-bak-*"))
     return {
         "status": status,
         "service_changed": service.read_text(encoding="utf-8") != "existing service\n",
@@ -130,7 +130,7 @@ def test_linux_autoupdate_install_backs_up_existing_units(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     service, timer = _linux_autoupdate_units(tmp_path, monkeypatch)
-    monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/vibeforcer")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/slopgate")
     run_commands = _record_suite_subprocess_run(monkeypatch)
     service.write_text(f"# {suite._AUTOUPDATE_MARKER}\nexisting service\n", encoding="utf-8")
     timer.write_text(f"# {suite._AUTOUPDATE_MARKER}\nexisting timer\n", encoding="utf-8")
@@ -144,27 +144,86 @@ def test_linux_autoupdate_install_backs_up_existing_units(
             f"# {suite._AUTOUPDATE_MARKER}\nexisting service\n",
             f"# {suite._AUTOUPDATE_MARKER}\nexisting timer\n",
         ],
-        "run_commands": [["systemctl", "--user", "enable", "--now", "vibeforcer-auto-update.timer"]],
+        "run_commands": [["systemctl", "--user", "enable", "--now", "slopgate-auto-update.timer"]],
     }
+
+
+def _windows_autoupdate_context(tmp_path: Path, monkeypatch: Any) -> Path:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.setattr(suite, "is_windows", lambda: True)
+    monkeypatch.setattr(suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe")
+
+    def fake_user_data_dir(app_name: str) -> Path:
+        return tmp_path / "LocalAppData" / app_name
+
+    monkeypatch.setattr(suite, "user_data_dir", fake_user_data_dir)
+    return tmp_path / "LocalAppData/slopgate/slopgate-auto-update.ps1"
 
 
 def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
-    monkeypatch.setattr(suite, "is_windows", lambda: True)
-    def fake_user_data_dir(app_name: str) -> Path:
-        return tmp_path / "LocalAppData" / app_name
-
-    monkeypatch.setattr(suite, "user_data_dir", fake_user_data_dir)
-    script = tmp_path / "LocalAppData/vibeforcer/vibeforcer-auto-update.ps1"
+    script = _windows_autoupdate_context(tmp_path, monkeypatch)
     script.parent.mkdir(parents=True)
     script.write_text("custom user script\n", encoding="utf-8")
 
     assert suite.uninstall_autoupdate(dry_run=False) == 1
 
     assert script.read_text(encoding="utf-8") == "custom user script\n"
-    assert not sorted(script.parent.glob("*.vibeforcer-bak-*"))
+    assert not sorted(script.parent.glob("*.slopgate-bak-*"))
+
+
+def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_create(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    script = _windows_autoupdate_context(tmp_path, monkeypatch)
+    run_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> Any:
+        run_commands.append(command)
+        if command[:2] == ["schtasks", "/Query"]:
+            return suite.subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="<Task><Actions><Exec><Command>custom.exe</Command></Exec></Actions></Task>",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+
+    assert suite.install_autoupdate(dry_run=False) == 1
+
+    assert run_commands == [["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"]]
+    assert not script.exists()
+
+
+def test_windows_autoupdate_install_exports_owned_existing_task_before_force_create(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    script = _windows_autoupdate_context(tmp_path, monkeypatch)
+    script.parent.mkdir(parents=True)
+    script.write_text(f"# {suite._AUTOUPDATE_MARKER}\nold script\n", encoding="utf-8")
+    run_commands: list[list[str]] = []
+    xml = f"<Task><Actions><Exec><Arguments>{script}</Arguments></Exec></Actions></Task>"
+
+    def fake_run(command: list[str], **kwargs: object) -> Any:
+        run_commands.append(command)
+        if command[:2] == ["schtasks", "/Query"]:
+            return suite.subprocess.CompletedProcess(command, 0, stdout=xml)
+        if command[:2] == ["schtasks", "/Create"]:
+            return suite.subprocess.CompletedProcess(command, 0)
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+
+    assert suite.install_autoupdate(dry_run=False) == 0
+
+    task_backups = sorted(script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*"))
+    assert len(task_backups) == 1
+    assert task_backups[0].read_text(encoding="utf-8") == xml
+    assert run_commands[0] == ["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"]
+    assert run_commands[1][:3] == ["schtasks", "/Create", "/F"]
 
 
 def _macos_uninstall_backup_snapshot(run_commands: list[list[str]]) -> dict[str, object]:
@@ -172,12 +231,12 @@ def _macos_uninstall_backup_snapshot(run_commands: list[list[str]]) -> dict[str,
     plan.target_path.parent.mkdir(parents=True)
     plan.target_path.write_text(plan.content, encoding="utf-8")
     status = suite.uninstall_autoupdate(dry_run=False)
-    backups = sorted(plan.target_path.parent.glob("*.vibeforcer-bak-*"))
+    backups = sorted(plan.target_path.parent.glob("*.slopgate-bak-*"))
     return {
         "status": status,
         "exists": plan.target_path.exists(),
         "backup_count": len(backups),
-        "marker_present": "rocks.baked.vibeforcer.autoupdate" in backups[0].read_text(encoding="utf-8"),
+        "marker_present": "rocks.baked.slopgate.autoupdate" in backups[0].read_text(encoding="utf-8"),
         "run_commands": run_commands,
         "target_path": str(plan.target_path),
     }
@@ -250,7 +309,7 @@ def test_update_suite_dry_run_reports_package_update_and_hook_refresh(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "find_binary", lambda: "vibeforcer")
+    monkeypatch.setattr(suite, "find_binary", lambda: "slopgate")
 
     def no_binary(_name: str) -> str | None:
         return None

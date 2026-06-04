@@ -1,4 +1,4 @@
-"""CLI subcommands for vibeforcer search (isx integration)."""
+"""CLI subcommands for slopgate search (isx integration)."""
 
 from __future__ import annotations
 
@@ -8,24 +8,24 @@ import os
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._argparse_types import SubparserRegistry
-from vibeforcer._types import object_dict
+from slopgate._argparse_types import SubparserRegistry
+from slopgate._types import object_dict
 from urllib.parse import urlparse, urlunparse
 
-from vibeforcer.search.completions import print_completion
-from vibeforcer.search.config import (
+from slopgate.search.completions import print_completion
+from slopgate.search.config import (
     APP_NAME,
     IsxError,
     SearchConfig,
     load_config,
 )
-from vibeforcer.search.git_utils import resolve_add_repo
-from vibeforcer.search.index_ops import (
+from slopgate.search.git_utils import resolve_add_repo
+from slopgate.search.index_ops import (
     find_local_index,
     local_indexes,
     resolve_reindex_target,
 )
-from vibeforcer.search.runtime import (
+from slopgate.search.runtime import (
     current_islands_config_path,
     embedding_like,
     fetch_runtime_models,
@@ -151,14 +151,14 @@ def _build_add_args(
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Write wrapper and islands configs."""
-    from vibeforcer.search._cli_init import cmd_init as _cmd_init
+    from slopgate.search._cli_init import cmd_init as _cmd_init
 
     return _cmd_init(args)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Check runtime config and endpoint reachability."""
-    from vibeforcer.search._cli_doctor import cmd_doctor as _cmd_doctor
+    from slopgate.search._cli_doctor import cmd_doctor as _cmd_doctor
 
     return _cmd_doctor(args)
 
@@ -328,6 +328,6 @@ def build_search_parser(
     subparsers: SubparserRegistry | None = None,
 ) -> argparse.ArgumentParser:
     """Build the ``search`` subcommand parser."""
-    from vibeforcer.search._cli_parser import build_search_parser as _build_search_parser
+    from slopgate.search._cli_parser import build_search_parser as _build_search_parser
 
     return _build_search_parser(subparsers)

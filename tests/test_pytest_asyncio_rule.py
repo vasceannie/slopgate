@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer._types import object_dict, string_value
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult
-from vibeforcer.rules.python_ast._pytest_asyncio_messages import PYTEST_ASYNCIO_TEMPLATE
+from slopgate._types import object_dict, string_value
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult
+from slopgate.rules.python_ast._pytest_asyncio_messages import PYTEST_ASYNCIO_TEMPLATE
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 UNMARKED_CLIENT_TEST = """
@@ -32,7 +32,7 @@ def _write_payload(path: str, code: str, cwd: Path | None = None) -> dict[str, o
 def _repo_root(tmp_path: Path, pytest_config: str = "", *, config_name: str = "pytest.ini") -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _ = (repo / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
     if pytest_config:
         _ = (repo / config_name).write_text(pytest_config, encoding="utf-8")
     return repo

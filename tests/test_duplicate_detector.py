@@ -6,11 +6,11 @@ import ast
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.lint._detectors.duplicates import _collect_block_windows
-from vibeforcer.lint._detectors.duplicates import detect_repeated_blocks
-from vibeforcer.lint._detectors.duplicates import detect_repeated_literals
-from vibeforcer.lint._config import load_config, set_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._detectors.duplicates import _collect_block_windows
+from slopgate.lint._detectors.duplicates import detect_repeated_blocks
+from slopgate.lint._detectors.duplicates import detect_repeated_literals
+from slopgate.lint._config import load_config, set_config
+from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,

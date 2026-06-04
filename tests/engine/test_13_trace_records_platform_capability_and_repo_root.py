@@ -7,16 +7,16 @@ from tests.test_engine import (
     _latest_trace_event,
     _pretool_bash_payload,
     _write_config_from_defaults,
-    _write_quality_gate,
+    _write_slopgate,
     evaluate_payload,
 )
 
 def test_trace_records_platform_capability_and_repo_root(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
-    repo = _write_quality_gate(tmp_path / "repo_trace_capability")
+    repo = _write_slopgate(tmp_path / "repo_trace_capability")
     _write_config_from_defaults(tmp_path, monkeypatch, _keep_default_config)
-    monkeypatch.setenv("VIBEFORCER_ROOT", str(tmp_path / "vf-root"))
+    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
 
     _ = evaluate_payload(
         _pretool_bash_payload(repo, "git commit -n -m skip"), platform="opencode"

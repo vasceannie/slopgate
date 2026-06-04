@@ -1,0 +1,10 @@
+{
+  "name": "slopgate",
+  "description": "Slopgate recovery skills and agents for Claude Code. Hook installation remains owned by the slopgate CLI.",
+  "version": "1.1.0",
+  "author": {
+    "name": "trav"
+  },
+  "repository": "https://lab.baked.rocks/claude/slopgate",
+  "license": "MIT"
+}

@@ -14,9 +14,9 @@ from typing import cast
 
 import pytest
 
-from vibeforcer.context import HookContext
-from vibeforcer.models import RuleFinding
-from vibeforcer.rules.base import Rule
+from slopgate.context import HookContext
+from slopgate.models import RuleFinding
+from slopgate.rules.base import Rule
 
 from .test_audit_cases import (
     _ALL_STAGING_RULES,

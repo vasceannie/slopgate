@@ -17,24 +17,24 @@ import json
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.engine import _render as engine_module
+from slopgate.engine import _render as engine_module
 
 import pytest
 
 from tests import support as test_support
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.adapters import get_adapter, ADAPTERS
-from vibeforcer.adapters.base import PlatformAdapter
-from vibeforcer.adapters.claude import ClaudeAdapter
-from vibeforcer.adapters.codex import CodexAdapter
-from vibeforcer.adapters.cursor import CursorAdapter
-from vibeforcer.adapters.opencode import OpenCodeAdapter
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import RuleFinding, Severity
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.adapters import get_adapter, ADAPTERS
+from slopgate.adapters.base import PlatformAdapter
+from slopgate.adapters.claude import ClaudeAdapter
+from slopgate.adapters.codex import CodexAdapter
+from slopgate.adapters.cursor import CursorAdapter
+from slopgate.adapters.opencode import OpenCodeAdapter
+from slopgate.engine import evaluate_payload
+from slopgate.models import RuleFinding, Severity
 
 FIXTURES_DIR = test_support.BUNDLE_ROOT / "fixtures"
-_RESOURCES_DIR = test_support.BUNDLE_ROOT / "src" / "vibeforcer" / "resources"
+_RESOURCES_DIR = test_support.BUNDLE_ROOT / "src" / "slopgate" / "resources"
 
 
 def _load_platform_fixture(platform: str, fixture_name: str) -> ObjectDict:
@@ -45,8 +45,8 @@ def _load_platform_fixture(platform: str, fixture_name: str) -> ObjectDict:
 def _repo_with_quality_gate(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     return repo
@@ -62,7 +62,7 @@ def _config_with_enabled_rules(
     raw["enabled_rules"] = enabled
     config_path = tmp_path / "adapter-spec-config.json"
     config_path.write_text(json.dumps(raw), encoding="utf-8")
-    monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_path))
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(config_path))
 
 
 def require_rendered(output: ObjectDict | None) -> ObjectDict:

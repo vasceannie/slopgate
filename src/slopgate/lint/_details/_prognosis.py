@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._details._metadata import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._details._metadata import (
     _BRANCH_RULES,
     _DUPLICATE_RULES,
     _EXCEPTION_RULES,

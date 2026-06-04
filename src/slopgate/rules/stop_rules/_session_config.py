@@ -5,11 +5,11 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer._types import bool_value, object_dict, string_value
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate._types import bool_value, object_dict, string_value
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 _GIT_COMMANDS: list[tuple[list[str], str]] = [

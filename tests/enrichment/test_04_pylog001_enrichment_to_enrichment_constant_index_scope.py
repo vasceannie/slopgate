@@ -9,7 +9,7 @@ from tests.test_enrichment import (
     pytest,
     test_support,
 )
-from vibeforcer.enrichment.quality_enrichers import _magic_numbers
+from slopgate.enrichment.quality_enrichers import _magic_numbers
 
 class TestPYLOG001Enrichment:
     LOG_CODE = "import logging\n\nlogger = logging.getLogger(__name__)\n"

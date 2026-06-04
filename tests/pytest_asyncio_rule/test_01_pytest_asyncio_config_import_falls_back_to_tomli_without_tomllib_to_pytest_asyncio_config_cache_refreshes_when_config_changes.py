@@ -33,8 +33,8 @@ def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
 
 builtins.__import__ = fake_import
 sys.modules.pop("tomllib", None)
-sys.modules.pop("vibeforcer.rules.python_ast._pytest_asyncio_config", None)
-module = importlib.import_module("vibeforcer.rules.python_ast._pytest_asyncio_config")
+sys.modules.pop("slopgate.rules.python_ast._pytest_asyncio_config", None)
+module = importlib.import_module("slopgate.rules.python_ast._pytest_asyncio_config")
 assert module.pytest_asyncio_mode
 '''
     result = subprocess.run(

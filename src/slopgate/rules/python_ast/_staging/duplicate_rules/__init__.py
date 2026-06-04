@@ -9,10 +9,10 @@ Staging: not yet registered in the rule registry.
 
 from __future__ import annotations
 
-from vibeforcer.rules.python_ast._staging.duplicate_rules._blocks import PythonRepeatedBlocksRule
-from vibeforcer.rules.python_ast._staging.duplicate_rules._call_sequences import PythonDuplicateCallSequenceRule
-from vibeforcer.rules.python_ast._staging.duplicate_rules._magic_numbers import PythonRepeatedMagicNumberRule
-from vibeforcer.rules.python_ast._staging.duplicate_rules._semantic import PythonSemanticCloneRule
+from slopgate.rules.python_ast._staging.duplicate_rules._blocks import PythonRepeatedBlocksRule
+from slopgate.rules.python_ast._staging.duplicate_rules._call_sequences import PythonDuplicateCallSequenceRule
+from slopgate.rules.python_ast._staging.duplicate_rules._magic_numbers import PythonRepeatedMagicNumberRule
+from slopgate.rules.python_ast._staging.duplicate_rules._semantic import PythonSemanticCloneRule
 
 __all__ = [
     "PythonDuplicateCallSequenceRule",

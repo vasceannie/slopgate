@@ -4,9 +4,9 @@ import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shlex
 
-from vibeforcer.constants import PRODUCTION_SYMBOL_PREVIEW_LIMIT, PYTEST_TEST_PREFIX
+from slopgate.constants import PRODUCTION_SYMBOL_PREVIEW_LIMIT, PYTEST_TEST_PREFIX
 
 
 def _lint_target_summary(paths: list[str]) -> str:
@@ -15,7 +15,7 @@ def _lint_target_summary(paths: list[str]) -> str:
 
 
 def _lint_check_instruction(paths: list[str]) -> str:
-    command = "from the repo root, run `vibeforcer lint check`"
+    command = "from the repo root, run `slopgate lint check`"
     if not paths:
         return f"Run {command} for details."
     shown = ", ".join(shlex.quote(path) for path in paths[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])

@@ -15,20 +15,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, final
 from typing_extensions import TypeGuard, override
 
-from vibeforcer.constants import (
+from slopgate.constants import (
     METADATA_FUNCTION,
     METADATA_PATH,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
 )
-from vibeforcer.lint._detectors.test_smells import (
+from slopgate.lint._detectors.test_smells import (
     _count_sut_calls,
     _is_pytest_fixture_decorator,
     _max_bare_assert_run,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 
 from .._helpers import (
     decision_for_context,
@@ -37,7 +37,7 @@ from .._helpers import (
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 _TEST_RULE_EVENTS = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 

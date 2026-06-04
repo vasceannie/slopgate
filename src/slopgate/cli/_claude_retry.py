@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from vibeforcer.constants import BLOCK, DENY
-from vibeforcer.models import EngineResult, RuleFinding
-from vibeforcer.rules.base import join_messages
+from slopgate.constants import BLOCK, DENY
+from slopgate.models import EngineResult, RuleFinding
+from slopgate.rules.base import join_messages
 
 CLAUDE_TEAM_RETRY_EVENTS = frozenset({"TaskCompleted", "TeammateIdle"})
 RETRY_DECISIONS = frozenset({BLOCK, DENY, "ask"})
@@ -25,7 +25,7 @@ def claude_team_event_feedback(result: EngineResult) -> str | None:
     if feedback:
         return feedback
     rule_ids = ", ".join(finding.rule_id for finding in blocking_findings)
-    return f"vibeforcer blocked {result.event_name}: {rule_ids}"
+    return f"slopgate blocked {result.event_name}: {rule_ids}"
 
 
 def _join_unique_context(findings: list[RuleFinding]) -> str:

@@ -50,7 +50,7 @@ def test_build_rules_survives_python_ast_import_error(
 
 
 def _force_python_ast_import_error(monkeypatch: MonkeyPatch) -> None:
-    import vibeforcer.rules as rules_mod
+    import slopgate.rules as rules_mod
 
     monkeypatch.setattr(
         rules_mod,

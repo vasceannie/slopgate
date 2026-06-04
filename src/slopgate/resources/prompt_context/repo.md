@@ -31,7 +31,7 @@
 - `.claude/hooks/*`, `.claude/hook-layer/config.json`
 - Linter configs: `pytest.ini`, `.eslintrc*`, `.flake8`, `.pylintrc`, `ruff.toml`, `pyrightconfig*`, `biome.json`
 - Quality tests: `src/test/code-quality.test.ts`, `tests/quality/`
-- Staging hook-rule authoring surfaces: `src/vibeforcer/rules/python_ast/_staging/`
+- Staging hook-rule authoring surfaces: `src/slopgate/rules/python_ast/_staging/`
 
 ## Code Quality
 - No `TODO`, `FIXME`, `HACK`, `XXX` markers — track work in issues.
@@ -61,7 +61,7 @@
 
 ## Baselines
 - `baselines.json` violations must only decrease, never increase.
-- Do not run `quality-gate baseline .`, `vibeforcer lint baseline .`, or `vfc lint baseline .` to re-baseline away violations.
+- Do not run `quality-gate baseline .`, `slopgate lint baseline .`, or `vfc lint baseline .` to re-baseline away violations.
 
 ## Before Stopping
 - Run `make quality` or the project quality command.

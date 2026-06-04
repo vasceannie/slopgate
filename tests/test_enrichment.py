@@ -14,15 +14,15 @@ import pytest
 from tests import support as test_support
 from tests.support import LoadFixture
 
-from vibeforcer._types import ObjectDict
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.enrichment import (
+from slopgate._types import ObjectDict
+from slopgate.engine import evaluate_payload
+from slopgate.enrichment import (
     discover_fixtures,
     find_parametrize_examples,
     enrich_findings,
 )
-from vibeforcer.enrichment import quality_enrichers
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.enrichment import quality_enrichers
+from slopgate.models import RuleFinding, Severity
 
 
 # ===========================================================================

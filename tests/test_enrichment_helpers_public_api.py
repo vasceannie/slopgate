@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from hypothesis import given, strategies
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     first_target_content,
     get_parse_count,
@@ -16,10 +16,10 @@ from vibeforcer.enrichment._helpers import (
     safe_parse,
     safe_read,
 )
-from vibeforcer.enrichment.local_context import find_local_call_sites
-from vibeforcer.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
-from vibeforcer.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.enrichment.local_context import find_local_call_sites
+from slopgate.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
+from slopgate.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
+from slopgate.models import RuleFinding, Severity
 
 IRRELEVANT_TEXT = strategies.text(alphabet="abc xyz\n#", max_size=80)
 

@@ -5,16 +5,16 @@ from __future__ import annotations
 import shlex
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     LINT_MAX_MODULE_LINES_SOFT,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import (
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.payloads import (
     is_bash_tool,
     is_edit_like_tool,
 )
@@ -22,7 +22,7 @@ from .._helpers import (
     decision_for_context,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._module_size_projection import _is_authored_python_path as _is_authored_python_path
 from ._source_parse import _is_full_module_candidate as _is_full_module_candidate, _line_count as _line_count, _parse_health_failure as _parse_health_failure, _resolve_python_path as _resolve_python_path

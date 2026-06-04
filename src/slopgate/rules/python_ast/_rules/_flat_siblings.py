@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, final
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     DENY,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
@@ -13,16 +13,16 @@ from vibeforcer.constants import (
     BLOCK,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.payloads import (
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.payloads import (
     first_present,
     is_bash_tool,
     is_edit_like_tool,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 class _FlatSiblingFindingInput(NamedTuple):

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.config._discovery import detect_root, resolve_config_path
-from vibeforcer.config._repo import (
+from slopgate.config._discovery import detect_root, resolve_config_path
+from slopgate.config._repo import (
     ensure_worktree_enrollment,
     is_path_skipped,
     is_repo_disabled,
@@ -16,7 +16,7 @@ from vibeforcer.config._repo import (
     resolve_main_git_repo_root,
     resolve_repo_root,
 )
-from vibeforcer.installer._shared import (
+from slopgate.installer._shared import (
     backup_existing_file,
     backup_existing_file_and_report,
     base_invocation,
@@ -26,17 +26,17 @@ from vibeforcer.installer._shared import (
     require_json_object,
     write_json_with_backup,
 )
-from vibeforcer.rules.common._shell_read import (
+from slopgate.rules.common._shell_read import (
     FullFileReadRule,
     PromptContextRule,
     ProtectedPathsRule,
 )
-from vibeforcer.rules.python_ast._helpers import (
+from slopgate.rules.python_ast._helpers import (
     decision_for_context,
     detect_family_prefix,
     evaluate_common,
 )
-from vibeforcer.search.cli import (
+from slopgate.search.cli import (
     cmd_add,
     cmd_list,
     cmd_models,
@@ -46,10 +46,10 @@ from vibeforcer.search.cli import (
     cmd_sync,
     cmd_use,
 )
-from vibeforcer.search.config import SearchConfig, detect_provider, expand, save_config
-import vibeforcer.search.config as search_config
-from vibeforcer.adapters.cursor import CursorAdapter
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.search.config import SearchConfig, detect_provider, expand, save_config
+import slopgate.search.config as search_config
+from slopgate.adapters.cursor import CursorAdapter
+from slopgate.models import RuleFinding, Severity
 
 
 def _repo_helper_snapshot(repo_path: Path) -> dict[str, object]:
@@ -104,8 +104,8 @@ def test_config_discovery_helpers_use_temp_config_dir(
 ) -> None:
     config_file = tmp_path / "config.json"
     config_file.write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("VIBEFORCER_CONFIG", str(config_file))
-    monkeypatch.setenv("VIBEFORCER_ROOT", str(tmp_path))
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(config_file))
+    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path))
 
     assert {
         "config_path": resolve_config_path(),
@@ -225,9 +225,9 @@ def test_search_cli_init_returns_zero_for_dry_init(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.search.cli import cmd_init
+    from slopgate.search.cli import cmd_init
 
-    app_dir = tmp_path / ".config" / "vibeforcer"
+    app_dir = tmp_path / ".config" / "slopgate"
     app_dir.mkdir(parents=True)
     config_path = app_dir / "config.json"
     islands_path = tmp_path / "islands.toml"

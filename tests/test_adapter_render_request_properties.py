@@ -4,8 +4,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies
 
-from vibeforcer.adapters import base
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.adapters import base
+from slopgate.models import RuleFinding, Severity
 
 
 _FINDING = RuleFinding(

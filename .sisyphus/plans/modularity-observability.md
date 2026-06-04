@@ -5,7 +5,7 @@
 
 ## Context
 
-Vibeforcer's core modules have grown organically — `enrichment.py` (928 lines), `python_ast.py` (902 lines), `cli.py` (668 lines). This plan addresses modularity, deduplication, side-effect isolation, threshold synchronization, and observability gaps.
+Slopgate's core modules have grown organically — `enrichment.py` (928 lines), `python_ast.py` (902 lines), `cli.py` (668 lines). This plan addresses modularity, deduplication, side-effect isolation, threshold synchronization, and observability gaps.
 
 All splits MUST use **sub-packages** (directory with `__init__.py`), not flat `_prefix_*.py` sibling files — per repo rules.
 
@@ -54,8 +54,8 @@ All identical: `value = ctx.config.enabled_rules.get(rule_id); return default if
 **QA**:
 - Command: `pytest tests/ -x`
 - Artifact: zero test failures
-- Grep verification: `grep -rn "_is_rule_enabled\|_is_enabled" src/vibeforcer/rules/ --include="*.py"` returns only the single definition in `base.py`
-- Import verification: `python -c "from vibeforcer.rules.base import is_rule_enabled; print('OK')"` succeeds
+- Grep verification: `grep -rn "_is_rule_enabled\|_is_enabled" src/slopgate/rules/ --include="*.py"` returns only the single definition in `base.py`
+- Import verification: `python -c "from slopgate.rules.base import is_rule_enabled; print('OK')"` succeeds
 
 ---
 
@@ -86,8 +86,8 @@ All identical: `value = ctx.config.enabled_rules.get(rule_id); return default if
 **QA**:
 - Command: `pytest tests/ -x`
 - Artifact: zero test failures
-- Cross-check: `python -c "from vibeforcer.constants import MAX_COMPLEXITY; from vibeforcer.models import RuntimeConfig; from vibeforcer.lint._config import QualityConfig; rc=RuntimeConfig.__dataclass_fields__; qc=QualityConfig.__dataclass_fields__; assert rc['python_max_complexity'].default == MAX_COMPLEXITY == qc['max_complexity'].default; print('OK')"` succeeds
-- Fallback verification: `grep -n "python_max_complexity" src/vibeforcer/config.py` shows the `.get()` fallback referencing `constants.MAX_COMPLEXITY`, not a hardcoded integer
+- Cross-check: `python -c "from slopgate.constants import MAX_COMPLEXITY; from slopgate.models import RuntimeConfig; from slopgate.lint._config import QualityConfig; rc=RuntimeConfig.__dataclass_fields__; qc=QualityConfig.__dataclass_fields__; assert rc['python_max_complexity'].default == MAX_COMPLEXITY == qc['max_complexity'].default; print('OK')"` succeeds
+- Fallback verification: `grep -n "python_max_complexity" src/slopgate/config.py` shows the `.get()` fallback referencing `constants.MAX_COMPLEXITY`, not a hardcoded integer
 
 ---
 
@@ -100,7 +100,7 @@ All identical: `value = ctx.config.enabled_rules.get(rule_id); return default if
 **Implementation**: Create `enrichment/` sub-package:
 
 ```
-src/vibeforcer/enrichment/
+src/slopgate/enrichment/
 ├── __init__.py          # re-exports: enrich_findings, ENRICHERS
 ├── _fixtures.py         # _safe_read, _safe_parse, _resolve_path, fixture discovery, parametrize examples (lines 28-178)
 ├── _test_enrichers.py   # _enrich_test_loop, _enrich_assertion_roulette, _enrich_test_smells, _enrich_fixture_outside_conftest (lines 185-345)
@@ -114,8 +114,8 @@ src/vibeforcer/enrichment/
 - `__init__.py` re-exports public API so external imports remain unchanged:
   ```python
   # Public API (imported by engine, tests, etc.)
-  from vibeforcer.enrichment._routing import enrich_findings, ENRICHERS
-  from vibeforcer.enrichment._fixtures import _discover_fixtures, _find_parametrize_examples
+  from slopgate.enrichment._routing import enrich_findings, ENRICHERS
+  from slopgate.enrichment._fixtures import _discover_fixtures, _find_parametrize_examples
   ```
   - `enrich_findings`, `ENRICHERS`: used by engine.py
   - `_discover_fixtures`, `_find_parametrize_examples`: imported by `tests/test_enrichment.py:15`
@@ -127,7 +127,7 @@ src/vibeforcer/enrichment/
 **QA**:
 - Command: `pytest tests/test_enrichment.py -x`
 - Artifact: all enrichment tests pass, zero failures
-- Import verification: `python -c "from vibeforcer.enrichment import enrich_findings, ENRICHERS; print(f'{len(ENRICHERS)} enrichers loaded')"` succeeds and shows same enricher count as before
+- Import verification: `python -c "from slopgate.enrichment import enrich_findings, ENRICHERS; print(f'{len(ENRICHERS)} enrichers loaded')"` succeeds and shows same enricher count as before
 - Smoke test: `pytest tests/ -x` — all tests pass (not just enrichment)
 
 ---
@@ -139,7 +139,7 @@ src/vibeforcer/enrichment/
 **Implementation**: Create `rules/python_ast/` sub-package:
 
 ```
-src/vibeforcer/rules/python_ast/
+src/slopgate/rules/python_ast/
 ├── __init__.py          # re-exports all 11 rule classes
 ├── _helpers.py          # _is_third_party_path, _decision, _parse_module, _evaluate_common (lines 32-92)
 └── _rules.py            # All 11 rule classes (lines 94-902)
@@ -154,7 +154,7 @@ src/vibeforcer/rules/python_ast/
 **QA**:
 - Command: `pytest tests/test_ast_rules.py -x`
 - Artifact: all AST rule tests pass, zero failures
-- Import verification: `python -c "from vibeforcer.rules.python_ast import PythonLongMethodRule, PythonImportFanoutRule; print('OK')"` succeeds
+- Import verification: `python -c "from slopgate.rules.python_ast import PythonLongMethodRule, PythonImportFanoutRule; print('OK')"` succeeds
 - Smoke test: `pytest tests/ -x` — all tests pass
 
 ---
@@ -174,7 +174,7 @@ src/vibeforcer/rules/python_ast/
 **QA**:
 - Command: `pytest tests/test_error_and_config_rules.py -x`
 - Artifact: zero test failures
-- Side-effect verification: `python -c "from vibeforcer.config import load_config, _merge_config, ensure_trace_directories; print('OK')"` succeeds
+- Side-effect verification: `python -c "from slopgate.config import load_config, _merge_config, ensure_trace_directories; print('OK')"` succeeds
 - Smoke test: `pytest tests/ -x`
 
 ---
@@ -197,7 +197,7 @@ src/vibeforcer/rules/python_ast/
 **QA**:
 - Command: `pytest tests/test_engine.py -x`
 - Artifact: zero test failures
-- Field verification: run vibeforcer against any test file, then `grep -c "elapsed_ms" <trace_dir>/rules.jsonl` returns >0
+- Field verification: run slopgate against any test file, then `grep -c "elapsed_ms" <trace_dir>/rules.jsonl` returns >0
 
 ---
 
@@ -236,7 +236,7 @@ src/vibeforcer/rules/python_ast/
 **QA**:
 - Command: `pytest tests/test_enrichment.py -x`
 - Artifact: zero test failures
-- Field verification: run vibeforcer against any test file, then `grep "_ENRICHMENT_METRICS" <trace_dir>/rules.jsonl` returns a valid JSON record with `elapsed_ms`, `enrichers_fired`, and `ast_parses` fields
+- Field verification: run slopgate against any test file, then `grep "_ENRICHMENT_METRICS" <trace_dir>/rules.jsonl` returns a valid JSON record with `elapsed_ms`, `enrichers_fired`, and `ast_parses` fields
 
 ---
 
@@ -248,7 +248,7 @@ src/vibeforcer/rules/python_ast/
 - Create `util/logger.py` — a minimal structured logging utility (NOT `structlog`, NOT stdlib `logging` — repo has no existing logger):
   ```python
   # util/logger.py
-  """Minimal structured logger for vibeforcer internals."""
+  """Minimal structured logger for slopgate internals."""
   import json, sys, time
 
   def _emit(level: str, message: str, **fields) -> None:
@@ -264,7 +264,7 @@ src/vibeforcer/rules/python_ast/
 - Fix `trace.py`: replace silent `except OSError: return` with:
   ```python
   except OSError as exc:
-      from vibeforcer.util.logger import warning
+      from slopgate.util.logger import warning
       warning("trace write failed", path=str(path), error=str(exc))
       return
   ```
@@ -279,8 +279,8 @@ src/vibeforcer/rules/python_ast/
 **QA**:
 - Command: `pytest tests/test_trace.py tests/test_engine.py -x`
 - Artifact: zero test failures
-- OSError logging verification: `grep -n "except OSError" src/vibeforcer/trace.py` shows the warning call, not a bare `return`
-- Import verification: `python -c "from vibeforcer.util.logger import info, warning, error, debug; print('OK')"` succeeds
+- OSError logging verification: `grep -n "except OSError" src/slopgate/trace.py` shows the warning call, not a bare `return`
+- Import verification: `python -c "from slopgate.util.logger import info, warning, error, debug; print('OK')"` succeeds
 - Smoke test: `pytest tests/ -x`
 
 ---
@@ -294,7 +294,7 @@ src/vibeforcer/rules/python_ast/
 **Implementation**: Create `cli/` sub-package:
 
 ```
-src/vibeforcer/cli/
+src/slopgate/cli/
 ├── __init__.py          # re-exports: main, safe_main, build_parser
 ├── _commands.py         # Hook/config commands (lines 34-253)
 ├── _lint.py             # Lint commands (lines 255-463)
@@ -309,7 +309,7 @@ src/vibeforcer/cli/
 **QA**:
 - Command: `pytest tests/ -x`
 - Artifact: zero test failures
-- CLI verification: `python -m vibeforcer.cli --version` succeeds (or `vibeforcer --version` if installed)
+- CLI verification: `python -m slopgate.cli --version` succeeds (or `slopgate --version` if installed)
 
 ---
 
@@ -360,7 +360,7 @@ Step 4.1 should follow 2.1-2.2 to match established patterns.
 
 ## Invariants (must not change)
 
-- External import paths remain identical (`from vibeforcer.enrichment import enrich_findings`, etc.)
+- External import paths remain identical (`from slopgate.enrichment import enrich_findings`, etc.)
 - All existing tests pass without modification
 - No logic changes in any step — pure reorganization and additive instrumentation
 - `pytest tests/ -x` passes at every step boundary

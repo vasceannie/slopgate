@@ -6,11 +6,11 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vibeforcer._types import ObjectDict, ObjectMapping, object_dict, string_value
-from vibeforcer.adapters.base import PlatformAdapter, render_request_from_call
-from vibeforcer.models import RuleFinding
+from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate.adapters.base import PlatformAdapter, render_request_from_call
+from slopgate.models import RuleFinding
 
-from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
 OPENCODE_EVENT_MAP: dict[str, str] = {
     "tool.execute.before": PRE_TOOL_USE,
     "tool.execute.after": POST_TOOL_USE,
@@ -52,10 +52,21 @@ class OpenCodeAdapter(PlatformAdapter):
         oc_event = string_value(raw.get("hook_event_name")) or ""
         canonical_event = OPENCODE_EVENT_MAP.get(oc_event, oc_event)
         canonical["hook_event_name"] = canonical_event
+        if oc_event:
+            canonical["opencode_hook_event"] = oc_event
 
         tool_name = string_value(raw.get("tool_name")) or ""
         if tool_name:
-            canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(tool_name, tool_name)
+            lowered = tool_name.strip().lower().replace("-", "_")
+            canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
+
+        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
+        if session_id:
+            canonical["session_id"] = session_id
+
+        cwd = string_value(raw.get("cwd")) or string_value(raw.get("directory"))
+        if cwd:
+            canonical["cwd"] = cwd
 
         if "tool_response" in canonical and "tool_result" not in canonical:
             canonical["tool_result"] = canonical["tool_response"]
@@ -121,8 +132,11 @@ class OpenCodeAdapter(PlatformAdapter):
         return None
 
     def _render_stop(self, request: _OpenCodeRenderRequest) -> ObjectDict | None:
-        if request.decision in {BLOCK, DENY}:
-            return self._block_output(request, action="continue")
+        if request.decision in {BLOCK, DENY, "ask"}:
+            return {
+                "action": "continue",
+                "reason": self._decision_reason(request),
+            }
         if request.context:
             return self._context_output(request.context)
         return None

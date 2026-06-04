@@ -6,25 +6,25 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     relative_path,
     resolve_path,
     safe_parse,
     safe_read,
 )
-from vibeforcer.enrichment.quality_enrichers._models import (
+from slopgate.enrichment.quality_enrichers._models import (
     ImportableConstant,
     MagicNumberHint,
 )
-from vibeforcer.quality.constant_index import (
+from slopgate.quality.constant_index import (
     build_project_constant_index,
     iter_constant_candidate_paths,
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 _CONSTANT_MODULE_NAMES = {"constants", "config", "settings", "defaults"}
 _SOURCE_ROOT_NAMES = {"src", "app"}

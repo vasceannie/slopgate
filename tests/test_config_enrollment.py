@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from vibeforcer.config import enroll_repo
+from slopgate.config import enroll_repo
 
 
 def _init_git_repo_with_worktree(tmp_path: Path) -> tuple[Path, Path]:
@@ -66,5 +66,5 @@ def test_enroll_repo_propagates_to_existing_worktrees(tmp_path: Path) -> None:
     assert set(written_roots) == {repo, worktree}, (
         f"Expected enrollment in repo and worktree, got {written_roots}"
     )
-    assert (repo / "quality_gate.toml").exists(), "Expected repo quality_gate.toml"
-    assert (worktree / "quality_gate.toml").exists(), "Expected worktree quality_gate.toml"
+    assert (repo / "slopgate.toml").exists(), "Expected repo slopgate.toml"
+    assert (worktree / "slopgate.toml").exists(), "Expected worktree slopgate.toml"

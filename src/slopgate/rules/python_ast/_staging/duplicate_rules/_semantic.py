@@ -7,20 +7,20 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
-from vibeforcer.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.lint._detectors.duplicates import (
+from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.lint._detectors.duplicates import (
     _has_skip_decorator,
     _normalize_ast,
     _skip_docstring,
     _structure_hash,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 
 from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 def _semantic_clone_groups(
     module: ast.Module,

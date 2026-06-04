@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import final
 
-from vibeforcer._types import ObjectMapping, object_dict
-from vibeforcer.models import RuntimeConfig
+from slopgate._types import ObjectMapping, object_dict
+from slopgate.models import RuntimeConfig
 
 from ._properties import HookPayloadProperties
 

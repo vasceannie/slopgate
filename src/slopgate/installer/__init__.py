@@ -1,55 +1,109 @@
-"""Platform installer — patches settings files to wire vibeforcer hooks.
+"""Platform installer — patches settings files to wire slopgate hooks.
 
 Supports:
-  vibeforcer install claude    → patches ~/.claude/settings.json
-  vibeforcer install codex     → patches ~/.codex/hooks.json
-  vibeforcer install opencode  → copies TS plugin to ~/.config/opencode/plugins/
-  vibeforcer install cursor    → patches ~/.cursor/hooks.json
+  slopgate install claude    → ~/.claude/settings.json and/or .claude/settings.json
+  slopgate install codex     → ~/.codex/hooks.json and/or .codex/hooks.json
+  slopgate install opencode  → user plugin dir and/or .opencode/plugins/
+  slopgate install cursor    → ~/.cursor/hooks.json and/or .cursor/hooks.json
+
+Use --install-scope {user,project,both} (alias: --cursor-scope) on install/uninstall.
 """
 
 from __future__ import annotations
 
-from vibeforcer.installer import _claude, _codex, _cursor, _opencode, _suite
-from vibeforcer.installer._claude import _CLAUDE_EVENTS, _claude_hooks_block
-from vibeforcer.installer._codex import (
+from pathlib import Path
+
+from slopgate.installer import _claude, _codex, _cursor, _opencode, _suite
+from slopgate.installer._claude import _CLAUDE_EVENTS, _claude_hooks_block
+from slopgate.installer._codex import (
     _CODEX_EVENTS,
     _codex_hooks_block,
     _enable_codex_hooks_toml,
 )
-from vibeforcer.installer._cursor import _CURSOR_EVENTS, _cursor_hooks_block
-from vibeforcer.installer._shared import find_binary as _find_binary
+from slopgate.installer._cursor import (
+    CURSOR_INSTALL_SCOPES,
+    _CURSOR_EVENTS,
+    _cursor_hooks_block,
+    _cursor_project_hooks_path,
+)
+from slopgate.installer._install_scope import INSTALL_SCOPES
+from slopgate.installer._shared import find_binary as _find_binary
 
 
-def _install_claude(dry_run: bool = False) -> int:
+def _install_claude(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
     _claude.find_binary = _find_binary
-    return _claude._install_claude(dry_run=dry_run)
+    return _claude._install_claude(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-_uninstall_claude = _claude._uninstall_claude
+def _uninstall_claude(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    return _claude._uninstall_claude(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-def _install_codex(dry_run: bool = False) -> int:
+def _install_codex(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
     _codex.find_binary = _find_binary
-    return _codex._install_codex(dry_run=dry_run)
+    return _codex._install_codex(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-_uninstall_codex = _codex._uninstall_codex
+def _uninstall_codex(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    return _codex._uninstall_codex(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-def _install_opencode(dry_run: bool = False) -> int:
+def _install_opencode(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
     _opencode.find_binary = _find_binary
-    return _opencode._install_opencode(dry_run=dry_run)
+    return _opencode._install_opencode(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-_uninstall_opencode = _opencode._uninstall_opencode
+def _uninstall_opencode(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    return _opencode._uninstall_opencode(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-def _install_cursor(dry_run: bool = False) -> int:
+def _install_cursor(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
     _cursor.find_binary = _find_binary
-    return _cursor._install_cursor(dry_run=dry_run)
+    return _cursor._install_cursor(dry_run=dry_run, scope=scope, project_root=project_root)
 
 
-_uninstall_cursor = _cursor._uninstall_cursor
+def _uninstall_cursor(
+    dry_run: bool = False,
+    *,
+    scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    return _cursor._uninstall_cursor(dry_run=dry_run, scope=scope, project_root=project_root)
 
 install_suite = _suite.install_suite
 SuiteInstallOptions = _suite.SuiteInstallOptions
@@ -66,20 +120,57 @@ _INSTALLERS = {
 }
 
 
-def install_platform(platform: str, dry_run: bool = False) -> int:
-    installer, _ = _INSTALLERS[platform]
-    return installer(dry_run=dry_run)
+def _resolved_project_root(project_root: Path | None) -> Path | None:
+    if project_root is None:
+        return None
+    return project_root.expanduser().resolve()
 
 
-def uninstall_platform(platform: str, dry_run: bool = False) -> int:
-    _, uninstaller = _INSTALLERS[platform]
-    return uninstaller(dry_run=dry_run)
+def install_platform(
+    platform: str,
+    dry_run: bool = False,
+    *,
+    install_scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    try:
+        installer, _ = _INSTALLERS[platform]
+        return installer(
+            dry_run=dry_run,
+            scope=install_scope,
+            project_root=_resolved_project_root(project_root),
+        )
+    except ValueError as exc:
+        print(exc)
+        return 1
+
+
+def uninstall_platform(
+    platform: str,
+    dry_run: bool = False,
+    *,
+    install_scope: str = "user",
+    project_root: Path | None = None,
+) -> int:
+    try:
+        _, uninstaller = _INSTALLERS[platform]
+        return uninstaller(
+            dry_run=dry_run,
+            scope=install_scope,
+            project_root=_resolved_project_root(project_root),
+        )
+    except ValueError as exc:
+        print(exc)
+        return 1
 
 
 __all__ = [
     "_CLAUDE_EVENTS",
     "_CODEX_EVENTS",
+    "CURSOR_INSTALL_SCOPES",
+    "INSTALL_SCOPES",
     "_CURSOR_EVENTS",
+    "_cursor_project_hooks_path",
     "_claude_hooks_block",
     "_codex_hooks_block",
     "_cursor_hooks_block",

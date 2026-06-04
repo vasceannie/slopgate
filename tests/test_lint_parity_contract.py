@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.cli.lint import cmd_lint
-from vibeforcer.lint import _collectors
-from vibeforcer.lint import _parity
-from vibeforcer.lint._collectors import (
+from slopgate.cli.lint import cmd_lint
+from slopgate.lint import _collectors
+from slopgate.lint import _parity
+from slopgate.lint._collectors import (
     run_all_collectors,
     run_test_integrity_collectors,
     run_touched_collectors,
 )
-from vibeforcer.lint._config import reset_config
+from slopgate.lint._config import reset_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +44,7 @@ def _collector_names(function_names: set[str]) -> set[str]:
 
 def _runtime_rule_ids() -> set[str]:
     ids: set[str] = set()
-    for path in (ROOT / "src" / "vibeforcer" / "rules").rglob("*.py"):
+    for path in (ROOT / "src" / "slopgate" / "rules").rglob("*.py"):
         if "_staging" in path.parts:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -67,7 +67,7 @@ def _runtime_rule_ids() -> set[str]:
                 ids.add(value.value)
 
     defaults = json.loads(
-        (ROOT / "src" / "vibeforcer" / "resources" / "defaults.json").read_text(
+        (ROOT / "src" / "slopgate" / "resources" / "defaults.json").read_text(
             encoding="utf-8"
         )
     )
@@ -100,8 +100,8 @@ def _assert_python_parse_error_report(output: str, result: int) -> None:
 
 
 def _write_parse_error_project(root: Path) -> None:
-    (root / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    (root / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     src = root / "src" / "pkg"

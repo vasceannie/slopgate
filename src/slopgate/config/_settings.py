@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.models import RegexRuleConfig, RuntimeConfig
-from vibeforcer.policy_defaults import RUNTIME_POLICY_DEFAULTS
+from slopgate.models import RegexRuleConfig, RuntimeConfig
+from slopgate.policy_defaults import RUNTIME_POLICY_DEFAULTS
 
 from ._coerce import (
     _bool_value,
@@ -104,9 +104,9 @@ class _PythonRuntimeSettings:
     import_fanout_limit: int
 
 
-def _repo_quality_gate_settings(repo_root: Path) -> _RepoQualityGateSettings:
+def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
     toml_data = _load_toml(repo_root)
-    qg_section = _object_dict(toml_data.get("quality_gate", {}))
+    qg_section = _object_dict(toml_data.get("slopgate", {}))
     return _RepoQualityGateSettings(
         thresholds=_object_dict(toml_data.get("thresholds", {})),
         enabled_rules={
@@ -246,7 +246,7 @@ def _merge_config(
     raw: dict[str, object],
     repo_root: Path,
 ) -> RuntimeConfig:
-    repo_settings = _repo_quality_gate_settings(repo_root)
+    repo_settings = _repo_slopgate_settings(repo_root)
     post_edit = _post_edit_quality_settings(raw, repo_settings)
     async_jobs = _async_job_settings(raw, repo_settings)
     python_runtime = _python_runtime_settings(raw, repo_settings)

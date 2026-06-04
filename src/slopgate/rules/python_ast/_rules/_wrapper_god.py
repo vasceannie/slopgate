@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     MAX_GOD_CLASS_LINES,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
@@ -13,15 +13,15 @@ from vibeforcer.constants import (
     METADATA_FUNCTION,
     METADATA_PATH,
 )
-from vibeforcer.lint._helpers import class_body_lines as _class_body_lines
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.lint._helpers import class_body_lines as _class_body_lines
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 from .._helpers import (
     decision_for_context,
     evaluate_common,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._module_size_projection import _python_structural_sources as _python_structural_sources
 from ._source_parse import _parsed_classes as _parsed_classes, _parsed_functions as _parsed_functions, _python_ast_rule_is_disabled as _python_ast_rule_is_disabled

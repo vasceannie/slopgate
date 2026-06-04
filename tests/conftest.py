@@ -1,4 +1,4 @@
-"""Shared fixtures for vibeforcer tests."""
+"""Shared fixtures for slopgate tests."""
 
 from __future__ import annotations
 
@@ -11,18 +11,18 @@ from typing import cast
 
 import pytest
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.engine import evaluate_payload as _evaluate_payload
-from vibeforcer.models import EngineResult
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.engine import evaluate_payload as _evaluate_payload
+from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 
 # pytest discovers fixtures by name — declare autouse fixtures as exported
 # so basedpyright's reportUnusedFunction doesn't flag them.
-__all__ = ["_vibeforcer_env"]
+__all__ = ["_slopgate_env"]
 
-# vibeforcer config lives under src/vibeforcer/resources/
-_RESOURCES = BUNDLE_ROOT / "src" / "vibeforcer" / "resources"
+# slopgate config lives under src/slopgate/resources/
+_RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
 
 
 # ---------------------------------------------------------------------------
@@ -31,18 +31,18 @@ _RESOURCES = BUNDLE_ROOT / "src" / "vibeforcer" / "resources"
 
 
 @pytest.fixture(autouse=True)
-def _vibeforcer_env(tmp_path: Path) -> Generator[None, None, None]:
-    """Set up vibeforcer env vars for every test.
+def _slopgate_env(tmp_path: Path) -> Generator[None, None, None]:
+    """Set up slopgate env vars for every test.
 
-    Points VIBEFORCER_ROOT to a tmp dir with config + logs.
-    Points VIBEFORCER_CONFIG to the bundled defaults.json.
+    Points SLOPGATE_ROOT to a tmp dir with config + logs.
+    Points SLOPGATE_CONFIG to the bundled defaults.json.
     """
-    old_root = os.environ.get("VIBEFORCER_ROOT")
-    old_config = os.environ.get("VIBEFORCER_CONFIG")
+    old_root = os.environ.get("SLOPGATE_ROOT")
+    old_config = os.environ.get("SLOPGATE_CONFIG")
     old_legacy = os.environ.get("CLAUDE_HOOK_LAYER_ROOT")
 
-    # Create a temp vibeforcer root with prompt context
-    test_root = tmp_path / "vibeforcer_root"
+    # Create a temp slopgate root with prompt context
+    test_root = tmp_path / "slopgate_root"
     test_root.mkdir(exist_ok=True)
     (test_root / "logs").mkdir(exist_ok=True)
     (test_root / "logs" / "async").mkdir(exist_ok=True)
@@ -51,16 +51,16 @@ def _vibeforcer_env(tmp_path: Path) -> Generator[None, None, None]:
     if (_RESOURCES / "prompt_context").exists():
         _ = shutil.copytree(_RESOURCES / "prompt_context", test_root / "prompt_context")
 
-    os.environ["VIBEFORCER_ROOT"] = str(test_root)
-    os.environ["VIBEFORCER_CONFIG"] = str(_RESOURCES / "defaults.json")
+    os.environ["SLOPGATE_ROOT"] = str(test_root)
+    os.environ["SLOPGATE_CONFIG"] = str(_RESOURCES / "defaults.json")
     # Clear legacy env to avoid fallback
     _ = os.environ.pop("CLAUDE_HOOK_LAYER_ROOT", None)
     _ = os.environ.pop("HOOK_LAYER_ROOT", None)
 
-    enrollment_marker = BUNDLE_ROOT / "quality_gate.toml"
+    enrollment_marker = BUNDLE_ROOT / "slopgate.toml"
     created_enrollment_marker = False
     if not enrollment_marker.exists():
-        enrollment_marker.write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+        enrollment_marker.write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
         created_enrollment_marker = True
 
     yield
@@ -70,13 +70,13 @@ def _vibeforcer_env(tmp_path: Path) -> Generator[None, None, None]:
 
     # Restore
     if old_root is None:
-        _ = os.environ.pop("VIBEFORCER_ROOT", None)
+        _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
-        os.environ["VIBEFORCER_ROOT"] = old_root
+        os.environ["SLOPGATE_ROOT"] = old_root
     if old_config is None:
-        _ = os.environ.pop("VIBEFORCER_CONFIG", None)
+        _ = os.environ.pop("SLOPGATE_CONFIG", None)
     else:
-        os.environ["VIBEFORCER_CONFIG"] = old_config
+        os.environ["SLOPGATE_CONFIG"] = old_config
     if old_legacy is not None:
         os.environ["CLAUDE_HOOK_LAYER_ROOT"] = old_legacy
 
@@ -114,13 +114,13 @@ def evaluate() -> Callable[[ObjectDict], EngineResult]:
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Generator[Path, None, None]:
-    """Create a temp directory with vibeforcer config."""
+    """Create a temp directory with slopgate config."""
     project_dir = tmp_path / "project"
     project_dir.mkdir(exist_ok=True)
     (project_dir / "logs").mkdir(exist_ok=True)
     (project_dir / "logs" / "async").mkdir(exist_ok=True)
-    _ = (project_dir / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (project_dir / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
 
     # Copy prompt context
@@ -129,21 +129,21 @@ def tmp_project(tmp_path: Path) -> Generator[Path, None, None]:
             _RESOURCES / "prompt_context", project_dir / "prompt_context"
         )
 
-    old_root = os.environ.get("VIBEFORCER_ROOT")
-    old_config = os.environ.get("VIBEFORCER_CONFIG")
-    os.environ["VIBEFORCER_ROOT"] = str(project_dir)
-    os.environ["VIBEFORCER_CONFIG"] = str(_RESOURCES / "defaults.json")
+    old_root = os.environ.get("SLOPGATE_ROOT")
+    old_config = os.environ.get("SLOPGATE_CONFIG")
+    os.environ["SLOPGATE_ROOT"] = str(project_dir)
+    os.environ["SLOPGATE_CONFIG"] = str(_RESOURCES / "defaults.json")
 
     yield project_dir
 
     if old_root is None:
-        _ = os.environ.pop("VIBEFORCER_ROOT", None)
+        _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
-        os.environ["VIBEFORCER_ROOT"] = old_root
+        os.environ["SLOPGATE_ROOT"] = old_root
     if old_config is None:
-        _ = os.environ.pop("VIBEFORCER_CONFIG", None)
+        _ = os.environ.pop("SLOPGATE_CONFIG", None)
     else:
-        os.environ["VIBEFORCER_CONFIG"] = old_config
+        os.environ["SLOPGATE_CONFIG"] = old_config
 
 
 @pytest.fixture
@@ -156,17 +156,17 @@ def langgraph_project(tmp_path: Path) -> Generator[Path, None, None]:
     (tmp_path / "src").mkdir(exist_ok=True)
     (tmp_path / "logs").mkdir(exist_ok=True)
     (tmp_path / "logs" / "async").mkdir(exist_ok=True)
-    _ = (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
 
-    old_root = os.environ.get("VIBEFORCER_ROOT")
-    os.environ["VIBEFORCER_ROOT"] = str(tmp_path)
+    old_root = os.environ.get("SLOPGATE_ROOT")
+    os.environ["SLOPGATE_ROOT"] = str(tmp_path)
     yield tmp_path
     if old_root is None:
-        _ = os.environ.pop("VIBEFORCER_ROOT", None)
+        _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
-        os.environ["VIBEFORCER_ROOT"] = old_root
+        os.environ["SLOPGATE_ROOT"] = old_root
 
 
 # ---------------------------------------------------------------------------

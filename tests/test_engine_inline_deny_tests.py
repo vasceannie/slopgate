@@ -14,7 +14,7 @@ from tests.test_engine import (
     evaluate_payload,
     finding_ids,
     _write_config_from_defaults,
-    _write_quality_gate,
+    _write_slopgate,
     _keep_default_config,
 )
 
@@ -133,11 +133,11 @@ class TestInlinePayloadDenies:
         result = evaluate_payload(
             pretool_bash(
                 "cd /home/trav\n"
-                "echo '===== vibeforcer config tree ====='\n"
-                "find ~/.config/vibeforcer -maxdepth 2 -type f 2>/dev/null | head -40\n"
+                "echo '===== slopgate config tree ====='\n"
+                "find ~/.config/slopgate -maxdepth 2 -type f 2>/dev/null | head -40\n"
                 "echo ''\n"
                 "echo '===== grep PY-LOG-002 across config + rules ====='\n"
-                "rg -l 'PY-LOG-002|boundary' ~/.config/vibeforcer ~/.claude/rules "
+                "rg -l 'PY-LOG-002|boundary' ~/.config/slopgate ~/.claude/rules "
                 "~/.claude/subagent-rules 2>/dev/null | head -20"
             )
         )
@@ -162,8 +162,8 @@ class TestInlinePayloadDenies:
 
 
 def test_powershell_git_no_verify_denied(tmp_path: Path) -> None:
-    _ = (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     payload = {
@@ -209,8 +209,8 @@ def test_powershell_windows_system_path_denied(tmp_path: Path) -> None:
 def test_powershell_path_commands_are_evaluated_through_rules(
     tmp_path: Path, command: str, rule_id: str
 ) -> None:
-    _ = (tmp_path / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     payload = {

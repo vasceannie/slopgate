@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any, cast
 import pytest
 from pytest import MonkeyPatch
-from vibeforcer._types import ObjectDict, object_dict
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import EngineResult
-from vibeforcer.util.payloads import shell_command_paths
+from slopgate._types import ObjectDict, object_dict
+from slopgate.engine import evaluate_payload
+from slopgate.models import EngineResult
+from slopgate.util.payloads import shell_command_paths
 from tests.support import (
     BUNDLE_ROOT,
     LoadFixture,
@@ -52,12 +52,12 @@ def _fixture_output(
 def _disabled_rule_findings(
     load_fixture: LoadFixture, fixture_name: str, rule_id: str
 ) -> list[object]:
-    from vibeforcer.config import load_config
-    from vibeforcer.context import HookContext
-    from vibeforcer.rules import build_rules
-    from vibeforcer.state import HookStateStore
-    from vibeforcer.trace import TraceWriter
-    from vibeforcer.util.payloads import HookPayload
+    from slopgate.config import load_config
+    from slopgate.context import HookContext
+    from slopgate.rules import build_rules
+    from slopgate.state import HookStateStore
+    from slopgate.trace import TraceWriter
+    from slopgate.util.payloads import HookPayload
     payload = load_fixture(fixture_name)
     config = load_config()
     config.enabled_rules[rule_id] = False
@@ -74,38 +74,38 @@ def _disabled_rule_findings(
     finally:
         config.enabled_rules[rule_id] = True
 def _rule_build_context(load_fixture: LoadFixture) -> tuple[Any, object]:
-    from vibeforcer.config import load_config
-    from vibeforcer.context import HookContext
-    import vibeforcer.rules as rules_mod
-    from vibeforcer.state import HookStateStore
-    from vibeforcer.trace import TraceWriter
-    from vibeforcer.util.payloads import HookPayload
+    from slopgate.config import load_config
+    from slopgate.context import HookContext
+    import slopgate.rules as rules_mod
+    from slopgate.state import HookStateStore
+    from slopgate.trace import TraceWriter
+    from slopgate.util.payloads import HookPayload
     config = load_config()
     trace = TraceWriter(config.trace_dir)
     state = HookStateStore(config.trace_dir)
     payload = HookPayload(load_fixture("pretool_git_no_verify.json"), config)
     ctx = HookContext(payload=payload, config=config, trace=trace, state=state)
     return rules_mod, ctx
-def _write_quality_gate(
-    repo: Path, content: str = "[quality_gate]\nenabled = true\n"
+def _write_slopgate(
+    repo: Path, content: str = "[slopgate]\nenabled = true\n"
 ) -> Path:
     repo.mkdir(parents=True, exist_ok=True)
-    _ = (repo / "quality_gate.toml").write_text(content, encoding="utf-8")
+    _ = (repo / "slopgate.toml").write_text(content, encoding="utf-8")
     return repo
 def _assert_worktree_marker_copied(repo: Path, worktree_marker: Path) -> None:
     assert worktree_marker.exists()
-    assert worktree_marker.read_text(encoding="utf-8") == (repo / "quality_gate.toml").read_text(
+    assert worktree_marker.read_text(encoding="utf-8") == (repo / "slopgate.toml").read_text(
         encoding="utf-8"
     )
 def _write_config_from_defaults(
     tmp_path: Path, monkeypatch: MonkeyPatch, mutate: Callable[[dict[str, Any]], None]
 ) -> Path:
-    defaults_path = BUNDLE_ROOT / "src" / "vibeforcer" / "resources" / "defaults.json"
+    defaults_path = BUNDLE_ROOT / "src" / "slopgate" / "resources" / "defaults.json"
     defaults = json.loads(defaults_path.read_text(encoding="utf-8"))
     mutate(defaults)
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps(defaults), encoding="utf-8")
-    monkeypatch.setenv("VIBEFORCER_CONFIG", str(cfg))
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(cfg))
     return cfg
 def _enable_failing_post_edit_quality_command(defaults: dict[str, Any]) -> None:
     defaults["post_edit_quality"]["enabled"] = True
@@ -138,9 +138,9 @@ def _post_edit_bash_payload(cwd: Path, command: str = "echo 'print(1)' > app.py"
 def _evaluate_post_edit_bash(cwd: Path, command: str = "echo 'print(1)' > app.py") -> EngineResult:
     return evaluate_payload(_post_edit_bash_payload(cwd, command))
 def _strict_rule_id_sets(repo: Path) -> tuple[set[str], set[str]]:
-    from vibeforcer.adapters import get_adapter
-    from vibeforcer.context import build_context
-    from vibeforcer.rules import build_always_on_rules, build_repo_strict_rules
+    from slopgate.adapters import get_adapter
+    from slopgate.context import build_context
+    from slopgate.rules import build_always_on_rules, build_repo_strict_rules
     ctx = build_context(
         get_adapter("claude").normalize_payload(
             _pretool_write_payload(repo, "src/app.py", "from typing import Any\n")
@@ -155,8 +155,8 @@ def _repo_with_moved_parse_error(tmp_path: Path) -> Path:
     source_dir = repo / "src" / "pkg"
     target_dir = source_dir / "moved"
     target_dir.mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     old_path = source_dir / "worker.py"
@@ -211,8 +211,8 @@ def _init_git_worktree(tmp_path: Path) -> tuple[Path, Path]:
     repo = tmp_path / "repo"
     worktree = tmp_path / "repo-worktree"
     repo.mkdir()
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
     _ = subprocess.run(
         ["git", "init", "-b", "main"],
@@ -258,11 +258,11 @@ def _init_git_worktree(tmp_path: Path) -> tuple[Path, Path]:
         text=True,
     )
     return repo, worktree
-def _fake_non_default_vibeforcer_git_output(
+def _fake_non_default_slopgate_git_output(
     args: list[str], cwd: Path | None = None, timeout: int = 3
 ) -> str | None:
     if args[-3:] == ["remote", "get-url", "origin"]:
-        return "https://lab.baked.rocks/claude/vibeforcer.git"
+        return "https://lab.baked.rocks/claude/slopgate.git"
     if args[-2:] == ["branch", "--show-current"]:
         return "feature/worktree-support"
     if args[-2:] == ["symbolic-ref", "refs/remotes/origin/HEAD"]:
@@ -313,11 +313,11 @@ def _evaluate_pretool_write(cwd: Path, file_path: str, content: str = "x") -> En
     return evaluate_payload(_pretool_write_payload(cwd, file_path, content))
 def _evaluate_pretool_bash(cwd: Path, command: str) -> EngineResult:
     return evaluate_payload(_pretool_bash_payload(cwd, command))
-def _fake_vibeforcer_worktree_git_output(
+def _fake_slopgate_worktree_git_output(
     args: list[str], cwd: Path | None = None, timeout: int = 3
 ) -> str | None:
     if args[-3:] == ["remote", "get-url", "origin"]:
-        return "https://lab.baked.rocks/claude/vibeforcer.git"
+        return "https://lab.baked.rocks/claude/slopgate.git"
     if args[-2:] == ["branch", "--show-current"]:
         return "feature/worktree-support"
     if args[-2:] == ["symbolic-ref", "refs/remotes/origin/HEAD"]:
@@ -340,4 +340,4 @@ def _pretool_delete_payload(cwd: Path, file_path: str) -> ObjectDict:
         "tool_input": {"file_path": file_path},
     }
 # Exported test support used by split test modules.
-__all__ = ('Any', 'BUNDLE_ROOT', 'BashBuilder', 'Callable', 'EVENTS_NO_HOOK_SPECIFIC', 'EngineResult', 'EvaluateFn', 'FIXTURE_FILE_NAMES', 'LoadFixture', 'MonkeyPatch', 'ObjectDict', 'Path', 'VALID_TOP_LEVEL_KEYS', 'VIRTUALENV_PARSE_SKIP_PATHS', 'WriteBuilder', '_assert_bash_negative_case', '_assert_worktree_marker_copied', '_assert_write_negative_case', '_disable_default_post_edit_quality', '_disabled_rule_findings', '_enable_failing_post_edit_quality_command', '_evaluate_post_edit_bash', '_evaluate_pretool_bash', '_evaluate_pretool_write', '_fake_non_default_vibeforcer_git_output', '_fake_vibeforcer_worktree_git_output', '_fixture_output', '_init_git_worktree', '_is_not_denied', '_keep_default_config', '_latest_trace_event', '_post_edit_bash_payload', '_pretool_bash_payload', '_pretool_delete_payload', '_pretool_write_payload', '_repo_with_moved_parse_error', '_rule_build_context', '_set_skip_paths', '_strict_rule_id_sets', '_write_config_from_defaults', '_write_quality_gate', '_write_skip_paths_config', 'assert_blocked', 'assert_denied_by', 'assert_not_denied', 'cast', 'evaluate_payload', 'finding_ids', 'hook_output', 'json', 'nested_output', 'object_dict', 'output_string', 'pytest', 're', 'require_output', 'required_string', 'shell_command_paths', 'subprocess')
+__all__ = ('Any', 'BUNDLE_ROOT', 'BashBuilder', 'Callable', 'EVENTS_NO_HOOK_SPECIFIC', 'EngineResult', 'EvaluateFn', 'FIXTURE_FILE_NAMES', 'LoadFixture', 'MonkeyPatch', 'ObjectDict', 'Path', 'VALID_TOP_LEVEL_KEYS', 'VIRTUALENV_PARSE_SKIP_PATHS', 'WriteBuilder', '_assert_bash_negative_case', '_assert_worktree_marker_copied', '_assert_write_negative_case', '_disable_default_post_edit_quality', '_disabled_rule_findings', '_enable_failing_post_edit_quality_command', '_evaluate_post_edit_bash', '_evaluate_pretool_bash', '_evaluate_pretool_write', '_fake_non_default_slopgate_git_output', '_fake_slopgate_worktree_git_output', '_fixture_output', '_init_git_worktree', '_is_not_denied', '_keep_default_config', '_latest_trace_event', '_post_edit_bash_payload', '_pretool_bash_payload', '_pretool_delete_payload', '_pretool_write_payload', '_repo_with_moved_parse_error', '_rule_build_context', '_set_skip_paths', '_strict_rule_id_sets', '_write_config_from_defaults', '_write_slopgate', '_write_skip_paths_config', 'assert_blocked', 'assert_denied_by', 'assert_not_denied', 'cast', 'evaluate_payload', 'finding_ids', 'hook_output', 'json', 'nested_output', 'object_dict', 'output_string', 'pytest', 're', 'require_output', 'required_string', 'shell_command_paths', 'subprocess')

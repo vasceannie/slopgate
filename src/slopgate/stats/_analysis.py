@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from vibeforcer._types import ObjectDict, object_dict, object_list, string_value
-from vibeforcer.constants import METADATA_PATH
+from slopgate._types import ObjectDict, object_dict, object_list, string_value
+from slopgate.constants import METADATA_PATH
 
 @dataclass
 class _Counters:

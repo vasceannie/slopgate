@@ -25,7 +25,7 @@
   "errors": {},
   "expected_contract": {
     "claude": {
-      "blocking_notes": "Richest direct hook surface; this is Vibeforcer's installed subset, not the full official Claude event surface.",
+      "blocking_notes": "Richest direct hook surface; this is Slopgate's installed subset, not the full official Claude event surface.",
       "canonical_events": [
         "SessionStart",
         "CwdChanged",
@@ -35,6 +35,7 @@
         "PostToolUse",
         "PostToolUseFailure",
         "Stop",
+        "SubagentStart",
         "SubagentStop",
         "TaskCompleted",
         "TeammateIdle",
@@ -50,6 +51,7 @@
         "PostToolUse",
         "PostToolUseFailure",
         "Stop",
+        "SubagentStart",
         "SubagentStop",
         "TaskCompleted",
         "TeammateIdle",
@@ -102,7 +104,7 @@
       "extraction_method": "claude-hooks-table",
       "installed_source": {
         "load_method": "ast-literal",
-        "path": "src/vibeforcer/installer/_claude.py",
+        "path": "src/slopgate/installer/_claude.py",
         "symbol": "_CLAUDE_EVENTS"
       },
       "intentionally_not_installed_events": [
@@ -117,13 +119,12 @@
         "SessionEnd",
         "Setup",
         "StopFailure",
-        "SubagentStart",
         "TaskCreated",
         "UserPromptExpansion",
         "WorktreeCreate",
         "WorktreeRemove"
       ],
-      "notes": "Vibeforcer installs a deliberate Claude subset while preserving unknown/non-owned hook events during merge/uninstall.",
+      "notes": "Slopgate installs a deliberate Claude subset while preserving unknown/non-owned hook events during merge/uninstall.",
       "official_events": [
         "ConfigChange",
         "CwdChanged",
@@ -157,7 +158,7 @@
       ],
       "source_id": "claude_hooks",
       "unknown_official_events": [],
-      "vibeforcer_installed_events": [
+      "slopgate_installed_events": [
         "SessionStart",
         "CwdChanged",
         "UserPromptSubmit",
@@ -166,6 +167,7 @@
         "PostToolUse",
         "PostToolUseFailure",
         "Stop",
+        "SubagentStart",
         "SubagentStop",
         "TaskCompleted",
         "TeammateIdle",

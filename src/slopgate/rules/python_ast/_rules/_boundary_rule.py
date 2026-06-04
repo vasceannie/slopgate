@@ -4,22 +4,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
     METADATA_FUNCTION,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 from .._helpers import (
     decision_for_context,
     evaluate_common,
     parse_module,
 )
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 from ._boundary_helpers import _BoundaryFunction as _BoundaryFunction, _boundary_kind_for_function as _boundary_kind_for_function, _has_boundary_log_call as _has_boundary_log_call, _is_test_module_path as _is_test_module_path, _iter_public_boundary_functions as _iter_public_boundary_functions
 

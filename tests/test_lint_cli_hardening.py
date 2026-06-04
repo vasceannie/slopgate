@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.cli.lint import _tally_rule, cmd_lint
-from vibeforcer.lint._baseline import Violation, assert_no_new_violations
-from vibeforcer.lint._config import reset_config
-from vibeforcer.lint._details import format_violation_details
+from slopgate.cli.lint import _tally_rule, cmd_lint
+from slopgate.lint._baseline import Violation, assert_no_new_violations
+from slopgate.lint._config import reset_config
+from slopgate.lint._details import format_violation_details
 
 
 def _write_clean_project(root: Path) -> Path:
-    (root / "quality_gate.toml").write_text("[quality_gate]\nenabled = true\n", encoding="utf-8")
+    (root / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
     src_pkg = root / "src" / "pkg"
     src_pkg.mkdir(parents=True)
     (src_pkg / "clean.py").write_text(
@@ -81,8 +81,8 @@ def _assert_type_suppression_detail_block(block: str) -> None:
 
 
 def _write_lint_project_with_file(root: Path, rel_path: str, content: str) -> None:
-    (root / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    (root / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     target = root / rel_path

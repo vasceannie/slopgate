@@ -9,14 +9,14 @@ from pathlib import Path
 
 from tests import support
 from tests.support import BUNDLE_ROOT, finding_ids
-from vibeforcer.config import load_config
-from vibeforcer.context import HookContext
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.models import RegexRuleConfig
-from vibeforcer.rules.regex_rule import RegexHit, RegexRule
-from vibeforcer.state import HookStateStore
-from vibeforcer.trace import TraceWriter
-from vibeforcer.util.payloads import HookPayload
+from slopgate.config import load_config
+from slopgate.context import HookContext
+from slopgate.engine import evaluate_payload
+from slopgate.models import RegexRuleConfig
+from slopgate.rules.regex_rule import RegexHit, RegexRule
+from slopgate.state import HookStateStore
+from slopgate.trace import TraceWriter
+from slopgate.util.payloads import HookPayload
 
 
 def bash_payload(command: str) -> dict[str, object]:
@@ -31,7 +31,7 @@ def bash_payload(command: str) -> dict[str, object]:
 
 def regex_context(tmp_path: Path, payload: dict[str, object]) -> HookContext:
     config = load_config(tmp_path, ensure_enrollment=False, ensure_trace=False)
-    trace = TraceWriter(tmp_path / ".vibeforcer" / "trace")
+    trace = TraceWriter(tmp_path / ".slopgate" / "trace")
     return HookContext(
         payload=HookPayload(payload, config),
         config=config,
@@ -261,7 +261,7 @@ class TestPathTarget:
             part for part in [qa_finding.message, qa_finding.additional_context] if part
         )
 
-        assert "src/vibeforcer" in combined
+        assert "src/slopgate" in combined
         assert "tests/quality/baselines.json" in combined
         assert "python -m pytest -q tests/quality" in combined
 

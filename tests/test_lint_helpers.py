@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 
-from vibeforcer.lint._helpers import class_body_lines, function_body_lines
+from slopgate.lint._helpers import class_body_lines, function_body_lines
 
 
 def _module(source: str) -> ast.Module:

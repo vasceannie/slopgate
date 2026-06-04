@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
+from slopgate.engine import evaluate_payload
+from slopgate.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
 from tests.support import BUNDLE_ROOT, finding_ids, hook_output, required_string
 
 
@@ -73,7 +73,7 @@ class TestBashOutputError:
 
     def test_quality_lint_tail_output_gets_full_lint_guidance(self) -> None:
         payload = self._post_bash(
-            "cd /home/trav/repos/job-hunter && vibeforcer lint check 2>&1 | tail -8",
+            "cd /home/trav/repos/job-hunter && slopgate lint check 2>&1 | tail -8",
             """
 ✗ untested-production-code src/tui/views/dashboard.py: on_mount has no focused coverage
 ✗ PY-LOG-002 src/tui/views/dashboard.py: boundary lifecycle method lacks logging
@@ -86,7 +86,7 @@ Found 2 error-like quality findings.
         expected_fragments = (
             "ERRORS-BASH-001",
             "quality-command output",
-            "vibeforcer lint check --details",
+            "slopgate lint check --details",
             "tail-only",
         )
         missing = [fragment for fragment in expected_fragments if fragment not in message]
@@ -106,7 +106,7 @@ Found 1 error-like quality finding.
 
         expected = (
             "quality-command output",
-            "vibeforcer lint check --details",
+            "slopgate lint check --details",
             "tail-only",
         )
         missing: list[str] = [fragment for fragment in expected if fragment not in message]

@@ -11,7 +11,7 @@ from tests.test_engine import (
     output_string,
     pytest,
 )
-from vibeforcer.models import RuleFinding
+from slopgate.models import RuleFinding
 
 @pytest.mark.parametrize(
     "code, should_deny",

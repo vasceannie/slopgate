@@ -3,8 +3,8 @@ from __future__ import annotations
 from functools import cached_property
 from pathlib import Path
 
-from vibeforcer._types import ObjectDict, object_dict
-from vibeforcer.models import ContentTarget, RuntimeConfig
+from slopgate._types import ObjectDict, object_dict
+from slopgate.models import ContentTarget, RuntimeConfig
 
 from ._basic import detect_language, first_present, shell_kind_for_tool
 from ._shell import shell_command_paths

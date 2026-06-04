@@ -5,7 +5,7 @@ from tests.test_engine import (
     MonkeyPatch,
     Path,
     WriteBuilder,
-    _fake_vibeforcer_worktree_git_output,
+    _fake_slopgate_worktree_git_output,
     _init_git_worktree,
     assert_denied_by,
     assert_not_denied,
@@ -129,7 +129,7 @@ class TestConfigProtection:
         assert "CONFIG-003" not in finding_ids(result)
 
 class TestHookInfraWorktreeException:
-    def test_worktree_exception_requires_vibeforcer_repo_and_non_default_branch(
+    def test_worktree_exception_requires_slopgate_repo_and_non_default_branch(
         self, tmp_path: Path, pretool_write: WriteBuilder, monkeypatch: MonkeyPatch
     ) -> None:
         repo, worktree = _init_git_worktree(tmp_path)
@@ -138,7 +138,7 @@ class TestHookInfraWorktreeException:
             args: list[str], cwd: Path | None = None, timeout: int = 3
         ) -> str | None:
             if args[-3:] == ["remote", "get-url", "origin"]:
-                return "https://lab.baked.rocks/claude/vibeforcer.git"
+                return "https://lab.baked.rocks/claude/slopgate.git"
             result = subprocess.run(
                 args,
                 cwd=str(cwd) if cwd is not None else None,
@@ -150,7 +150,7 @@ class TestHookInfraWorktreeException:
             return result.stdout.strip() or None
 
         monkeypatch.setattr(
-            "vibeforcer.rules.stop_rules._git_output",
+            "slopgate.rules.stop_rules._git_output",
             fake_git_output,
         )
 
@@ -169,8 +169,8 @@ class TestHookInfraWorktreeException:
     ) -> None:
         _repo, worktree = _init_git_worktree(tmp_path)
         monkeypatch.setattr(
-            "vibeforcer.rules.stop_rules._git_output",
-            _fake_vibeforcer_worktree_git_output,
+            "slopgate.rules.stop_rules._git_output",
+            _fake_slopgate_worktree_git_output,
         )
 
         result = evaluate_payload(
@@ -185,7 +185,7 @@ class TestHookInfraWorktreeException:
             "worktree hook exceptions should not apply on non-default branches"
         )
 
-    def test_worktree_exception_denied_for_non_vibeforcer_repo(
+    def test_worktree_exception_denied_for_non_slopgate_repo(
         self, tmp_path: Path, pretool_write: WriteBuilder
     ) -> None:
         _repo, worktree = _init_git_worktree(tmp_path)
@@ -199,7 +199,7 @@ class TestHookInfraWorktreeException:
         )
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result), (
-            "worktree hook exceptions should not apply to non-vibeforcer repos"
+            "worktree hook exceptions should not apply to non-slopgate repos"
         )
 
 @pytest.mark.parametrize(

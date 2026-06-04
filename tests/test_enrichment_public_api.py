@@ -5,25 +5,25 @@ from tempfile import TemporaryDirectory
 
 from hypothesis import given, strategies
 
-from vibeforcer.config import load_config
-from vibeforcer.context import HookContext
-from vibeforcer.enrichment.code_enrichers import (
+from slopgate.config import load_config
+from slopgate.context import HookContext
+from slopgate.enrichment.code_enrichers import (
     enrich_cyclomatic_complexity,
     enrich_feature_envy,
     enrich_long_method,
     enrich_long_params,
     enrich_thin_wrapper,
 )
-from vibeforcer.enrichment.logger_enrichers import enrich_stdlib_logger
-from vibeforcer.enrichment.silent_except import enrich_silent_except
-from vibeforcer.enrichment.type_enrichers import (
+from slopgate.enrichment.logger_enrichers import enrich_stdlib_logger
+from slopgate.enrichment.silent_except import enrich_silent_except
+from slopgate.enrichment.type_enrichers import (
     enrich_python_any,
     enrich_type_suppression,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.state import HookStateStore
-from vibeforcer.trace import TraceWriter
-from vibeforcer.util.payloads import HookPayload
+from slopgate.models import RuleFinding, Severity
+from slopgate.state import HookStateStore
+from slopgate.trace import TraceWriter
+from slopgate.util.payloads import HookPayload
 
 
 SAMPLE_CODE = """
@@ -82,7 +82,7 @@ def context_for_source(tmp_path: Path, source: str, path: str = "sample.py") -> 
         {"tool_input": {"file_path": path, "content": source}},
         config,
     )
-    trace = TraceWriter(tmp_path / ".vibeforcer" / "trace")
+    trace = TraceWriter(tmp_path / ".slopgate" / "trace")
     return HookContext(
         payload=payload,
         config=config,

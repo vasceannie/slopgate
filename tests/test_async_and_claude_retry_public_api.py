@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from hypothesis import assume, given, strategies
 
-from vibeforcer.async_jobs import run_async_jobs
-from vibeforcer.cli._claude_retry import claude_team_event_feedback
-from vibeforcer.models import EngineResult, RuleFinding, Severity
+from slopgate.async_jobs import run_async_jobs
+from slopgate.cli._claude_retry import claude_team_event_feedback
+from slopgate.models import EngineResult, RuleFinding, Severity
 
 
 def test_run_async_jobs_noops_outside_post_tool_use() -> None:

@@ -8,21 +8,21 @@ from unittest.mock import patch
 
 from hypothesis import given, strategies
 
-from vibeforcer.config._repo import enroll_repo
-from vibeforcer.enrichment.fixtures import discover_fixtures, find_parametrize_examples
-from vibeforcer.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
-from vibeforcer.rules.common._shell_read import is_safe_read_shell_command
-from vibeforcer.search import runtime
-from vibeforcer.search.runtime import (
+from slopgate.config._repo import enroll_repo
+from slopgate.enrichment.fixtures import discover_fixtures, find_parametrize_examples
+from slopgate.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
+from slopgate.rules.common._shell_read import is_safe_read_shell_command
+from slopgate.search import runtime
+from slopgate.search.runtime import (
     choose_litellm_model,
     embedding_like,
     fetch_models,
     fetch_runtime_models,
     runtime_env,
 )
-from vibeforcer.util.payloads._basic import is_edit_like_tool
-from vibeforcer.util.payloads._shell import shell_command_paths
-from vibeforcer.util.platform import normalize_path_for_match, resolve_path_for_match
+from slopgate.util.payloads._basic import is_edit_like_tool
+from slopgate.util.payloads._shell import shell_command_paths
+from slopgate.util.platform import normalize_path_for_match, resolve_path_for_match
 
 _SHORT_TEXT = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 _/-.",
@@ -68,7 +68,7 @@ def test_fetch_models_is_callable_property(_: None) -> None:
 
 @given(strategies.just(None))
 def test_fetch_runtime_models_uses_configured_api_key_property(_: None) -> None:
-    from vibeforcer.search.config import SearchConfig
+    from slopgate.search.config import SearchConfig
 
     with patch.dict(os.environ, {"RUNTIME_TEST_KEY": "test-secret"}):
         with patch.object(
@@ -84,7 +84,7 @@ def test_fetch_runtime_models_uses_configured_api_key_property(_: None) -> None:
 
 @given(strategies.just(None))
 def test_runtime_env_merges_api_key_from_configured_env_var_property(_: None) -> None:
-    from vibeforcer.search.config import SearchConfig
+    from slopgate.search.config import SearchConfig
 
     with patch.dict(os.environ, {"RUNTIME_ENV_TEST_KEY": "from-env"}):
         cfg = SearchConfig(

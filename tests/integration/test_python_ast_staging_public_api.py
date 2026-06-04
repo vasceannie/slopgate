@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.integration.test_python_ast_rule_public_api import context_with_limits
-from vibeforcer.rules.python_ast._staging import test_audit
-from vibeforcer.rules.python_ast._staging.duplicate_rules import (
+from slopgate.rules.python_ast._staging import test_audit
+from slopgate.rules.python_ast._staging.duplicate_rules import (
     PythonDuplicateCallSequenceRule,
     PythonRepeatedBlocksRule,
     PythonRepeatedMagicNumberRule,
     PythonSemanticCloneRule,
 )
-from vibeforcer.rules.python_ast._staging.test_smell_rules import (
+from slopgate.rules.python_ast._staging.test_smell_rules import (
     PythonAssertionRouletteRule,
     PythonConditionalAssertionRule,
     PythonEagerTestRule,

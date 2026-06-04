@@ -25,7 +25,7 @@ class TestCodexAdapterBasic:
             "model": "gpt-5.4",
         }
         canonical = adapter.normalize_payload(raw)
-        assert canonical is raw  # Codex format is already canonical
+        assert canonical == raw
 
     def test_pretool_deny(self) -> None:
         adapter = CodexAdapter()

@@ -1,4 +1,4 @@
-[quality_gate]
+[slopgate]
 enabled = true
 
 [post_edit_quality]

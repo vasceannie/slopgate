@@ -3,22 +3,22 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeforcer.enrichment._helpers import append_enrichment_message, resolve_path
-from vibeforcer.enrichment.fixtures import discover_fixtures, find_parametrize_examples
-from vibeforcer.adapters.base import render_request_from_call
-from vibeforcer.context import build_context
-from vibeforcer.engine._render import render_output
-from vibeforcer.installer._shared import (
-    command_is_vibeforcer_hook,
+from slopgate.enrichment._helpers import append_enrichment_message, resolve_path
+from slopgate.enrichment.fixtures import discover_fixtures, find_parametrize_examples
+from slopgate.adapters.base import render_request_from_call
+from slopgate.context import build_context
+from slopgate.engine._render import render_output
+from slopgate.installer._shared import (
+    command_is_slopgate_hook,
     filter_owned_hook_commands,
     hook_command,
     merge_owned_hooks,
     remove_owned_hooks,
     shell_command,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.common._shell_read import command_has_word, is_safe_read_shell_command
-from vibeforcer.rules.python_ast._helpers import parse_module
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.common._shell_read import command_has_word, is_safe_read_shell_command
+from slopgate.rules.python_ast._helpers import parse_module
 
 
 def test_python_ast_parse_pipeline_respects_size_and_syntax_bounds() -> None:
@@ -52,17 +52,17 @@ def test_enrichment_pipeline_appends_messages_and_resolves_paths(tmp_path: Path)
 
 def test_installer_command_pipeline_quotes_posix_and_powershell_commands() -> None:
     assert {
-        "posix": shell_command(["/tmp/Vibeforcer Bin/vibeforcer", "handle"]),
+        "posix": shell_command(["/tmp/Slopgate Bin/slopgate", "handle"]),
         "windows": "powershell.exe" in shell_command(["C:/Program Files/vf.exe", "handle"], windows=True),
     } == {
-        "posix": "'/tmp/Vibeforcer Bin/vibeforcer' handle",
+        "posix": "'/tmp/Slopgate Bin/slopgate' handle",
         "windows": True,
     }
 
 
 def test_shell_read_pipeline_detects_standalone_command_words() -> None:
     assert {
-        "rg_token": command_has_word("rg needle src/vibeforcer", "rg"),
+        "rg_token": command_has_word("rg needle src/slopgate", "rg"),
         "substring_not_token": command_has_word("target --help", "tar"),
         "safe_null_redirect": is_safe_read_shell_command("rg needle src 2>/dev/null"),
         "unsafe_redirect": is_safe_read_shell_command("rg needle src > report.txt"),
@@ -74,8 +74,8 @@ def test_shell_read_pipeline_detects_standalone_command_words() -> None:
     }
 
 
-def test_installer_hook_pipeline_filters_only_vibeforcer_owned_commands() -> None:
-    owned = {"command": hook_command("vibeforcer", "handle", "--platform", "claude")}
+def test_installer_hook_pipeline_filters_only_slopgate_owned_commands() -> None:
+    owned = {"command": hook_command("slopgate", "handle", "--platform", "claude")}
     external = {"command": "echo keep-me"}
     entry = {"matcher": "Write", "hooks": [owned, external]}
     managed = {"PreToolUse": [{"matcher": "Write", "hooks": [owned]}]}
@@ -85,7 +85,7 @@ def test_installer_hook_pipeline_filters_only_vibeforcer_owned_commands() -> Non
     removed = remove_owned_hooks({"PreToolUse": [entry]})
 
     assert {
-        "owned": command_is_vibeforcer_hook(owned["command"]),
+        "owned": command_is_slopgate_hook(owned["command"]),
         "filtered": filtered,
         "merged_hooks": merged["PreToolUse"],
         "removed": removed,

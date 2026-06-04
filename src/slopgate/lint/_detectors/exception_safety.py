@@ -13,9 +13,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._baseline import Violation
+from slopgate.lint._config import get_config
+from slopgate.lint._helpers import (
     ParsedFile,
     enclosing_function,
     ensure_parsed,

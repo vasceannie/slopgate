@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, cast
 
 from typing_extensions import override
 
-from vibeforcer._types import object_dict, object_list
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.util.payloads import path_matches_glob
+from slopgate._types import object_dict, object_list
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.payloads import path_matches_glob
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 def _extract_rules_dict(raw: object) -> dict[str, list[str]]:
@@ -84,14 +84,14 @@ def _is_repo_wide_baseline_command(command: str) -> bool:
             continue
         if name == "quality-gate" and tokens[idx + 1 : idx + 2] == ["baseline"]:
             return True
-        if name in {"vibeforcer", "vfc"} and tokens[idx + 1 : idx + 3] == [
+        if name in {"slopgate", "vfc"} and tokens[idx + 1 : idx + 3] == [
             "lint",
             "baseline",
         ]:
             return True
         if name.startswith("python") and tokens[idx + 1 : idx + 5] == [
             "-m",
-            "vibeforcer",
+            "slopgate",
             "lint",
             "baseline",
         ]:
@@ -136,7 +136,7 @@ class BaselineGuardRule(Rule):
                     decision="deny",
                     message=(
                         "Running repo-wide baseline generation is blocked. "
-                        "`quality-gate baseline`, `vibeforcer lint baseline`, and `vfc lint baseline` "
+                        "`quality-gate baseline`, `slopgate lint baseline`, and `vfc lint baseline` "
                         "all hide technical debt by normalizing existing violations. "
                         "Fix the violations instead of inflating the baseline."
                     ),
@@ -152,7 +152,7 @@ class BaselineGuardRule(Rule):
             return p
 
         # Relative hook targets belong to the payload/project root. Do not fall
-        # through to the hook process cwd; that can point at the vibeforcer repo
+        # through to the hook process cwd; that can point at the slopgate repo
         # and mask brand-new baseline creation in the target project.
         seen: set[Path] = set()
         for base in (ctx.cwd, ctx.config.repo_root):

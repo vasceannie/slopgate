@@ -65,8 +65,8 @@ class TestAstHealthRule(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             repo = Path(tmp_dir) / "repo"
             repo.mkdir(parents=True)
-            _ = (repo / "quality_gate.toml").write_text(
-                "[quality_gate]\nenabled = true\n",
+            _ = (repo / "slopgate.toml").write_text(
+                "[slopgate]\nenabled = true\n",
                 encoding="utf-8",
             )
             payload = {
@@ -89,8 +89,8 @@ class TestAstHealthRule(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             repo = Path(tmp_dir) / "repo"
             repo.mkdir(parents=True)
-            _ = (repo / "quality_gate.toml").write_text(
-                "[quality_gate]\nenabled = true\n",
+            _ = (repo / "slopgate.toml").write_text(
+                "[slopgate]\nenabled = true\n",
                 encoding="utf-8",
             )
             payload = {
@@ -236,8 +236,8 @@ class TestAstHealthRule(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             repo = Path(tmp_dir) / "repo"
             repo.mkdir(parents=True)
-            _ = (repo / "quality_gate.toml").write_text(
-                "[quality_gate]\nenabled = true\n",
+            _ = (repo / "slopgate.toml").write_text(
+                "[slopgate]\nenabled = true\n",
                 encoding="utf-8",
             )
             _ = (repo / "broken.py").write_text("    x = 1\n", encoding="utf-8")

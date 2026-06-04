@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.models import RuntimeConfig
+from slopgate.models import RuntimeConfig
 
 from ._discovery import detect_root, resolve_config_path
 from ._io import _load_json

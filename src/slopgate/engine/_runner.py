@@ -5,18 +5,18 @@ from pathlib import Path
 from time import monotonic
 from typing import Literal
 
-from vibeforcer.config import (
+from slopgate.config import (
     is_path_skipped,
     is_repo_disabled,
     is_repo_enrolled,
     resolve_repo_root,
 )
-from vibeforcer.context import HookContext
-from vibeforcer.enrichment import enrich_findings
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules import build_always_on_rules, build_repo_strict_rules
-from vibeforcer.rules.base import Rule
-from vibeforcer.util import warning
+from slopgate.context import HookContext
+from slopgate.enrichment import enrich_findings
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules import build_always_on_rules, build_repo_strict_rules
+from slopgate.rules.base import Rule
+from slopgate.util import warning
 
 def _apply_severity_overrides(
     findings: list[RuleFinding],
@@ -53,6 +53,11 @@ def _platform_capability(platform: str) -> tuple[str, str | None]:
         return (
             "partial",
             "codex hooks are experimental and currently provide Bash-focused tool interception rather than Claude-style tool parity",
+        )
+    if normalized == "cursor":
+        return (
+            "partial",
+            "cursor postToolUse and afterFileEdit cannot hard-block tool results; they inject additional_context only. workspaceOpen and several observational hooks are not installed by default",
         )
     return ("full", None)
 

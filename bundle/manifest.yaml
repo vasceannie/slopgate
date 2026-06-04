@@ -1,0 +1,39 @@
+version: 1
+repo_root: ..
+links:
+  - platform: claude
+    src: shared/skills/code-hygiene-refactor
+    dest: ~/.claude/skills/code-hygiene-refactor
+  - platform: claude
+    src: shared/skills/hygiene-orchestrator
+    dest: ~/.claude/skills/hygiene-orchestrator
+  - platform: claude
+    src: shared/skills/isx-cli
+    dest: ~/.claude/skills/isx-cli
+  - platform: claude
+    src: shared/skills/code-smell-utility-locator
+    dest: ~/.claude/skills/code-smell-utility-locator
+  - platform: claude
+    src: claude/agents/agent-python-executor.md
+    dest: ~/.claude/agents/agent-python-executor.md
+  - platform: claude
+    src: claude/rules/python/style-conventions.md
+    dest: ~/.claude/rules/python/style-conventions.md
+  - platform: claude
+    src: claude/rules/quality-complexity.md
+    dest: ~/.claude/rules/quality-complexity.md
+  - platform: opencode
+    src: shared/skills/code-hygiene-refactor
+    dest: ~/.config/opencode/skills/code-hygiene-refactor
+  - platform: opencode
+    src: shared/skills/hygiene-orchestrator
+    dest: ~/.config/opencode/skills/hygiene-orchestrator
+  - platform: opencode
+    src: shared/skills/isx-cli
+    dest: ~/.config/opencode/skills/isx-cli
+  - platform: opencode
+    src: shared/skills/code-smell-utility-locator
+    dest: ~/.config/opencode/skills/code-smell-utility-locator
+  - platform: opencode
+    src: opencode/rules/workflow/own-completion.md
+    dest: ~/.config/opencode/rules/workflow/own-completion.md

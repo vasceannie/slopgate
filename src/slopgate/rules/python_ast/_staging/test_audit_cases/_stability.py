@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from vibeforcer.constants import MAX_PARAMS
-from vibeforcer.rules.base import Rule
-from vibeforcer.rules.python_ast._staging.duplicate_rules import (
+from slopgate.constants import MAX_PARAMS
+from slopgate.rules.base import Rule
+from slopgate.rules.python_ast._staging.duplicate_rules import (
     PythonDuplicateCallSequenceRule,
     PythonRepeatedBlocksRule,
     PythonRepeatedMagicNumberRule,
     PythonSemanticCloneRule,
 )
-from vibeforcer.rules.python_ast._staging.test_smell_rules import (
+from slopgate.rules.python_ast._staging.test_smell_rules import (
     PythonAssertionRouletteRule,
     PythonConditionalAssertionRule,
     PythonEagerTestRule,

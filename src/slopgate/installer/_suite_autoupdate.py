@@ -6,19 +6,21 @@ import plistlib
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from vibeforcer.installer._shared import (
+from slopgate.installer._shared import (
     base_invocation,
     backup_existing_file_and_report,
     find_binary,
     shell_command,
 )
-from vibeforcer.util.platform import is_windows, user_config_dir, user_data_dir
+from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
-DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/vibeforcer.git@master"
+DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@master"
 DEFAULT_UPDATE_INTERVAL_MINUTES = 3 * 10
-_AUTOUPDATE_MARKER = "Vibeforcer auto-update managed file"
+_AUTOUPDATE_MARKER = "Slopgate auto-update managed file"
+_WINDOWS_TASK_NAME = "Slopgate Auto Update"
 
 
 @dataclass(frozen=True)
@@ -47,15 +49,15 @@ def _linux_systemd_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
     config_dir = user_config_dir("systemd") / "user"
-    service_path = config_dir / "vibeforcer-auto-update.service"
-    timer_path = config_dir / "vibeforcer-auto-update.timer"
+    service_path = config_dir / "slopgate-auto-update.service"
+    timer_path = config_dir / "slopgate-auto-update.timer"
     update_command = shell_command(_update_suite_args(source, include_missing=include_missing))
     service = "\n".join(
         [
             f"# {_AUTOUPDATE_MARKER}",
             "[Unit]",
-            "Description=Update Vibeforcer from GitHub and refresh local hook install sites",
-            "Documentation=https://github.com/vasceannie/vibeforcer",
+            "Description=Update Slopgate from GitHub and refresh local hook install sites",
+            "Documentation=https://github.com/vasceannie/slopgate",
             "",
             "[Service]",
             "Type=oneshot",
@@ -68,14 +70,14 @@ def _linux_systemd_plan(
         [
             f"# {_AUTOUPDATE_MARKER}",
             "[Unit]",
-            "Description=Run Vibeforcer auto-update while this device is awake",
+            "Description=Run Slopgate auto-update while this device is awake",
             "",
             "[Timer]",
             "OnBootSec=5min",
             f"OnUnitActiveSec={interval_minutes}min",
             "RandomizedDelaySec=5min",
             "Persistent=true",
-            "Unit=vibeforcer-auto-update.service",
+            "Unit=slopgate-auto-update.service",
             "",
             "[Install]",
             "WantedBy=timers.target",
@@ -86,7 +88,7 @@ def _linux_systemd_plan(
         "systemd-user",
         timer_path,
         f"# {service_path}\n{service}\n# {timer_path}\n{timer}",
-        ["systemctl", "--user", "enable", "--now", "vibeforcer-auto-update.timer"],
+        ["systemctl", "--user", "enable", "--now", "slopgate-auto-update.timer"],
     )
 
 
@@ -94,11 +96,11 @@ def _macos_launchd_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
     plist_path = (
-        Path.home() / "Library" / "LaunchAgents" / "rocks.baked.vibeforcer.autoupdate.plist"
+        Path.home() / "Library" / "LaunchAgents" / "rocks.baked.slopgate.autoupdate.plist"
     )
     interval_seconds = max(60, interval_minutes * 60)
     payload = {
-        "Label": "rocks.baked.vibeforcer.autoupdate",
+        "Label": "rocks.baked.slopgate.autoupdate",
         "ProgramArguments": _update_suite_args(source, include_missing=include_missing),
         "StartInterval": interval_seconds,
         "RunAtLoad": True,
@@ -120,8 +122,8 @@ def _macos_launchd_plan(
 def _windows_task_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
-    script_dir = user_data_dir("vibeforcer")
-    script_path = script_dir / "vibeforcer-auto-update.ps1"
+    script_dir = user_data_dir("slopgate")
+    script_path = script_dir / "slopgate-auto-update.ps1"
     args = _update_suite_args(source, include_missing=include_missing)
     ps_args = " ".join("'" + arg.replace("'", "''") + "'" for arg in args[1:])
     binary = args[0].replace("'", "''")
@@ -150,7 +152,7 @@ def _windows_task_plan(
             "/MO",
             str(max(1, interval_minutes)),
             "/TN",
-            "Vibeforcer Auto Update",
+            _WINDOWS_TASK_NAME,
             "/TR",
             task_command,
         ],
@@ -183,7 +185,7 @@ def _systemd_plan_files(plan: SchedulerPlan) -> list[tuple[Path, str]]:
     header_indexes = [
         index
         for index, line in enumerate(lines)
-        if line.startswith("# ") and "vibeforcer-auto-update." in line
+        if line.startswith("# ") and "slopgate-auto-update." in line
     ]
     if len(header_indexes) != 2:
         raise ValueError("systemd auto-update plan must contain service and timer headers")
@@ -203,11 +205,11 @@ def _scheduler_plan_files(plan: SchedulerPlan) -> list[tuple[Path, str]]:
 
 def _scheduler_disable_command(plan: SchedulerPlan) -> list[str] | None:
     if plan.kind == "systemd-user":
-        return ["systemctl", "--user", "disable", "--now", "vibeforcer-auto-update.timer"]
+        return ["systemctl", "--user", "disable", "--now", "slopgate-auto-update.timer"]
     if plan.kind == "launchd":
         return ["launchctl", "unload", "-w", str(plan.target_path)]
     if plan.kind == "windows-schtasks":
-        return ["schtasks", "/Delete", "/F", "/TN", "Vibeforcer Auto Update"]
+        return ["schtasks", "/Delete", "/F", "/TN", _WINDOWS_TASK_NAME]
     return None
 
 
@@ -216,6 +218,60 @@ def _scheduler_file_is_owned(path: Path) -> bool:
     marker_line = f"# {_AUTOUPDATE_MARKER}"
     plist_marker = f"<!-- {_AUTOUPDATE_MARKER} -->"
     return any(line.strip() in {marker_line, plist_marker} for line in content.splitlines()[:3])
+
+
+def _query_windows_task_xml() -> str | None:
+    completed = subprocess.run(
+        ["schtasks", "/Query", "/TN", _WINDOWS_TASK_NAME, "/XML"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout or ""
+
+
+def _path_appears_in_task_xml(path: Path, xml: str) -> bool:
+    raw_path = str(path)
+    candidates = {
+        raw_path,
+        raw_path.replace("/", "\\"),
+        raw_path.replace("\\", "/"),
+    }
+    folded_xml = xml.casefold()
+    return any(candidate.casefold() in folded_xml for candidate in candidates)
+
+
+def _windows_task_is_owned(plan: SchedulerPlan, xml: str) -> bool:
+    return (
+        _path_appears_in_task_xml(plan.target_path, xml)
+        and plan.target_path.exists()
+        and _scheduler_file_is_owned(plan.target_path)
+    )
+
+
+def _backup_existing_windows_task_xml(plan: SchedulerPlan, xml: str) -> None:
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+    backup_path = plan.target_path.with_name(
+        f"slopgate-auto-update-task.xml.slopgate-bak-{timestamp}"
+    )
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path.write_text(xml, encoding="utf-8")
+    print(f"Backed up existing auto-update task XML to {backup_path}")
+
+
+def _prepare_windows_task_replacement(plan: SchedulerPlan) -> int:
+    if plan.kind != "windows-schtasks":
+        return 0
+    xml = _query_windows_task_xml()
+    if xml is None:
+        return 0
+    if not _windows_task_is_owned(plan, xml):
+        print(f"Refusing to overwrite unrecognized scheduled task: {_WINDOWS_TASK_NAME}")
+        return 1
+    _backup_existing_windows_task_xml(plan, xml)
+    return 0
 
 
 def install_autoupdate(
@@ -239,6 +295,9 @@ def install_autoupdate(
             print("Would run: " + shell_command(plan.enable_command))
         return 0
 
+    if _prepare_windows_task_replacement(plan) != 0:
+        return 1
+
     for target_path, _content in _scheduler_plan_files(plan):
         if target_path.exists() and not _scheduler_file_is_owned(target_path):
             print(f"Refusing to overwrite unrecognized auto-update file: {target_path}")
@@ -261,7 +320,7 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     existing_paths = [target_path for target_path, _content in entries if target_path.exists()]
     print(f"Auto-update scheduler: {plan.kind}")
     if not existing_paths:
-        print("No Vibeforcer auto-update scheduler files found.")
+        print("No Slopgate auto-update scheduler files found.")
         return 0
 
     for target_path in existing_paths:

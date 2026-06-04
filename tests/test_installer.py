@@ -8,9 +8,9 @@ from typing import Any
 import tomli
 from pytest import CaptureFixture, MonkeyPatch
 
-import vibeforcer.installer as installer_module
-import vibeforcer.installer._shared as installer_shared
-import vibeforcer.util.platform as platform_utils
+import slopgate.installer as installer_module
+import slopgate.installer._shared as installer_shared
+import slopgate.util.platform as platform_utils
 
 
 def _hook_builder(name: str) -> Any:
@@ -29,11 +29,11 @@ def _dry_run_install_json(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
     *,
-    binary: str | None = "vibeforcer",
+    binary: str | None = "slopgate",
     windows: bool = False,
 ) -> dict[str, Any]:
     def which(name: str) -> str | None:
-        return binary if name == "vibeforcer" else None
+        return binary if name == "slopgate" else None
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(installer_shared, "is_windows", lambda: windows)
@@ -73,7 +73,7 @@ def _hook_commands(hooks: dict[str, Any], event_name: str = "PreToolUse") -> lis
 
 
 def test_codex_hooks_cover_current_tool_events() -> None:
-    hooks = _hook_builder("_codex_hooks_block")("vibeforcer")
+    hooks = _hook_builder("_codex_hooks_block")("slopgate")
     session_start = hooks["SessionStart"][0]
     pre = hooks["PreToolUse"][0]
     post = hooks["PostToolUse"][0]
@@ -109,7 +109,7 @@ def test_codex_hooks_are_bash_only(
     commands = list(_all_hook_commands(hooks))
     assert (
         bool(commands),
-        all(command.startswith("vibeforcer ") for command in commands),
+        all(command.startswith("slopgate ") for command in commands),
         all(" handle" in command for command in commands),
         all("powershell.exe" not in command for command in commands),
     ) == (True, True, True, True)
@@ -156,7 +156,7 @@ def test_codex_install_writes_hooks_and_toml_feature(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
+    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
 
     assert installer_module._install_codex(dry_run=False) == 0
 
@@ -192,7 +192,7 @@ def test_codex_install_refuses_invalid_existing_hooks_json(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
+    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
     hooks_path = tmp_path / ".codex" / "hooks.json"
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text("{not-json", encoding="utf-8")
@@ -239,7 +239,7 @@ def _existing_claude_settings() -> dict[str, object]:
         "hooks": {
             "PreToolUse": [
                 {"matcher": "Bash", "hooks": [{"type": "command", "command": "other-gate"}]},
-                {"hooks": [{"type": "command", "command": "/old/bin/vibeforcer handle"}]},
+                {"hooks": [{"type": "command", "command": "/old/bin/slopgate handle"}]},
             ]
         }
     }
@@ -255,7 +255,7 @@ def _existing_codex_hooks() -> dict[str, object]:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "/old/bin/vibeforcer handle --platform codex",
+                            "command": "/old/bin/slopgate handle --platform codex",
                         }
                     ],
                 },
@@ -272,7 +272,7 @@ def _install_with_existing_hooks(
     existing_hooks: dict[str, object],
 ) -> Path:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(installer_module, "_find_binary", lambda: "vibeforcer")
+    monkeypatch.setattr(installer_module, "_find_binary", lambda: "slopgate")
     hooks_path = tmp_path / harness_dir / file_name
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text(json.dumps(existing_hooks), encoding="utf-8")

@@ -5,15 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     relative_path,
     safe_read,
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 _PATH_HINT_FILES = (
     "config.py",

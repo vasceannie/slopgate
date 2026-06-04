@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.engine import evaluate_payload
+from slopgate.engine import evaluate_payload
 
 from tests.support import finding_ids
 
 
-def _write_quality_gate(repo: Path) -> Path:
+def _write_slopgate(repo: Path) -> Path:
     repo.mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
     return repo
 
 
 def test_post_edit_lint_rule_skips_virtualenv_lib_inspection(tmp_path: Path) -> None:
-    repo = _write_quality_gate(tmp_path / "repo_lint_virtualenv")
+    repo = _write_slopgate(tmp_path / "repo_lint_virtualenv")
     target = (
         tmp_path
         / ".venvs"
@@ -47,7 +47,7 @@ def test_post_edit_lint_rule_skips_virtualenv_lib_inspection(tmp_path: Path) -> 
 
 
 def test_python_ast_parse_failure_skips_dot_venvs_paths(tmp_path: Path) -> None:
-    repo = _write_quality_gate(tmp_path / "repo_ast_virtualenv")
+    repo = _write_slopgate(tmp_path / "repo_ast_virtualenv")
     path_value = ".venvs/job-hunter/lib/python3.12/site-packages/pkg/bad.py"
     payload = {
         "session_id": "t",

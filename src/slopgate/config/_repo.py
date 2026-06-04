@@ -3,13 +3,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from vibeforcer.util import warning
+from slopgate.util import warning
 
 from ._coerce import _bool_value, _object_dict
-from ._io import _load_toml, _quality_gate_path, _quality_gate_template, _write_quality_gate
+from ._io import _load_toml, _slopgate_path, _slopgate_template, _write_slopgate
 
 # Sentinel filenames that disable the quality gate for a repo.
-_DISABLE_SENTINELS = (".noqualitygate", ".no-quality-gate")
+_DISABLE_SENTINELS = (".noslopgate", ".no-slop-gate")
 
 def _git_output(
     args: list[str],
@@ -98,13 +98,13 @@ def ensure_worktree_enrollment(start: Path | None = None) -> Path | None:
     if main_repo_root is None or main_repo_root == worktree_root:
         return None
 
-    source_marker = _quality_gate_path(main_repo_root)
+    source_marker = _slopgate_path(main_repo_root)
     if not source_marker.exists():
         return None
 
     try:
         template = source_marker.read_text(encoding="utf-8")
-        _write_quality_gate(worktree_root, template)
+        _write_slopgate(worktree_root, template)
     except OSError as exc:
         warning(
             "worktree enrollment copy failed",
@@ -126,21 +126,21 @@ def enroll_repo(
     default_root = target if target.is_dir() else target.parent
     repo_root = resolve_main_git_repo_root(target) or default_root
 
-    template = _quality_gate_template()
+    template = _slopgate_template()
     written_roots: list[Path] = []
-    if _write_quality_gate(repo_root, template):
+    if _write_slopgate(repo_root, template):
         written_roots.append(repo_root)
     else:
         try:
-            template = _quality_gate_path(repo_root).read_text(encoding="utf-8")
+            template = _slopgate_path(repo_root).read_text(encoding="utf-8")
         except OSError:
-            template = _quality_gate_template()
+            template = _slopgate_template()
 
     if include_worktrees and resolve_main_git_repo_root(repo_root) is not None:
         for worktree_root in list_git_worktrees(repo_root):
             if worktree_root == repo_root:
                 continue
-            if _write_quality_gate(worktree_root, template):
+            if _write_slopgate(worktree_root, template):
                 written_roots.append(worktree_root)
 
     return repo_root, written_roots
@@ -151,7 +151,7 @@ def resolve_repo_root(start: Path | None = None) -> Path | None:
     """Resolve enrolled repo root by walking ancestors from *start*."""
     path = (start or Path.cwd()).resolve()
     for candidate in (path, *path.parents):
-        if (candidate / "quality_gate.toml").exists():
+        if (candidate / "slopgate.toml").exists():
             return candidate
     return None
 
@@ -173,7 +173,7 @@ def is_repo_disabled(repo_root: Path | None = None) -> bool:
             return True
 
     toml_data = _load_toml(repo_root)
-    qg_section = _object_dict(toml_data.get("quality_gate", {}))
+    qg_section = _object_dict(toml_data.get("slopgate", {}))
     if _bool_value(qg_section.get("enabled"), True) is False:
         return True
 

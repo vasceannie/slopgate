@@ -8,4 +8,4 @@ __all__ = [
     "save_config",
 ]
 
-from vibeforcer.search.config import IsxError, load_config, save_config
+from slopgate.search.config import IsxError, load_config, save_config

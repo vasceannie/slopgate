@@ -8,20 +8,20 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 _TAIL_BYTES = 32_768
 
-_VIBEFORCER_REPO_SUFFIX = "/claude/vibeforcer"
+_SLOPGATE_REPO_SUFFIX = "/claude/slopgate"
 
 
 def _resolve_candidate_path(path_str: str, cwd: Path | None = None) -> Path:
@@ -97,8 +97,8 @@ def _is_worktree(path_str: str, cwd: Path | None = None) -> bool:
     return git_entry.is_file()
 
 
-def _is_vibeforcer_repo(path_str: str, cwd: Path | None = None) -> bool:
-    """Return True when the target path belongs to the vibeforcer repo."""
+def _is_slopgate_repo(path_str: str, cwd: Path | None = None) -> bool:
+    """Return True when the target path belongs to the slopgate repo."""
     repo_root = _git_repo_root(path_str, cwd)
     if repo_root is None:
         return False
@@ -108,7 +108,7 @@ def _is_vibeforcer_repo(path_str: str, cwd: Path | None = None) -> bool:
     if remote is None:
         return False
     normalized = _normalize_git_remote(remote)
-    return normalized.endswith(_VIBEFORCER_REPO_SUFFIX)
+    return normalized.endswith(_SLOPGATE_REPO_SUFFIX)
 
 
 def _default_branch_name(repo_root: Path) -> str | None:
@@ -279,7 +279,7 @@ class IgnorePreexistingRule(Rule):
 
 _QUALITY_REMINDER = (
     "Before stopping, verify tests pass and quality gates are clean. "
-    "Run `vibeforcer lint check` (or your project-specific quality "
+    "Run `slopgate lint check` (or your project-specific quality "
     "command) before finishing this task."
 )
 

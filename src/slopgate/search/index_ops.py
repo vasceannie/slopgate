@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import ObjectDict, object_dict, string_value
-from vibeforcer.search.config import (
+from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.search.config import (
     DEFAULT_INDEXES_PATH,
     IsxError,
     SearchConfig,
     expand,
 )
-from vibeforcer.search.git_utils import (
+from slopgate.search.git_utils import (
     get_git_remote_url,
     get_git_repo_root,
     urls_match,

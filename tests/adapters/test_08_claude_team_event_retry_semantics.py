@@ -7,8 +7,8 @@ from collections.abc import Sequence
 
 from tests.test_adapters import ClaudeAdapter, RuleFinding, Severity, pytest
 
-from vibeforcer.cli.commands import cmd_handle
-from vibeforcer.models import EngineResult
+from slopgate.cli.commands import cmd_handle
+from slopgate.models import EngineResult
 
 
 def _team_block_finding(rule_id: str) -> RuleFinding:
@@ -38,7 +38,7 @@ def _run_cmd_handle(
             output=output,
         )
 
-    import vibeforcer.engine as engine_module
+    import slopgate.engine as engine_module
 
     monkeypatch.setattr(engine_module, "evaluate_payload", fake_evaluate_payload)
     monkeypatch.setattr(

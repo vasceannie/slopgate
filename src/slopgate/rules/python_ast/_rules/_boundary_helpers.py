@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     pass
 
-from vibeforcer.util.payloads import lower_path as lower_path
+from slopgate.util.payloads import lower_path as lower_path
 
 
 _BOUNDARY_LOG_METHODS = frozenset(

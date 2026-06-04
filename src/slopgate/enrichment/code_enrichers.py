@@ -5,20 +5,20 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from vibeforcer.constants import METADATA_PATH, PRODUCTION_SYMBOL_PREVIEW_LIMIT
-from vibeforcer.enrichment._helpers import (
+from slopgate.constants import METADATA_PATH, PRODUCTION_SYMBOL_PREVIEW_LIMIT
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     resolve_path,
     safe_parse,
     safe_read,
 )
-from vibeforcer.enrichment.local_context import find_local_call_sites
+from slopgate.enrichment.local_context import find_local_call_sites
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef

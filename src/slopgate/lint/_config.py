@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
-from vibeforcer.lint.config_values import build_default_values
+from slopgate.lint.config_values import build_default_values
 
 
 @dataclass(frozen=True)

@@ -58,8 +58,8 @@ EXC_002_BOUNDARY_CASES = [
 def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     payload = {
@@ -98,7 +98,7 @@ def test_posttool_bash_move_skips_old_missing_path_but_checks_new_path(
     ]
 
 def test_morph_tool_is_edit_like() -> None:
-    from vibeforcer.util.payloads import is_edit_like_tool
+    from slopgate.util.payloads import is_edit_like_tool
 
     assert is_edit_like_tool("morph")
     assert is_edit_like_tool("morph_edit_file")

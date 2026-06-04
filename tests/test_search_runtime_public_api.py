@@ -6,9 +6,9 @@ from typing import Self
 
 import pytest
 
-from vibeforcer.search import config
-from vibeforcer.search import runtime
-from vibeforcer.search.config import SearchConfig
+from slopgate.search import config
+from slopgate.search import runtime
+from slopgate.search.config import SearchConfig
 
 
 class ModelResponse:

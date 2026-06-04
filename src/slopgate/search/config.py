@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 from typing import cast
 
-from vibeforcer._types import object_dict, object_list, string_value
-from vibeforcer.util.platform import user_config_dir, user_data_dir
+from slopgate._types import object_dict, object_list, string_value
+from slopgate.util.platform import user_config_dir, user_data_dir
 
 
 class IsxError(RuntimeError):

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import final
 
-from vibeforcer.util import warning
+from slopgate.util import warning
 
 
 def _make_record(payload: dict[str, object]) -> str:

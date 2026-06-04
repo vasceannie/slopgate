@@ -1,16 +1,24 @@
-# Vibeforcer Repository Guide
+# Slopgate Repository Guide
 
-This repository owns the `vibeforcer` rule engine itself: installers, adapters,
+This repository owns the `slopgate` rule engine itself: installers, adapters,
 runtime enforcement, lint detectors, and platform integration shims.
 
 ## Scope
 
 - Treat this repo as the source of truth for rule definitions and platform
   capability mapping.
-- Do not assume a downstream repository is enrolled in `quality_gate.toml`
+- Do not assume a downstream repository is enrolled in `slopgate.toml`
   unless that repo or worktree actually contains it.
 - When verifying whether a rule would have blocked a change, check the target
   repo or worktree where the violation occurred, not just this rule repo.
+- Harness-facing agent assets belong under `bundle/` when they are meant to be
+  shared or packaged: skills, prompt fragments, rule shards, Claude agents, and
+  MCP templates. Do not scatter Slopgate-branded skills/rules back into
+  `~/.claude` or `~/.config/opencode` except via the manifest-driven symlinks.
+- `slopgate install` remains the sole owner of live harness hook wiring
+  (`hooks.json`, Claude `settings.json` hook entries, and the OpenCode plugin
+  install target). Bundle prompt fragments must be merged/imported; never
+  symlink over full `CLAUDE.md` or `AGENTS.md` files.
 
 ## Platform reality
 

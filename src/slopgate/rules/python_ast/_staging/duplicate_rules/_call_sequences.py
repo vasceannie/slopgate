@@ -7,15 +7,15 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
-from vibeforcer.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.lint._detectors.duplicates import _extract_call_sequence
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
+from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.lint._detectors.duplicates import _extract_call_sequence
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
 
 from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 def _function_call_sequence_groups(
     module: ast.Module,

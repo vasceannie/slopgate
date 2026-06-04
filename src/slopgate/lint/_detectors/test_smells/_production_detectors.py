@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from vibeforcer.constants import (
+from slopgate.constants import (
     INTEGRATION_SEAM_THRESHOLD,
     METADATA_FUNCTION,
     MISSING_IMPORT_PREVIEW_LIMIT,
 )
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._helpers import ParsedFile
+from slopgate.lint._baseline import Violation
+from slopgate.lint._helpers import ParsedFile
 
 from ._coverage_helpers import _CoverageInputs as _CoverageInputs, _coverage_violation as _coverage_violation, _metadata_int as _metadata_int, _runtime_coverage_by_rel as _runtime_coverage_by_rel
 from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index

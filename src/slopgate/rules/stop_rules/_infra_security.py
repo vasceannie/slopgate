@@ -5,19 +5,19 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from vibeforcer.constants import (
+from slopgate.constants import (
     DENY,
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     METADATA_PATH,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import Rule, is_rule_enabled
-from vibeforcer.rules.common import is_safe_read_shell_command
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.rules.common import is_safe_read_shell_command
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
-from ._git_quality import _is_non_default_branch as _is_non_default_branch, _is_vibeforcer_repo as _is_vibeforcer_repo, _is_worktree as _is_worktree
+from ._git_quality import _is_non_default_branch as _is_non_default_branch, _is_slopgate_repo as _is_slopgate_repo, _is_worktree as _is_worktree
 
 
 _READ_TOOLS = frozenset({"read", "grep", "glob"})
@@ -25,13 +25,13 @@ _READ_TOOLS = frozenset({"read", "grep", "glob"})
 _INFRA_FRAGMENTS = (
     "hook-layer/config.json",
     "hook_layer/",
-    "vibeforcer/",
+    "slopgate/",
     ".claude/hooks/",
 )
 
 _CONFIG_FRAGMENTS = (
-    "config/vibeforcer/config.json",
-    "config/vibeforcer/rules",
+    "config/slopgate/config.json",
+    "config/slopgate/rules",
 )
 
 
@@ -48,7 +48,7 @@ def _path_contains_fragment(path_value: str, fragment: str) -> bool:
 
 def _is_safe_bash_for_path(ctx: HookContext) -> bool:
     """Return True if the bash command is a safe read-only operation."""
-    from vibeforcer.util.payloads import is_shell_tool
+    from slopgate.util.payloads import is_shell_tool
 
     if not ctx.tool_name or not is_shell_tool(ctx.tool_name):
         return False
@@ -57,11 +57,11 @@ def _is_safe_bash_for_path(ctx: HookContext) -> bool:
 
 def _is_modifying_tool(ctx: HookContext) -> bool:
     """Return True if the tool can modify files (bash or edit-like)."""
-    from vibeforcer.util.payloads import is_shell_tool
+    from slopgate.util.payloads import is_shell_tool
 
     if ctx.tool_name and is_shell_tool(ctx.tool_name):
         return True
-    from vibeforcer.util.payloads import is_edit_like_tool
+    from slopgate.util.payloads import is_edit_like_tool
 
     return is_edit_like_tool(ctx.tool_name)
 
@@ -97,13 +97,13 @@ def _check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] |
 
 
 def _check_infra_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
-    """Check infra fragments with a narrow vibeforcer worktree exception."""
+    """Check infra fragments with a narrow slopgate worktree exception."""
     for frag in _INFRA_FRAGMENTS:
         if not _path_contains_fragment(path_value, frag):
             continue
         if (
             _is_worktree(path_value, ctx.cwd)
-            and _is_vibeforcer_repo(path_value, ctx.cwd)
+            and _is_slopgate_repo(path_value, ctx.cwd)
             and _is_non_default_branch(path_value, ctx.cwd)
         ):
             return []
@@ -154,7 +154,7 @@ _SECURITY_PATTERNS = tuple(
 
 _SECURITY_EXCLUDED = (
     "hook_layer/",
-    "vibeforcer/",
+    "slopgate/",
     "hook-layer/",
     ".claude/hooks/",
     "test_",

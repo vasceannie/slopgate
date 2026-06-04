@@ -5,12 +5,12 @@ from pathlib import Path
 
 
 def _search_boundary_output() -> str:
-    search_root = Path(__file__).resolve().parents[1] / "src" / "vibeforcer" / "search"
+    search_root = Path(__file__).resolve().parents[1] / "src" / "slopgate" / "search"
     result = subprocess.run(
         [
             "rg",
             "-n",
-            r"vibeforcer\.(rules|engine|enrichment|lint)",
+            r"slopgate\.(rules|engine|enrichment|lint)",
             str(search_root),
         ],
         check=False,

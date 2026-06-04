@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.policy_defaults import (
+from slopgate.policy_defaults import (
     LINT_DEPRECATED_PATTERNS_DEFAULTS,
     LINT_EXCEPTION_SAFETY_DEFAULTS,
     LINT_LOGGING_DEFAULTS,

@@ -42,7 +42,7 @@ class TestClaudeAdapterBasic:
     def test_normalize_is_passthrough(self) -> None:
         adapter = ClaudeAdapter()
         raw = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "/tmp"}
-        assert adapter.normalize_payload(raw) is raw
+        assert adapter.normalize_payload(raw) == raw
 
     def test_pretool_deny(self) -> None:
         adapter = ClaudeAdapter()

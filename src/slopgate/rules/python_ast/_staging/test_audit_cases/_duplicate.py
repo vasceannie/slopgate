@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from vibeforcer.rules.base import Rule
-from vibeforcer.rules.python_ast._staging.duplicate_rules import (
+from slopgate.rules.base import Rule
+from slopgate.rules.python_ast._staging.duplicate_rules import (
     PythonDuplicateCallSequenceRule,
     PythonRepeatedBlocksRule,
     PythonRepeatedMagicNumberRule,

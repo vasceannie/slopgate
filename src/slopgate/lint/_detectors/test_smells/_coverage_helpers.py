@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
-from vibeforcer.constants import (
+from slopgate.constants import (
     PRODUCTION_SYMBOL_PREVIEW_LIMIT,
 )
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._config import get_config
+from slopgate.lint._baseline import Violation
+from slopgate.lint._config import get_config
 
 from ._production_symbols import _COVERAGE_JSON_NAMES as _COVERAGE_JSON_NAMES, _COVERAGE_XML_NAMES as _COVERAGE_XML_NAMES, _ProductionSymbol as _ProductionSymbol
 

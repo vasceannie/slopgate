@@ -9,8 +9,8 @@ from tests.test_adapters import (
     get_adapter,
     require_rendered,
 )
-from vibeforcer._types import ObjectDict
-from vibeforcer.constants import BLOCK, DENY, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate._types import ObjectDict
+from slopgate.constants import BLOCK, DENY, POST_TOOL_USE, PRE_TOOL_USE
 
 
 def test_cursor_adapter_registry_name() -> None:
@@ -147,3 +147,95 @@ def test_cursor_adapter_renders_stop_block_as_followup() -> None:
         get_adapter("cursor").render_output("Stop", [finding], decision=BLOCK),
     )
     assert output == {"followup_message": "[STOP-001 | HIGH] Quality gate still failing."}
+
+
+def test_cursor_adapter_renders_before_submit_prompt_block() -> None:
+    finding = RuleFinding(
+        rule_id="PROMPT-001",
+        title="blocked",
+        severity=Severity.HIGH,
+        decision=DENY,
+        message="Prompt blocked.",
+    )
+    output = require_rendered(
+        get_adapter("cursor").render_output("UserPromptSubmit", [finding], decision=DENY),
+    )
+    assert output == {
+        "continue": False,
+        "user_message": "[PROMPT-001 | HIGH] Prompt blocked.",
+    }
+
+
+def test_cursor_adapter_renders_post_tool_use_as_additional_context() -> None:
+    finding = RuleFinding(
+        rule_id="QUALITY-LINT-001",
+        title="lint",
+        severity=Severity.HIGH,
+        decision=BLOCK,
+        message="Lint failed.",
+    )
+    output = require_rendered(
+        get_adapter("cursor").render_output(POST_TOOL_USE, [finding], decision=BLOCK),
+    )
+    assert output == {"additional_context": "[QUALITY-LINT-001 | HIGH] Lint failed."}
+
+
+def test_cursor_adapter_subagent_start_deny_omits_agent_message() -> None:
+    finding = RuleFinding(
+        rule_id="SUB-001",
+        title="blocked",
+        severity=Severity.HIGH,
+        decision=DENY,
+        message="Subagent denied.",
+    )
+    output = require_rendered(
+        get_adapter("cursor").render_output("SubagentStart", [finding], decision=DENY),
+    )
+    assert output == {
+        "permission": "deny",
+        "user_message": "[SUB-001 | HIGH] Subagent denied.",
+    }
+
+
+def test_cursor_adapter_normalizes_tab_file_read() -> None:
+    normalized = get_adapter("cursor").normalize_payload(
+        {
+            "hook_event_name": "beforeTabFileRead",
+            "file_path": "/repo/tab.py",
+            "content": "secret = 1",
+        }
+    )
+    assert {
+        "hook_event_name": normalized["hook_event_name"],
+        "tool_name": normalized["tool_name"],
+        "file_path": normalized["tool_input"]["file_path"],
+    } == {
+        "hook_event_name": PRE_TOOL_USE,
+        "tool_name": "Read",
+        "file_path": "/repo/tab.py",
+    }
+
+
+def test_cursor_adapter_normalizes_mcp_and_workspace_roots() -> None:
+    normalized = get_adapter("cursor").normalize_payload(
+        {
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "MCP: user-gitnexus/query",
+            "tool_input": {"query": "auth flow"},
+            "workspace_roots": ["/repo"],
+            "conversation_id": "conv-mcp",
+        }
+    )
+    assert {
+        "hook_event_name": normalized["hook_event_name"],
+        "tool_name": normalized["tool_name"],
+        "cwd": normalized["cwd"],
+        "session_id": normalized["session_id"],
+        "cursor_hook_event": normalized["cursor_hook_event"],
+    } == {
+        "hook_event_name": PRE_TOOL_USE,
+        "tool_name": "MCP: user-gitnexus/query",
+        "cwd": "/repo",
+        "session_id": "conv-mcp",
+        "cursor_hook_event": "beforeMCPExecution",
+    }

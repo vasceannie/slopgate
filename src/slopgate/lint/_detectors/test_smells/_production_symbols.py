@@ -6,7 +6,7 @@ import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from vibeforcer.lint._helpers import (
+from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_test_files,

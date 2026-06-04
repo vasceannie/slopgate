@@ -1,4 +1,4 @@
-# vibeforcer
+# slopgate
 
 Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Codex CLI and OpenCode are supported with platform-specific limitations.
 
@@ -21,57 +21,81 @@ pipx install .
 ## Quick Start
 
 ```bash
-# Initialize config (creates ~/.config/vibeforcer/)
-vibeforcer config init
+# Initialize config (creates ~/.config/slopgate/)
+slopgate config init
 
 # Install hooks for your platform
-vibeforcer install claude    # patches ~/.claude/settings.json
-vibeforcer install codex     # patches ~/.codex/hooks.json
-vibeforcer install opencode  # copies plugin to the user OpenCode plugins dir
+slopgate install claude    # patches ~/.claude/settings.json
+slopgate install codex     # patches ~/.codex/hooks.json
+slopgate install opencode  # copies plugin to the user OpenCode plugins dir
 
 # Or use the native all-harness installer and OS auto-updater
-vibeforcer install all --with-autoupdate
+slopgate install all --with-autoupdate
 
 # Run self-test
-vibeforcer test
+slopgate test
 
 # Check stats
-vibeforcer stats --days 7
+slopgate stats --days 7
 
 # Lint the current project for code quality
-vibeforcer lint check             # scan the full project from the detected root
-vibeforcer lint check --details   # extended violations + repair prognosis
-vibeforcer lint init .            # scaffold quality_gate.toml
+slopgate lint check             # scan the full project from the detected root
+slopgate lint check --details   # extended violations + repair prognosis
+slopgate lint init .            # scaffold slopgate.toml
 ```
 
 ## Supported Platforms
 
 | Platform | Status | Install |
 |---|---|---|
-| **Claude Code** | ✅ Production | `vibeforcer install claude` |
-| **Codex CLI** | ⚠️ Partial | `vibeforcer install codex` |
-| **OpenCode** | ⚠️ Degraded | `vibeforcer install opencode` |
+| **Claude Code** | ✅ Production | `slopgate install claude [--install-scope user\|project\|both]` |
+| **Cursor** | ⚠️ Partial | `slopgate install cursor [--install-scope user\|project\|both]` |
+| **Codex CLI** | ⚠️ Partial | `slopgate install codex [--install-scope user\|project\|both]` |
+| **OpenCode** | ⚠️ Degraded | `slopgate install opencode [--install-scope user\|project\|both]` |
 
-`vibeforcer install all --with-autoupdate` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `vibeforcer update-suite`, so a push to `github.com/vasceannie/vibeforcer` refreshes the package and rewrites the local Claude/Codex/OpenCode install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. `install-suite --with-autoupdate` remains as a compatibility alias for the same all-harness flow.
+`slopgate install all --with-autoupdate` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update-suite`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. `install-suite --with-autoupdate` remains as a compatibility alias for the same all-harness flow.
+
+## Agent bundle
+
+The [`bundle/`](bundle/) directory is the repo-owned source of truth for Slopgate-facing agent assets that are safe to share across harnesses: recovery skills, rule shards, prompt fragments, Claude agents, and MCP templates.
+
+Local development flow:
+
+```bash
+./bundle/scripts/link-local.sh --dry-run  # review symlink targets
+./bundle/scripts/link-local.sh            # link skills/rules/agents only
+slopgate install all                      # hook files remain CLI-owned
+./bundle/scripts/verify-local.sh
+```
+
+Important ownership boundary: the bundle **does not** symlink full prompt entrypoints (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`) and does **not** own Claude/Codex/Cursor `hooks.json` or Claude `settings.json` hook commands. Keep hook wiring under `slopgate install ...` so install/uninstall can merge safely, back up user config, and point at the correct local binary.
+
+For Claude Code marketplace work, `bundle/claude-plugin/` is a plugin-shaped tree and `bundle/marketplace/` is a local marketplace catalog. Build/test locally with:
+
+```bash
+./bundle/scripts/build-claude-plugin.sh --copy
+claude --plugin-dir ./bundle/claude-plugin
+```
 
 ## Platform Notes
 
-- **Claude Code**: full first-class hook target. Vibeforcer can use Claude's richer event model, including prompt/session/tool interception.
-- **Codex CLI**: experimental hook support with narrower runtime coverage than Claude Code. Vibeforcer installs conservative Codex hooks for shell and common edit tools (`Bash|apply_patch|Edit|Write`) and treats Codex as partial coverage.
-- **OpenCode**: implemented via a plugin shim rather than a Claude-style hook schema. OpenCode exposes plugin events such as `tool.execute.before`, `tool.execute.after`, `permission.asked`, and session events, but prompt interception and stop blocking do not have Claude-equivalent parity. The installer targets the user plugin directory (`~/.config/opencode/plugins/` on Linux/XDG, `%APPDATA%\\opencode\\plugins\\` on native Windows) and backs up existing plugin files before replacing owned content.
+- **Claude Code**: full first-class hook target. Installs into `~/.claude/settings.json` and/or `.claude/settings.json` (`--install-scope`). Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
+- **Cursor**: native hooks via `~/.cursor/hooks.json` (user) and/or `.cursor/hooks.json` (project). Install with `slopgate install <platform>` (user default), `--install-scope project|both`, and optional `--project-root /path/to/repo`. The same flags apply to `install all`, `install-suite`, `update-suite`, and `uninstall`. Slopgate maps Cursor events to its canonical model and renders Cursor-native stdout (`permission` gates, `continue` for `beforeSubmitPrompt`, `additional_context` for `postToolUse`/`afterFileEdit`, `followup_message` for `stop`/`subagentStop`). Post-tool hooks cannot hard-block edits the way Claude `PostToolUse` denial does; use `preToolUse`, `beforeShellExecution`, or `beforeReadFile` for enforcement. Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`) are installed for inline-completion policy; `workspaceOpen` is not wired yet.
+- **Codex CLI**: partial hooks via `~/.codex/hooks.json` and/or `.codex/hooks.json`, with `features.hooks = true` enabled in the adjacent `config.toml` when that file exists. Matchers target `Bash|apply_patch|Edit|Write`. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per [Codex hooks docs](https://developers.openai.com/codex/config-reference).
+- **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `session.created`, `session.idle`, `permission.asked`) map to the canonical model; blocking is strongest at `tool.execute.before`. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
 
 ## Architecture
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Claude Code  │  │  Codex CLI  │  │  OpenCode   │
-│ settings.json│  │ hooks.json  │  │  TS plugin  │
-└──────┬───────┘  └──────┬──────┘  └──────┬──────┘
-       │                 │                 │
-       └─────────────────┼─────────────────┘
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Claude Code  │  │   Cursor    │  │  Codex CLI  │  │  OpenCode   │
+│ settings.json│  │ hooks.json  │  │ hooks.json  │  │  TS plugin  │
+└──────┬───────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+       │                 │                 │                 │
+       └─────────────────┴─────────────────┴─────────────────┘
                          ▼
               ┌────────────────────┐
-              │  vibeforcer handle │
+              │  slopgate handle │
               │  --platform X      │
               └─────────┬──────────┘
                         ▼
@@ -87,7 +111,7 @@ vibeforcer lint init .            # scaffold quality_gate.toml
               └────────────────────┘
 ```
 
-No shell wrappers. No bootstrap scripts. Just `vibeforcer handle` on PATH.
+No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 
 ## CLI
 
@@ -95,33 +119,33 @@ No shell wrappers. No bootstrap scripts. Just `vibeforcer handle` on PATH.
 
 ```bash
 # Core hook handler (called by platform hooks)
-vibeforcer handle [--platform claude|codex|opencode]
+slopgate handle [--platform claude|cursor|codex|opencode]
 
 # Replay a captured payload
-vibeforcer replay --payload fixture.json [--platform codex] [--pretty]
+slopgate replay --payload fixture.json [--platform codex] [--pretty]
 
 # Check quality gate status for a repo
-vibeforcer check [path]
+slopgate check [path]
 
 # Install/uninstall hooks
-vibeforcer install <platform|all> [--with-autoupdate] [--dry-run]
-vibeforcer uninstall <platform> [--dry-run]
-vibeforcer install-suite [--with-autoupdate] [--dry-run]
-vibeforcer update-suite [--dry-run]
+slopgate install <platform|all> [--with-autoupdate] [--dry-run]
+slopgate uninstall <platform> [--dry-run]
+slopgate install-suite [--with-autoupdate] [--dry-run]
+slopgate update-suite [--dry-run]
 
 # Activity analysis
-vibeforcer stats [--log results.jsonl] [--days N] [--json]
+slopgate stats [--log results.jsonl] [--days N] [--json]
 
 # Configuration
-vibeforcer config show        # show effective config
-vibeforcer config init        # create from defaults
-vibeforcer config path        # print config file location
+slopgate config show        # show effective config
+slopgate config init        # create from defaults
+slopgate config path        # print config file location
 
 # Self-test
-vibeforcer test
+slopgate test
 
 # Version
-vibeforcer version
+slopgate version
 ```
 
 For Codex CLI and OpenCode, "real-time" should be read as best-effort within the host platform's current hook or plugin surface, not as Claude-equivalent parity.
@@ -131,16 +155,16 @@ For Codex CLI and OpenCode, "real-time" should be read as best-effort within the
 ```bash
 # Scan the current project root for violations (compares against baseline)
 # Intentionally accepts no path/file argument; use cd <project-root> first.
-vibeforcer lint check [--details|--verbose]
+slopgate lint check [--details|--verbose]
 
 # Repo-wide rebaselining is intentionally disabled
-# Do not run vibeforcer lint baseline [path]
+# Do not run slopgate lint baseline [path]
 
-# Scaffold a quality_gate.toml config
-vibeforcer lint init [path]
+# Scaffold a slopgate.toml config
+slopgate lint init [path]
 
-# Merge missing config keys into existing quality_gate.toml
-vibeforcer lint update [path] [--dry-run]
+# Merge missing config keys into existing slopgate.toml
+slopgate lint update [path] [--dry-run]
 ```
 
 #### 28 Batch Detectors
@@ -159,16 +183,16 @@ vibeforcer lint update [path] [--dry-run]
 
 ## Config Discovery
 
-vibeforcer resolves config in this order:
+slopgate resolves config in this order:
 
-1. `$VIBEFORCER_CONFIG` (explicit file path)
-2. `%APPDATA%\vibeforcer\config.json` on native Windows
-3. `~/.config/vibeforcer/config.json` (XDG/POSIX)
+1. `$SLOPGATE_CONFIG` (explicit file path)
+2. `%APPDATA%\slopgate\config.json` on native Windows
+3. `~/.config/slopgate/config.json` (XDG/POSIX)
 4. `$CLAUDE_HOOK_LAYER_ROOT/.claude/hook-layer/config.json` (legacy)
 5. `~/.claude/hooks/enforcer/.claude/hook-layer/config.json` (legacy default)
 6. Bundled defaults
 
-Per-repo overrides via `quality_gate.toml` in the repo root.
+Per-repo overrides via `slopgate.toml` in the repo root.
 
 ## Rules
 
@@ -190,7 +214,7 @@ Availability depends on platform support:
 
 ### Batch Lint Rules (28 detectors)
 - See "28 Batch Detectors" table above
-- Configured via `quality_gate.toml` in each project
+- Configured via `slopgate.toml` in each project
 - Baseline tracking: only *new* violations fail the gate
 - Repo-wide baseline regeneration is disabled to prevent agents from normalizing technical debt
 
@@ -205,15 +229,15 @@ Configured in `config.json` — covers:
 
 ## Per-Repo Overrides
 
-Create `quality_gate.toml` in your repo root:
+Create `slopgate.toml` in your repo root:
 
 ```toml
-[quality_gate]
+[slopgate]
 # Disable specific rules
 disabled_rules = ["PY-CODE-013", "PY-TEST-004"]
 
 # Downgrade rules to advisory
-[quality_gate.severity_overrides]
+[slopgate.severity_overrides]
 "PY-CODE-008" = "warn"
 
 [thresholds]
@@ -226,11 +250,11 @@ max_line_length = 140
 
 ## Enforcement Modes
 
-vibeforcer now enforces in two layers using `quality_gate.toml` as the enrollment signal:
+slopgate now enforces in two layers using `slopgate.toml` as the enrollment signal:
 
-- **outside_repo**: no `quality_gate.toml` in the current working repo root. Only always-on safety rules run.
-- **repo_strict**: `quality_gate.toml` exists and the repo is enabled. Always-on safety + full strict/project rules run.
-- **repo_relaxed**: `quality_gate.toml` exists, but `.noqualitygate`, `.no-quality-gate`, or `[quality_gate].enabled = false` is set. Only always-on safety rules run.
+- **outside_repo**: no `slopgate.toml` in the current working repo root. Only always-on safety rules run.
+- **repo_strict**: `slopgate.toml` exists and the repo is enabled. Always-on safety + full strict/project rules run.
+- **repo_relaxed**: `slopgate.toml` exists, but `.noslopgate`, `.no-slop-gate`, or `[slopgate].enabled = false` is set. Only always-on safety rules run.
 
 Always-on safety protections are:
 
@@ -243,27 +267,27 @@ Always-on safety protections are:
 To place a repo into relaxed mode locally:
 
 ```bash
-touch .noqualitygate
+touch .noslopgate
 ```
 
-Or in `quality_gate.toml`:
+Or in `slopgate.toml`:
 
 ```toml
-[quality_gate]
+[slopgate]
 enabled = false
 ```
 
 ## Testing
 
 ```bash
-cd vibeforcer
+cd slopgate
 PYTHONPATH=src pytest tests/ -q
 ```
 
 PowerShell:
 
 ```powershell
-cd vibeforcer
+cd slopgate
 $env:PYTHONPATH = "src"
 pytest tests/ -q
 ```
@@ -271,36 +295,46 @@ pytest tests/ -q
 ## Windows / PowerShell Notes
 
 - Native Windows installs use the standard console scripts generated by Python
-  packaging (`vibeforcer.exe`, `vfc.exe`, and `isx.exe`).
+  packaging (`slopgate.exe`, `vfc.exe`, and `isx.exe`).
 - Installed hook commands are quoted through a PowerShell-compatible launcher
   on Windows so paths with spaces under `AppData` can execute reliably.
 - PowerShell commands are inspected for common file operations such as
   `Set-Content`, `Add-Content`, `Out-File`, `Copy-Item`, `Move-Item`, and
   `Remove-Item`.
 - OpenCode plugin installs use `%APPDATA%\\opencode\\plugins` on native
-  Windows and bake the discovered `vibeforcer.exe` path into the generated
-  plugin with JSON/TypeScript-safe escaping. `VIBEFORCER_BIN` can still override
+  Windows and bake the discovered `slopgate.exe` path into the generated
+  plugin with JSON/TypeScript-safe escaping. `SLOPGATE_BIN` can still override
   it at runtime.
 - Codex CLI hook support on native Windows depends on the installed Codex
   version. When Codex hooks are unavailable or degraded on Windows, use WSL or
-  Git Bash for runtime enforcement and use `vibeforcer lint check` natively for
+  Git Bash for runtime enforcement and use `slopgate lint check` natively for
   batch quality checks.
 
-## Cutover from Enforcer
+## Archived Windows worktree
+
+The old `slopgate-windows-powershell` git worktree (`windows-powershell-compat`) is
+archived; native Windows support is in this repo. See
+[docs/archive/windows-powershell-compat.md](docs/archive/windows-powershell-compat.md).
+
+## Cutover from slopgate / Enforcer
 
 ```bash
-# 1. Install vibeforcer globally
-pipx install ~/path/to/vibeforcer
+# 0. One-shot rename (repos + user config + OpenCode plugin)
+slopgate migrate
+# Repo-only: slopgate migrate --repo-only /path/to/repo
+
+# 1. Install slopgate globally
+pipx install ~/path/to/slopgate
 
 # 2. Copy your config
-mkdir -p ~/.config/vibeforcer
-cp ~/.claude/hooks/enforcer/.claude/hook-layer/config.json ~/.config/vibeforcer/
+mkdir -p ~/.config/slopgate
+cp ~/.claude/hooks/enforcer/.claude/hook-layer/config.json ~/.config/slopgate/
 
 # 3. Install hooks (replaces shell wrappers)
-vibeforcer install claude
+slopgate install claude
 
 # 4. Test
-vibeforcer test
+slopgate test
 
 # 5. Remove old enforcer (optional)
 # rm -rf ~/.claude/hooks/enforcer

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.search import _cli_doctor, _cli_init
-from vibeforcer.search._cli_parser import build_search_parser
-from vibeforcer.search.cli import (
+from slopgate.search import _cli_doctor, _cli_init
+from slopgate.search._cli_parser import build_search_parser
+from slopgate.search.cli import (
     cmd_add,
     cmd_list,
     cmd_models,
@@ -131,7 +131,7 @@ def test_cmd_init_writes_config_and_islands_scaffold_without_prompt(
 
 
 def _stub_load_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     config: dict[str, object] = {
         "binary": "islands-ollama",
@@ -144,7 +144,7 @@ def _stub_load_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
 
 
 def _stub_run_islands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     calls: list[list[str]] = []
 
@@ -160,7 +160,7 @@ def test_cmd_models_lists_embedding_models(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     monkeypatch.setattr(
@@ -181,7 +181,7 @@ def test_cmd_use_updates_model(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     monkeypatch.setattr(search_cli, "fetch_runtime_models", lambda _cfg: ["nomic-embed-text"])
@@ -199,7 +199,7 @@ def test_cmd_list_prints_no_indexes_message(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     monkeypatch.setattr(search_cli, "local_indexes", lambda _cfg: [])
@@ -214,7 +214,7 @@ def test_cmd_list_prints_no_indexes_message(
 def test_cmd_add_invokes_run_islands_with_add_args(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
@@ -234,7 +234,7 @@ def test_cmd_add_invokes_run_islands_with_add_args(
 def test_cmd_search_invokes_run_islands_with_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
@@ -248,8 +248,8 @@ def test_cmd_search_invokes_run_islands_with_query(
 def test_cmd_remove_raises_when_index_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.search import cli as search_cli
-    from vibeforcer.search.config import IsxError
+    from slopgate.search import cli as search_cli
+    from slopgate.search.config import IsxError
 
     _stub_load_config(monkeypatch)
     monkeypatch.setattr(search_cli, "find_local_index", lambda _cfg, _name: None)
@@ -261,7 +261,7 @@ def test_cmd_remove_raises_when_index_not_found(
 def test_cmd_sync_delegates_to_run_islands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
@@ -276,7 +276,7 @@ def test_cmd_reindex_adds_fresh_when_no_existing_index(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from vibeforcer.search import cli as search_cli
+    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)

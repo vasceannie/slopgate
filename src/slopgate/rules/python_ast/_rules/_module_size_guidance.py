@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeforcer.util.payloads import lower_path
+from slopgate.util.payloads import lower_path
 
 
 def _module_split_scenario(path_value: str) -> str:

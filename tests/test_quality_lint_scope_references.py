@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from tests.support import finding_ids
-from vibeforcer.engine import evaluate_payload
-from vibeforcer.lint._config import reset_config
+from slopgate.engine import evaluate_payload
+from slopgate.lint._config import reset_config
 
 
 def _write_referenced_source_project(repo: Path) -> Path:
-    (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n",
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n",
         encoding="utf-8",
     )
     src_dir = repo / "src" / "pkg"

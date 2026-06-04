@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.util import warning
+from slopgate.util import warning
 
 from ._coerce import _object_dict
 
@@ -21,10 +21,10 @@ for module_name in ("tomllib", "tomli"):
         break
 
 def _load_toml(root: Path) -> dict[str, object]:
-    """Load quality_gate.toml from project root if available."""
+    """Load slopgate.toml from project root if available."""
     if _toml_loads is None:
         return {}
-    for name in ("quality_gate.toml",):
+    for name in ("slopgate.toml",):
         toml_path = root / name
         if toml_path.exists():
             try:
@@ -54,19 +54,19 @@ def _load_json(path: Path) -> dict[str, object]:
         )
         raise RuntimeError(f"Invalid JSON in {path}: {exc}") from exc
 
-def _quality_gate_path(root: Path) -> Path:
-    return root / "quality_gate.toml"
+def _slopgate_path(root: Path) -> Path:
+    return root / "slopgate.toml"
 
 
-def _quality_gate_template() -> str:
-    from vibeforcer.lint import __version__ as lint_version
-    from vibeforcer.lint._updater import render_quality_gate_toml
+def _slopgate_template() -> str:
+    from slopgate.lint import __version__ as lint_version
+    from slopgate.lint._updater import render_slopgate_toml
 
-    return render_quality_gate_toml(version=lint_version)
+    return render_slopgate_toml(version=lint_version)
 
 
-def _write_quality_gate(root: Path, template: str) -> bool:
-    marker = _quality_gate_path(root)
+def _write_slopgate(root: Path, template: str) -> bool:
+    marker = _slopgate_path(root)
     if marker.exists():
         return False
     root.mkdir(parents=True, exist_ok=True)

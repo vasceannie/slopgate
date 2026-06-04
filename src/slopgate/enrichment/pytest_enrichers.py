@@ -7,21 +7,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import cast
 
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     relative_path,
     resolve_path,
     safe_read,
 )
-from vibeforcer.enrichment._types import FixtureInfo, ParametrizeExample
-from vibeforcer.enrichment.fixtures import (
+from slopgate.enrichment._types import FixtureInfo, ParametrizeExample
+from slopgate.enrichment.fixtures import (
     discover_fixtures,
     find_parametrize_examples,
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 FixtureExtrasBuilder = Callable[[Path, Sequence[FixtureInfo]], list[str]]
 

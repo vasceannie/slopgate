@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from vibeforcer.util.platform import is_windows
+from slopgate.util.platform import is_windows
 
 
 @dataclass(slots=True)
@@ -19,7 +19,7 @@ class CommandResult:
 
 
 def _configured_shell() -> str:
-    configured = os.getenv("VIBEFORCER_COMMAND_SHELL", "").strip().lower()
+    configured = os.getenv("SLOPGATE_COMMAND_SHELL", "").strip().lower()
     if configured:
         return configured
     return "powershell" if is_windows() else "native"

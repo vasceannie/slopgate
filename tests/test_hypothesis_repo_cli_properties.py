@@ -9,12 +9,12 @@ from typing import cast
 import pytest
 from hypothesis import given, strategies
 
-from vibeforcer.installer import _shared as installer_shared
-from vibeforcer.rules.python_ast._helpers import detect_family_prefix, evaluate_common
-from vibeforcer.search.cli import cmd_list, cmd_models, cmd_remove, cmd_use
-from vibeforcer.search import config as search_config
-from vibeforcer.search.config import expand
-from vibeforcer.config._repo import is_path_skipped, is_repo_disabled, list_git_worktrees
+from slopgate.installer import _shared as installer_shared
+from slopgate.rules.python_ast._helpers import detect_family_prefix, evaluate_common
+from slopgate.search.cli import cmd_list, cmd_models, cmd_remove, cmd_use
+from slopgate.search import config as search_config
+from slopgate.search.config import expand
+from slopgate.config._repo import is_path_skipped, is_repo_disabled, list_git_worktrees
 
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z0-9_]{0,12}", fullmatch=True).filter(
     lambda value: not keyword.iskeyword(value)
@@ -82,7 +82,7 @@ def test_require_json_object_rejects_invalid_json_property(
 def test_cmd_list_returns_zero_without_local_indexes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("vibeforcer.search.cli.local_indexes", lambda: [])
+    monkeypatch.setattr("slopgate.search.cli.local_indexes", lambda: [])
 
     assert cmd_list(argparse.Namespace()) == 0
 
@@ -99,7 +99,7 @@ def test_cmd_models_returns_nonzero_without_api_key(
 def test_cmd_remove_returns_nonzero_for_missing_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("vibeforcer.search.cli.load_config", lambda: search_config.SearchConfig())
+    monkeypatch.setattr("slopgate.search.cli.load_config", lambda: search_config.SearchConfig())
 
     assert cmd_remove(argparse.Namespace(repo="missing-repo")) != 0
 
@@ -107,7 +107,7 @@ def test_cmd_remove_returns_nonzero_for_missing_target(
 def test_cmd_use_returns_nonzero_without_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("vibeforcer.search.cli.load_config", lambda: search_config.SearchConfig())
+    monkeypatch.setattr("slopgate.search.cli.load_config", lambda: search_config.SearchConfig())
 
     assert cmd_use(argparse.Namespace(model=None)) != 0
 

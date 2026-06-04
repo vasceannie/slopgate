@@ -146,7 +146,7 @@ class TestTraceWriterInit:
     """TraceWriter should not duplicate mkdir calls that config already did."""
 
     def test_trace_writer_works_with_existing_dir(self, tmp_path: Path) -> None:
-        from vibeforcer.trace import TraceWriter
+        from slopgate.trace import TraceWriter
 
         trace_dir = tmp_path / "logs"
         trace_dir.mkdir()
@@ -156,7 +156,7 @@ class TestTraceWriterInit:
         assert (trace_dir / "events.jsonl").exists()
 
     def test_trace_writer_works_with_missing_dir(self, tmp_path: Path) -> None:
-        from vibeforcer.trace import TraceWriter
+        from slopgate.trace import TraceWriter
 
         trace_dir = tmp_path / "new_logs"
         tw = TraceWriter(trace_dir)

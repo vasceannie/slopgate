@@ -14,8 +14,8 @@ from tests.test_enrichment import (
     _write_text,
 )
 
-from vibeforcer.context import HookContext
-from vibeforcer.enrichment.pytest_enrichers import (
+from slopgate.context import HookContext
+from slopgate.enrichment.pytest_enrichers import (
     enrich_assertion_roulette,
     enrich_fixture_outside_conftest,
     enrich_test_loop,

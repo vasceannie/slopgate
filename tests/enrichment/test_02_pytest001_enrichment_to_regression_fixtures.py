@@ -227,7 +227,7 @@ class TestEnrichmentSafety:
             metadata={"hits": []},
         )
         # With no hits, enrichment should be a no-op
-        from vibeforcer.context import build_context
+        from slopgate.context import build_context
 
         ctx = build_context(
             {

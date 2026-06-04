@@ -6,11 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.constants import METADATA_PATH
-from vibeforcer.context import build_context
-from vibeforcer.engine import _retry as engine_retry
-from vibeforcer.engine import evaluate_payload, render_output
-from vibeforcer.models import RuleFinding, Severity
+from slopgate.constants import METADATA_PATH
+from slopgate.context import build_context
+from slopgate.engine import _retry as engine_retry
+from slopgate.engine import evaluate_payload, render_output
+from slopgate.models import RuleFinding, Severity
 
 from tests import support as test_support
 from tests.test_hot_rule_recommendation_gate import (

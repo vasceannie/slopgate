@@ -5,15 +5,15 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING
 
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     first_target_content,
     safe_parse,
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 
 def _extract_called_functions(tree: ast.AST) -> list[str]:

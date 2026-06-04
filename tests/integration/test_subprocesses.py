@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vibeforcer.util.subprocesses import CommandResult, run_shell
+from slopgate.util.subprocesses import CommandResult, run_shell
 
 
 def test_run_shell_executes_command_from_requested_working_directory(

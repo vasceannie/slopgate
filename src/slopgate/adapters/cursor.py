@@ -1,4 +1,10 @@
-"""Cursor adapter for native Cursor hooks."""
+"""Cursor adapter for native Cursor hooks.
+
+Output shapes follow https://cursor.com/docs/agent/hooks — notably
+``beforeSubmitPrompt`` uses ``continue``/``user_message``, ``postToolUse`` uses
+``additional_context`` (no hard deny), and ``stop``/``subagentStop`` use
+``followup_message``.
+"""
 
 from __future__ import annotations
 
@@ -6,10 +12,10 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vibeforcer._types import ObjectDict, ObjectMapping, object_dict, string_value
-from vibeforcer.adapters.base import PlatformAdapter, render_request_from_call
-from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.models import RuleFinding
+from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate.adapters.base import PlatformAdapter, render_request_from_call
+from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.models import RuleFinding
 
 _CURSOR_EVENT_MAP: dict[str, str] = {
     "preToolUse": PRE_TOOL_USE,
@@ -17,13 +23,22 @@ _CURSOR_EVENT_MAP: dict[str, str] = {
     "postToolUseFailure": "PostToolUseFailure",
     "beforeShellExecution": PRE_TOOL_USE,
     "afterShellExecution": POST_TOOL_USE,
+    "beforeMCPExecution": PRE_TOOL_USE,
+    "afterMCPExecution": POST_TOOL_USE,
     "beforeReadFile": PRE_TOOL_USE,
+    "beforeTabFileRead": PRE_TOOL_USE,
     "afterFileEdit": POST_TOOL_USE,
+    "afterTabFileEdit": POST_TOOL_USE,
     "beforeSubmitPrompt": "UserPromptSubmit",
+    "sessionStart": "SessionStart",
+    "sessionEnd": "SessionEnd",
     "stop": "Stop",
     "subagentStart": "SubagentStart",
     "subagentStop": "SubagentStop",
     "preCompact": "PreCompact",
+    "afterAgentResponse": "AfterAgentResponse",
+    "afterAgentThought": "AfterAgentThought",
+    "workspaceOpen": "WorkspaceOpen",
 }
 
 _CURSOR_TOOL_ALIAS_MAP: dict[str, str] = {
@@ -42,9 +57,19 @@ _CURSOR_TOOL_ALIAS_MAP: dict[str, str] = {
     "websearch": "WebSearch",
 }
 
-_SHELL_EVENTS = {"beforeShellExecution", "afterShellExecution"}
-_READ_EVENTS = {"beforeReadFile"}
-_FILE_EDIT_EVENTS = {"afterFileEdit"}
+_SHELL_EVENTS = frozenset({"beforeShellExecution", "afterShellExecution"})
+_READ_EVENTS = frozenset({"beforeReadFile", "beforeTabFileRead"})
+_FILE_EDIT_EVENTS = frozenset({"afterFileEdit", "afterTabFileEdit"})
+_MCP_EVENTS = frozenset({"beforeMCPExecution", "afterMCPExecution"})
+_PERMISSION_EVENTS = frozenset(
+    {
+        PRE_TOOL_USE,
+        PERMISSION_REQUEST,
+        "SubagentStart",
+    }
+)
+_POST_TOOL_EVENTS = frozenset({POST_TOOL_USE})
+_FOLLOWUP_EVENTS = frozenset({"Stop", "SubagentStop"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +159,8 @@ def _cursor_tool_input(raw: ObjectMapping, cursor_event: str) -> ObjectDict:
         return _shell_tool_input(raw, tool_input)
     if cursor_event in _READ_EVENTS or cursor_event in _FILE_EDIT_EVENTS:
         return _file_tool_input(raw, tool_input)
+    if cursor_event in _MCP_EVENTS:
+        return tool_input
     return tool_input
 
 
@@ -152,6 +179,33 @@ def _append_context(message: str, context: str | None) -> str:
     return f"{message}\n\n{context}"
 
 
+def _workspace_cwd(raw: ObjectMapping, canonical: ObjectDict) -> None:
+    cwd = _first_string(raw, "cwd", "workspaceRoot", "workspace_root", "project_path")
+    if cwd:
+        canonical["cwd"] = cwd
+        return
+    roots = raw.get("workspace_roots")
+    if isinstance(roots, list):
+        for item in roots:
+            root = string_value(item)
+            if root and root.strip():
+                canonical["cwd"] = root.strip()
+                return
+
+
+def _sync_tool_result_fields(canonical: ObjectDict, raw: ObjectMapping) -> None:
+    tool_output = raw.get("tool_output")
+    if tool_output is not None:
+        if "tool_result" not in canonical:
+            canonical["tool_result"] = tool_output
+        if "tool_response" not in canonical:
+            canonical["tool_response"] = tool_output
+    if "tool_response" in canonical and "tool_result" not in canonical:
+        canonical["tool_result"] = canonical["tool_response"]
+    elif "tool_result" in canonical and "tool_response" not in canonical:
+        canonical["tool_response"] = canonical["tool_result"]
+
+
 class CursorAdapter(PlatformAdapter):
     name: str = "cursor"
 
@@ -160,14 +214,14 @@ class CursorAdapter(PlatformAdapter):
         canonical = object_dict(raw)
         cursor_event = _first_string(raw, "hook_event_name", "hookEventName", "event_name", "event")
         canonical["hook_event_name"] = _CURSOR_EVENT_MAP.get(cursor_event, cursor_event)
+        if cursor_event:
+            canonical["cursor_hook_event"] = cursor_event
 
         session_id = _first_string(raw, "session_id", "sessionId", "conversation_id", "conversationId")
         if session_id:
             canonical["session_id"] = session_id
 
-        cwd = _first_string(raw, "cwd", "workspaceRoot", "workspace_root", "project_path")
-        if cwd:
-            canonical["cwd"] = cwd
+        _workspace_cwd(raw, canonical)
 
         tool_name = _tool_name_from_raw(raw, cursor_event)
         if tool_name:
@@ -178,25 +232,32 @@ class CursorAdapter(PlatformAdapter):
 
         if cursor_event in _FILE_EDIT_EVENTS and "tool_response" not in canonical:
             canonical["tool_response"] = {"file_path": tool_input.get("file_path", "")}
-        elif "tool_response" in canonical and "tool_result" not in canonical:
-            canonical["tool_result"] = canonical["tool_response"]
-        elif "tool_result" in canonical and "tool_response" not in canonical:
-            canonical["tool_response"] = canonical["tool_result"]
+        _sync_tool_result_fields(canonical, raw)
 
         prompt = _first_string(raw, "prompt", "user_prompt", "userPrompt")
         if prompt:
             canonical["prompt"] = prompt
         return canonical
 
-    def _deny_output(self, request: _CursorRenderRequest) -> ObjectDict:
+    def _deny_permission_output(self, request: _CursorRenderRequest) -> ObjectDict:
+        reason = _decision_text(self, request)
+        payload: ObjectDict = {
+            "permission": "deny",
+            "user_message": reason,
+        }
+        if request.event_name != "SubagentStart":
+            payload["agent_message"] = _append_context(reason, request.context)
+        return payload
+
+    def _ask_permission_output(self, request: _CursorRenderRequest) -> ObjectDict:
         reason = _decision_text(self, request)
         return {
-            "permission": "deny",
+            "permission": "ask",
             "user_message": reason,
             "agent_message": _append_context(reason, request.context),
         }
 
-    def _allow_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+    def _allow_permission_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
         payload: ObjectDict = {"permission": "allow"}
         if request.updated_input:
             payload["updated_input"] = request.updated_input
@@ -204,10 +265,50 @@ class CursorAdapter(PlatformAdapter):
             payload["agent_message"] = request.context
         return payload if len(payload) > 1 else None
 
+    def _permission_gate_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+        if request.decision in {DENY, BLOCK}:
+            return self._deny_permission_output(request)
+        if request.decision == "ask":
+            return self._ask_permission_output(request)
+        if request.decision == "allow" or request.updated_input:
+            return self._allow_permission_output(request)
+        if request.context:
+            return {"permission": "allow", "agent_message": request.context}
+        return None
+
+    def _post_tool_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+        reason = _decision_text(self, request)
+        message = _append_context(reason, request.context) if reason else request.context
+        if not message:
+            return None
+        return {"additional_context": message}
+
+    def _prompt_submit_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+        if request.decision in {DENY, BLOCK, "ask"}:
+            return {
+                "continue": False,
+                "user_message": _decision_text(self, request),
+            }
+        if request.context:
+            return {"continue": True, "user_message": request.context}
+        return None
+
     def _followup_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
         message = _append_context(_decision_text(self, request), request.context)
         if message:
             return {"followup_message": message}
+        return None
+
+    def _pre_compact_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+        message = _append_context(_decision_text(self, request), request.context)
+        if message:
+            return {"user_message": message}
+        return None
+
+    def _session_start_output(self, request: _CursorRenderRequest) -> ObjectDict | None:
+        message = _append_context(_decision_text(self, request), request.context)
+        if message:
+            return {"additional_context": message}
         return None
 
     @override
@@ -227,17 +328,25 @@ class CursorAdapter(PlatformAdapter):
             decision=render_request.decision,
         )
 
-        if request.event_name in {PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE, "UserPromptSubmit"}:
-            if request.decision in {DENY, BLOCK, "ask"}:
-                return self._deny_output(request)
-            if request.decision == "allow" or request.context or request.updated_input:
-                return self._allow_output(request)
-            return None
+        if request.event_name in _PERMISSION_EVENTS:
+            return self._permission_gate_output(request)
 
-        if request.event_name in {"Stop", "SubagentStop"}:
+        if request.event_name in _POST_TOOL_EVENTS:
+            return self._post_tool_output(request)
+
+        if request.event_name == "UserPromptSubmit":
+            return self._prompt_submit_output(request)
+
+        if request.event_name in _FOLLOWUP_EVENTS:
             if request.decision in {DENY, BLOCK, "ask"} or request.context:
                 return self._followup_output(request)
             return None
+
+        if request.event_name == "PreCompact":
+            return self._pre_compact_output(request)
+
+        if request.event_name == "SessionStart" and request.context:
+            return self._session_start_output(request)
 
         if request.context:
             return {"agent_message": request.context}

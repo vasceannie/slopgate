@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from vibeforcer.constants import (
+from slopgate.constants import (
     MISSING_IMPORT_PREVIEW_LIMIT,
     METADATA_FUNCTION,
 )
-from vibeforcer._types import ObjectDict
-from vibeforcer.lint._baseline import Violation
-from vibeforcer.lint._helpers import ParsedFile, project_root
+from slopgate._types import ObjectDict
+from slopgate.lint._baseline import Violation
+from slopgate.lint._helpers import ParsedFile, project_root
 
 from ._coverage_helpers import _metadata_int as _metadata_int
 from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index

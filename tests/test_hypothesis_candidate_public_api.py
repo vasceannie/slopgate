@@ -9,24 +9,24 @@ from hypothesis import given
 from hypothesis import strategies
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.adapters import get_adapter
-from vibeforcer.lint import _baseline
-from vibeforcer.lint._baseline import Violation, assert_no_new_violations
-from vibeforcer.lint._config import load_config, reset_config, set_config
-from vibeforcer.lint._details import format_violation_details
-from vibeforcer.lint._detectors.duplicates import detect_repeated_blocks
-from vibeforcer.lint._detectors.line_length import detect_long_lines
-from vibeforcer.lint._detectors.test_smells import (
+from slopgate.adapters import get_adapter
+from slopgate.lint import _baseline
+from slopgate.lint._baseline import Violation, assert_no_new_violations
+from slopgate.lint._config import load_config, reset_config, set_config
+from slopgate.lint._details import format_violation_details
+from slopgate.lint._detectors.duplicates import detect_repeated_blocks
+from slopgate.lint._detectors.line_length import detect_long_lines
+from slopgate.lint._detectors.test_smells import (
     detect_fixtures_outside_conftest,
 )
-from vibeforcer.lint._helpers import (
+from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,
 )
-from vibeforcer.models import RuleFinding, Severity
-from vibeforcer.rules.base import join_messages
-from vibeforcer.enrichment import enrich_findings
+from slopgate.models import RuleFinding, Severity
+from slopgate.rules.base import join_messages
+from slopgate.enrichment import enrich_findings
 
 
 TEXT_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789 _.-"

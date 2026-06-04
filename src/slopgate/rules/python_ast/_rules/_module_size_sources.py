@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from vibeforcer._types import ObjectDict, object_dict, object_list
-from vibeforcer.constants import LINT_MAX_MODULE_LINES_SOFT, PERMISSION_REQUEST, PRE_TOOL_USE
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.payloads import (
+from slopgate._types import ObjectDict, object_dict, object_list
+from slopgate.constants import LINT_MAX_MODULE_LINES_SOFT, PERMISSION_REQUEST, PRE_TOOL_USE
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.payloads import (
     extract_path_from_mapping,
     first_present,
     is_bash_tool,
@@ -17,7 +17,7 @@ from vibeforcer.util.payloads import (
 from ._source_parse import _line_count, _resolve_python_path
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
+    from slopgate.context import HookContext
 
 
 def _significant_line_fingerprint(source: str) -> tuple[str, ...]:

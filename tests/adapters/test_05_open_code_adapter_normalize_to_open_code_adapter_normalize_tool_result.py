@@ -3,6 +3,9 @@ from __future__ import annotations
 from tests.test_adapters import (
     ObjectDict,
     OpenCodeAdapter,
+    RuleFinding,
+    Severity,
+    require_rendered,
 )
 
 class TestOpenCodeAdapterNormalize:
@@ -212,3 +215,17 @@ class TestOpenCodeAdapterNormalizeToolResult:
         assert "tool_response" not in canonical, (
             "tool_response should not be created for PreToolUse"
         )
+
+
+class TestOpenCodeAdapterRender:
+    def test_stop_block_renders_continue_action(self) -> None:
+        adapter = OpenCodeAdapter()
+        finding = RuleFinding(
+            rule_id="STOP-001",
+            title="continue",
+            severity=Severity.HIGH,
+            decision="block",
+            message="Keep going.",
+        )
+        output = require_rendered(adapter.render_output("Stop", [finding], decision="block"))
+        assert output == {"action": "continue", "reason": "[STOP-001 | HIGH] Keep going."}

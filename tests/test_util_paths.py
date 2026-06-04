@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.util import logger
-from vibeforcer.util.payloads import is_bash_tool, is_shell_tool, shell_kind_for_tool
-from vibeforcer.util.path_filters import is_third_party_or_virtualenv_path
-from vibeforcer.util.platform import (
+from slopgate.util import logger
+from slopgate.util.payloads import is_bash_tool, is_shell_tool, shell_kind_for_tool
+from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.platform import (
     is_windows,
     looks_like_windows_absolute_path,
     lower_path_for_match,
@@ -45,8 +45,8 @@ def _xdg_helper_results(
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     return {
         "is_windows_bool": isinstance(is_windows(), bool),
-        "config": user_config_dir("vibeforcer-test"),
-        "data": user_data_dir("vibeforcer-test"),
+        "config": user_config_dir("slopgate-test"),
+        "data": user_data_dir("slopgate-test"),
         "data_root_exists": data_root.exists(),
     }
 
@@ -76,8 +76,8 @@ def test_user_platform_dirs_respect_xdg_config_home(
 
     assert results == {
         "is_windows_bool": True,
-        "config": config_root / "vibeforcer-test",
-        "data": Path.home() / ".local" / "share" / "vibeforcer-test",
+        "config": config_root / "slopgate-test",
+        "data": Path.home() / ".local" / "share" / "slopgate-test",
         "data_root_exists": False,
     }
 

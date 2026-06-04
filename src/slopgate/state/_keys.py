@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from time import time
-from vibeforcer.constants import (
+from slopgate.constants import (
     METADATA_PATH,
 )
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
     ObjectMapping,
     object_dict,

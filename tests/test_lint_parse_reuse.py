@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from vibeforcer.lint._detectors import code_smells
-from vibeforcer.lint._detectors import logging_conventions
-from vibeforcer.lint._detectors import stale_code
-from vibeforcer.lint._detectors import wrappers
-from vibeforcer.lint._detectors.test_smells import _basic_detection
-from vibeforcer.lint import _helpers
-from vibeforcer.lint._config import get_config
-from vibeforcer.lint._helpers import (
+from slopgate.lint._detectors import code_smells
+from slopgate.lint._detectors import logging_conventions
+from slopgate.lint._detectors import stale_code
+from slopgate.lint._detectors import wrappers
+from slopgate.lint._detectors.test_smells import _basic_detection
+from slopgate.lint import _helpers
+from slopgate.lint._config import get_config
+from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,

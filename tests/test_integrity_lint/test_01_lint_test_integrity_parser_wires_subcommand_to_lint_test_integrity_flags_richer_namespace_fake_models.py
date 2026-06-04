@@ -83,8 +83,8 @@ def test_sends_notice_payload_contract():
 
     captured = capsys.readouterr()
     assert result == 1
-    assert "vibeforcer lint " in captured.out
-    assert "vibeforcer lint test-integrity" not in captured.out
+    assert "slopgate lint " in captured.out
+    assert "slopgate lint test-integrity" not in captured.out
     _assert_mock_theater_guidance(captured.out, result)
 
 

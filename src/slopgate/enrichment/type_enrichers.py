@@ -6,14 +6,14 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from vibeforcer.enrichment._helpers import (
+from slopgate.enrichment._helpers import (
     append_enrichment_message,
     first_target_content,
 )
 
 if TYPE_CHECKING:
-    from vibeforcer.context import HookContext
-    from vibeforcer.models import RuleFinding
+    from slopgate.context import HookContext
+    from slopgate.models import RuleFinding
 
 
 def _is_dict_or_mapping(content: str) -> bool:

@@ -6,21 +6,42 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vibeforcer._types import (
+from slopgate._types import (
     ObjectDict,
     ObjectMapping,
     is_object_dict,
     object_dict,
     string_value,
 )
-from vibeforcer.adapters.base import (
+from slopgate.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
     render_request_from_call,
     render_permission_request_output,
 )
-from vibeforcer.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from vibeforcer.models import RuleFinding
+from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.models import RuleFinding
+
+_CLAUDE_EVENT_ALIASES: dict[str, str] = {
+    "pretooluse": PRE_TOOL_USE,
+    "posttooluse": POST_TOOL_USE,
+    "posttoolusefailure": "PostToolUseFailure",
+    "permissionrequest": PERMISSION_REQUEST,
+    "userpromptsubmit": "UserPromptSubmit",
+    "sessionstart": "SessionStart",
+    "sessionend": "SessionEnd",
+    "subagentstart": "SubagentStart",
+    "subagentstop": "SubagentStop",
+}
+
+
+def _canonical_event_name(raw: ObjectMapping) -> str:
+    event = string_value(raw.get("hook_event_name")) or string_value(raw.get("hookEventName"))
+    if not event:
+        return ""
+    if event in _CLAUDE_EVENT_ALIASES.values():
+        return event
+    return _CLAUDE_EVENT_ALIASES.get(event.lower().replace("-", ""), event)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,17 +58,27 @@ class ClaudeAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
-        if is_object_dict(raw):
-            return raw
-        return object_dict(raw)
+        canonical = object_dict(raw) if is_object_dict(raw) else object_dict(raw)
+        event_name = _canonical_event_name(raw)
+        if event_name:
+            canonical["hook_event_name"] = event_name
+        session_id = string_value(raw.get("session_id")) or string_value(raw.get("sessionId"))
+        if session_id:
+            canonical["session_id"] = session_id
+        cwd = string_value(raw.get("cwd")) or string_value(raw.get("workspace_root"))
+        if cwd:
+            canonical["cwd"] = cwd
+        return canonical
 
     def _decision_reason(self, request: _ClaudeRenderRequest) -> str:
         return self.join_messages(
             self.decision_findings(request.findings, request.decision)
         )
 
-    def _render_pre_tool_use(self, request: _ClaudeRenderRequest) -> ObjectDict | None:
-        specific: ObjectDict = {"hookEventName": PRE_TOOL_USE}
+    def _render_hook_specific_permission(
+        self, request: _ClaudeRenderRequest, hook_event_name: str
+    ) -> ObjectDict | None:
+        specific: ObjectDict = {"hookEventName": hook_event_name}
         if request.decision in {DENY, "ask", "allow"}:
             specific["permissionDecision"] = request.decision
             specific["permissionDecisionReason"] = self._decision_reason(request)
@@ -60,6 +91,9 @@ class ClaudeAdapter(PlatformAdapter):
             specific["additionalContext"] = request.context
         response: ObjectDict = {"hookSpecificOutput": specific}
         return response if len(specific) > 1 else None
+
+    def _render_pre_tool_use(self, request: _ClaudeRenderRequest) -> ObjectDict | None:
+        return self._render_hook_specific_permission(request, PRE_TOOL_USE)
 
     def _render_permission_request(
         self, request: _ClaudeRenderRequest
@@ -121,8 +155,8 @@ class ClaudeAdapter(PlatformAdapter):
             decision=render_request.decision,
         )
 
-        if request.event_name == PRE_TOOL_USE:
-            return self._render_pre_tool_use(request)
+        if request.event_name in {PRE_TOOL_USE, "SubagentStart"}:
+            return self._render_hook_specific_permission(request, request.event_name)
 
         if request.event_name == PERMISSION_REQUEST:
             return self._render_permission_request(request)

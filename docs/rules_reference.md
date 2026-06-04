@@ -9,7 +9,7 @@
 | BUILTIN-PROTECTED-PATHS | HIGH | PreToolUse, PermissionRequest | Blocks writes to configured protected paths |
 | GLOBAL-BUILTIN-SENSITIVE-DATA | HIGH | PreToolUse, PermissionRequest | Blocks access to sensitive files (.env, SSH keys, etc.) |
 | GLOBAL-BUILTIN-SYSTEM-PROTECTION | CRITICAL | PreToolUse, PermissionRequest | Blocks access to system paths (/etc, /usr, etc.) |
-| GLOBAL-BUILTIN-HOOK-INFRA-EXEC | CRITICAL | PreToolUse, PermissionRequest | Blocks modification of vibeforcer infrastructure |
+| GLOBAL-BUILTIN-HOOK-INFRA-EXEC | CRITICAL | PreToolUse, PermissionRequest | Blocks modification of slopgate infrastructure |
 
 ### Git Safety
 

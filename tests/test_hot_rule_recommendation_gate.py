@@ -6,10 +6,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from vibeforcer.context import build_context
-from vibeforcer.engine import evaluate_payload, render_output
-from vibeforcer.engine import _retry as engine_retry
-from vibeforcer.models import EngineResult, RuleFinding, Severity
+from slopgate.context import build_context
+from slopgate.engine import evaluate_payload, render_output
+from slopgate.engine import _retry as engine_retry
+from slopgate.models import EngineResult, RuleFinding, Severity
 
 from tests import support as test_support
 
@@ -17,8 +17,8 @@ from tests import support as test_support
 def _enroll_repo(repo: Path) -> None:
     (repo / "src").mkdir(parents=True, exist_ok=True)
     (repo / "tests").mkdir(parents=True, exist_ok=True)
-    (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
 
 
@@ -99,7 +99,7 @@ def _assert_quality_lint_repair_context(context: str, output_text: str) -> None:
         "Do not continue feature work",
         "reread the touched file",
         "smallest repo-root quality command",
-        "from the repo root, run `vibeforcer lint check`",
+        "from the repo root, run `slopgate lint check`",
         "fix only the reported collector",
     ]
     missing_context = [phrase for phrase in required_context if phrase not in context]
@@ -227,7 +227,7 @@ def test_long_params_reason_is_role_aware_for_production_code(tmp_path: Path) ->
 
 def test_repo_prompt_context_preflights_hot_rules(bundle_root: Path) -> None:
     prompt_context = (
-        bundle_root / "src" / "vibeforcer" / "resources" / "prompt_context" / "repo.md"
+        bundle_root / "src" / "slopgate" / "resources" / "prompt_context" / "repo.md"
     ).read_text(encoding="utf-8")
 
     assert "Hot Hook Preflight" in prompt_context

@@ -5,17 +5,17 @@ from tempfile import TemporaryDirectory
 
 from hypothesis import given, strategies
 
-from vibeforcer.lint._detectors.duplicates import detect_semantic_clones
-from vibeforcer.lint._detectors.exception_safety import (
+from slopgate.lint._detectors.duplicates import detect_semantic_clones
+from slopgate.lint._detectors.exception_safety import (
     detect_broad_except_swallow,
     detect_silent_except,
     detect_silent_fallback,
 )
-from vibeforcer.lint._detectors.type_safety import (
+from slopgate.lint._detectors.type_safety import (
     detect_any_usage,
     detect_type_suppressions,
 )
-from vibeforcer.lint._helpers import ParsedFile, parse_files
+from slopgate.lint._helpers import ParsedFile, parse_files
 
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z_]{0,12}", fullmatch=True)
 

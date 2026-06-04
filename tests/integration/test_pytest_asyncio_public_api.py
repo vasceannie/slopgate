@@ -7,7 +7,7 @@ from pathlib import Path
 from hypothesis import given, strategies
 
 from tests.test_enrichment_public_api import context_for_source
-from vibeforcer.rules.python_ast._pytest_asyncio_ast import (
+from slopgate.rules.python_ast._pytest_asyncio_ast import (
     FixtureCheckTarget,
     fixture_decorator_call,
     fixture_decorator_name,
@@ -17,11 +17,11 @@ from vibeforcer.rules.python_ast._pytest_asyncio_ast import (
     pytest_aliases,
     string_keyword,
 )
-from vibeforcer.rules.python_ast._pytest_asyncio_config import (
+from slopgate.rules.python_ast._pytest_asyncio_config import (
     pytest_asyncio_default_fixture_loop_scope,
     pytest_asyncio_mode,
 )
-from vibeforcer.rules.python_ast._pytest_asyncio_scope import (
+from slopgate.rules.python_ast._pytest_asyncio_scope import (
     fixture_scope_fragment,
     is_unknown_fixture_scope,
     is_valid_fixture_loop_scope,

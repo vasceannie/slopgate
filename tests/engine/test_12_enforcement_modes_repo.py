@@ -19,8 +19,8 @@ from tests.test_engine import (
 def _repo_with_quality_gate(tmp_path: Path, name: str) -> Path:
     repo = tmp_path / name
     repo.mkdir(parents=True)
-    _ = (repo / "quality_gate.toml").write_text(
-        "[quality_gate]\nenabled = true\n", encoding="utf-8"
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
     return repo
 
@@ -34,7 +34,7 @@ def _patch_allowlist_payload(repo: Path) -> dict[str, object]:
         "tool_input": {
             "patch": """
 *** Begin Patch
-*** Update File: quality_gate.toml
+*** Update File: slopgate.toml
 @@
  allowed_strings = [
 +    "field",
@@ -53,7 +53,7 @@ def _patch_delete_payload(repo: Path) -> dict[str, object]:
         "hook_event_name": "PreToolUse",
         "tool_name": "Patch",
         "tool_input": {
-            "patch": "*** Begin Patch\n*** Delete File: quality_gate.toml\n*** End Patch\n"
+            "patch": "*** Begin Patch\n*** Delete File: slopgate.toml\n*** End Patch\n"
         },
     }
 
@@ -61,9 +61,9 @@ def _patch_delete_payload(repo: Path) -> dict[str, object]:
 def _direct_policy_marker_payload(repo: Path) -> dict[str, object]:
     return _pretool_write_payload(
         repo,
-        "quality_gate.toml",
+        "slopgate.toml",
         """
-[quality_gate]
+[slopgate]
 enabled = true
 [magic_values]
 allowed_strings = ["type", "value", "text", "status", "field", "company"]
@@ -76,16 +76,16 @@ allowed = []
 _REPO_ENROLLMENT_CASES: list[tuple[str, Callable[[Path], dict[str, object]]]] = [
     (
         "repo_enrolled_sentinel",
-        lambda repo: _pretool_write_payload(repo, ".noqualitygate", ""),
+        lambda repo: _pretool_write_payload(repo, ".noslopgate", ""),
     ),
     (
         "repo_enrolled_delete",
-        lambda repo: _pretool_delete_payload(repo, "quality_gate.toml"),
+        lambda repo: _pretool_delete_payload(repo, "slopgate.toml"),
     ),
     (
         "repo_enrolled_disable_flag",
         lambda repo: _pretool_write_payload(
-            repo, "quality_gate.toml", "[quality_gate]\nenabled = false\n"
+            repo, "slopgate.toml", "[slopgate]\nenabled = false\n"
         ),
     ),
     ("repo_enrolled_policy_marker_edit", _direct_policy_marker_payload),

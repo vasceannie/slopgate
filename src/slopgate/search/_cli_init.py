@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from vibeforcer.search.config import (
+from slopgate.search.config import (
     APP_CONFIG,
     APP_NAME,
     DEFAULT_ISLANDS_CONFIG,
@@ -20,12 +20,12 @@ from vibeforcer.search.config import (
     expand,
     save_config,
 )
-from vibeforcer.search.runtime import (
+from slopgate.search.runtime import (
     choose_litellm_model,
     embedding_like,
     write_islands_config,
 )
-from vibeforcer.search.scaffolds import scaffold_opencode_plugin, scaffold_skill
+from slopgate.search.scaffolds import scaffold_opencode_plugin, scaffold_skill
 
 
 def _string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
