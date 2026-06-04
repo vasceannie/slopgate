@@ -1,0 +1,19 @@
+{
+  "semantic_tokens": "combined",
+  "terminal": {
+    "detect_venv": {
+      "on": {
+        // Default directories to search for virtual environments, relative
+        // to the current working directory. We recommend overriding this
+        // in your project's settings, rather than globally.
+        "directories": [".env", "env", ".venv", "venv"],
+        // Can also be `csh`, `fish`, `nushell` and `power_shell`
+        "activate_script": "default",
+        // Preferred Conda manager to use when activating Conda environments.
+        // Values: "auto", "conda", "mamba", "micromamba"
+        // Default: "auto"
+        "conda_manager": "auto"
+      }
+    }
+  }
+}
