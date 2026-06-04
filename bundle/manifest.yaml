@@ -5,35 +5,242 @@ links:
     src: shared/skills/code-hygiene-refactor
     dest: ~/.claude/skills/code-hygiene-refactor
   - platform: claude
+    src: shared/skills/code-smell-utility-locator
+    dest: ~/.claude/skills/code-smell-utility-locator
+  - platform: claude
     src: shared/skills/hygiene-orchestrator
     dest: ~/.claude/skills/hygiene-orchestrator
+  - platform: claude
+    src: shared/skills/implement-spec
+    dest: ~/.claude/skills/implement-spec
   - platform: claude
     src: shared/skills/isx-cli
     dest: ~/.claude/skills/isx-cli
   - platform: claude
-    src: shared/skills/code-smell-utility-locator
-    dest: ~/.claude/skills/code-smell-utility-locator
+    src: shared/skills/rtk-cli
+    dest: ~/.claude/skills/rtk-cli
   - platform: claude
-    src: claude/agents/agent-python-executor.md
-    dest: ~/.claude/agents/agent-python-executor.md
+    src: shared/skills/codegraph-cli
+    dest: ~/.claude/skills/codegraph-cli
   - platform: claude
-    src: claude/rules/python/style-conventions.md
-    dest: ~/.claude/rules/python/style-conventions.md
+    src: shared/skills/requirements-spec
+    dest: ~/.claude/skills/requirements-spec
   - platform: claude
-    src: claude/rules/quality-complexity.md
-    dest: ~/.claude/rules/quality-complexity.md
+    src: shared/skills/test-extender
+    dest: ~/.claude/skills/test-extender
+  - platform: claude
+    src: shared/skills/type-strictness
+    dest: ~/.claude/skills/type-strictness
   - platform: opencode
     src: shared/skills/code-hygiene-refactor
     dest: ~/.config/opencode/skills/code-hygiene-refactor
   - platform: opencode
+    src: shared/skills/code-smell-utility-locator
+    dest: ~/.config/opencode/skills/code-smell-utility-locator
+  - platform: opencode
     src: shared/skills/hygiene-orchestrator
     dest: ~/.config/opencode/skills/hygiene-orchestrator
+  - platform: opencode
+    src: shared/skills/implement-spec
+    dest: ~/.config/opencode/skills/implement-spec
   - platform: opencode
     src: shared/skills/isx-cli
     dest: ~/.config/opencode/skills/isx-cli
   - platform: opencode
+    src: shared/skills/rtk-cli
+    dest: ~/.config/opencode/skills/rtk-cli
+  - platform: opencode
+    src: shared/skills/codegraph-cli
+    dest: ~/.config/opencode/skills/codegraph-cli
+  - platform: opencode
+    src: shared/skills/requirements-spec
+    dest: ~/.config/opencode/skills/requirements-spec
+  - platform: opencode
+    src: shared/skills/test-extender
+    dest: ~/.config/opencode/skills/test-extender
+  - platform: opencode
+    src: shared/skills/type-strictness
+    dest: ~/.config/opencode/skills/type-strictness
+  - platform: codex
+    src: shared/skills/code-hygiene-refactor
+    dest: ~/.codex/skills/code-hygiene-refactor
+  - platform: codex
     src: shared/skills/code-smell-utility-locator
-    dest: ~/.config/opencode/skills/code-smell-utility-locator
+    dest: ~/.codex/skills/code-smell-utility-locator
+  - platform: codex
+    src: shared/skills/hygiene-orchestrator
+    dest: ~/.codex/skills/hygiene-orchestrator
+  - platform: codex
+    src: shared/skills/implement-spec
+    dest: ~/.codex/skills/implement-spec
+  - platform: codex
+    src: shared/skills/isx-cli
+    dest: ~/.codex/skills/isx-cli
+  - platform: codex
+    src: shared/skills/rtk-cli
+    dest: ~/.codex/skills/rtk-cli
+  - platform: codex
+    src: shared/skills/codegraph-cli
+    dest: ~/.codex/skills/codegraph-cli
+  - platform: codex
+    src: shared/skills/requirements-spec
+    dest: ~/.codex/skills/requirements-spec
+  - platform: codex
+    src: shared/skills/test-extender
+    dest: ~/.codex/skills/test-extender
+  - platform: codex
+    src: shared/skills/type-strictness
+    dest: ~/.codex/skills/type-strictness
+  - platform: claude
+    src: claude/agents/agent-feasibility.md
+    dest: ~/.claude/agents/agent-feasibility.md
+  - platform: claude
+    src: claude/agents/agent-python-executor.md
+    dest: ~/.claude/agents/agent-python-executor.md
+  - platform: claude
+    src: claude/agents/agent-requirements-gatherer.md
+    dest: ~/.claude/agents/agent-requirements-gatherer.md
+  - platform: claude
+    src: claude/agents/agent-test-orchestrator.md
+    dest: ~/.claude/agents/agent-test-orchestrator.md
+  - platform: claude
+    src: claude/agents/agent-testing-architect.md
+    dest: ~/.claude/agents/agent-testing-architect.md
+  - platform: claude
+    src: claude/subagent-rules/python-core.md
+    dest: ~/.claude/subagent-rules/python-core.md
+  - platform: claude
+    src: claude/subagent-rules/python-testing.md
+    dest: ~/.claude/subagent-rules/python-testing.md
+  - platform: claude
+    src: claude/subagent-rules/typescript-core.md
+    dest: ~/.claude/subagent-rules/typescript-core.md
+  - platform: claude
+    src: claude/subagent-rules/workflow-quality.md
+    dest: ~/.claude/subagent-rules/workflow-quality.md
+  - platform: claude
+    src: claude/rules/domain/langgraph.md
+    dest: ~/.claude/rules/domain/langgraph.md
+  - platform: claude
+    src: claude/rules/git-workflow.md
+    dest: ~/.claude/rules/git-workflow.md
+  - platform: claude
+    src: claude/rules/own-completion.md
+    dest: ~/.claude/rules/own-completion.md
+  - platform: claude
+    src: claude/rules/perf-awareness.md
+    dest: ~/.claude/rules/perf-awareness.md
+  - platform: claude
+    src: claude/rules/python/error-handling.md
+    dest: ~/.claude/rules/python/error-handling.md
+  - platform: claude
+    src: claude/rules/python/project-structure.md
+    dest: ~/.claude/rules/python/project-structure.md
+  - platform: claude
+    src: claude/rules/python/style-conventions.md
+    dest: ~/.claude/rules/python/style-conventions.md
+  - platform: claude
+    src: claude/rules/python/type-safety.md
+    dest: ~/.claude/rules/python/type-safety.md
+  - platform: claude
+    src: claude/rules/quality-architecture.md
+    dest: ~/.claude/rules/quality-architecture.md
+  - platform: claude
+    src: claude/rules/quality-complexity.md
+    dest: ~/.claude/rules/quality-complexity.md
+  - platform: claude
+    src: claude/rules/rust/style-conventions.md
+    dest: ~/.claude/rules/rust/style-conventions.md
+  - platform: claude
+    src: claude/rules/search-navigation.md
+    dest: ~/.claude/rules/search-navigation.md
+  - platform: claude
+    src: claude/rules/sec-general.md
+    dest: ~/.claude/rules/sec-general.md
+  - platform: claude
+    src: claude/rules/testing/pytest-patterns.md
+    dest: ~/.claude/rules/testing/pytest-patterns.md
+  - platform: claude
+    src: claude/rules/testing/test-patterns.md
+    dest: ~/.claude/rules/testing/test-patterns.md
+  - platform: claude
+    src: claude/rules/testing/test-smells.md
+    dest: ~/.claude/rules/testing/test-smells.md
+  - platform: claude
+    src: claude/rules/tool-atomic-edits.md
+    dest: ~/.claude/rules/tool-atomic-edits.md
+  - platform: claude
+    src: claude/rules/typescript/error-handling.md
+    dest: ~/.claude/rules/typescript/error-handling.md
+  - platform: claude
+    src: claude/rules/typescript/style-conventions.md
+    dest: ~/.claude/rules/typescript/style-conventions.md
+  - platform: claude
+    src: claude/rules/typescript/type-safety.md
+    dest: ~/.claude/rules/typescript/type-safety.md
+  - platform: opencode
+    src: opencode/rules/core/agent-core.md
+    dest: ~/.config/opencode/rules/core/agent-core.md
+  - platform: opencode
+    src: opencode/rules/core/shell-noninteractive.md
+    dest: ~/.config/opencode/rules/core/shell-noninteractive.md
+  - platform: opencode
+    src: opencode/rules/domain/langgraph.md
+    dest: ~/.config/opencode/rules/domain/langgraph.md
+  - platform: opencode
+    src: opencode/rules/python/error-handling.md
+    dest: ~/.config/opencode/rules/python/error-handling.md
+  - platform: opencode
+    src: opencode/rules/python/project-structure.md
+    dest: ~/.config/opencode/rules/python/project-structure.md
+  - platform: opencode
+    src: opencode/rules/python/style.md
+    dest: ~/.config/opencode/rules/python/style.md
+  - platform: opencode
+    src: opencode/rules/python/type-safety.md
+    dest: ~/.config/opencode/rules/python/type-safety.md
+  - platform: opencode
+    src: opencode/rules/quality/architecture.md
+    dest: ~/.config/opencode/rules/quality/architecture.md
+  - platform: opencode
+    src: opencode/rules/quality/complexity.md
+    dest: ~/.config/opencode/rules/quality/complexity.md
+  - platform: opencode
+    src: opencode/rules/quality/performance.md
+    dest: ~/.config/opencode/rules/quality/performance.md
+  - platform: opencode
+    src: opencode/rules/rust/style.md
+    dest: ~/.config/opencode/rules/rust/style.md
+  - platform: opencode
+    src: opencode/rules/security/general.md
+    dest: ~/.config/opencode/rules/security/general.md
+  - platform: opencode
+    src: opencode/rules/testing/patterns.md
+    dest: ~/.config/opencode/rules/testing/patterns.md
+  - platform: opencode
+    src: opencode/rules/testing/pytest.md
+    dest: ~/.config/opencode/rules/testing/pytest.md
+  - platform: opencode
+    src: opencode/rules/testing/smells.md
+    dest: ~/.config/opencode/rules/testing/smells.md
+  - platform: opencode
+    src: opencode/rules/typescript/error-handling.md
+    dest: ~/.config/opencode/rules/typescript/error-handling.md
+  - platform: opencode
+    src: opencode/rules/typescript/style.md
+    dest: ~/.config/opencode/rules/typescript/style.md
+  - platform: opencode
+    src: opencode/rules/typescript/type-safety.md
+    dest: ~/.config/opencode/rules/typescript/type-safety.md
+  - platform: opencode
+    src: opencode/rules/workflow/git.md
+    dest: ~/.config/opencode/rules/workflow/git.md
   - platform: opencode
     src: opencode/rules/workflow/own-completion.md
     dest: ~/.config/opencode/rules/workflow/own-completion.md
+  - platform: opencode
+    src: opencode/rules/workflow/search-navigation.md
+    dest: ~/.config/opencode/rules/workflow/search-navigation.md
+  - platform: opencode
+    src: opencode/rules/workflow/tool-atomic-edits.md
+    dest: ~/.config/opencode/rules/workflow/tool-atomic-edits.md

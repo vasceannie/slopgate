@@ -27,11 +27,12 @@ Use `--only claude`, `--only opencode`, `--only codex`, or `--only cursor` to li
 
 ## Directory map
 
-- `shared/skills/` — canonical shared skill trees linked into Claude and OpenCode.
-- `shared/mcp/slopgate.mcp.json` — placeholder MCP config template; servers are intentionally TBD.
-- `claude/` — Claude-specific prompt fragments, rule shards, subagent rules, and agents.
-- `opencode/` — OpenCode prompt fragments and rule shards; hooks remain installed by `slopgate install opencode`.
-- `codex/` — Codex prompt fragments for manual merge into `~/.codex/AGENTS.md`.
+- `shared/skills/` — canonical shared skill trees linked into Claude, OpenCode, and Codex.
+- `shared/mcp/slopgate.mcp.json` — placeholder MCP config template; servers are intentionally TBD and must stay secret-free.
+- `shared/mcp/codegraph.mcp.json` — merge snippet for the CodeGraph MCP server (`codegraph serve --mcp`); prefer `codegraph install` for agent wiring.
+- `claude/` — Claude-specific prompt fragments, full rule shard mirror, subagent-rule digests, and agents.
+- `opencode/` — OpenCode prompt fragments and full rule shard mirror; hooks remain installed by `slopgate install opencode`.
+- `codex/` — Codex prompt fragments for manual merge into `~/.codex/AGENTS.md`; Codex skill trees link from `shared/skills/`.
 - `cursor/` — reserved Cursor rule surface; native hooks remain installed by `slopgate install cursor`.
 - `claude-plugin/` — Claude Code plugin-shaped tree for local `--plugin-dir` testing and future marketplace packaging.
 - `marketplace/` — local Claude marketplace catalog for plugin-manager smoke tests.
@@ -49,10 +50,12 @@ The plugin contains skills and agents only. Its `hooks/README.md` points users b
 
 ## Migration inventory
 
-The first bundle pass migrated these local Slopgate-branded assets:
+The bundle currently centralizes these non-secret local agent assets:
 
-- `code-hygiene-refactor`, `hygiene-orchestrator`, `isx-cli`, and `code-smell-utility-locator` into `shared/skills/`.
-- `agent-python-executor.md` into `claude/agents/`.
-- Claude rule shards `python/style-conventions.md` and `quality-complexity.md`.
-- OpenCode rule shard `workflow/own-completion.md`.
+- Shared skills: `code-hygiene-refactor`, `hygiene-orchestrator`, `type-strictness`, `test-extender`, `requirements-spec`, `implement-spec`, `isx-cli`, `rtk-cli` ([RTK](https://github.com/rtk-ai/rtk); hooks via `rtk init`), `codegraph-cli` ([CodeGraph](https://github.com/colbymchenry/codegraph); MCP via `codegraph install`), and `code-smell-utility-locator`.
+- Claude agents/subagents: `agent-python-executor.md` (the canonical Python executor; sometimes referred to as `python-agent-executor`), plus feasibility, requirements, testing-architect, and test-orchestrator agents.
+- Claude subagent digests: `python-core.md`, `python-testing.md`, `typescript-core.md`, and `workflow-quality.md`.
+- Claude and OpenCode rule shard mirrors under `claude/rules/` and `opencode/rules/`.
 - Slopgate-specific prompt fragments from Claude and OpenCode global guidance.
+
+Not centralized: project-specific digests such as Job Hunter context, Cursor generated MCP metadata/transcripts/caches, and live hook files. Those remain project/runtime state, not bundle source.

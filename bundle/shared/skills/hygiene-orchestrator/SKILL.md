@@ -1,142 +1,261 @@
 ---
 name: hygiene-orchestrator
 description: |
-  Coordinate multi-file or repo-wide hygiene repairs after Slopgate, type, lint, or test-quality failures. Use when code-hygiene-refactor is not enough: multiple files share findings, package splits affect public imports, QUALITY-LINT-001 repeats across a repo, or parallel repair batches are needed. Preserves guardrails; never rebaselines or weakens rules without explicit approval.
+  Orchestrate systematic elimination of all linter warnings and errors across Python, TypeScript, and Rust codebases. Use when asked to "clean up lints", "fix all warnings", "run hygiene", "eliminate type errors", or "orchestrate code quality fixes". This skill coordinates multiple code-hygiene-enforcer agents working in parallel on non-conflicting file groupings, tracks progress persistently, and loops until all issues are resolved. CRITICAL: Never run linters directly—always use Makefile targets that export to .hygeine/.
 ---
 
 # Hygiene Orchestrator
 
-Use this skill for broad quality cleanup. For one file or one local hook denial, start with `code-hygiene-refactor`; escalate here when the work needs batching, dependency ordering, or multiple agents.
+Coordinate systematic elimination of linter warnings/errors using parallelized agents and persistent progress tracking.
 
-## Non-negotiables
+## Critical Rules
 
-1. **Do not weaken quality gates**: no threshold/allowlist/baseline/test edits unless Trav explicitly approves that policy change.
-2. **No overlapping edits**: two agents/batches must not write the same file or package facade at the same time.
-3. **Structural repairs before lint churn**: package splits, public API preservation, and import graph cleanup are coordination tasks, not parallel free-for-alls.
-4. **Repo-root quality checks**: run public Slopgate lint from the repo root with no path arguments.
-5. **Record progress durably** when context may compact: issue manifest, batch ownership, completed files, validation results, blockers.
+1. **NEVER run linters directly in terminal** — Use Makefile targets exclusively
+2. **Always export to .hygeine/** — Lint outputs must be persisted for parsing
+3. **Update tracking before context compaction** — Progress must survive context limits
+4. **Remind all agents about type-strictness skill** — Invoke `/type-strictness` for type fixes
 
-## Intake workflow
+## Workflow Overview
 
-1. Capture the current signal:
-   - hook rule IDs (`PY-CODE-017`, `PY-CODE-018`, `QUALITY-LINT-001`, etc.);
-   - linter/type/test commands and outputs;
-   - affected paths and import owners.
-2. Classify findings:
-   - package/architecture (`PY-CODE-017`, oversized modules, god classes);
-   - type safety (`type-strictness` needed);
-   - test quality (`test-extender` likely needed);
-   - duplicate helpers/constants;
-   - operational hook/runtime failures.
-3. Decide whether work is serial or parallel.
-
-## Batching strategy
-
-### Serial-only classes
-
-Run these as one coordinated batch, not parallel edits:
-
-- module-to-package splits that touch `__init__.py` facades;
-- flat sibling package conversions (`PY-CODE-017`);
-- public API/import migrations;
-- shared type/protocol changes;
-- shared constants/helper ownership changes.
-
-### Parallel-safe classes
-
-May be split into non-overlapping file batches after import ownership is clear:
-
-- independent test assertion/message fixes;
-- dead code removal in unrelated directories;
-- local type narrowing that does not alter shared signatures;
-- repeated small smells in unrelated packages.
-
-### Ownership rule
-
-A batch owns:
-
-- exact files it may edit;
-- package facades it may touch;
-- tests it must run;
-- imports it may update.
-
-No other batch can touch those paths until validation completes.
-
-## Suggested repair waves
-
-1. **Wave 0: stop the bleeding**
-   - Restore parseability (`PY-AST-001`) and failing imports.
-   - Revert or repair landed PostToolUse bad mutations.
-2. **Wave 1: architecture/package shape**
-   - Convert flat sibling clusters to packages.
-   - Split oversized modules/god classes into cohesive owners.
-   - Preserve public API with facades and tests.
-3. **Wave 2: shared types/constants/helpers**
-   - Add protocols/TypedDicts/parameter objects.
-   - Consolidate duplicate helpers/constants.
-4. **Wave 3: localized lint/test cleanup**
-   - Dispatch parallel file-owned batches.
-5. **Wave 4: verification and drift check**
-   - Focused tests, type/lint, repo-root Slopgate, broader suite as needed.
-
-## Agent handoff template
-
-```text
-Batch: <name>
-Rule IDs: <ids>
-Owned files: <files>
-Do not touch: <shared facades/files owned by other batches>
-Required skills: code-hygiene-refactor, type-strictness/test-extender if relevant
-Goal: <specific repair>
-Public API/imports to preserve: <imports>
-Verification: <commands>
-Return: summary, files changed, validation output, blockers
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  1. Export      │───>│  2. Parse &      │───>│  3. Dispatch    │
+│  Lint Results   │    │  Group Issues    │    │  Parallel Agents│
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         ^                                              │
+         │              ┌──────────────────┐            │
+         └──────────────│  4. Validate &   │<───────────┘
+                        │  Update Tracking │
+                        └──────────────────┘
 ```
 
-## Verification ladder
+## Phase 1: Export Lint Results
+
+Run Makefile targets to populate `.hygeine/`:
 
 ```bash
-# Syntax for changed Python files
-python3 -m py_compile <changed files>
+# Python lints (pyrefly + basedpyright)
+make lint-py                    # → .hygeine/pyrefly.txt
+make type-check-py 2>&1 | tee .hygeine/basedpyright.txt
 
-# Focused tests by touched behavior
-python3 -m pytest <focused tests> -q
+# TypeScript lints
+make lint                       # → .hygeine/biome.json
+make type-check 2>&1 | tee .hygeine/tsc.txt
 
-# Repo-root Slopgate gate; no path args
-cd /path/to/repo && HOME=/home/trav /home/trav/.local/bin/slopgate lint check
+# Rust lints
+make clippy                     # → .hygeine/clippy.json
+make lint-rs                    # → .hygeine/rust_code_quality.txt
 ```
 
-For Slopgate source changes:
+**Auto-fixable first**: Run `make lint-fix-py` and `make lint-fix` before manual fixes.
+
+## Phase 2: Parse and Group Issues
+
+### Parsing Lint Outputs
+
+Use `scripts/parse_lints.py` to parse all outputs into unified format:
 
 ```bash
-cd /home/trav/.openclaw/workspace-hooker/slopgate
-.venv/bin/python -m pytest tests/test_flat_file_sibling_packages.py tests/test_size_guard_hook_behavior.py -q
-HOME=/home/trav .venv/bin/slopgate test
-git diff --check
+python /path/to/skill/scripts/parse_lints.py .hygeine/ --output .hygeine/unified_issues.json
 ```
 
-## Progress record shape
+### Grouping Strategy
 
-Keep this in a project scratch file such as `.hygiene/tracking.json`, `.hermes/hygiene-progress.md`, or the session todo list when local files are not appropriate:
+Group issues into **non-conflicting batches** for parallel agent work:
+
+| Priority | Grouping Criteria | Rationale |
+|----------|-------------------|-----------|
+| 1 | By file (no overlaps) | Agents can't conflict on different files |
+| 2 | By error category | Similar fixes, consistent patterns |
+| 3 | By severity | Errors before warnings |
+| 4 | By dependency order | Fix imports/types before consumers |
+
+**Non-conflicting batch rules:**
+- Files in batch A share NO imports with files in batch B
+- Type definition files before files that use those types
+- Base classes before derived classes
+
+See `references/grouping_strategies.md` for detailed algorithms.
+
+## Phase 3: Dispatch Parallel Agents
+
+### Agent Configuration
+
+Each agent batch receives:
+1. **File list**: Non-overlapping with other batches
+2. **Issue manifest**: Specific errors/warnings to fix
+3. **Context reminder**: Type-strictness skill, project conventions
+
+### Dispatch Template
+
+```yaml
+# For each batch, spawn code-hygiene-enforcer agent:
+batch_1:
+  files: [src/noteflow/grpc/_mixins/annotation.py, src/noteflow/grpc/_mixins/calendar.py]
+  issues: [unbound-name, missing-attribute]
+  agent: code-hygiene-enforcer
+  instructions: |
+    Fix the following issues. Remember: use /type-strictness skill for all type fixes.
+    Never add # type: ignore. Update all dependent code.
+
+batch_2:
+  files: [src/noteflow/grpc/_mixins/project/_membership.py, src/noteflow/grpc/_mixins/project/_mixin.py]
+  issues: [bad-argument-type]
+  agent: code-hygiene-enforcer
+  instructions: |
+    Fix None-safety issues. Add proper guards or update function signatures.
+    Use /type-strictness for type refinements.
+```
+
+### Parallel Execution
+
+Use Task tool to launch multiple agents simultaneously:
+
+```
+Task(subagent_type="code-hygiene-enforcer", prompt="...", run_in_background=true)
+Task(subagent_type="code-hygiene-enforcer", prompt="...", run_in_background=true)
+...
+```
+
+Monitor with `TaskOutput(task_id=..., block=true)`.
+
+## Phase 4: Validate and Update Tracking
+
+### Post-Agent Validation
+
+After each agent completes:
+
+1. **Re-run affected linters**:
+   ```bash
+   make lint-py PY_TARGETS="<fixed_files>"
+   make type-check-py PY_TARGETS="<fixed_files>"
+   ```
+
+2. **Verify no regressions**:
+   ```bash
+   pytest tests/quality/ -q
+   ```
+
+3. **Check for new issues** introduced by fixes
+
+### Update Tracking File
+
+Maintain `.hygeine/tracking.json`:
 
 ```json
 {
-  "session": "ISO-8601 timestamp",
-  "goal": "repo quality repair",
-  "initial_signal": {"rules": [], "commands": []},
-  "batches": [
-    {"name": "package-split", "owned_files": [], "status": "pending", "validation": []}
+  "session_id": "2025-01-02T03:45:00Z",
+  "iteration": 3,
+  "initial_counts": {
+    "python_errors": 45,
+    "python_warnings": 120,
+    "typescript_errors": 12,
+    "rust_warnings": 8
+  },
+  "current_counts": {
+    "python_errors": 12,
+    "python_warnings": 45,
+    "typescript_errors": 0,
+    "rust_warnings": 2
+  },
+  "completed_files": ["src/foo.py", "src/bar.py"],
+  "pending_files": ["src/baz.py"],
+  "blocked_issues": [
+    {"file": "src/qux.py", "reason": "Requires architectural change"}
   ],
-  "completed_files": [],
-  "blocked": []
+  "last_updated": "2025-01-02T04:15:00Z"
 }
 ```
 
-Use `.hygiene/` unless the project already has `.hygeine/`; do not create both spellings in the same repo.
+## Context Compaction Protocol
 
-## Related skills
+**CRITICAL**: Before context limit is reached, MUST update:
 
-- `code-hygiene-refactor` for single-denial repair tactics.
-- `type-strictness` for type-safety failures.
-- `test-extender` for test additions/repairs.
-- `code-smell-utility-locator` if available for helper/constant radar before consolidating utilities.
+1. **tracking.json** with current progress
+2. **Todo list** with remaining work items
+3. **Memory** (if using Serena): Write to `hygiene_progress` memory
+
+### Handoff Message Template
+
+```yaml
+hygiene_handoff:
+  status: "in_progress"
+  iteration: 4
+  remaining_errors: 12
+  next_batch:
+    files: [list of files]
+    issues: [list of issue types]
+  instructions: |
+    Continue hygiene orchestration from iteration 4.
+    Read .hygeine/tracking.json for full state.
+    Run /hygiene-orchestrator to resume.
+```
+
+## Iteration Loop
+
+```
+WHILE issues_remaining > 0:
+    1. Export fresh lint results (Makefile targets)
+    2. Parse unified issues
+    3. Group into non-conflicting batches
+    4. Dispatch agents in parallel
+    5. Wait for completion
+    6. Validate fixes
+    7. Update tracking.json
+    8. IF context_nearing_limit:
+           Write handoff state
+           EXIT with resume instructions
+    9. Increment iteration
+```
+
+## Available Makefile Targets
+
+| Target | Output File | Description |
+|--------|-------------|-------------|
+| `make lint-py` | `.hygeine/pyrefly.txt` | Python lints (pyrefly) |
+| `make type-check-py` | (stdout) | Python types (basedpyright) |
+| `make lint-fix-py` | `.hygeine/ruff.fix.json` | Auto-fix Python |
+| `make lint` | `.hygeine/biome.json` | TypeScript lints |
+| `make type-check` | (stdout) | TypeScript types |
+| `make lint-fix` | - | Auto-fix TypeScript |
+| `make clippy` | `.hygeine/clippy.json` | Rust lints |
+| `make lint-rs` | `.hygeine/rust_code_quality.txt` | Rust quality |
+
+## Skill Reminders
+
+Always remind dispatched agents:
+
+1. **Use /type-strictness skill** for type annotations
+2. **Use /test-extender skill** when modifying tested code
+3. **Never use # type: ignore** — fix the underlying issue
+4. **Never use Any** unless absolutely unavoidable
+5. **Update all callers** when changing signatures
+6. **Run tests** after fixes: `pytest <affected_tests>`
+
+## Error Categories Reference
+
+### Python (pyrefly/basedpyright)
+- `unbound-name` — Variable may be uninitialized
+- `missing-attribute` — Method called on None
+- `bad-argument-type` — Type mismatch in function call
+- `untyped-import` — Missing type stubs
+- `not-iterable` — Async iteration issues
+
+### TypeScript (biome/tsc)
+- `noExplicitAny` — Replace Any with specific type
+- `noUnusedVariables` — Remove or use the variable
+- `useConst` — Prefer const over let
+
+### Rust (clippy)
+- `clippy::unwrap_used` — Handle errors properly
+- `clippy::expect_used` — Provide context or use ?
+- `dead_code` — Remove unused code
+
+## Resumption Protocol
+
+If starting fresh after compaction:
+
+1. Read `.hygeine/tracking.json`
+2. Read `.hygeine/unified_issues.json`
+3. Continue from `tracking.json.iteration`
+4. Process `tracking.json.pending_files`

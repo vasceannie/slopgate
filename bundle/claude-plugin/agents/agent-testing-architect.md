@@ -1,0 +1,1 @@
+../../claude/agents/agent-testing-architect.md
