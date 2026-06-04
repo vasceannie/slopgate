@@ -31,6 +31,9 @@ links:
   - platform: claude
     src: shared/skills/type-strictness
     dest: ~/.claude/skills/type-strictness
+  - platform: claude
+    src: shared/skills/intelligent-coding-patterns
+    dest: ~/.claude/skills/intelligent-coding-patterns
   - platform: opencode
     src: shared/skills/code-hygiene-refactor
     dest: ~/.config/opencode/skills/code-hygiene-refactor
@@ -61,6 +64,9 @@ links:
   - platform: opencode
     src: shared/skills/type-strictness
     dest: ~/.config/opencode/skills/type-strictness
+  - platform: opencode
+    src: shared/skills/intelligent-coding-patterns
+    dest: ~/.config/opencode/skills/intelligent-coding-patterns
   - platform: codex
     src: shared/skills/code-hygiene-refactor
     dest: ~/.codex/skills/code-hygiene-refactor
@@ -91,6 +97,12 @@ links:
   - platform: codex
     src: shared/skills/type-strictness
     dest: ~/.codex/skills/type-strictness
+  - platform: codex
+    src: shared/skills/intelligent-coding-patterns
+    dest: ~/.codex/skills/intelligent-coding-patterns
+  - platform: cursor
+    src: shared/skills/intelligent-coding-patterns
+    dest: ~/.cursor/skills/intelligent-coding-patterns
   - platform: claude
     src: claude/agents/agent-feasibility.md
     dest: ~/.claude/agents/agent-feasibility.md
