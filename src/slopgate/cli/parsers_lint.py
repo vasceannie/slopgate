@@ -51,6 +51,21 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
     _add_lint_analysis_parser(
         lint_sub,
         LintAnalysisParserSpec(
+            name="strict",
+            help_text="Commit gate: fail if any violation exists (not just NEW)",
+            description=(
+                "Lint the current project root and fail when any violation is present. "
+                "Use for git pre-commit; agent stop hooks should use `lint check` instead."
+            ),
+            details_help=(
+                "Show extended violation locations, signatures, and repair prognosis"
+            ),
+            lint_command="strict",
+        ),
+    )
+    _add_lint_analysis_parser(
+        lint_sub,
+        LintAnalysisParserSpec(
             name="test-integrity",
             help_text="Scan tests for weak assertions and schema-bypass fakes",
             description="Scan project tests for weak assertions and integration gaps.",
@@ -60,31 +75,51 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
     )
 
 
-def _add_lint_freeze_parser(lint_sub: SubparserRegistry) -> None:
+@dataclass(frozen=True)
+class _LintPathSubcommandSpec:
+    name: str
+    help_text: str
+    description: str
+    lint_command: str
+
+
+def _add_lint_path_subcommand(
+    lint_sub: SubparserRegistry,
+    spec: _LintPathSubcommandSpec,
+) -> None:
     from slopgate.cli import parsers as core
 
-    freeze = lint_sub.add_parser(
-        "freeze",
-        help="One-time baseline snapshot when rules are empty",
+    parser = lint_sub.add_parser(
+        spec.name,
+        help=spec.help_text,
+        description=spec.description,
+    )
+    core._add_optional_path_argument(parser)
+    parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
+
+
+_LINT_PATH_SUBCOMMANDS = (
+    _LintPathSubcommandSpec(
+        name="freeze",
+        help_text="One-time baseline snapshot when rules are empty",
         description=(
             "Write current lint findings to baselines.json. "
             "Only allowed while the baseline rules map is empty."
         ),
-    )
-    core._add_optional_path_argument(freeze)
-    freeze.set_defaults(func=cmd_lint, lint_command="freeze")
-
-
-def _add_lint_baseline_parser(lint_sub: SubparserRegistry) -> None:
-    from slopgate.cli import parsers as core
-
-    baseline = lint_sub.add_parser(
-        "baseline",
-        help="Disabled: repo-wide rebaselining is not allowed",
+        lint_command="freeze",
+    ),
+    _LintPathSubcommandSpec(
+        name="baseline",
+        help_text="Disabled: repo-wide rebaselining is not allowed",
         description="Disabled: repo-wide rebaselining is not allowed",
-    )
-    core._add_optional_path_argument(baseline)
-    baseline.set_defaults(func=cmd_lint, lint_command="baseline")
+        lint_command="baseline",
+    ),
+)
+
+
+def _add_lint_path_subcommands(lint_sub: SubparserRegistry) -> None:
+    for spec in _LINT_PATH_SUBCOMMANDS:
+        _add_lint_path_subcommand(lint_sub, spec)
 
 
 def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
@@ -109,8 +144,7 @@ def add_lint_parsers(sub: SubparserRegistry) -> None:
     lint_sub = lint.add_subparsers(dest="lint_command")
 
     _add_lint_analysis_parsers(lint_sub)
-    _add_lint_freeze_parser(lint_sub)
-    _add_lint_baseline_parser(lint_sub)
+    _add_lint_path_subcommands(lint_sub)
     _add_lint_init_parser(lint_sub)
     _add_lint_update_parser(lint_sub)
 

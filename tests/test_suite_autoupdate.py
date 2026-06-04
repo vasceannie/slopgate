@@ -267,3 +267,20 @@ def test_macos_scheduler_plan_escapes_plist_arguments(
     assert parsed["ProgramArguments"][-1] == "git+https://example.invalid/vf.git?x=1&y=<two>"
 
 
+def _linux_autoupdate_units(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path]:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setattr(suite, "is_windows", lambda: False)
+    monkeypatch.setattr(suite.sys, "platform", "linux")
+    service = tmp_path / ".config/systemd/user/slopgate-auto-update.service"
+    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
+    service.parent.mkdir(parents=True)
+    return service, timer
+
+
+def _macos_autoupdate_context(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(suite, "is_windows", lambda: False)
+    monkeypatch.setattr(suite.sys, "platform", "darwin")
+    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
+

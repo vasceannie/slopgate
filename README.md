@@ -41,7 +41,8 @@ slopgate test
 slopgate stats --days 7
 
 # Lint the current project for code quality
-slopgate lint check             # scan the full project from the detected root
+slopgate lint check             # scan project; fail only on NEW violations (agent stop hooks)
+slopgate lint strict            # fail on ANY violation (git pre-commit gate)
 slopgate lint check --details   # extended violations + repair prognosis
 slopgate lint init .            # scaffold slopgate.toml
 ```

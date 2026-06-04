@@ -11,27 +11,11 @@ from slopgate.cli.commands import cmd_install
 from slopgate.cli.parsers import build_parser
 
 from tests.test_suite_autoupdate import (
+    _linux_autoupdate_units,
+    _macos_autoupdate_context,
     _record_suite_subprocess_run,
     _windows_owned_task_install_snapshot,
 )
-
-
-def _linux_autoupdate_units(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path]:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "linux")
-    service = tmp_path / ".config/systemd/user/slopgate-auto-update.service"
-    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
-    service.parent.mkdir(parents=True)
-    return service, timer
-
-
-def _macos_autoupdate_context(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
 
 
 def test_linux_autoupdate_install_refuses_unowned_existing_units(

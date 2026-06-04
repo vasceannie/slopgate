@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from slopgate.cli.lint import _tally_rule, cmd_lint
+from slopgate.cli.lint import _LintRunTotals, _TallyInput, _print_lint_summary, _tally_rule, cmd_lint
 from slopgate.lint._baseline import Violation, assert_no_new_violations
 from slopgate.lint._config import reset_config
 from slopgate.lint._details import format_violation_details
@@ -35,7 +35,7 @@ def _assert_lint_check_forces_repo_root_scope(
 ) -> None:
     assert result == 0, "clean nested lint check should return success"
     expected_lines = [
-        f"project: {project_root}",
+        f"project:  {project_root}",
         f"src:     {project_root / 'src'}  (1 files)",
         "✓ No new violations",
     ]
@@ -211,6 +211,15 @@ def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
     _assert_type_suppression_detail_block(block)
 
 
+def test_lint_summary_clean_repo_says_no_violations(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert _print_lint_summary(_LintRunTotals(0, 0, 0), color=False) == 0
+    output = capsys.readouterr().out
+    assert "✓ No violations" in output
+    assert "baselines.json" not in output
+
+
 def test_lint_summary_prints_existing_literal_locations(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -222,7 +231,14 @@ def test_lint_summary_prints_existing_literal_locations(
         metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
     )
 
-    _ = _tally_rule("repeated-string-literal", [violation], {}, details=False)
+    _ = _tally_rule(
+        _TallyInput(
+            rule_name="repeated-string-literal",
+            violations=[violation],
+            baseline={},
+            details=False,
+        )
+    )
 
     output = capsys.readouterr().out
     assert "+ <project>:'skipped'" in output

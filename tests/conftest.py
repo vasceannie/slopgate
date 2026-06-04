@@ -12,6 +12,7 @@ from typing import cast
 import pytest
 
 from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.lint._config import reset_config
 from slopgate.engine import evaluate_payload as _evaluate_payload
 from slopgate.models import EngineResult
 
@@ -19,7 +20,7 @@ BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 
 # pytest discovers fixtures by name — declare autouse fixtures as exported
 # so basedpyright's reportUnusedFunction doesn't flag them.
-__all__ = ["_slopgate_env"]
+__all__ = ["_slopgate_env", "reset_lint_config"]
 
 # slopgate config lives under src/slopgate/resources/
 _RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
@@ -28,6 +29,13 @@ _RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
 # ---------------------------------------------------------------------------
 # Core fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def reset_lint_config() -> Generator[None, None, None]:
+    """Reset lint QualityConfig singleton after each test."""
+    yield
+    reset_config()
 
 
 @pytest.fixture(autouse=True)
