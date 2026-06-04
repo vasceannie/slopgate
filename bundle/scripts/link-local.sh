@@ -120,7 +120,13 @@ for entry in entries:
         print(f"ERROR manifest entry missing src/dest: {entry}", file=sys.stderr)
         errors += 1
         continue
-    src = (bundle_root / src_value).resolve()
+    src = (bundle_root / src_value).resolve(strict=False)
+    try:
+        src.relative_to(bundle_root)
+    except ValueError:
+        print(f"ERROR source escapes bundle: {src_value} -> {src}", file=sys.stderr)
+        errors += 1
+        continue
     dest = Path(os.path.expandvars(os.path.expanduser(dest_value)))
     if is_forbidden_dest(dest):
         print(f"SKIP forbidden full harness config target: {dest}")

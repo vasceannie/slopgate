@@ -5,11 +5,25 @@ BUNDLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="$BUNDLE_ROOT/manifest.yaml"
 ONLY="all"
 RUN_SLOPGATE_TEST=0
+STRICT=0
+VERBOSE=0
 
-usage() { echo "Usage: verify-local.sh [--only claude|opencode|codex|cursor] [--slopgate-test]"; }
+usage() {
+  cat <<'USAGE'
+Usage: verify-local.sh [--only claude|opencode|codex|cursor] [--strict] [--verbose] [--slopgate-test]
+
+Default mode is migration-safe and concise: exact bundle-owned symlinks are
+verified, while legacy real paths and old non-bundle symlinks are counted as
+WARNs and do not fail the check. Use --verbose to print each WARN. Use --strict
+to require every manifest destination to be an exact symlink to its manifest
+source.
+USAGE
+}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --only) shift; ONLY="${1:-}"; case "$ONLY" in claude|opencode|codex|cursor) ;; *) echo "invalid --only: $ONLY" >&2; exit 2 ;; esac ;;
+    --strict) STRICT=1 ;;
+    --verbose) VERBOSE=1 ;;
     --slopgate-test) RUN_SLOPGATE_TEST=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -17,54 +31,138 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-python3 - "$MANIFEST" "$BUNDLE_ROOT" "$ONLY" <<'PY'
+python3 - "$MANIFEST" "$BUNDLE_ROOT" "$ONLY" "$STRICT" "$VERBOSE" <<'PY'
 from __future__ import annotations
-import os, sys
+
+import os
+import sys
+from collections import Counter
 from pathlib import Path
-manifest_path = Path(sys.argv[1]); bundle_root = Path(sys.argv[2]).resolve(); only = sys.argv[3]
-def unquote(v: str) -> str:
-    v=v.strip(); return v[1:-1] if len(v)>=2 and v[0] in "'\"" and v[-1] == v[0] else v
-def parse(path: Path):
-    entries=[]; cur=None; in_links=False
-    for raw in path.read_text(encoding='utf-8').splitlines():
-        line=raw.rstrip(); s=line.strip()
-        if not s or s.startswith('#'): continue
-        if s == 'links:': in_links=True; continue
-        if not in_links: continue
-        if line.startswith('  - '):
-            if cur: entries.append(cur)
-            cur={}; rest=line[4:].strip()
+
+manifest_path = Path(sys.argv[1])
+bundle_root = Path(sys.argv[2]).resolve()
+only = sys.argv[3]
+strict = sys.argv[4] == "1"
+verbose = sys.argv[5] == "1"
+
+
+def unquote(value: str) -> str:
+    value = value.strip()
+    return value[1:-1] if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0] else value
+
+
+def parse(path: Path) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    in_links = False
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped == "links:":
+            in_links = True
+            continue
+        if not in_links:
+            continue
+        if line.startswith("  - "):
+            if current:
+                entries.append(current)
+            current = {}
+            rest = line[4:].strip()
             if rest:
-                k,_,v=rest.partition(':'); cur[k.strip()]=unquote(v.strip())
-        elif cur is not None and line.startswith('    '):
-            k,_,v=s.partition(':'); cur[k.strip()]=unquote(v.strip())
-    if cur: entries.append(cur)
+                key, _, value = rest.partition(":")
+                current[key.strip()] = unquote(value.strip())
+        elif current is not None and line.startswith("    "):
+            key, _, value = stripped.partition(":")
+            current[key.strip()] = unquote(value.strip())
+    if current:
+        entries.append(current)
     return entries
-failures=0; checked=0
-for e in parse(manifest_path):
-    platform=e.get('platform','shared')
-    if only != 'all' and platform != only: continue
-    dest=Path(os.path.expandvars(os.path.expanduser(e['dest'])))
-    checked += 1
-    if not dest.is_symlink():
-        print(f"FAIL not linked: {dest}"); failures += 1; continue
-    target=dest.resolve(strict=False)
+
+
+def is_relative_to(path: Path, root: Path) -> bool:
     try:
-        target.relative_to(bundle_root)
+        path.relative_to(root)
     except ValueError:
-        print(f"FAIL outside bundle: {dest} -> {target}"); failures += 1; continue
-    if not target.exists():
-        print(f"FAIL broken symlink: {dest} -> {target}"); failures += 1; continue
-    print(f"OK {dest} -> {target}")
+        return False
+    return True
+
+
+def record_warning(kind: str, message: str) -> None:
+    warning_counts[kind] += 1
+    if verbose or strict:
+        prefix = "FAIL" if strict else "WARN"
+        print(f"{prefix} {message}")
+
+
+failures = 0
+checked = 0
+ok = 0
+warning_counts: Counter[str] = Counter()
+for entry in parse(manifest_path):
+    platform = entry.get("platform", "shared")
+    if only != "all" and platform != only:
+        continue
+    checked += 1
+    src_value = entry.get("src")
+    dest_value = entry.get("dest")
+    if not src_value or not dest_value:
+        print(f"FAIL manifest entry missing src/dest: {entry}")
+        failures += 1
+        continue
+
+    expected = (bundle_root / src_value).resolve(strict=False)
+    if not is_relative_to(expected, bundle_root):
+        print(f"FAIL source escapes bundle: {src_value} -> {expected}")
+        failures += 1
+        continue
+    if not expected.exists():
+        print(f"FAIL missing source: {src_value} -> {expected}")
+        failures += 1
+        continue
+
+    dest = Path(os.path.expandvars(os.path.expanduser(dest_value)))
+    if dest.is_symlink():
+        target = dest.resolve(strict=False)
+        if target == expected:
+            print(f"OK {dest} -> {target}")
+            ok += 1
+            continue
+        if not target.exists():
+            print(f"FAIL broken symlink: {dest} -> {target}")
+            failures += 1
+            continue
+        if is_relative_to(target, bundle_root):
+            print(f"FAIL bundle symlink target mismatch: {dest} -> {target}; expected {expected}")
+            failures += 1
+            continue
+        record_warning("non_bundle_symlink", f"existing non-bundle symlink: {dest} -> {target}; expected {expected}")
+        if strict:
+            failures += 1
+        continue
+
+    if dest.exists():
+        record_warning("real_path", f"existing real path: {dest}; expected symlink -> {expected}")
+    else:
+        record_warning("missing", f"missing live path: {dest}; expected symlink -> {expected}")
+    if strict:
+        failures += 1
+
 for root, dirs, files in os.walk(bundle_root):
     for name in dirs + files:
-        p = Path(root) / name
-        if p.is_symlink() and not p.resolve(strict=False).exists():
-            print(f"FAIL broken symlink inside bundle: {p} -> {p.resolve(strict=False)}")
+        path = Path(root) / name
+        if path.is_symlink() and not path.resolve(strict=False).exists():
+            print(f"FAIL broken symlink inside bundle: {path} -> {path.resolve(strict=False)}")
             failures += 1
+
+warning_total = sum(warning_counts.values())
+warning_summary = ", ".join(f"{key}={warning_counts[key]}" for key in sorted(warning_counts)) or "none"
 if failures:
-    raise SystemExit(f"verify failed: {failures} failure(s) across {checked} manifest link(s)")
-print(f"verify ok: {checked} manifest link(s), only={only}")
+    raise SystemExit(
+        f"verify failed: failures={failures}, ok={ok}, warnings={warning_total} ({warning_summary}), checked={checked}, only={only}, strict={strict}"
+    )
+print(f"verify ok: ok={ok}, warnings={warning_total} ({warning_summary}), checked={checked}, only={only}, strict={strict}")
 PY
 
 if [[ "$RUN_SLOPGATE_TEST" == "1" ]]; then
