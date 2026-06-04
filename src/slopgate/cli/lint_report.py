@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from slopgate.constants import MAX_LINT_VIOLATIONS_SHOWN
-from slopgate.lint._baseline import Violation
+from slopgate.lint._baseline import BaselineSyncResult, Violation
 
 if TYPE_CHECKING:
     from slopgate.lint._config import QualityConfig
@@ -171,15 +171,7 @@ def _print_lint_summary(totals: _LintRunTotals, color: bool, *, gate: LintGateMo
             print(
                 _colorize(
                     "32",
-                    f"✓ No new violations ({totals.violations} known-debt hits remain — fix and shrink baselines.json)",
-                    color,
-                )
-            )
-        if totals.fixed:
-            print(
-                _colorize(
-                    "33",
-                    f"  ℹ {totals.fixed} fixed — update baselines.json only as a deliberate debt reduction, not via repo-wide rebaselining",
+                    f"✓ No new violations ({totals.violations} known-debt hits remain)",
                     color,
                 )
             )
@@ -216,11 +208,62 @@ def _print_lint_header(
         )
     else:
         print(
-            "  note:     agent/stop gate — fails only on NEW violations vs baseline"
+            "  note:     agent/stop gate — fails on NEW violations; syncs baseline after run"
         )
     _print_scan_roots("src", files.cfg.src_roots, len(files.src_files))
     _print_scan_roots("tests", files.cfg.test_roots, len(files.test_files))
     print()
+
+
+@dataclass(frozen=True, slots=True)
+class _BaselineLintSyncContext:
+    collectors: list[tuple[str, list[Violation]]]
+    baseline: dict[str, set[str]]
+    totals: _LintRunTotals
+    gate: LintGateMode
+    color: bool
+
+
+def _lint_prune_only(totals: _LintRunTotals, *, gate: LintGateMode) -> bool:
+    if gate == "new":
+        return totals.new > 0
+    return totals.violations > 0
+
+
+def _print_baseline_sync_result(
+    result: BaselineSyncResult,
+    *,
+    prune_only: bool,
+    color: bool,
+) -> None:
+    if not result.wrote and result.stale_removed == 0:
+        return
+    parts: list[str] = []
+    if result.stale_removed:
+        parts.append(f"removed {result.stale_removed} stale")
+    if result.wrote and not prune_only:
+        parts.append("mirrored current findings")
+    elif result.wrote:
+        parts.append("pruned fixed debt")
+    if parts:
+        detail = ", ".join(parts)
+        print(_colorize("32", f"  ✓ Updated baselines.json ({detail})", color))
+
+
+def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
+    from slopgate.lint._baseline import apply_lint_baseline_sync
+
+    prune_only = _lint_prune_only(context.totals, gate=context.gate)
+    result = apply_lint_baseline_sync(
+        context.collectors,
+        context.baseline,
+        prune_only=prune_only,
+    )
+    _print_baseline_sync_result(
+        result,
+        prune_only=prune_only,
+        color=context.color,
+    )
 
 
 def _print_collector_results(
@@ -249,4 +292,14 @@ def _print_collector_results(
             totals.new + rule_new,
             totals.fixed + rule_fixed,
         )
-    return _print_lint_summary(totals, color, gate=gate)
+    exit_code = _print_lint_summary(totals, color, gate=gate)
+    _sync_baseline_after_lint(
+        _BaselineLintSyncContext(
+            collectors=collectors,
+            baseline=baseline,
+            totals=totals,
+            gate=gate,
+            color=color,
+        )
+    )
+    return exit_code

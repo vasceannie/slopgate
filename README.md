@@ -234,7 +234,7 @@ Set the lint baseline file under `[paths]` in `slopgate.toml` (relative paths ar
 baseline_path = "baselines.json"
 ```
 
-`slopgate lint check` prints the resolved baseline path in its header. Lint does not auto-write baselines on every check. Run `slopgate lint freeze` once while `rules` is still empty to snapshot known debt for context; agents should treat listed IDs as work to fix and shrink the file after fixes — not as permission to ignore issues.
+`slopgate lint check` prints the resolved baseline path in its header and **syncs `baselines.json` after each run**: on a clean pass it mirrors current findings (dropping stale ids); when NEW violations block the gate it only prunes fixed debt (never auto-adds NEW ids). Run `slopgate lint freeze` once while `rules` is still empty for initial enrollment. Listed stable IDs remain real defects to fix — not permission to ignore them.
 
 #### 38 batch lint detectors
 

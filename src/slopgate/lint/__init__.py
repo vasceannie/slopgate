@@ -8,11 +8,15 @@ __version__ = "0.1.0"
 
 from slopgate.lint._baseline import (
     BaselineResult,
+    BaselineSyncResult,
     Violation,
+    apply_lint_baseline_sync,
+    compute_synced_baseline_rules,
     assert_no_new_violations,
     content_hash,
     load_baseline,
     save_baseline,
+    save_baseline_ids,
 )
 from slopgate.lint._config import QualityConfig, get_config, load_config, reset_config, set_config
 from slopgate.lint._helpers import (
@@ -25,6 +29,9 @@ from slopgate.lint._helpers import (
 
 __all__ = [
     "BaselineResult",
+    "BaselineSyncResult",
+    "apply_lint_baseline_sync",
+    "compute_synced_baseline_rules",
     "QualityConfig",
     "Violation",
     "assert_no_new_violations",
@@ -39,5 +46,6 @@ __all__ = [
     "reset_config",
     "safe_parse",
     "save_baseline",
+    "save_baseline_ids",
     "set_config",
 ]

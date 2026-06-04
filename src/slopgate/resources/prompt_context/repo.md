@@ -62,8 +62,8 @@
 ## Baselines (`baselines.json`)
 - **Mental model:** baseline is an **inventory of known debt** captured at enrollment — a map of what to fix, not a waiver. `slopgate lint` only **blocks NEW** violations; listed stable IDs are still real defects.
 - **When you touch a file:** read matching baseline entries for that path (Read/Grep `baselines.json` or run `slopgate lint check --details`). Prefer fixing baselined hits in files you are already editing before adding behavior nearby.
-- **After you fix code:** remove the corresponding `stable_id` entries from `baselines.json` (debt must **shrink**). Never add IDs or inflate counts — `BASELINE-001` denies that.
-- **Do not:** treat "baselined" / "known debt" as acceptable; skip fixes because lint exited 0; run `slopgate lint baseline`, `quality-gate baseline`, or `vfc lint baseline`; or bulk re-freeze to hide regressions (`slopgate lint freeze` is one-time init only).
+- **After you fix code:** run `slopgate lint check` — it prunes stale `stable_id` entries automatically. On a clean pass it mirrors the current scan into the baseline file.
+- **Do not:** treat "baselined" / "known debt" as acceptable; skip fixes because lint exited 0; run `slopgate lint baseline`, `quality-gate baseline`, or `vfc lint baseline`; or bulk re-freeze to hide regressions (`slopgate lint freeze` is one-time init only). Never hand-edit the baseline to add NEW violation ids — hooks deny inflation (`BASELINE-001`).
 - **Optional triage:** the `code-hygiene-refactor` skill's `analyze_violations.py --baselines baselines.json` groups hits by rule/file for repair planning.
 
 ## Before Stopping

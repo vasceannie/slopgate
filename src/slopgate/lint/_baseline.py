@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from typing import NamedTuple
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -92,21 +93,99 @@ def load_baseline() -> dict[str, set[str]]:
     return result
 
 
-def save_baseline(violations_by_rule: dict[str, list[Violation]]) -> None:
-    """Persist a new baseline snapshot."""
+def save_baseline_ids(rules: dict[str, set[str]]) -> None:
+    """Persist baseline rule → stable_id sets (empty rules are omitted)."""
     bp = _baseline_path()
     data = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "rules": {
-            rule: sorted(v.stable_id for v in violations)
-            for rule, violations in violations_by_rule.items()
-        },
+        "rules": {rule: sorted(ids) for rule, ids in sorted(rules.items()) if ids},
     }
     _ = bp.write_text(
         json.dumps(data, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def save_baseline(violations_by_rule: dict[str, list[Violation]]) -> None:
+    """Persist a new baseline snapshot."""
+    save_baseline_ids(
+        {
+            rule: {violation.stable_id for violation in violations}
+            for rule, violations in violations_by_rule.items()
+        }
+    )
+
+
+def _current_ids_by_rule(
+    collectors: list[tuple[str, list[Violation]]],
+) -> dict[str, set[str]]:
+    return {
+        rule: {violation.stable_id for violation in violations}
+        for rule, violations in collectors
+    }
+
+
+def _baseline_rules_equal(
+    left: dict[str, set[str]],
+    right: dict[str, set[str]],
+) -> bool:
+    left_keys = set(left)
+    right_keys = set(right)
+    if left_keys != right_keys:
+        return False
+    return all(left[key] == right[key] for key in left_keys)
+
+
+def compute_synced_baseline_rules(
+    collectors: list[tuple[str, list[Violation]]],
+    old_baseline: dict[str, set[str]],
+    *,
+    prune_only: bool,
+) -> tuple[dict[str, set[str]], int]:
+    """Return baseline rules after sync and the number of stale ids removed."""
+    current_by_rule = _current_ids_by_rule(collectors)
+    all_rules = set(old_baseline) | set(current_by_rule)
+    synced: dict[str, set[str]] = {}
+    stale_removed = 0
+
+    for rule in all_rules:
+        old_ids = old_baseline.get(rule, set())
+        current_ids = current_by_rule.get(rule, set())
+        stale_removed += len(old_ids - current_ids)
+        if prune_only:
+            kept = old_ids & current_ids
+            if kept:
+                synced[rule] = kept
+        elif current_ids:
+            synced[rule] = set(current_ids)
+
+    return synced, stale_removed
+
+
+class BaselineSyncResult(NamedTuple):
+    """Outcome of persisting baselines.json after a lint run."""
+
+    stale_removed: int
+    wrote: bool
+
+
+def apply_lint_baseline_sync(
+    collectors: list[tuple[str, list[Violation]]],
+    old_baseline: dict[str, set[str]],
+    *,
+    prune_only: bool,
+) -> BaselineSyncResult:
+    """Write baselines.json after lint; return stale ids removed and whether file changed."""
+    synced, stale_removed = compute_synced_baseline_rules(
+        collectors,
+        old_baseline,
+        prune_only=prune_only,
+    )
+    if _baseline_rules_equal(old_baseline, synced):
+        return BaselineSyncResult(stale_removed, False)
+    save_baseline_ids(synced)
+    return BaselineSyncResult(stale_removed, True)
 
 
 def assert_no_new_violations(
