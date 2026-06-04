@@ -1,0 +1,77 @@
+import type { Decision, Severity, FlagTarget } from "@/types/slopgate";
+
+// Shared Nivo theme for all dark-terminal charts
+export const NIVO_DARK_THEME = {
+  text: { fill: "hsl(215, 12%, 50%)", fontFamily: "JetBrains Mono", fontSize: 9 },
+  grid: { line: { stroke: "hsl(220, 15%, 15%)" } },
+  crosshair: { line: { stroke: "hsl(142, 50%, 45%)", strokeWidth: 1 } },
+  tooltip: {
+    container: {
+      background: "hsl(220, 25%, 7%)",
+      border: "1px solid hsl(220, 15%, 15%)",
+      color: "hsl(210, 20%, 82%)",
+      fontFamily: "JetBrains Mono",
+      fontSize: 10,
+    },
+  },
+} as const;
+
+// Decision → HSL color string (for Nivo `colors` prop)
+export const DECISION_COLORS: Record<Decision, string> = {
+  allow: "hsl(142, 50%, 45%)",
+  deny: "hsl(0, 72%, 51%)",
+  block: "hsl(0, 85%, 60%)",
+  ask: "hsl(38, 92%, 50%)",
+  warn: "hsl(217, 91%, 60%)",
+  context: "hsl(217, 70%, 50%)",
+};
+
+// Decision → Tailwind class pairs for badges
+export const DECISION_BADGE_STYLE: Record<Decision, string> = {
+  allow: "bg-signal-allow/20 text-signal-allow border-signal-allow/30",
+  deny: "bg-signal-deny/20 text-signal-deny border-signal-deny/30",
+  block: "bg-signal-block/20 text-signal-block border-signal-block/30",
+  ask: "bg-signal-ask/20 text-signal-ask border-signal-ask/30",
+  warn: "bg-signal-warn/20 text-signal-warn border-signal-warn/30",
+  context: "bg-signal-context/20 text-signal-context border-signal-context/30",
+};
+
+// Decision → Tailwind dot class for timelines
+export const DECISION_DOT_STYLE: Record<Decision, string> = {
+  allow: "bg-signal-allow",
+  deny: "bg-signal-deny",
+  block: "bg-signal-block",
+  ask: "bg-signal-ask",
+  warn: "bg-signal-warn",
+  context: "bg-signal-context",
+};
+
+// Severity → HSL color string
+export const SEVERITY_COLORS: Record<Severity, string> = {
+  LOW: "hsl(210, 20%, 55%)",
+  MEDIUM: "hsl(38, 92%, 50%)",
+  HIGH: "hsl(20, 90%, 55%)",
+  CRITICAL: "hsl(0, 85%, 60%)",
+};
+
+// Severity → Tailwind class
+export const SEVERITY_TEXT_STYLE: Record<Severity, string> = {
+  LOW: "text-severity-low",
+  MEDIUM: "text-severity-medium",
+  HIGH: "text-severity-high",
+  CRITICAL: "text-severity-critical",
+};
+
+// Platform → Tailwind badge style
+export const PLATFORM_BADGE_STYLE: Record<string, string> = {
+  claude: "bg-platform-claude/20 text-platform-claude",
+  codex: "bg-platform-codex/20 text-platform-codex",
+  opencode: "bg-platform-opencode/20 text-platform-opencode",
+};
+
+// Flag target labels & colors (shared between FlagButton and FlaggedItemsPanel)
+export const FLAG_TARGET_LABELS: Record<FlagTarget, { label: string; color: string }> = {
+  openclaw: { label: "OpenClaw", color: "text-platform-opencode" },
+  claude: { label: "Claude", color: "text-platform-claude" },
+  codex: { label: "Codex", color: "text-platform-codex" },
+};
