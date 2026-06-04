@@ -1,7 +1,8 @@
 """Baseline-based quality enforcement infrastructure.
 
-"No new debt" quality gates.  Compares against a frozen baseline of
-existing violations.  Any new violation fails immediately.
+Compares lint output to a frozen inventory of *known debt* (stable IDs).
+The gate blocks NEW violations only — baselined hits remain real defects
+agents should fix over time, not ignore because they are listed.
 """
 
 from __future__ import annotations

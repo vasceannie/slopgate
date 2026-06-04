@@ -126,7 +126,7 @@ Use this recovery order: **read denial → load matching rule/digest → re-read
 - `GIT-001`: no `--no-verify`; do not use hook bypasses. Fix the hook failure.
 - `GIT-002`: commit/status workflow reminders mean inspect the actual git state and keep changes atomic; do not stage unrelated files or let generated/index-maintenance edits ride along. Rule ID fidelity is mandatory: in this local system, git bypass/commit workflow recovery is `GIT-001` plus `GIT-002`. Do **not** invent or cite `GIT-003` for stash/worktree behavior.
 - Do not use `git stash`, `git reset --hard`, `git checkout --`, `git restore`, or `git clean` on user work without explicit approval; describe this as protected by `GIT-002`/worktree safety, not `GIT-003`.
-- `QA-PATH-003`, `GLOBAL-BUILTIN-SENSITIVE-DATA`, `BUILTIN-PROTECTED-PATHS`, hook-infra/config rules: never read/write secrets or protected config paths unless the user explicitly authorizes that scope. Do not edit `tests/quality/` policy surfaces, `slopgate.toml`, baselines, hook infrastructure, linter config, or agent config as part of normal code execution. When `QA-PATH-003` is relevant, explicitly say escalation/user/Trav authorization is required before any protected quality-harness edit.
+- `QA-PATH-003`, `GLOBAL-BUILTIN-SENSITIVE-DATA`, `BUILTIN-PROTECTED-PATHS`, hook-infra/config rules: never read/write secrets or protected config paths unless the user explicitly authorizes that scope. Do not edit `tests/quality/` policy surfaces, `slopgate.toml`, hook infrastructure, linter config, or agent config as part of normal code execution. `baselines.json` is readable as a **known-debt fix queue**; only shrink it after real fixes (never inflate). When `QA-PATH-003` is relevant, explicitly say escalation/user/Trav authorization is required before any protected quality-harness edit.
 
 ## METHOD
 
@@ -141,7 +141,7 @@ Use this recovery order: **read denial → load matching rule/digest → re-read
    - Batch imports and usages in the same edit.
    - Prefer `Edit`/`MultiEdit`; preserve adjacent user work and local style.
    - Keep public API stable unless explicitly authorized; update docstrings for touched public APIs.
-   - No duplicate `_new`, `_enhanced`, `_v2` modules. No suppressions. No quality-gate/baseline edits.
+   - No duplicate `_new`, `_enhanced`, `_v2` modules. No suppressions. No baseline inflation; fix code and remove stable IDs when debt is cleared.
 
 3. **Validate**
    - Run the smallest project-native command first: a single pytest node, focused CLI smoke, or targeted type/lint command.

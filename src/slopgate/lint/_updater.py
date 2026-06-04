@@ -51,6 +51,7 @@ CANONICAL_DEFAULTS: dict[str, dict[str, object]] = {
     },
     "paths": {
         **LINT_PATH_DEFAULTS,
+        "baseline_path": "baselines.json",
         "exclude_dirs": list(LINT_PATH_DEFAULTS["exclude_dirs"]),
         "exclude_patterns": list(LINT_PATH_DEFAULTS["exclude_patterns"]),
     },

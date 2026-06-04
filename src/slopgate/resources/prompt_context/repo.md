@@ -59,13 +59,16 @@
 - `ERRORS-BASH-001` / `ERRORS-FAIL-001`: treat error output or non-zero exits as active repair work. Inspect stdout/stderr, fix the smallest failing command, then rerun it.
 - `PY-CODE-012` and `PY-IMPORT-001` are context-only advisory signals. Do not retry solely for those unless the boundary is already in scope.
 
-## Baselines
-- `baselines.json` violations must only decrease, never increase.
-- Do not run `quality-gate baseline .`, `slopgate lint baseline .`, or `vfc lint baseline .` to re-baseline away violations.
+## Baselines (`baselines.json`)
+- **Mental model:** baseline is an **inventory of known debt** captured at enrollment — a map of what to fix, not a waiver. `slopgate lint` only **blocks NEW** violations; listed stable IDs are still real defects.
+- **When you touch a file:** read matching baseline entries for that path (Read/Grep `baselines.json` or run `slopgate lint check --details`). Prefer fixing baselined hits in files you are already editing before adding behavior nearby.
+- **After you fix code:** remove the corresponding `stable_id` entries from `baselines.json` (debt must **shrink**). Never add IDs or inflate counts — `BASELINE-001` denies that.
+- **Do not:** treat "baselined" / "known debt" as acceptable; skip fixes because lint exited 0; run `slopgate lint baseline`, `quality-gate baseline`, or `vfc lint baseline`; or bulk re-freeze to hide regressions (`slopgate lint freeze` is one-time init only).
+- **Optional triage:** the `code-hygiene-refactor` skill's `analyze_violations.py --baselines baselines.json` groups hits by rule/file for repair planning.
 
 ## Before Stopping
 - Run `make quality` or the project quality command.
-- Do not dismiss issues as "pre-existing" — fix them or flag explicitly.
+- Do not dismiss issues as "pre-existing" or "baselined" — fix them, shrink the baseline, or flag explicitly for the user.
 
 ## Module Organization
 - When splitting a large module into smaller files, **create a sub-package** (directory with `__init__.py`), not flat `_prefix_*.py` sibling files.

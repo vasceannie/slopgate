@@ -168,9 +168,15 @@ def _touched_reference_test_files(src_files: list[Path], test_files: list[Path])
     """Return suite test references when touched source files need coverage context."""
     if not src_files:
         return None
-    from slopgate.lint._helpers import tests_root
+    from slopgate.lint._helpers import test_roots
 
-    by_resolved = {path.resolve(): path for path in tests_root().rglob("*.py") if path.is_file()}
+    by_resolved: dict[Path, Path] = {}
+    for tests_root in test_roots():
+        if not tests_root.exists():
+            continue
+        for path in tests_root.rglob("*.py"):
+            if path.is_file():
+                by_resolved.setdefault(path.resolve(), path)
     for path in test_files:
         by_resolved.setdefault(path.resolve(), path)
     return sorted(by_resolved.values())

@@ -216,12 +216,24 @@ slopgate lint check [--details|--verbose]
 # Repo-wide rebaselining is intentionally disabled
 # Do not run slopgate lint baseline [path]
 
+# One-time snapshot when baselines.json has empty rules (initial enrollment)
+slopgate lint freeze
+
 # Scaffold a slopgate.toml config
 slopgate lint init [path]
 
 # Merge missing config keys into existing slopgate.toml
 slopgate lint update [path] [--dry-run]
 ```
+
+Set the lint baseline file under `[paths]` in `slopgate.toml` (relative paths are resolved from the repo root):
+
+```toml
+[paths]
+baseline_path = "baselines.json"
+```
+
+`slopgate lint check` prints the resolved baseline path in its header. Lint does not auto-write baselines on every check. Run `slopgate lint freeze` once while `rules` is still empty to snapshot known debt for context; agents should treat listed IDs as work to fix and shrink the file after fixes — not as permission to ignore issues.
 
 #### 38 batch lint detectors
 

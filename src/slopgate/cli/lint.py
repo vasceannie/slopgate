@@ -80,7 +80,7 @@ def _rule_count_text(
         parts.append(_colorize("32", f"{len(counts.fixed_ids)} fixed", color))
     text = ", ".join(parts)
     if counts.allowed:
-        text += f" {_colorize('2', f'(baseline: {len(counts.allowed)})', color)}"
+        text += f" {_colorize('2', f'(known debt: {len(counts.allowed)})', color)}"
     return text
 
 
@@ -102,7 +102,9 @@ def _print_detailed_violations(
     from slopgate.lint._details import format_violation_details
 
     for violation in violations:
-        status = "NEW" if getattr(violation, "stable_id") in counts.new_ids else "BASELINED"
+        status = (
+            "NEW" if getattr(violation, "stable_id") in counts.new_ids else "KNOWN-DEBT"
+        )
         print()
         for line in format_violation_details(rule_name, violation, status=status):
             print(line)
@@ -135,7 +137,9 @@ def _print_lint_summary(
     if total_n == 0:
         print(
             _colorize(
-                "32", f"✓ No new violations ({total_v} total, all baselined)", color
+                "32",
+                f"✓ No new violations ({total_v} known-debt hits remain — fix and shrink baselines.json)",
+                color,
             )
         )
         if total_f:
@@ -201,16 +205,30 @@ def _configured_lint_files(
             _restore_quality_scope(old_quality_scope)
 
 
+def _print_scan_roots(label: str, roots: tuple[Path, ...], file_count: int) -> None:
+    if len(roots) == 1:
+        print(f"  {label + ':':8} {roots[0]}  ({file_count} files)")
+        return
+    joined = ", ".join(str(root) for root in roots)
+    print(f"  {label + ':':8} [{joined}]  ({file_count} files)")
+
+
 def _print_lint_header(
     lint_version: str,
     label: str,
     files: _LintFiles,
 ) -> None:
+    from slopgate.lint._baseline import _baseline_path
+
     suffix = f" {label}" if label else ""
     print(f"slopgate lint {lint_version}{suffix}")
-    print(f"  project: {files.cfg.project_root}")
-    print(f"  src:     {files.cfg.src_root}  ({len(files.src_files)} files)")
-    print(f"  tests:   {files.cfg.tests_root}  ({len(files.test_files)} files)")
+    print(f"  project:  {files.cfg.project_root}")
+    print(f"  baseline: {_baseline_path()}")
+    print(
+        "  note:     baseline = known-debt inventory to fix; lint fails only on NEW hits"
+    )
+    _print_scan_roots("src", files.cfg.src_roots, len(files.src_files))
+    _print_scan_roots("tests", files.cfg.test_roots, len(files.test_files))
     print()
 
 
@@ -245,6 +263,48 @@ def _lint_check(root: Path, *, details: bool = False) -> int:
 def _lint_baseline(_root: Path) -> int:
     print(BASELINE_DISABLED_MESSAGE)
     return 1
+
+
+def _baseline_has_recorded_debt(baseline: dict[str, set[str]]) -> bool:
+    return any(allowed_ids for allowed_ids in baseline.values())
+
+
+def _lint_freeze(root: Path) -> int:
+    """Snapshot current lint findings into baselines.json when rules are still empty."""
+    from slopgate.lint import __version__ as lint_version
+    from slopgate.lint._baseline import _baseline_path, load_baseline, save_baseline
+    from slopgate.lint._collectors import run_all_collectors
+
+    project_root = _discover_project_root(root)
+    files = _configured_lint_files(project_root, force_all_scope=True)
+    existing = load_baseline()
+    if _baseline_has_recorded_debt(existing):
+        print("Baseline already records violations; refusing to overwrite.")
+        print(
+            "  Fix violations or edit baselines.json to reduce debt. "
+            "Repo-wide rebaselining stays disabled (`slopgate lint baseline`)."
+        )
+        return 1
+    _print_lint_header(lint_version, "freeze", files)
+
+    violations_by_rule: dict[str, list[Violation]] = {}
+    total = 0
+    for rule_name, violations in run_all_collectors(files.src_files, files.test_files):
+        if not violations:
+            continue
+        violations_by_rule[rule_name] = violations
+        total += len(violations)
+
+    save_baseline(violations_by_rule)
+    destination = _baseline_path()
+    print(
+        f"✓ Froze {total} violation(s) across {len(violations_by_rule)} rule(s) "
+        f"into {destination}"
+    )
+    print(
+        "  Future `slopgate lint` fails only on NEW violations; fix listed debt and shrink this file."
+    )
+    return 0
 
 
 def _lint_test_integrity(root: Path, *, details: bool = False) -> int:
@@ -313,6 +373,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
     root = Path(path_value).resolve()
     dispatch = {
         "baseline": _lint_baseline,
+        "freeze": _lint_freeze,
         "init": _lint_init,
     }
     if lint_command == "check":

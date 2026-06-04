@@ -30,13 +30,15 @@ def _deprecated_patterns() -> list[tuple[str, str]]:
 
 
 def _path_values(root: Path) -> dict[str, object]:
-    baseline_candidate = root / "tests" / "quality" / "baselines.json"
-    baseline_path = baseline_candidate if baseline_candidate.exists() else None
+    src_root = root / str(LINT_PATH_DEFAULTS["src"])
+    tests_root = root / str(LINT_PATH_DEFAULTS["tests"])
     return {
         "project_root": root,
-        "src_root": root / str(LINT_PATH_DEFAULTS["src"]),
-        "tests_root": root / str(LINT_PATH_DEFAULTS["tests"]),
-        "baseline_path": baseline_path,
+        "src_roots": (src_root,),
+        "test_roots": (tests_root,),
+        "src_root": src_root,
+        "tests_root": tests_root,
+        "baseline_path": None,
         "exclude_dirs": {str(item) for item in LINT_PATH_DEFAULTS["exclude_dirs"]},
         "exclude_patterns": [
             str(item) for item in LINT_PATH_DEFAULTS["exclude_patterns"]

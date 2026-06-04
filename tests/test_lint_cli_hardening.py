@@ -71,7 +71,7 @@ def _assert_oversized_module_scaffold(block: str) -> None:
 
 def _assert_type_suppression_detail_block(block: str) -> None:
     expected_details = [
-        "[BASELINED] type-suppression",
+        "[KNOWN-DEBT] type-suppression",
         "location: src/example/types.py:12",
         "metadata.related_files: src/example/protocols.py",
         "Protocol, TypedDict, overload, local stub",
@@ -204,7 +204,7 @@ def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
     )
 
     block = "\n".join(
-        format_violation_details("type-suppression", violation, status="BASELINED")
+        format_violation_details("type-suppression", violation, status="KNOWN-DEBT")
     )
 
     assert "metadata.related_files" in block

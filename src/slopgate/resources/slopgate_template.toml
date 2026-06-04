@@ -5,8 +5,12 @@
 version = "{version}"
 
 [paths]
+# Single directory or array of roots scanned by `slopgate lint check`.
 src = "src"
 tests = "tests"
+# src = ["src", "automation", "cloud", "scripts"]
+# Known-debt inventory (stable_id lists per rule) — fix queue, not a waiver. Relative to repo root.
+baseline_path = "baselines.json"
 exclude_dirs = [".venv", "venv", "env", "__pycache__", "node_modules", ".git"]
 exclude_patterns = ["*_pb2.py", "*_pb2_grpc.py", "*_pb2.pyi"]
 

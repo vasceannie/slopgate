@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
+from slopgate.lint._toml_overrides import apply_paths_overrides, resolve_baseline_path
 from slopgate.lint.config_values import build_default_values
 
 
@@ -14,6 +15,8 @@ class QualityConfig:
     """Resolved lint quality configuration."""
 
     project_root: Path
+    src_roots: tuple[Path, ...]
+    test_roots: tuple[Path, ...]
     src_root: Path
     tests_root: Path
     baseline_path: Path | None
@@ -72,6 +75,8 @@ _config_instance: QualityConfig | None = None
 
 class _QualityConfigValues(TypedDict):
     project_root: Path
+    src_roots: tuple[Path, ...]
+    test_roots: tuple[Path, ...]
     src_root: Path
     tests_root: Path
     baseline_path: Path | None
@@ -117,16 +122,17 @@ class _QualityConfigValues(TypedDict):
     deprecated_patterns: list[tuple[str, str]]
 
 
-def _build_default_config(root: Path) -> QualityConfig:
-    values = build_default_values(root)
-    typed_values = cast(_QualityConfigValues, cast(object, values))
-    return QualityConfig(**typed_values)
-
-
 def load_config(project_root: Path) -> QualityConfig:
-    """Load lint config using deterministic repository defaults."""
+    """Load lint config from repository defaults and ``slopgate.toml`` overrides."""
 
-    loaded = _build_default_config(project_root.resolve())
+    root = project_root.resolve()
+    values = build_default_values(root)
+    apply_paths_overrides(values, root)
+    configured_baseline = resolve_baseline_path(root)
+    if configured_baseline is not None:
+        values["baseline_path"] = configured_baseline
+    typed_values = cast(_QualityConfigValues, cast(object, values))
+    loaded = QualityConfig(**typed_values)
     set_config(loaded)
     return loaded
 

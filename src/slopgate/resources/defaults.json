@@ -941,7 +941,7 @@
         "baselines?/"
       ],
       "action": "context",
-      "additional_context": "WARNING: You are editing baseline/snapshot files. Verify that changes reflect intentional behavior updates, not regressions. Review diffs carefully.",
+      "additional_context": "Baseline files list KNOWN DEBT to fix — not accepted quality. Edits must only REMOVE stable_id entries after fixing code (shrink debt). Never add violation IDs to hide new problems. If you are reading baselines for context, use that to plan fixes in touched files.",
       "case_sensitive": false,
       "multiline": false
     },
@@ -958,7 +958,7 @@
         "(sed\\s+-i|tee\\s|>\\s*(?!&)|>>|set-content\\b|add-content\\b|out-file\\b|copy-item\\b|move-item\\b).*baselines?\\.json"
       ],
       "action": "context",
-      "additional_context": "WARNING: You are editing baseline files via shell. Verify changes reflect intentional behavior updates.",
+      "additional_context": "Shell edits to baseline files must only shrink known-debt lists after fixes. Do not inflate baselines or re-baseline away lint failures.",
       "case_sensitive": false,
       "multiline": false
     },

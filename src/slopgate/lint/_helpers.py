@@ -26,8 +26,16 @@ def src_root() -> Path:
     return get_config().src_root
 
 
+def src_roots() -> tuple[Path, ...]:
+    return get_config().src_roots
+
+
 def tests_root() -> Path:
     return get_config().tests_root
+
+
+def test_roots() -> tuple[Path, ...]:
+    return get_config().test_roots
 
 
 # ---------------------------------------------------------------------------
@@ -109,14 +117,22 @@ def _walk_python_files(root: Path) -> list[Path]:
     return sorted(results)
 
 
+def _walk_roots(roots: tuple[Path, ...]) -> list[Path]:
+    by_resolved: dict[Path, Path] = {}
+    for root_path in roots:
+        for path in _walk_python_files(root_path):
+            by_resolved.setdefault(path.resolve(), path)
+    return sorted(by_resolved.values())
+
+
 def find_source_files() -> list[Path]:
     """Return all non-test Python source files."""
-    return _walk_python_files(src_root())
+    return _walk_roots(src_roots())
 
 
 def find_test_files() -> list[Path]:
     """Return all Python test files."""
-    return _walk_python_files(tests_root())
+    return _walk_roots(test_roots())
 
 
 def find_all_python_files() -> list[Path]:

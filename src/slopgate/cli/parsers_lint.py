@@ -60,6 +60,21 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
     )
 
 
+def _add_lint_freeze_parser(lint_sub: SubparserRegistry) -> None:
+    from slopgate.cli import parsers as core
+
+    freeze = lint_sub.add_parser(
+        "freeze",
+        help="One-time baseline snapshot when rules are empty",
+        description=(
+            "Write current lint findings to baselines.json. "
+            "Only allowed while the baseline rules map is empty."
+        ),
+    )
+    core._add_optional_path_argument(freeze)
+    freeze.set_defaults(func=cmd_lint, lint_command="freeze")
+
+
 def _add_lint_baseline_parser(lint_sub: SubparserRegistry) -> None:
     from slopgate.cli import parsers as core
 
@@ -94,6 +109,7 @@ def add_lint_parsers(sub: SubparserRegistry) -> None:
     lint_sub = lint.add_subparsers(dest="lint_command")
 
     _add_lint_analysis_parsers(lint_sub)
+    _add_lint_freeze_parser(lint_sub)
     _add_lint_baseline_parser(lint_sub)
     _add_lint_init_parser(lint_sub)
     _add_lint_update_parser(lint_sub)
