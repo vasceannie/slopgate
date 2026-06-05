@@ -65,6 +65,10 @@ class TestRepeatedStringLiteralMetadata:
         assert "already_defined" in metadata
         already_defined = cast(dict[str, object], metadata["already_defined"])
         assert already_defined["name"] == "SHARED_ERROR"
+        assert already_defined["path"] == "src/constants.py"
+        assert already_defined["line"] == 1
+        assert "src/constants.py:1" in repeated[0].detail
+        assert "do not duplicate it or hide the literal with string fragments" in repeated[0].detail
 
     def test_suggests_candidate_name_when_constant_missing(self, tmp_path: Path) -> None:
         _ = (tmp_path / "src").mkdir()

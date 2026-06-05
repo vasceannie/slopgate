@@ -107,7 +107,10 @@ def _string_literal_metadata(
         METADATA_PATH: relative,
         "line": lineno,
     }
-    suffix = f"; already defined as {constant_match.name} in {relative}:{lineno}"
+    suffix = (
+        f"; import existing constant {constant_match.name} from {relative}:{lineno}; "
+        "do not duplicate it or hide the literal with string fragments"
+    )
     return {"already_defined": already_defined}, suffix
 
 

@@ -257,6 +257,15 @@ def _module_name_for_import(constants_file: Path, root: Path) -> str:
     return ".".join(parts) if parts else constants_file.stem
 
 
+def _constant_search_root(ctx: HookContext) -> Path:
+    """Return the project root that should own constants for hook feedback."""
+
+    config_root = ctx.config.root
+    if iter_constant_candidate_paths(config_root):
+        return config_root
+    return ctx.config.repo_root
+
+
 def _append_importable_constant_hints(
     extras: list[str], constants_file: Path, root: Path, target_values: set[int | float | str]
 ) -> bool:
@@ -293,6 +302,11 @@ def _append_importable_constant_hints(
         module = _module_name_for_import(path, root)
         names = ", ".join(constant.name for constant in constants)
         extras.append(f"  from {module} import {names}")
+    if exact_matches:
+        extras.append(
+            "Import the existing constant from the cited path; do not create a duplicate, "
+            "alias, or split-literal workaround."
+        )
     return True
 
 
@@ -301,21 +315,23 @@ def enrich_magic_numbers(finding: RuleFinding, ctx: HookContext) -> None:
 
     extras: list[str] = []
     target_values = _target_literal_values(ctx)
-    _append_triggered_magic_number_hints(extras, ctx, ctx.config.root)
-    for source_path in _metadata_source_paths(finding, ctx.config.root):
-        constants_file = _find_constants_module(source_path, ctx.config.root)
+    root = _constant_search_root(ctx)
+    _append_triggered_magic_number_hints(extras, ctx, root)
+    for source_path in _metadata_source_paths(finding, root):
+        constants_file = _find_constants_module(source_path, root)
         if constants_file is not None:
-            relative = relative_path(constants_file, ctx.config.root)
+            relative = relative_path(constants_file, root)
             extras.append(f"\nProject constants module found: `{relative}`")
             _append_importable_constant_hints(
-                extras, constants_file, ctx.config.root, target_values
+                extras, constants_file, root, target_values
             )
             break
 
     if not extras:
         extras.append(
             "\nDefine repeated literals in a constants/config module "
-            + "instead of inline magic values."
+            + "instead of inline magic values. Do not split or concatenate "
+            + "literal fragments to bypass the gate."
         )
 
     append_enrichment_message(finding, extras)

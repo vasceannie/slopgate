@@ -142,9 +142,11 @@ If a function repeatedly pulls fields/methods from another object, move the beha
 ## Duplicate helper / repeated literal recovery
 
 1. Search existing helpers/constants first.
-2. If none exists, choose the narrowest domain owner.
-3. Avoid `utils.py` dumping grounds.
-4. Preserve protocol/schema keys where literal extraction would make code less clear; only extract semantic repeated values.
+2. If Slopgate cites an existing constant, read the cited owner (`path:line`), confirm semantic fit, import that symbol, and replace the duplicate literal with the import.
+3. If none exists, choose the narrowest domain owner.
+4. Avoid `utils.py` dumping grounds.
+5. Preserve protocol/schema keys where literal extraction would make code less clear; only extract semantic repeated values.
+6. Reject detector camouflage: no string fragmentation (`"pri" + "mary"`), partial-constant stitching (`PK_PRI + "mary"`), alias-only constants, tuple/list packing, or generated indirection whose only purpose is to change hashes.
 
 ## Test and fixture bloat recovery
 

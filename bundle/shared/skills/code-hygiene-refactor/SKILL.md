@@ -16,6 +16,7 @@ Use this skill when a hook, linter, review, or CI gate says the code shape is wr
 4. **Repair before continuing**: if a PostToolUse/after-edit backstop blocked, assume the bad mutation has landed. Fix it before unrelated edits.
 5. **Preserve public API**: package splits should keep import compatibility with `__init__.py` re-exports or explicit migration edits plus tests.
 6. **Smallest coherent diff**: split by responsibility, not by line-count shuffling.
+7. **No detector camouflage**: never split strings/numbers (`"pri" + "mary"`), stitch constants (`PK_PRI + "mary"`), tuple-pack values, or add aliases just to dodge duplicate-literal/constant rules.
 
 ## Preemptive triggers — refactor *before* the hook denies
 
@@ -43,7 +44,7 @@ When you make a preemptive split, the rules of the rule-specific recovery map be
    - refactor shape;
    - public imports to preserve;
    - focused tests/compile command.
-4. Search for existing helpers/constants/ownership before creating new abstractions.
+4. Search for existing helpers/constants/ownership before creating new abstractions. If the hook/lint response names an existing constant, import that exact symbol from the cited `path:line` instead of creating a duplicate.
 5. Patch the design, not the guardrail.
 
 ## Rule-specific recovery map
@@ -140,6 +141,26 @@ Recovery:
 3. If the finding is oversized-module/god-class/long-method/duplicate-helper, use the structural strategies in this skill.
 4. If the finding is type-safety, load `type-strictness` too.
 5. Run focused verification, then repo-root lint.
+
+### Repeated literal / existing constant findings
+
+Signal: `PY-QUALITY-010`, `PY-DUP-004`, `repeated-string-literal`, or a `QUALITY-LINT-001` detail says a literal is repeated, magic, or already defined as a constant.
+
+Resolution strategy:
+
+1. Use the cited existing constant location first. Good hook output should name the symbol and the owner, e.g. `PRIMARY_TIMEOUT_MS = 500 (src/constants.py:12)` or `import existing constant PRIMARY_TIMEOUT_MS from src/constants.py:12`.
+2. Read that owner file before editing. Confirm the constant is semantically the same value/policy, not just coincidentally equal.
+3. Import and reuse the existing symbol at call sites; preserve the owner module as the single source of truth.
+4. If no existing constant is cited, create one near the owning domain (`constants.py`, `_constants.py`, config/defaults module, or a domain package constant), then replace all semantic duplicates intentionally.
+5. Verify with the focused test/compile command and repo-root `slopgate lint check`.
+
+Dirty fixes to reject:
+
+- splitting a literal into fragments such as `"pri" + "mary"`;
+- composing a duplicate from partial constants such as `PK_PRI + "mary"`;
+- aliasing an existing constant under a new name without adding domain meaning;
+- tuple/list packing or generated indirection whose only purpose is to change detector hashes;
+- moving the value to `utils.py` or a random config file unrelated to the owning policy.
 
 ### `PY-AST-001` — parse/read failure
 

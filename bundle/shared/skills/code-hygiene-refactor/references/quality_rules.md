@@ -39,7 +39,8 @@ This reference is intentionally Slopgate-oriented. Project-specific Makefile tar
 
 - Thin wrappers: inline or add real value.
 - Feature envy: move behavior to the object/domain owner.
-- Duplicate helpers/repeated literals: search for existing constants/helpers before adding new ones.
+- Duplicate helpers/repeated literals: search for existing constants/helpers before adding new ones; when Slopgate cites an existing constant, import the symbol from the cited `path:line` instead of creating another name.
+- Repeated literal camouflage: never split strings (`"pri" + "mary"`), stitch partial constants (`PK_PRI + "mary"`), or add aliases solely to bypass duplicate-literal detectors.
 - Type suppression: load `type-strictness` and model the type correctly.
 
 ## Structural thresholds to assume unless project policy says otherwise

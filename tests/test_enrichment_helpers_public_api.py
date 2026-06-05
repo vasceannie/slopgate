@@ -19,6 +19,7 @@ from slopgate.enrichment._helpers import (
 from slopgate.enrichment.local_context import find_local_call_sites
 from slopgate.enrichment.quality_enrichers._magic_numbers import enrich_magic_numbers
 from slopgate.enrichment.quality_enrichers._paths import enrich_hardcoded_paths
+from slopgate.engine import evaluate_payload
 from slopgate.models import RuleFinding, Severity
 
 IRRELEVANT_TEXT = strategies.text(alphabet="abc xyz\n#", max_size=80)
@@ -106,7 +107,44 @@ def test_magic_number_enricher_reports_existing_constants(tmp_path: Path) -> Non
         "\nExact constant match:"
         "\n  RETRY_LIMIT = 3 (constants.py:1)"
         "\n  from constants import RETRY_LIMIT"
+        "\nImport the existing constant from the cited path; do not create a duplicate, "
+        "alias, or split-literal workaround."
     )
+
+
+def test_magic_number_hook_response_cites_existing_constant_location(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
+    (tmp_path / "src" / "constants.py").write_text(
+        "PRIMARY_TIMEOUT_MS = 500\n", encoding="utf-8"
+    )
+    content = (
+        "from __future__ import annotations\n\n"
+        "def wait(value: int) -> bool:\n"
+        "    return value > 500\n"
+    )
+
+    result = evaluate_payload(
+        {
+            "session_id": "constant-location-response",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "src/worker.py", "content": content},
+        },
+        platform="claude",
+    )
+
+    assert result.output is not None
+    response = str(result.output)
+    assert "PRIMARY_TIMEOUT_MS = 500 (src/constants.py:1)" in response
+    assert "from constants import PRIMARY_TIMEOUT_MS" in response
+    assert "split-literal workaround" in response
 
 
 def test_hardcoded_path_enricher_reports_central_path_config(tmp_path: Path) -> None:
@@ -135,7 +173,8 @@ def test_magic_number_enricher_has_generic_fallback_property(source: str) -> Non
         enrich_magic_numbers(item, ctx)
     assert item.message == (
         "\n\nDefine repeated literals in a constants/config module "
-        "instead of inline magic values."
+        "instead of inline magic values. Do not split or concatenate "
+        "literal fragments to bypass the gate."
     )
 
 
