@@ -114,9 +114,9 @@ def _string_literal_metadata(
     return {"already_defined": already_defined}, suffix
 
 
-def _existing_location_metadata(
+def _collect_existing_locations(
     occurrences: dict[str, set[int]],
-) -> dict[str, object]:
+) -> tuple[list[str], int]:
     locations: list[str] = []
     total = 0
     for rel_path in sorted(occurrences):
@@ -124,8 +124,24 @@ def _existing_location_metadata(
             total += 1
             if len(locations) < _MAX_EXISTING_LOCATION_PREVIEW:
                 locations.append(f"{rel_path}:{lineno}")
+    return locations, total - len(locations)
+
+
+def _existing_location_detail_suffix(occurrences: dict[str, set[int]]) -> str:
+    locations, remaining = _collect_existing_locations(occurrences)
+    if not locations:
+        return ""
+    location_text = ", ".join(locations)
+    if remaining > 0:
+        location_text += f", ... +{remaining} more"
+    return f"; locations: {location_text}"
+
+
+def _existing_location_metadata(
+    occurrences: dict[str, set[int]],
+) -> dict[str, object]:
+    locations, remaining = _collect_existing_locations(occurrences)
     metadata: dict[str, object] = {"existing_locations": locations}
-    remaining = total - len(locations)
     if remaining > 0:
         metadata["existing_locations_more"] = remaining
     return metadata
@@ -143,7 +159,10 @@ def _magic_number_violation(
         rule="repeated-magic-number",
         relative_path="<project>",
         identifier=repr(value),
-        detail=f"appears in {len(files_seen)} files (max: {max_files})",
+        detail=(
+            f"appears in {len(files_seen)} files (max: {max_files})"
+            f"{_existing_location_detail_suffix(occurrences)}"
+        ),
         metadata=_existing_location_metadata(occurrences),
     )
 
@@ -167,7 +186,11 @@ def _string_literal_violation(
         rule="repeated-string-literal",
         relative_path="<project>",
         identifier=repr(value)[:40],
-        detail=f"appears in {len(files_seen)} files (max: {max_files}){detail_suffix}",
+        detail=(
+            f"appears in {len(files_seen)} files (max: {max_files})"
+            f"{_existing_location_detail_suffix(occurrences)}"
+            f"{detail_suffix}"
+        ),
         metadata=metadata,
     )
 

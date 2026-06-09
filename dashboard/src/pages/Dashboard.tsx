@@ -12,7 +12,7 @@ import { FalsePositiveAnalysis } from "@/components/dashboard/FalsePositiveAnaly
 import { FileDropZone } from "@/components/dashboard/FileDropZone";
 import { PathExplorer } from "@/components/dashboard/PathExplorer";
 import { RuleManager } from "@/components/dashboard/RuleManager";
-import { Terminal, Filter, X, Settings2 } from "lucide-react";
+import { Terminal, Filter, X, Settings2, LoaderCircle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // Memo wrappers — only for components that aren't already memo'd internally
@@ -23,6 +23,45 @@ const MemoAsyncJobs = memo(AsyncJobs);
 const MemoDriftTuning = memo(DriftTuning);
 // SessionExplorer, FalsePositiveAnalysis, PathExplorer already use memo internally — no double wrapping
 
+function OverviewLoadingPlaceholder() {
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+      <div className="grid min-h-[590px] gap-4 lg:h-[650px] lg:grid-rows-[minmax(260px,1.12fr)_minmax(220px,0.88fr)]">
+        {[
+          "Decision Volume Over Time",
+          "Event Pipeline",
+        ].map(label => (
+          <div key={label}>
+            <h3 className="text-xs text-muted-foreground uppercase tracking-wider mb-2 px-1">{label}</h3>
+            <div className="flex h-[calc(100%-1.25rem)] min-h-[220px] items-center justify-center rounded-md border border-border bg-card/30 p-3 text-xs text-muted-foreground">
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin text-primary" />
+              Loading live trace snapshot…
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        <div className="flex min-h-[590px] flex-col gap-3 lg:h-[650px]">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs text-muted-foreground uppercase tracking-wider px-1">Top Pressure Rules</h3>
+          </div>
+          <div className="grid min-h-0 flex-1 grid-rows-[minmax(245px,0.43fr)_minmax(320px,0.57fr)] gap-4">
+            {[
+              "Top Pressure Rules",
+              "Severity Mix",
+            ].map(label => (
+              <div key={label} className="flex min-h-0 items-center justify-center rounded-md border border-border bg-card/30 p-3 text-xs text-muted-foreground">
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin text-primary" />
+                Loading {label.toLowerCase()}…
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [filters, setFilters] = useState<FilterState>({
     timeWindow: "7d",
@@ -31,6 +70,7 @@ export default function Dashboard() {
   });
 
   const data = useTraceData(filters);
+  const isInitialSnapshotLoading = data.sourceStatus.isSnapshotLoading && data.sourceStatus.meta.totalRecords === 0;
 
   const handlePathFilter = useCallback((path: string | null) => {
     setFilters(prev => ({ ...prev, pathFilter: path }));
@@ -95,10 +135,19 @@ export default function Dashboard() {
           </TabsList>
 
           <TabsContent value="overview" className="mt-4 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <MemoDecisionFunnel timeSeries={data.timeSeries} eventsByType={data.eventsByType} />
-              <MemoTopRules topRules={data.topRules} duplicationByRule={data.duplicationByRule} />
-            </div>
+            {isInitialSnapshotLoading ? (
+              <OverviewLoadingPlaceholder />
+            ) : (
+              <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+                <MemoDecisionFunnel
+                  timeSeries={data.timeSeries}
+                  eventsByType={data.eventsByType}
+                  eventsByTypeAndPlatform={data.eventsByTypeAndPlatform}
+                  timeWindow={filters.timeWindow}
+                />
+                <MemoTopRules topRules={data.topRules} duplicationByRule={data.duplicationByRule} />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="fp-analysis" className="mt-4">

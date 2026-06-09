@@ -1,0 +1,190 @@
+import json
+import re
+import shutil
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+home = Path.home()
+expected = {
+    "claude": [
+        "SessionStart",
+        "CwdChanged",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStop",
+        "TaskCompleted",
+        "TeammateIdle",
+        "InstructionsLoaded",
+        "ConfigChange",
+    ],
+    "codex": ["SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"],
+}
+
+
+def read_json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), None
+    except FileNotFoundError:
+        return None, "missing"
+    except json.JSONDecodeError as exc:
+        return None, f"json_parse_error: {exc.msg}"
+    except OSError as exc:
+        return None, f"read_error: {type(exc).__name__}"
+
+
+def commands_in(value):
+    found = []
+    if isinstance(value, dict):
+        command = value.get("command")
+        if isinstance(command, str):
+            found.append(command)
+        for item in value.values():
+            found.extend(commands_in(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(commands_in(item))
+    return found
+
+
+def summarize_hooks(hooks, expected_events):
+    if not isinstance(hooks, dict):
+        hooks = {}
+    present = sorted(k for k in expected_events if k in hooks)
+    missing = sorted(k for k in expected_events if k not in hooks)
+    commands = commands_in(hooks)
+    vf_commands = [cmd for cmd in commands if "slopgate" in cmd and "handle" in cmd]
+    return {
+        "configured_events": present,
+        "missing_events": missing,
+        "expected_events": expected_events,
+        "hook_entry_count": sum(len(v) if isinstance(v, list) else 1 for v in hooks.values()),
+        "slopgate_command_count": len(vf_commands),
+        "all_commands_reference_slopgate": bool(commands) and len(vf_commands) == len(commands),
+    }
+
+
+def dry_run(platform):
+    candidates = [home / ".local" / "bin" / "slopgate", shutil.which("slopgate")]
+    binary = next((str(p) for p in candidates if p and Path(str(p)).exists()), None)
+    if not binary:
+        return {"available": False, "ok": False, "note": "slopgate binary not found"}
+    try:
+        proc = subprocess.run(
+            [binary, "install", platform, "--dry-run"],
+            cwd=str(home),
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=False,
+        )
+        return {"available": True, "ok": proc.returncode == 0, "returncode": proc.returncode}
+    except subprocess.TimeoutExpired:
+        return {"available": True, "ok": False, "note": "dry-run timeout"}
+    except Exception as exc:
+        return {"available": True, "ok": False, "note": type(exc).__name__}
+
+
+def status_from(installed, partial=False, error=None):
+    if error and error != "missing":
+        return "error"
+    if installed:
+        return "installed"
+    if partial:
+        return "partial"
+    return "missing"
+
+
+claude_path = home / ".claude" / "settings.json"
+claude_data, claude_err = read_json(claude_path)
+claude_hooks = summarize_hooks(claude_data.get("hooks") if isinstance(claude_data, dict) else {}, expected["claude"])
+claude_installed = claude_err is None and not claude_hooks["missing_events"] and claude_hooks["slopgate_command_count"] > 0
+claude_partial = claude_err is None and (bool(claude_hooks["configured_events"]) or claude_hooks["slopgate_command_count"] > 0)
+
+codex_hooks_path = home / ".codex" / "hooks.json"
+codex_data, codex_err = read_json(codex_hooks_path)
+codex_hooks = summarize_hooks(codex_data.get("hooks") if isinstance(codex_data, dict) else {}, expected["codex"])
+codex_toml = home / ".codex" / "config.toml"
+try:
+    codex_toml_text = codex_toml.read_text(encoding="utf-8")
+    codex_feature = bool(re.search(r"(?m)^\s*codex_hooks\s*=\s*true\b", codex_toml_text))
+    codex_feature_error = None
+except FileNotFoundError:
+    codex_feature = False
+    codex_feature_error = "missing"
+except OSError as exc:
+    codex_feature = False
+    codex_feature_error = type(exc).__name__
+codex_installed = codex_err is None and codex_feature and not codex_hooks["missing_events"] and codex_hooks["slopgate_command_count"] > 0
+codex_partial = codex_err is None and (bool(codex_hooks["configured_events"]) or codex_hooks["slopgate_command_count"] > 0 or codex_feature)
+
+opencode_plugin = home / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
+opencode_disabled = home / ".config" / "opencode" / "plugins.disabled" / "slopgate-plugin.ts"
+try:
+    plugin_text = opencode_plugin.read_text(encoding="utf-8")[:12000]
+    plugin_present = True
+    plugin_error = None
+except FileNotFoundError:
+    plugin_text = ""
+    plugin_present = False
+    plugin_error = "missing"
+except OSError as exc:
+    plugin_text = ""
+    plugin_present = False
+    plugin_error = type(exc).__name__
+opencode_marker = "slopgate" in plugin_text and "handle" in plugin_text
+opencode_disabled_present = opencode_disabled.exists()
+
+platforms = [
+    {
+        "id": "claude",
+        "label": "Claude Code",
+        "capability": "full",
+        "support": "richest hook support / production",
+        "status": status_from(claude_installed, claude_partial, claude_err),
+        "config_path": "~/.claude/settings.json",
+        "config_exists": claude_err is None,
+        "error": None if claude_err in (None, "missing") else claude_err,
+        "dry_run": dry_run("claude"),
+        **claude_hooks,
+    },
+    {
+        "id": "codex",
+        "label": "Codex",
+        "capability": "partial",
+        "support": "partial hooks; requires codex_hooks feature flag",
+        "status": status_from(codex_installed, codex_partial, codex_err or codex_feature_error),
+        "config_path": "~/.codex/hooks.json",
+        "config_exists": codex_err is None,
+        "feature_flag_path": "~/.codex/config.toml",
+        "feature_flag_enabled": codex_feature,
+        "error": None if (codex_err in (None, "missing") and codex_feature_error in (None, "missing")) else (codex_err or codex_feature_error),
+        "dry_run": dry_run("codex"),
+        **codex_hooks,
+    },
+    {
+        "id": "opencode",
+        "label": "OpenCode",
+        "capability": "degraded",
+        "support": "plugin-mediated; prompt/stop controls are advisory/degraded",
+        "status": "installed" if plugin_present and opencode_marker else ("disabled" if opencode_disabled_present and not plugin_present else status_from(False, plugin_present, plugin_error)),
+        "config_path": "~/.config/opencode/plugins/slopgate-plugin.ts",
+        "config_exists": plugin_present,
+        "plugin_contains_slopgate": opencode_marker,
+        "disabled_plugin_present": opencode_disabled_present,
+        "error": None if plugin_error in (None, "missing") else plugin_error,
+        "dry_run": dry_run("opencode"),
+        "configured_events": ["tool.execute.before", "tool.execute.after", "session.created", "session.idle", "permission.asked"] if plugin_present and opencode_marker else [],
+        "missing_events": [],
+        "expected_events": ["tool.execute.before", "tool.execute.after", "session.created", "session.idle", "permission.asked"],
+        "hook_entry_count": 1 if plugin_present else 0,
+        "slopgate_command_count": 1 if opencode_marker else 0,
+        "all_commands_reference_slopgate": bool(opencode_marker),
+    },
+]
+
+print(json.dumps({"ok": True, "checked_at": datetime.now(timezone.utc).isoformat(), "platforms": platforms}))

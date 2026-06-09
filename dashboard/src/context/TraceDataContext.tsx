@@ -1,52 +1,13 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
-import type { HookEvent, RuleFinding, HookResult, SubprocessRun } from "@/types/slopgate";
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { generateMockData } from "@/data/mockTraces";
 import { coerceTraceRecord } from "./traceRecordValidation";
+import {
+  TraceDataContext,
+  type TraceData,
+  type TraceDataContextValue,
+} from "./traceDataContext";
 
-interface TraceData {
-  events: HookEvent[];
-  rules: RuleFinding[];
-  results: HookResult[];
-  subprocesses: SubprocessRun[];
-}
-
-export type SourceMode = "mock" | "baked" | "uploaded" | "streaming";
-export type StreamState = "idle" | "connecting" | "live" | "retrying";
-
-export interface TraceSourceMeta {
-  initialDataLatestAt: string | null;
-  latestDataAt: string | null;
-  snapshotLoadedAt: string | null;
-  snapshotLookbackHours: number | null;
-  snapshotError: string | null;
-  snapshotTruncated: Record<string, number>;
-  streamConnectedAt: number | null;
-  lastAcceptedStreamRecordAt: string | null;
-  acceptedStreamRecords: number;
-  rejectedStreamRecords: number;
-  totalRecords: number;
-}
-
-interface TraceDataContextValue {
-  data: TraceData;
-  sourceMode: SourceMode;
-  streamState: StreamState;
-  sourceMeta: TraceSourceMeta;
-  isStreaming: boolean;
-  isLive: boolean;
-  lastStreamEventAt: number | null;
-  ingestFiles: (files: File[]) => Promise<{ accepted: number; rejected: string[] }>;
-  refreshSnapshot: (lookbackHours: number) => Promise<void>;
-  resetToMock: () => void;
-}
-
-const TraceDataContext = createContext<TraceDataContextValue | null>(null);
-
-export function useTraceDataSource() {
-  const ctx = useContext(TraceDataContext);
-  if (!ctx) throw new Error("useTraceDataSource must be used within TraceDataProvider");
-  return ctx;
-}
+export type { SourceMode, StreamState, TraceSourceMeta } from "./traceDataContext";
 
 type AppendOutcome = "accepted" | "ignored" | "rejected";
 
@@ -88,6 +49,13 @@ async function parseJSONLFile(file: File): Promise<{
 }
 
 const MAX_RECORDS_PER_CATEGORY = 250000;
+
+const EMPTY_TRACE_DATA: TraceData = {
+  events: [],
+  rules: [],
+  results: [],
+  subprocesses: [],
+};
 
 function latestTimestamp(items: Array<{ timestamp?: string }>): string | null {
   let latest: string | null = null;
@@ -159,7 +127,7 @@ function getInitialData(): { data: TraceData; sourceMode: SourceMode } {
       sourceMode: "baked",
     };
   }
-  return { data: generateMockData(), sourceMode: "mock" };
+  return { data: EMPTY_TRACE_DATA, sourceMode: "mock" };
 }
 
 export function TraceDataProvider({ children }: { children: ReactNode }) {
@@ -176,10 +144,12 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
   const [snapshotLookbackHours, setSnapshotLookbackHours] = useState<number | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotTruncated, setSnapshotTruncated] = useState<Record<string, number>>({});
+  const [isSnapshotLoading, setSnapshotLoading] = useState(initial.sourceMode === "mock");
   const [acceptedStreamRecords, setAcceptedStreamRecords] = useState(0);
   const [rejectedStreamRecords, setRejectedStreamRecords] = useState(0);
   const [shouldConnectStream, setShouldConnectStream] = useState(initial.sourceMode === "baked");
   const eventSourceRef = useRef<EventSource | null>(null);
+  const snapshotRequestVersionRef = useRef(0);
 
   const appendRecord = useCallback((obj: Record<string, unknown>): AppendOutcome => {
     const accepted = coerceTraceRecord(obj);
@@ -257,9 +227,13 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
   const refreshSnapshot = useCallback(async (lookbackHours: number) => {
     const hours = Math.max(1, Math.min(Math.ceil(lookbackHours), 720));
     const basePath = document.querySelector("base")?.getAttribute("href")?.replace(/\/$/, "") ?? "";
+    const requestVersion = snapshotRequestVersionRef.current + 1;
+    snapshotRequestVersionRef.current = requestVersion;
+    setSnapshotLoading(true);
     try {
       const response = await fetch(`${window.location.origin}${basePath}/api/snapshot?lookback_hours=${hours}`);
       const snapshot = await response.json() as SnapshotResponse;
+      if (snapshotRequestVersionRef.current !== requestVersion) return;
       if (!response.ok || snapshot.ok === false) {
         throw new Error(snapshot.error || `snapshot HTTP ${response.status}`);
       }
@@ -272,7 +246,13 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
       setSnapshotTruncated(snapshot.truncated ?? {});
       setShouldConnectStream(true);
     } catch (error) {
-      setSnapshotError(error instanceof Error ? error.message : String(error));
+      if (snapshotRequestVersionRef.current === requestVersion) {
+        setSnapshotError(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (snapshotRequestVersionRef.current === requestVersion) {
+        setSnapshotLoading(false);
+      }
     }
   }, []);
 
@@ -281,6 +261,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
   }, [refreshSnapshot]);
 
   const ingestFiles = useCallback(async (files: File[]) => {
+    snapshotRequestVersionRef.current += 1;
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -295,6 +276,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
     setSnapshotLookbackHours(null);
     setSnapshotError(null);
     setSnapshotTruncated({});
+    setSnapshotLoading(false);
     setAcceptedStreamRecords(0);
     setRejectedStreamRecords(0);
 
@@ -338,6 +320,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetToMock = useCallback(() => {
+    snapshotRequestVersionRef.current += 1;
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -352,6 +335,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
     setSnapshotLookbackHours(null);
     setSnapshotError(null);
     setSnapshotTruncated({});
+    setSnapshotLoading(false);
     setAcceptedStreamRecords(0);
     setRejectedStreamRecords(0);
     setData(generateMockData());
@@ -368,6 +352,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
     snapshotLookbackHours,
     snapshotError,
     snapshotTruncated,
+    isSnapshotLoading,
     streamConnectedAt,
     lastAcceptedStreamRecordAt,
     acceptedStreamRecords,
@@ -376,6 +361,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
   }), [
     acceptedStreamRecords,
     initialDataLatestAt,
+    isSnapshotLoading,
     lastAcceptedStreamRecordAt,
     latestDataAt,
     rejectedStreamRecords,

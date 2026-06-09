@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, type ChangeEvent, type DragEvent } from "react";
 import { Upload, FileText, X, RotateCcw, CheckCircle2, LoaderCircle, WifiOff, AlertTriangle } from "lucide-react";
-import { useTraceDataSource, type SourceMode } from "@/context/TraceDataContext";
+import { type SourceMode } from "@/context/TraceDataContext";
+import { useTraceDataSource } from "@/context/useTraceDataSource";
 import { cn } from "@/lib/utils";
 
 const SOURCE_MESSAGES: Record<SourceMode, string> = {
@@ -94,6 +95,11 @@ export function FileDropZone() {
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <div className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin" />
             Parsing traces…
+          </div>
+        ) : sourceMeta.isSnapshotLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <LoaderCircle className="w-3.5 h-3.5 animate-spin text-primary" />
+            Loading live trace snapshot before rendering charts…
           </div>
         ) : isLive ? (
           <div className="flex flex-wrap items-center gap-2 text-xs">

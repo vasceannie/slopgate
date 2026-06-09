@@ -142,19 +142,22 @@ def compute_synced_baseline_rules(
     old_baseline: dict[str, set[str]],
     *,
     prune_only: bool,
+    accepted_baseline: dict[str, set[str]] | None = None,
 ) -> tuple[dict[str, set[str]], int]:
     """Return baseline rules after sync and the number of stale ids removed."""
     current_by_rule = _current_ids_by_rule(collectors)
-    all_rules = set(old_baseline) | set(current_by_rule)
+    accepted = accepted_baseline or {}
+    all_rules = set(old_baseline) | set(current_by_rule) | set(accepted)
     synced: dict[str, set[str]] = {}
     stale_removed = 0
 
     for rule in all_rules:
         old_ids = old_baseline.get(rule, set())
+        accepted_ids = accepted.get(rule, set())
         current_ids = current_by_rule.get(rule, set())
         stale_removed += len(old_ids - current_ids)
         if prune_only:
-            kept = old_ids & current_ids
+            kept = (old_ids | accepted_ids) & current_ids
             if kept:
                 synced[rule] = kept
         elif current_ids:
@@ -168,6 +171,16 @@ class BaselineSyncResult(NamedTuple):
 
     stale_removed: int
     wrote: bool
+    inherited_added: int = 0
+
+
+def _count_new_synced_ids(
+    old_baseline: dict[str, set[str]],
+    synced: dict[str, set[str]],
+) -> int:
+    return sum(
+        len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items()
+    )
 
 
 def apply_lint_baseline_sync(
@@ -175,17 +188,20 @@ def apply_lint_baseline_sync(
     old_baseline: dict[str, set[str]],
     *,
     prune_only: bool,
+    accepted_baseline: dict[str, set[str]] | None = None,
 ) -> BaselineSyncResult:
     """Write baselines.json after lint; return stale ids removed and whether file changed."""
     synced, stale_removed = compute_synced_baseline_rules(
         collectors,
         old_baseline,
         prune_only=prune_only,
+        accepted_baseline=accepted_baseline,
     )
+    inherited_added = _count_new_synced_ids(old_baseline, synced)
     if _baseline_rules_equal(old_baseline, synced):
-        return BaselineSyncResult(stale_removed, False)
+        return BaselineSyncResult(stale_removed, False, inherited_added)
     save_baseline_ids(synced)
-    return BaselineSyncResult(stale_removed, True)
+    return BaselineSyncResult(stale_removed, True, inherited_added)
 
 
 def assert_no_new_violations(

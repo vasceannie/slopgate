@@ -37,7 +37,7 @@ def _assert_lint_check_forces_repo_root_scope(
     expected_lines = [
         f"project:  {project_root}",
         f"src:     {project_root / 'src'}  (1 files)",
-        "✓ No new violations",
+        "✓ No violations",
     ]
     missing_lines = [line for line in expected_lines if line not in output]
     assert missing_lines == [], "lint check should ignore changed scope and scan repo root"
@@ -227,7 +227,10 @@ def test_lint_summary_prints_existing_literal_locations(
         rule="repeated-string-literal",
         relative_path="<project>",
         identifier="'skipped'",
-        detail="appears in 11 files (max: 10); consider `SKIPPED`",
+        detail=(
+            "appears in 11 files (max: 10); locations: src/a.py:5, src/b.py:8; "
+            "consider `SKIPPED`"
+        ),
         metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
     )
 
@@ -242,4 +245,29 @@ def test_lint_summary_prints_existing_literal_locations(
 
     output = capsys.readouterr().out
     assert "+ <project>:'skipped'" in output
+    assert "locations: src/a.py:5, src/b.py:8" in output
+    assert "existing locations:" not in output
+
+
+def test_lint_summary_falls_back_to_metadata_locations_without_detail_suffix(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    violation = Violation(
+        rule="repeated-string-literal",
+        relative_path="<project>",
+        identifier="'skipped'",
+        detail="appears in 11 files (max: 10); consider `SKIPPED`",
+        metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
+    )
+
+    _ = _tally_rule(
+        _TallyInput(
+            rule_name="repeated-string-literal",
+            violations=[violation],
+            baseline={},
+            details=False,
+        )
+    )
+
+    output = capsys.readouterr().out
     assert "existing locations: src/a.py:5, src/b.py:8" in output

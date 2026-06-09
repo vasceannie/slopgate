@@ -1,24 +1,6 @@
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
 import type { InvestigationFlag, FlagTarget, FlagMode, FlagItemType } from "@/types/slopgate";
-
-interface FlagContextValue {
-  flags: InvestigationFlag[];
-  addFlag: (item: Omit<InvestigationFlag, "id" | "createdAt" | "resolved">) => void;
-  removeFlag: (id: string) => void;
-  resolveFlag: (id: string) => void;
-  unresolveFlag: (id: string) => void;
-  isFlagged: (itemType: FlagItemType, itemId: string) => boolean;
-  getFlagsForItem: (itemType: FlagItemType, itemId: string) => InvestigationFlag[];
-  exportFlags: () => string;
-}
-
-const FlagContext = createContext<FlagContextValue | null>(null);
-
-export function useFlagSystem() {
-  const ctx = useContext(FlagContext);
-  if (!ctx) throw new Error("useFlagSystem must be used within FlagProvider");
-  return ctx;
-}
+import { FlagContext, type FlagContextValue } from "./flagContext";
 
 const STORAGE_KEY = "slopgate_flags";
 

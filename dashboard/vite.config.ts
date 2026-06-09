@@ -7,7 +7,15 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 18835,
+    allowedHosts: ["airbox"],
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:18834",
+        changeOrigin: true,
+        ws: false,
+      },
+    },
     hmr: {
       overlay: false,
     },

@@ -57,13 +57,13 @@ Build static assets with trace data baked in, deploy to the canvas directory, th
 
 ```bash
 # From repo root — local logs on this machine
-python3 dashboard/scripts/build-standalone.py --logs-dir ~/.config/slopgate/logs
+make dashboard-build
 
 # Or fetch logs + config from a remote host over SSH (default host: little)
-python3 dashboard/scripts/build-standalone.py --ssh little
+make dashboard-build-ssh
 
 # Serve UI + live APIs (snapshot, SSE stream, config read/write, harness status)
-python3 dashboard/scripts/serve.py
+make dashboard-api
 ```
 
 Open **http://127.0.0.1:18834/** (or `http://0.0.0.0:18834/` when `BIND=0.0.0.0`).
@@ -78,19 +78,18 @@ Open **http://127.0.0.1:18834/** (or `http://0.0.0.0:18834/` when `BIND=0.0.0.0`
 
 `serve.py` serves files from `~/.openclaw/canvas/forcedash` (populated by `build-standalone.py`). Without a prior build, start `serve.py` only after `build-standalone.py` has run at least once.
 
-### UI development (port 8080)
+### UI development (port 18835)
 
 For frontend work without the canvas deploy path:
 
 ```bash
-cd dashboard
-npm install   # or: bun install
-npm run dev   # Vite → http://localhost:8080
+npm --prefix dashboard install   # or: bun --cwd dashboard install
+make dashboard-dev                # Vite → http://localhost:18835
 ```
 
 - Starts with **mock** data unless `window.__SLOPGATE_DATA__` is injected.
 - **Drop** `.jsonl` / `.ndjson` trace files onto the UI to explore local logs.
-- Rule editing and harness panels need `serve.py` on **18834** (API routes are not proxied through Vite).
+- Rule editing and harness panels need `make dashboard-api` on **18834**; Vite proxies `/api/*` to that server.
 
 ### Trace inputs
 

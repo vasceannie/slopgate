@@ -114,3 +114,70 @@ def test_protected_paths_rule_denies_matching_path(tmp_path: Path) -> None:
 
     assert len(result) == 1
     assert result[0].rule_id == "BUILTIN-PROTECTED-PATHS"
+    assert result[0].decision == "deny"
+
+
+def test_protected_paths_rule_allows_readonly_sed_of_makefile() -> None:
+    rule = ProtectedPathsRule()
+    ctx = _make_ctx(
+        tool_name="Bash",
+        candidate_paths=["Makefile"],
+        shell_command="sed -n '1,160p' Makefile",
+        protected_paths=["Makefile"],
+    )
+
+    import slopgate.rules.base as base_mod
+
+    original_enabled = base_mod.is_rule_enabled
+    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    try:
+        result = rule.evaluate(ctx)
+    finally:
+        base_mod.is_rule_enabled = original_enabled
+
+    assert result == []
+
+
+def test_protected_paths_rule_allows_make_target_execution() -> None:
+    rule = ProtectedPathsRule()
+    ctx = _make_ctx(
+        tool_name="Bash",
+        candidate_paths=["Makefile"],
+        shell_command="make eval-dataset-ats",
+        protected_paths=["Makefile"],
+    )
+
+    import slopgate.rules.base as base_mod
+
+    original_enabled = base_mod.is_rule_enabled
+    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    try:
+        result = rule.evaluate(ctx)
+    finally:
+        base_mod.is_rule_enabled = original_enabled
+
+    assert result == []
+
+
+def test_protected_paths_rule_asks_for_makefile_edits() -> None:
+    rule = ProtectedPathsRule()
+    ctx = _make_ctx(
+        tool_name="Write",
+        candidate_paths=["Makefile"],
+        protected_paths=["Makefile"],
+    )
+
+    import slopgate.rules.base as base_mod
+
+    original_enabled = base_mod.is_rule_enabled
+    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    try:
+        result = rule.evaluate(ctx)
+    finally:
+        base_mod.is_rule_enabled = original_enabled
+
+    assert len(result) == 1
+    assert result[0].rule_id == "BUILTIN-PROTECTED-PATHS"
+    assert result[0].decision == "ask"
+    message = result[0].message or ""
+    assert "approval" in message.lower()

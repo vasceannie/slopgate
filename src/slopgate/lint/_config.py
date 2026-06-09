@@ -69,6 +69,8 @@ class QualityConfig:
 
     deprecated_patterns: list[tuple[str, str]]
 
+    enable_git_base_debt: bool
+
 
 _config_instance: QualityConfig | None = None
 
@@ -120,6 +122,8 @@ class _QualityConfigValues(TypedDict):
     ban_conditional_assertions: bool
     ban_fixtures_outside_conftest: bool
     deprecated_patterns: list[tuple[str, str]]
+
+    enable_git_base_debt: bool
 
 
 def load_config(project_root: Path) -> QualityConfig:

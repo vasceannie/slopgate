@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { useRulesConfig } from "@/context/RulesConfigContext";
+import { useRulesConfig } from "@/context/useRulesConfig";
 import { Globe } from "lucide-react";
 import { getRuleDescription } from "@/lib/ruleDescriptions";
 import { SEVERITY_COLORS } from "@/lib/chartTheme";

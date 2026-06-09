@@ -8,15 +8,24 @@ from tests.test_engine import (
     Path,
     WriteBuilder,
     BashBuilder,
-    assert_blocked,
+    EngineResult,
     assert_denied_by,
-    assert_not_denied,
     evaluate_payload,
     finding_ids,
     _write_config_from_defaults,
-    _write_slopgate,
     _keep_default_config,
 )
+
+
+def _assert_protected_path_asks(result: EngineResult) -> None:
+    output = getattr(result, "output", None) or {}
+    hook_specific = output.get("hookSpecificOutput")
+    assert isinstance(hook_specific, dict)
+    assert hook_specific.get("permissionDecision") == "ask"
+    reason = str(hook_specific.get("permissionDecisionReason") or "")
+    assert "BUILTIN-PROTECTED-PATHS" in reason
+    assert "explicit approval" in reason.lower()
+    assert any(f.rule_id == "BUILTIN-PROTECTED-PATHS" for f in result.findings)
 
 
 class TestInlinePayloadDenies:
@@ -107,7 +116,7 @@ class TestInlinePayloadDenies:
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
         assert any(f.rule_id == "BUILTIN-PROTECTED-PATHS" for f in result.findings)
 
-    def test_broad_claude_protection_still_denies_protected_files_in_worktrees(
+    def test_broad_claude_protection_asks_for_makefile_edits_in_worktrees(
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
@@ -124,8 +133,8 @@ class TestInlinePayloadDenies:
                 "all:\n\techo hi\n",
             )
         )
-        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
-        assert any(f.rule_id == "BUILTIN-PROTECTED-PATHS" for f in result.findings)
+        assert result.findings
+        _assert_protected_path_asks(result)
 
     def test_protected_rule_discovery_allows_readonly_bash_with_dev_null_redirects(
         self, pretool_bash: BashBuilder

@@ -274,6 +274,24 @@ def _find_matched_protected_path(
     return None
 
 
+def _is_makefile_path(path_value: str) -> bool:
+    normalized = path_value.replace("\\", "/").rstrip("/")
+    return normalized.rsplit("/", 1)[-1] == "Makefile"
+
+
+def _is_makefile_target_execution(tool_name: str | None, bash_command: str | None) -> bool:
+    if tool_name is None or bash_command is None or not is_shell_tool(tool_name):
+        return False
+    tokens = _shell_tokens(bash_command)
+    return bool(tokens) and Path(tokens[0]).name == "make"
+
+
+def _protected_path_decision(matched_path: str) -> str:
+    if _is_makefile_path(matched_path):
+        return "ask"
+    return DENY
+
+
 class ProtectedPathsRule(Rule):
     rule_id: str = "BUILTIN-PROTECTED-PATHS"
     title: str = "Protected paths"
@@ -293,17 +311,30 @@ class ProtectedPathsRule(Rule):
             return []
         if _is_safe_bash_read(ctx.tool_name, ctx.shell_command):
             return []
+        if _is_makefile_path(matched_path) and _is_makefile_target_execution(
+            ctx.tool_name,
+            ctx.shell_command,
+        ):
+            return []
+        decision = _protected_path_decision(matched_path)
+        message = (
+            f"Protected path matched: {matched_path}. "
+            "Read-only inspection and `make <target>` execution are allowed for "
+            "Makefiles; content changes require explicit approval."
+            if decision == "ask"
+            else (
+                f"Protected path matched: {matched_path}. "
+                f"Modify configuration only with explicit "
+                f"approval or move the check into config.json."
+            )
+        )
         return [
             RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.HIGH,
-                decision=DENY,
-                message=(
-                    f"Protected path matched: {matched_path}. "
-                    f"Modify configuration only with explicit "
-                    f"approval or move the check into config.json."
-                ),
+                decision=decision,
+                message=message,
                 metadata={METADATA_PATH: matched_path},
             )
         ]

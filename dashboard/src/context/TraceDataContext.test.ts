@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TraceDataProvider, useTraceDataSource } from "./TraceDataContext";
+import { TraceDataProvider } from "./TraceDataContext";
+import { useTraceDataSource } from "./useTraceDataSource";
 import { classifyLine, coerceTraceRecord } from "./traceRecordValidation";
 
 describe("live trace record validation", () => {
@@ -59,6 +60,27 @@ describe("live trace record validation", () => {
     expect(classifyLine(metric)).toBe("ignored");
     expect(coerceTraceRecord(metric)).toMatchObject({ type: "ignored" });
   });
+
+  it("accepts raw subprocess records without duration_ms field", () => {
+    const sub = {
+      timestamp: "2026-06-04T22:45:27.405373+00:00",
+      event_name: "PostToolUse",
+      session_id: "sub-1",
+      command: "python -m pytest -q tests/quality",
+      cwd: "/home/trav/repos/example",
+      returncode: 127,
+      stdout: "",
+      stderr: "not found",
+    };
+
+    expect(classifyLine(sub)).toBe("subprocess");
+    const coerced = coerceTraceRecord(sub);
+    expect(coerced).not.toBeNull();
+    expect(coerced).toMatchObject({ type: "subprocess" });
+    if (coerced?.type === "subprocess") {
+      expect(coerced.record.duration_ms).toBe(0);
+    }
+  });
 });
 
 class MockEventSource {
@@ -83,6 +105,38 @@ class MockEventSource {
 function RuleCountProbe() {
   const { data } = useTraceDataSource();
   return createElement("div", { "data-testid": "rule-count" }, data.rules.length);
+}
+
+function SourceStateProbe() {
+  const { data, sourceMode, sourceMeta } = useTraceDataSource();
+  return createElement(
+    "div",
+    { "data-testid": "source-state" },
+    `${sourceMode}:${sourceMeta.isSnapshotLoading}:${data.rules.length}:${data.events.length}`
+  );
+}
+
+function SourceActionProbe() {
+  const { data, ingestFiles, resetToMock, sourceMode, sourceMeta } = useTraceDataSource();
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "div",
+      { "data-testid": "source-state" },
+      `${sourceMode}:${sourceMeta.isSnapshotLoading}:${data.rules.length}:${data.events.length}`
+    ),
+    createElement("button", { "data-testid": "reset", onClick: resetToMock }, "reset"),
+    createElement("button", {
+      "data-testid": "upload",
+      onClick: () => {
+        const uploadText = JSON.stringify(streamRule("uploaded finding", { path: "src/uploaded.py" }));
+        const upload = new File([uploadText], "rules.jsonl");
+        Object.defineProperty(upload, "text", { value: async () => uploadText });
+        void ingestFiles([upload]);
+      },
+    }, "upload")
+  );
 }
 
 function streamRule(message: string, metadata: Record<string, unknown>) {
@@ -138,5 +192,106 @@ describe("TraceDataProvider stream de-duplication", () => {
     });
 
     await waitFor(() => expect(screen.getByTestId("rule-count")).toHaveTextContent("2"));
+  });
+});
+
+describe("TraceDataProvider initial snapshot loading", () => {
+  beforeEach(() => {
+    MockEventSource.instances = [];
+    vi.stubGlobal("EventSource", MockEventSource);
+    Reflect.deleteProperty(window, "__SLOPGATE_DATA__");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(window, "__SLOPGATE_DATA__");
+  });
+
+  it("starts empty while the first live snapshot is pending", async () => {
+    let resolveSnapshot: ((response: Response) => void) | null = null;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    })));
+
+    render(createElement(TraceDataProvider, null, createElement(SourceStateProbe)));
+
+    expect(screen.getByTestId("source-state")).toHaveTextContent("mock:true:0:0");
+
+    await waitFor(() => expect(resolveSnapshot).toBeTypeOf("function"));
+    if (!resolveSnapshot) throw new Error("snapshot request was not started");
+
+    await act(async () => {
+      resolveSnapshot(new Response(JSON.stringify({
+        ok: true,
+        lookback_hours: 168,
+        loaded_at: "2026-05-13T08:56:00.000Z",
+        truncated: {},
+        data: {
+          events: [],
+          rules: [streamRule("snapshot finding", { path: "src/live.py" })],
+          results: [],
+          subprocesses: [],
+        },
+      }), { status: 200 }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("source-state")).toHaveTextContent("streaming:false:1:0"));
+  });
+
+  it("ignores a stale snapshot after resetting to mock data", async () => {
+    let resolveSnapshot: ((response: Response) => void) | null = null;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    })));
+
+    render(createElement(TraceDataProvider, null, createElement(SourceActionProbe)));
+
+    await waitFor(() => expect(resolveSnapshot).toBeTypeOf("function"));
+    fireEvent.click(screen.getByTestId("reset"));
+    await waitFor(() => expect(screen.getByTestId("source-state")).toHaveTextContent(/^mock:false:/));
+    if (!resolveSnapshot) throw new Error("snapshot request was not started");
+
+    await act(async () => {
+      resolveSnapshot(new Response(JSON.stringify({
+        ok: true,
+        lookback_hours: 168,
+        loaded_at: "2026-05-13T08:56:00.000Z",
+        truncated: {},
+        data: {
+          events: [],
+          rules: [streamRule("stale snapshot", { path: "src/stale.py" })],
+          results: [],
+          subprocesses: [],
+        },
+      }), { status: 200 }));
+    });
+
+    expect(screen.getByTestId("source-state")).toHaveTextContent(/^mock:false:/);
+  });
+
+  it("ignores a stale snapshot after uploaded data is accepted", async () => {
+    let resolveSnapshot: ((response: Response) => void) | null = null;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    })));
+
+    render(createElement(TraceDataProvider, null, createElement(SourceActionProbe)));
+
+    await waitFor(() => expect(resolveSnapshot).toBeTypeOf("function"));
+    fireEvent.click(screen.getByTestId("upload"));
+    await waitFor(() => expect(screen.getByTestId("source-state")).toHaveTextContent("uploaded:false:1:0"));
+    if (!resolveSnapshot) throw new Error("snapshot request was not started");
+
+    await act(async () => {
+      resolveSnapshot(new Response(JSON.stringify({
+        ok: true,
+        lookback_hours: 168,
+        loaded_at: "2026-05-13T08:56:00.000Z",
+        truncated: {},
+        data: { events: [], rules: [], results: [], subprocesses: [] },
+      }), { status: 200 }));
+    });
+
+    expect(screen.getByTestId("source-state")).toHaveTextContent("uploaded:false:1:0");
   });
 });

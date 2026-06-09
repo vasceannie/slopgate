@@ -142,7 +142,7 @@ def test_publishes_company_payload():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_flags_mocked_integration_tests(
     tmp_path: Path,
@@ -191,7 +191,7 @@ def test_error_context_is_preserved():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_allows_negative_side_effect_mock_contract(
     tmp_path: Path,
@@ -216,7 +216,7 @@ def test_noop_does_not_log_without_start_time():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_ignores_low_risk_wire_payload_contracts(
     tmp_path: Path,
@@ -244,7 +244,7 @@ def test_deserialize_ignores_unknown_fields():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_allows_outer_boundary_stubs_in_integration_tests(
     tmp_path: Path,
@@ -269,7 +269,7 @@ def test_integration_bootstrap_uses_env_boundary():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_allows_one_field_protocol_namespace_stub(
     tmp_path: Path,
@@ -292,7 +292,7 @@ def test_soft_verify_widget_kind_protocol_stub():
 
     captured = capsys.readouterr()
     assert result == 0
-    assert "No new violations" in captured.out
+    assert "✓ No violations" in captured.out
 
 def test_lint_test_integrity_flags_richer_namespace_fake_models(
     tmp_path: Path,

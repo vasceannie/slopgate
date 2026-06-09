@@ -84,6 +84,7 @@ CANONICAL_DEFAULTS: dict[str, dict[str, object]] = {
     },
     "scope": {
         "default": LINT_SCOPE_DEFAULTS["default"],
+        "git_base_debt": LINT_SCOPE_DEFAULTS["git_base_debt"],
     },
 }
 

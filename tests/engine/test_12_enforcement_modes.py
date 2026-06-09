@@ -151,6 +151,83 @@ class TestEnforcementModes:
         assert finding.message is not None
         assert str(repo.resolve()) in finding.message
 
+    def test_post_edit_quality_skips_readonly_shell_probe_outside_repo(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        repo = _write_slopgate(tmp_path / "repo_quality_readonly_shell")
+        asset = tmp_path / "canvas" / "forcedash" / "assets" / "index-rTQrJY9a.js"
+        asset.parent.mkdir(parents=True)
+        _ = asset.write_text("const TopRules = 'ComposedChart';\n", encoding="utf-8")
+
+        def fail_js_quality(defaults: dict[str, object]) -> None:
+            post_edit_quality = defaults["post_edit_quality"]
+            assert isinstance(post_edit_quality, dict)
+            post_edit_quality["enabled"] = True
+            post_edit_quality["block_on_failure"] = True
+            post_edit_quality["commands_by_language"] = {"js_ts": ["false"]}
+
+        _write_config_from_defaults(tmp_path, monkeypatch, fail_js_quality)
+
+        result = _evaluate_post_edit_bash(
+            repo,
+            f"if grep -c \"Top Pressure Rules\\|Pareto\\|TopRules\\|ComposedChart\" {asset} 2>&1; "
+            "then echo \"FOUND\"; else echo \"NOT FOUND\"; fi",
+        )
+
+        assert "QUALITY-POST-001" not in finding_ids(result)
+
+    def test_post_edit_quality_skips_npm_when_no_package_json(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        """QUALITY-POST-001 must not run npm quality commands when no
+        package.json exists anywhere in the candidate path ancestry or
+        repo root. This prevents the Bash wrapper from running
+        ``npm run lint`` from ``/`` during read-only probes such as
+        Playwright browser geometry checks."""
+        repo = _write_slopgate(tmp_path / "repo_no_package_json")
+
+        def enable_npm_quality(defaults: dict[str, object]) -> None:
+            post_edit_quality = defaults["post_edit_quality"]
+            assert isinstance(post_edit_quality, dict)
+            post_edit_quality["enabled"] = True
+            post_edit_quality["block_on_failure"] = True
+            post_edit_quality["commands_by_language"] = {"js_ts": ["npm run lint"]}
+
+        _write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
+
+        # A .js file outside the repo ensures languages includes js_ts
+        # but no package.json exists in the path ancestry or repo root.
+        asset = tmp_path / "canvas" / "assets" / "index-rTQrJY9a.js"
+        asset.parent.mkdir(parents=True)
+        _ = asset.write_text("const TopRules = 'ComposedChart';\n")
+
+        result = _evaluate_post_edit_bash(
+            repo,
+            f"npx playwright open {asset} 2>&1 || true",
+        )
+
+        # Must not fire QUALITY-POST-001 — npm run lint would fail
+        # from '/' with no package.json in scope.
+        assert "QUALITY-POST-001" not in finding_ids(result)
+
+        # Confirm a normal mutating bash command in a valid npm project
+        # still fires QUALITY-POST-001.
+        npm_repo = tmp_path / "repo_with_package_json"
+        _write_slopgate(npm_repo)
+        _ = (npm_repo / "package.json").write_text("{\"scripts\": {\"lint\": \"exit 1\"}}\n")
+        result_mutating = evaluate_payload(_post_edit_bash_payload(
+            npm_repo,
+            "echo 'export const x = 1;' > app.js",
+        ))
+        nm_findings = [
+            f for f in result_mutating.findings
+            if f.rule_id == "QUALITY-POST-001"
+        ]
+        assert nm_findings, (
+            "Mutating bash in an npm project with package.json should "
+            f"fire QUALITY-POST-001; got {finding_ids(result_mutating)}"
+        )
+
     def test_repo_toml_can_enable_post_edit_quality(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:

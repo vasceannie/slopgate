@@ -7,6 +7,7 @@ from tests.test_engine import (
     WriteBuilder,
     assert_denied_by,
     assert_not_denied,
+    assert_asked_by,
     evaluate_payload,
     finding_ids,
     pytest,
@@ -32,7 +33,7 @@ class TestInlinePayloadDenies:
 
     def test_protected_path_makefile(self, pretool_write: WriteBuilder) -> None:
         result = evaluate_payload(pretool_write("Makefile", "all:\n\techo hi\n"))
-        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS", "protected path")
+        assert_asked_by(result, "BUILTIN-PROTECTED-PATHS", "Makefile")
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result), (
             "direct Makefile writes should remain protected"
         )
@@ -175,9 +176,9 @@ class TestInlinePayloadDenies:
         self, pretool_bash: BashBuilder
     ) -> None:
         result = evaluate_payload(pretool_bash("touch Makefile"))
-        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
+        assert_asked_by(result, "BUILTIN-PROTECTED-PATHS")
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result), (
-            "Bash writes to protected Makefile paths should remain denied"
+            "Bash writes to protected Makefile paths should remain protected"
         )
 
     def test_exec_protection_write_config(self, pretool_write: WriteBuilder) -> None:

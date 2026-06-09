@@ -107,6 +107,7 @@ class _LintScopeDefaults(TypedDict):
     """Shape of shared scope defaults."""
 
     default: str
+    git_base_debt: bool
 
 
 LINT_PATH_DEFAULTS: Final[_LintPathDefaults] = {
@@ -171,6 +172,7 @@ LINT_DEPRECATED_PATTERNS_DEFAULTS: Final[_LintDeprecatedPatternsDefaults] = {
 
 LINT_SCOPE_DEFAULTS: Final[_LintScopeDefaults] = {
     "default": "all",
+    "git_base_debt": True,
 }
 
 

@@ -1,7 +1,7 @@
 import type { FilterState, Platform, TimeWindow } from "@/types/slopgate";
 import { cn } from "@/lib/utils";
 import { useCallback } from "react";
-import { useTraceDataSource } from "@/context/TraceDataContext";
+import { useTraceDataSource } from "@/context/useTraceDataSource";
 
 const TIME_OPTIONS: { value: TimeWindow; label: string }[] = [
   { value: "1h", label: "1h" },

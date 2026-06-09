@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Flag, X } from "lucide-react";
-import { useFlagSystem } from "@/context/FlagContext";
+import { useFlagSystem } from "@/context/useFlagSystem";
 import { FLAG_TARGET_LABELS } from "@/lib/chartTheme";
 import type { FlagTarget, FlagMode, FlagItemType } from "@/types/slopgate";
 import { Target, Clock, Radio } from "lucide-react";

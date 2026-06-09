@@ -95,6 +95,25 @@ def assert_denied_by(
         )
 
 
+def assert_asked_by(
+    result: EngineResult, rule_id: str, msg_fragment: str = ""
+) -> None:
+    spec = hook_output(result)
+    decision = output_string(spec, "permissionDecision") or None
+    if decision is None:
+        inner = nested_output(spec, "decision")
+        decision = output_string(inner, "behavior") or None
+        reason = output_string(inner, "message")
+    else:
+        reason = output_string(spec, "permissionDecisionReason")
+    assert decision == "ask", f"Expected ask, got {decision}. Output: {result.output}"
+    assert rule_id in reason, f"Expected {rule_id} in reason, got: {reason}"
+    if msg_fragment:
+        assert msg_fragment.lower() in reason.lower(), (
+            f"Expected '{msg_fragment}' in reason"
+        )
+
+
 def assert_blocked(result: EngineResult, rule_id: str = "") -> None:
     output = require_output(result)
     assert output_string(output, "decision") == "block", (

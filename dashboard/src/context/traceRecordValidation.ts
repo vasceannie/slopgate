@@ -77,6 +77,9 @@ function isHookResultRecord(obj: unknown): obj is HookResult {
 function isSubprocessRunRecord(obj: unknown): obj is SubprocessRun {
   if (typeof obj !== "object" || obj === null) return false;
   const o = obj as Record<string, unknown>;
+  // duration_ms may be absent in raw log records; match snapshot default (0).
+  const out = o as Record<string, unknown> & { duration_ms?: number };
+  out.duration_ms ??= 0;
   return (
     typeof o.timestamp === "string"
     && typeof o.event_name === "string"
@@ -86,7 +89,7 @@ function isSubprocessRunRecord(obj: unknown): obj is SubprocessRun {
     && typeof o.returncode === "number"
     && typeof o.stdout === "string"
     && typeof o.stderr === "string"
-    && typeof o.duration_ms === "number"
+    && typeof out.duration_ms === "number"
   );
 }
 

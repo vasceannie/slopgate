@@ -26,6 +26,8 @@ def _colorize(code: str, text: str, enabled: bool) -> str:
 
 
 def _existing_location_lines(violation: Violation, *, color: bool) -> list[str]:
+    if "; locations:" in violation.detail:
+        return []
     raw_locations = violation.metadata.get("existing_locations")
     if not isinstance(raw_locations, list):
         return []
@@ -56,6 +58,15 @@ class _LintFiles:
 
 
 @dataclass(frozen=True, slots=True)
+class _LintHeader:
+    lint_version: str
+    label: str
+    files: _LintFiles
+    gate: LintGateMode = "new"
+    git_base_note: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class _TallyInput:
     rule_name: str
     violations: list[Violation]
@@ -69,6 +80,34 @@ class _LintRunTotals:
     violations: int
     new: int
     fixed: int
+
+
+@dataclass(frozen=True, slots=True)
+class _BaselineInputs:
+    stored: dict[str, set[str]]
+    accepted: dict[str, set[str]]
+
+    @property
+    def effective(self) -> dict[str, set[str]]:
+        return _merge_rule_ids(self.stored, self.accepted)
+
+
+def _coerce_baseline_inputs(
+    baseline: dict[str, set[str]] | _BaselineInputs,
+) -> _BaselineInputs:
+    if isinstance(baseline, _BaselineInputs):
+        return baseline
+    return _BaselineInputs(stored=baseline, accepted={})
+
+
+def _merge_rule_ids(
+    left: dict[str, set[str]],
+    right: dict[str, set[str]],
+) -> dict[str, set[str]]:
+    merged: dict[str, set[str]] = {rule: set(ids) for rule, ids in left.items()}
+    for rule, ids in right.items():
+        merged.setdefault(rule, set()).update(ids)
+    return merged
 
 
 def _rule_counts(
@@ -189,29 +228,25 @@ def _print_scan_roots(label: str, roots: tuple[Path, ...], file_count: int) -> N
     print(f"  {label + ':':8} [{joined}]  ({file_count} files)")
 
 
-def _print_lint_header(
-    lint_version: str,
-    label: str,
-    files: _LintFiles,
-    *,
-    gate: LintGateMode = "new",
-) -> None:
+def _print_lint_header(header: _LintHeader) -> None:
     from slopgate.lint._baseline import _baseline_path
 
-    suffix = f" {label}" if label else ""
-    print(f"slopgate lint {lint_version}{suffix}")
-    print(f"  project:  {files.cfg.project_root}")
+    suffix = f" {header.label}" if header.label else ""
+    print(f"slopgate lint {header.lint_version}{suffix}")
+    print(f"  project:  {header.files.cfg.project_root}")
     print(f"  baseline: {_baseline_path()}")
-    if gate == "all":
+    if header.git_base_note:
+        print(f"  git base: {header.git_base_note}")
+    if header.gate == "all":
         print(
             "  note:     commit gate — fails on ANY violation (fix code or shrink baseline)"
         )
     else:
         print(
-            "  note:     agent/stop gate — fails on NEW violations; syncs baseline after run"
+            "  note:     agent/stop gate — fails on branch/WIP violations; prunes fixed debt after run"
         )
-    _print_scan_roots("src", files.cfg.src_roots, len(files.src_files))
-    _print_scan_roots("tests", files.cfg.test_roots, len(files.test_files))
+    _print_scan_roots("src", header.files.cfg.src_roots, len(header.files.src_files))
+    _print_scan_roots("tests", header.files.cfg.test_roots, len(header.files.test_files))
     print()
 
 
@@ -219,6 +254,7 @@ def _print_lint_header(
 class _BaselineLintSyncContext:
     collectors: list[tuple[str, list[Violation]]]
     baseline: dict[str, set[str]]
+    accepted_baseline: dict[str, set[str]]
     totals: _LintRunTotals
     gate: LintGateMode
     color: bool
@@ -241,9 +277,11 @@ def _print_baseline_sync_result(
     parts: list[str] = []
     if result.stale_removed:
         parts.append(f"removed {result.stale_removed} stale")
-    if result.wrote and not prune_only:
+    if result.inherited_added:
+        parts.append(f"recorded {result.inherited_added} git-base inherited")
+    if result.wrote and not prune_only and not result.inherited_added:
         parts.append("mirrored current findings")
-    elif result.wrote:
+    elif result.wrote and not result.inherited_added:
         parts.append("pruned fixed debt")
     if parts:
         detail = ", ".join(parts)
@@ -258,6 +296,7 @@ def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
         context.collectors,
         context.baseline,
         prune_only=prune_only,
+        accepted_baseline=context.accepted_baseline,
     )
     _print_baseline_sync_result(
         result,
@@ -268,12 +307,13 @@ def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
 
 def _print_collector_results(
     collectors: list[tuple[str, list[Violation]]],
-    baseline: dict[str, set[str]],
+    baseline: dict[str, set[str]] | _BaselineInputs,
     *,
     gate: LintGateMode = "new",
     details: bool,
 ) -> int:
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+    baseline_inputs = _coerce_baseline_inputs(baseline)
     totals = _LintRunTotals(0, 0, 0)
     for rule_name, violations in collectors:
         if not violations:
@@ -282,7 +322,7 @@ def _print_collector_results(
             _TallyInput(
                 rule_name=rule_name,
                 violations=violations,
-                baseline=baseline,
+                baseline=baseline_inputs.effective,
                 gate=gate,
                 details=details,
             )
@@ -296,7 +336,8 @@ def _print_collector_results(
     _sync_baseline_after_lint(
         _BaselineLintSyncContext(
             collectors=collectors,
-            baseline=baseline,
+            baseline=baseline_inputs.stored,
+            accepted_baseline=baseline_inputs.accepted,
             totals=totals,
             gate=gate,
             color=color,

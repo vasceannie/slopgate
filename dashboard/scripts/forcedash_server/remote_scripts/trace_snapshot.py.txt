@@ -1,0 +1,229 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import json
+
+LOOKBACK_HOURS = __LOOKBACK_HOURS__
+LOG_DIR = Path.home() / ".config" / "slopgate" / "logs"
+JSONL_FILES = ["events.jsonl", "rules.jsonl", "results.jsonl", "subprocess.jsonl", "async/subprocess.jsonl"]
+MAX_RECORDS = {"events": 120000, "rules": 240000, "results": 120000, "subprocesses": 10000}
+TRACE_META_KEYS = ("platform_capability", "degraded_reason", "enforcement_mode", "resolved_repo_root")
+
+
+def object_dict(value):
+    if not isinstance(value, Mapping):
+        return None
+    return {key: item for key, item in value.items() if isinstance(key, str)}
+
+
+def object_list(value):
+    if not isinstance(value, list):
+        return []
+    return value
+
+
+def str_list(value):
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def trim_text(value, limit):
+    if not isinstance(value, str):
+        return None
+    if len(value) <= limit:
+        return value
+    return value[:limit] + "...[trimmed]"
+
+
+def parse_ts(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def classify(obj):
+    if "command" in obj and "returncode" in obj:
+        return "subprocesses"
+    if "findings" in obj and isinstance(obj.get("findings"), list):
+        return "results"
+    if "rule_id" in obj:
+        if "decision" in obj and "severity" in obj and "event_name" in obj and "session_id" in obj:
+            return "rules"
+        return None
+    if "event_name" in obj and "session_id" in obj:
+        return "events"
+    return None
+
+
+def trace_metadata(obj):
+    meta = {}
+    for key in TRACE_META_KEYS:
+        value = obj.get(key)
+        if isinstance(value, str) or value is None:
+            meta[key] = value
+    return meta
+
+
+def project_event(obj):
+    return {
+        "timestamp": obj.get("timestamp", ""),
+        "platform": obj.get("platform", "claude"),
+        "event_name": obj.get("event_name", ""),
+        "session_id": obj.get("session_id", ""),
+        "tool_name": obj.get("tool_name", ""),
+        "candidate_paths": str_list(obj.get("candidate_paths")),
+        "languages": str_list(obj.get("languages")),
+        **trace_metadata(obj),
+    }
+
+
+def project_rule(obj):
+    return {
+        "timestamp": obj.get("timestamp", ""),
+        "platform": obj.get("platform", "claude"),
+        "event_name": obj.get("event_name", ""),
+        "session_id": obj.get("session_id", ""),
+        "tool_name": obj.get("tool_name", ""),
+        "rule_id": obj.get("rule_id", ""),
+        "severity": obj.get("severity", "LOW"),
+        "decision": obj.get("decision"),
+        "message": trim_text(obj.get("message"), 180),
+        "additional_context": trim_text(obj.get("additional_context"), 180),
+        "metadata": object_dict(obj.get("metadata")) or {},
+        **trace_metadata(obj),
+    }
+
+
+def project_result(obj):
+    findings = []
+    for finding_value in object_list(obj.get("findings")):
+        finding = object_dict(finding_value)
+        if finding is None:
+            continue
+        findings.append({
+            "rule_id": finding.get("rule_id", ""),
+            "severity": finding.get("severity", "LOW"),
+            "decision": finding.get("decision"),
+            "message": trim_text(finding.get("message"), 180),
+            "additional_context": trim_text(finding.get("additional_context"), 180),
+            "metadata": object_dict(finding.get("metadata")) or {},
+            **trace_metadata(finding),
+        })
+    return {
+        "timestamp": obj.get("timestamp", ""),
+        "platform": obj.get("platform", "claude"),
+        "event_name": obj.get("event_name", ""),
+        "session_id": obj.get("session_id", ""),
+        "tool_name": obj.get("tool_name", ""),
+        "findings": findings,
+        "errors": [text for err in object_list(obj.get("errors")) for text in [trim_text(err, 180)] if text is not None],
+        "output": None,
+        "skipped": bool(obj.get("skipped", False)),
+        "reason": trim_text(obj.get("reason"), 180),
+        **trace_metadata(obj),
+    }
+
+
+def project_subprocess(obj):
+    return {
+        "timestamp": obj.get("timestamp", ""),
+        "event_name": obj.get("event_name", ""),
+        "session_id": obj.get("session_id", ""),
+        "command": trim_text(obj.get("command"), 180) or "",
+        "cwd": trim_text(obj.get("cwd"), 120) or "",
+        "returncode": obj.get("returncode", 0),
+        "stdout": trim_text(obj.get("stdout"), 120) or "",
+        "stderr": trim_text(obj.get("stderr"), 180) or "",
+        "duration_ms": obj.get("duration_ms", 0),
+    }
+
+
+def project_record(obj):
+    category = classify(obj)
+    if category == "events":
+        return category, project_event(obj)
+    if category == "rules":
+        return category, project_rule(obj)
+    if category == "results":
+        return category, project_result(obj)
+    if category == "subprocesses":
+        return category, project_subprocess(obj)
+    return None
+
+
+def read_jsonl(path):
+    if not path.exists():
+        return
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or not line.startswith("{"):
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            record = object_dict(value)
+            if record is not None:
+                yield record
+
+
+def collect_snapshot():
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
+    data = {"events": [], "rules": [], "results": [], "subprocesses": []}
+    seen_files = []
+    raw_counts = {"events": 0, "rules": 0, "results": 0, "subprocesses": 0}
+    for fname in JSONL_FILES:
+        collect_file(LOG_DIR / fname, fname, cutoff, data, seen_files, raw_counts)
+    truncated = truncate_data(data)
+    return data, seen_files, raw_counts, truncated
+
+
+def collect_file(path, fname, cutoff, data, seen_files, raw_counts):
+    if not path.exists():
+        return
+    seen_files.append(fname)
+    for rec in read_jsonl(path):
+        timestamp = parse_ts(rec.get("timestamp"))
+        if timestamp is not None and timestamp < cutoff:
+            continue
+        projected = project_record(rec)
+        if projected is None:
+            continue
+        category, item = projected
+        raw_counts[category] += 1
+        data[category].append(item)
+
+
+def truncate_data(data):
+    truncated = {}
+    for category, limit in MAX_RECORDS.items():
+        over = max(0, len(data[category]) - limit)
+        if over:
+            truncated[category] = over
+            data[category] = data[category][-limit:]
+    return truncated
+
+
+data, seen_files, raw_counts, truncated = collect_snapshot()
+print(json.dumps({
+    "ok": True,
+    "lookback_hours": LOOKBACK_HOURS,
+    "loaded_at": datetime.now(timezone.utc).isoformat(),
+    "log_host": "__SSH_HOST__",
+    "log_dir": str(LOG_DIR),
+    "files": seen_files,
+    "counts_raw": raw_counts,
+    "counts_published": {key: len(value) for key, value in data.items()},
+    "truncated": truncated,
+    "data": data,
+}, separators=(",", ":")))

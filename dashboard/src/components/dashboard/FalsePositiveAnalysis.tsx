@@ -115,11 +115,9 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 
     const allActive = tab === "fp" ? fpSorted : tab === "fn" ? fnSorted : inconsistentSorted;
     const active = showAll ? allActive : allActive.slice(0, TABLE_DEFAULT_LIMIT);
-    const scoreKey = tab === "fp" ? "fpScore" : tab === "fn" ? "fnScore" : "inconsistencyRate";
-
     const barData = active.map(s => ({
       rule: s.rule_id.length > 22 ? s.rule_id.slice(0, 20) + "…" : s.rule_id,
-      score: Math.round(tab === "inconsistent" ? s.inconsistencyRate * 100 : (s as any)[scoreKey]),
+      score: Math.round(tab === "fp" ? s.fpScore : tab === "fn" ? s.fnScore : s.inconsistencyRate * 100),
       findings: s.totalFindings,
       blocks: s.blockCount,
       warns: s.warnCount,
@@ -133,7 +131,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
       highFNCount: signals.filter(s => s.fnScore > 30).length,
       noisyCount: signals.filter(s => s.inconsistencyRate > 0.5).length,
     };
-  }, [signals, tab]);
+  }, [signals, tab, showAll]);
 
   const summaryPie = useMemo(() => [
     { id: "Likely FP", value: highFPCount, color: "hsl(38, 92%, 50%)" },

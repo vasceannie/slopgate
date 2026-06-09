@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useTraceDataSource } from "@/context/TraceDataContext";
+import { useTraceDataSource } from "@/context/useTraceDataSource";
 import type {
   FilterState, HookEvent, RuleFinding, HookResult, SubprocessRun,
   Decision, Platform, EventName, Severity, TraceMetadata, OperationalContext, OperationalCountRow,
@@ -260,8 +260,9 @@ export function useTraceData(filters: FilterState) {
     };
   }, [results, windowMs]);
 
-  const { eventsByType, timeSeries, topRules, duplicationByRule } = useMemo<{
+  const { eventsByType, eventsByTypeAndPlatform, timeSeries, topRules, duplicationByRule } = useMemo<{
     eventsByType: Record<EventName, number>;
+    eventsByTypeAndPlatform: Record<EventName, Partial<Record<Platform, number>>>;
     timeSeries: Array<{ time: string } & Record<Decision, number>>;
     topRules: Array<{
       rule_id: string;
@@ -275,6 +276,13 @@ export function useTraceData(filters: FilterState) {
       acc[e.event_name] = (acc[e.event_name] || 0) + 1;
       return acc;
     }, {} as Record<EventName, number>);
+
+    const nextEventsByTypeAndPlatform = events.reduce((acc: Record<EventName, Partial<Record<Platform, number>>>, e: HookEvent) => {
+      const platformCounts = acc[e.event_name] ?? {};
+      platformCounts[e.platform] = (platformCounts[e.platform] ?? 0) + 1;
+      acc[e.event_name] = platformCounts;
+      return acc;
+    }, {} as Record<EventName, Partial<Record<Platform, number>>>);
 
     const tsBucketSize = windowMs <= 86400000 ? 3600000 : 86400000;
     const timeSeriesBuckets = new Map<string, Record<Decision, number>>();
@@ -291,6 +299,7 @@ export function useTraceData(filters: FilterState) {
 
     return {
       eventsByType: nextEventsByType,
+      eventsByTypeAndPlatform: nextEventsByTypeAndPlatform,
       timeSeries: Array.from(timeSeriesBuckets.entries())
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([time, counts]) => ({ time, ...counts })),
@@ -478,6 +487,8 @@ export function useTraceData(filters: FilterState) {
 
     if (sourceMeta.snapshotError) {
       warning = `Live snapshot failed: ${sourceMeta.snapshotError}`;
+    } else if (sourceMeta.isSnapshotLoading && sourceMode === "mock") {
+      warning = "Loading live trace snapshot; charts are held empty to avoid showing mock data.";
     } else if (Object.keys(sourceMeta.snapshotTruncated).length > 0) {
       warning = `Live snapshot was truncated for browser safety: ${Object.entries(sourceMeta.snapshotTruncated).map(([key, count]) => `${key} +${count}`).join(", ")}.`;
     } else if (windowRecordCount === 0 && sourceMeta.latestDataAt && sourceMeta.latestDataAt < windowStartAt) {
@@ -494,6 +505,7 @@ export function useTraceData(filters: FilterState) {
       mode: sourceMode,
       streamState,
       isStreaming,
+      isSnapshotLoading: sourceMeta.isSnapshotLoading,
       windowStartAt,
       latestByCategory,
       warning,
@@ -526,6 +538,7 @@ export function useTraceData(filters: FilterState) {
     posture: { totalInvocations, blockRate, denyRate, askRate, skippedCount, errorCount, decisionCounts, sparklines },
     sourceStatus,
     eventsByType,
+    eventsByTypeAndPlatform,
     timeSeries,
     topRules,
     duplicationByRule,
@@ -545,6 +558,7 @@ export function useTraceData(filters: FilterState) {
     errorCount,
     events,
     eventsByType,
+    eventsByTypeAndPlatform,
     fireCounts,
     hottestRepos,
     operationalContext,

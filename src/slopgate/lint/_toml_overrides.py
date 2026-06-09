@@ -92,3 +92,6 @@ def apply_paths_overrides(values: dict[str, object], project_root: Path) -> None
         default_scope = scope_data.get("default")
         if isinstance(default_scope, str) and default_scope.strip():
             values["default_scope"] = default_scope.strip()
+        git_base_debt = scope_data.get("git_base_debt")
+        if isinstance(git_base_debt, bool):
+            values["enable_git_base_debt"] = git_base_debt

@@ -8,7 +8,28 @@ from typing import cast
 from tests.test_duplicate_detector import _make_parsed
 from slopgate.lint._detectors.duplicates import _collect_block_windows
 from slopgate.lint._detectors.duplicates import detect_repeated_literals
+from slopgate.lint._baseline import Violation
 from slopgate.lint._config import load_config, set_config
+
+
+def _repeated_skipped_literal_parsed() -> list:
+    return [
+        _make_parsed(
+            "from __future__ import annotations\n\n"
+            f"LIMIT = {idx}\n"
+            "def flag() -> str:\n"
+            "    return 'skipped'\n"
+            "def window() -> int:\n"
+            "    return 24\n",
+            rel=f"src/file_{idx}.py",
+        )
+        for idx in range(11)
+    ]
+
+
+def _violations_by_rule(parsed: list) -> dict[str, Violation]:
+    return {violation.rule: violation for violation in detect_repeated_literals(parsed)}
+
 
 class TestRepeatedStringLiteralMetadata:
     def test_records_existing_locations_for_repeated_literals(
@@ -18,21 +39,7 @@ class TestRepeatedStringLiteralMetadata:
         cfg = load_config(tmp_path)
         set_config(cfg)
 
-        parsed = [
-            _make_parsed(
-                "from __future__ import annotations\n\n"
-                f"LIMIT = {idx}\n"
-                "def flag() -> str:\n"
-                "    return 'skipped'\n"
-                "def window() -> int:\n"
-                "    return 24\n",
-                rel=f"src/file_{idx}.py",
-            )
-            for idx in range(11)
-        ]
-
-        violations = detect_repeated_literals(parsed)
-        by_rule = {violation.rule: violation for violation in violations}
+        by_rule = _violations_by_rule(_repeated_skipped_literal_parsed())
 
         string_locations = cast(
             list[str],
@@ -42,9 +49,28 @@ class TestRepeatedStringLiteralMetadata:
             list[str],
             by_rule["repeated-magic-number"].metadata["existing_locations"],
         )
-        assert "src/file_0.py:5" in string_locations
-        assert "src/file_10.py:5" in string_locations
-        assert "src/file_0.py:7" in magic_locations
+        assert (
+            string_locations[0] == "src/file_0.py:5"
+            and "src/file_10.py:5" in string_locations
+            and magic_locations[0] == "src/file_0.py:7"
+        )
+
+    def test_surfaces_existing_locations_in_detail_and_stable_id(
+        self, tmp_path: Path
+    ) -> None:
+        _ = (tmp_path / "src").mkdir()
+        set_config(load_config(tmp_path))
+
+        by_rule = _violations_by_rule(_repeated_skipped_literal_parsed())
+        cases = (
+            (by_rule["repeated-string-literal"], "src/file_0.py:5"),
+            (by_rule["repeated-magic-number"], "src/file_0.py:7"),
+        )
+        assert all(
+            f"; locations: {marker}" in violation.detail
+            and f"; locations: {marker}" in violation.stable_id
+            for violation, marker in cases
+        )
 
     def test_marks_already_defined_constant_match(self, tmp_path: Path) -> None:
         _ = (tmp_path / "src").mkdir()
@@ -62,13 +88,15 @@ class TestRepeatedStringLiteralMetadata:
         repeated = [v for v in violations if v.rule == "repeated-string-literal"]
         assert repeated, "expected repeated-string-literal violation"
         metadata = repeated[0].metadata
-        assert "already_defined" in metadata
+        assert "already_defined" in metadata, "Expected metadata to identify the existing constant"
         already_defined = cast(dict[str, object], metadata["already_defined"])
-        assert already_defined["name"] == "SHARED_ERROR"
-        assert already_defined["path"] == "src/constants.py"
-        assert already_defined["line"] == 1
-        assert "src/constants.py:1" in repeated[0].detail
-        assert "do not duplicate it or hide the literal with string fragments" in repeated[0].detail
+        assert already_defined["name"] == "SHARED_ERROR", "Expected existing constant name in metadata"
+        assert already_defined["path"] == "src/constants.py", "Expected existing constant path in metadata"
+        assert already_defined["line"] == 1, "Expected existing constant line in metadata"
+        assert "src/constants.py:1" in repeated[0].detail, "Expected detail to cite existing constant location"
+        assert (
+            "do not duplicate it or hide the literal with string fragments" in repeated[0].detail
+        ), "Expected detail to warn against hiding the duplicate literal"
 
     def test_suggests_candidate_name_when_constant_missing(self, tmp_path: Path) -> None:
         _ = (tmp_path / "src").mkdir()

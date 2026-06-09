@@ -15,39 +15,14 @@
  *   - apiAvailable: false when running without the serve.py API server
  */
 import {
-  createContext, useContext, useState, useCallback, useEffect, useRef,
+  useState, useCallback, useEffect, useRef,
   type ReactNode,
 } from "react";
-import type { SlopgateConfig } from "@/types/slopgate";
+
+import { RulesConfigContext, EMPTY_CONFIG, type RulesConfigContextValue } from "./rulesConfigContext";
 
 const API_BASE = window.location.origin + (import.meta.env.BASE_URL.replace(/\/$/, ""));
 const CONFIG_ENDPOINT = `${API_BASE}/api/config`;
-
-type SaveStatus = "idle" | "saving" | "saved" | "error";
-
-interface RulesConfigContextValue {
-  config: SlopgateConfig;
-  pendingCount: number;
-  toggleRule: (rule_id: string) => void;
-  setExclusions: (rule_id: string, globs: string[]) => void;
-  setSkipPaths: (paths: string[]) => void;
-  saveConfig: () => Promise<void>;
-  discardChanges: () => void;
-  saveStatus: SaveStatus;
-  saveError: string | null;
-  apiAvailable: boolean;
-  loading: boolean;
-}
-
-const EMPTY_CONFIG: SlopgateConfig = { enabled_rules: {}, regex_rules: [], skip_paths: [] };
-
-const RulesConfigContext = createContext<RulesConfigContextValue | null>(null);
-
-export function useRulesConfig() {
-  const ctx = useContext(RulesConfigContext);
-  if (!ctx) throw new Error("useRulesConfig must be used within RulesConfigProvider");
-  return ctx;
-}
 
 /** Get the config baked at build time (may be stale) */
 function getBakedConfig(): SlopgateConfig | null {
