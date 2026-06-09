@@ -53,9 +53,8 @@ def _record_suite_subprocess_run(monkeypatch: Any) -> list[list[str]]:
 def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
     args = build_parser().parse_args(
         [
-            "install-suite",
+            "setup",
             "--dry-run",
-            "--with-autoupdate",
             "--include-missing",
             "--interval-minutes",
             "45",
@@ -68,14 +67,14 @@ def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
         args.with_autoupdate,
         args.include_missing,
         args.interval_minutes,
-    ) == ("install-suite", True, True, True, 45)
+    ) == ("setup", True, True, True, 45)
 
 
 def test_install_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
-    args = build_parser().parse_args(["install-suite", "--with-autoupdate", "--dry-run"])
+    args = build_parser().parse_args(["setup", "--dry-run"])
 
     assert (args.command, args.func, args.dry_run, args.with_autoupdate) == (
-        "install-suite",
+        "setup",
         cmd_install_suite,
         True,
         True,
@@ -84,7 +83,7 @@ def test_install_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> 
 
 def test_native_install_all_parser_supports_autoupdate() -> None:
     args = build_parser().parse_args(
-        ["install", "all", "--with-autoupdate", "--dry-run"]
+        ["install", "all", "--dry-run"]
     )
 
     assert (args.command, args.platform, args.with_autoupdate, args.dry_run) == (
@@ -97,7 +96,7 @@ def test_native_install_all_parser_supports_autoupdate() -> None:
 
 def test_native_uninstall_all_parser_supports_autoupdate() -> None:
     args = build_parser().parse_args(
-        ["uninstall", "all", "--with-autoupdate", "--dry-run"]
+        ["uninstall", "all", "--dry-run"]
     )
 
     assert (args.command, args.func, args.platform, args.with_autoupdate, args.dry_run) == (
@@ -110,10 +109,10 @@ def test_native_uninstall_all_parser_supports_autoupdate() -> None:
 
 
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
-    args = build_parser().parse_args(["update-suite", "--dry-run"])
+    args = build_parser().parse_args(["update", "--dry-run"])
 
     assert (args.command, args.func, args.dry_run, hasattr(args, "platform")) == (
-        "update-suite",
+        "update",
         cmd_update_suite,
         True,
         False,
@@ -234,7 +233,7 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
     plan = suite.build_scheduler_plan()
 
     exec_start = next(line for line in plan.content.splitlines() if line.startswith("ExecStart="))
-    assert " -m slopgate update-suite " in exec_start
+    assert " -m slopgate update " in exec_start
 
 
 def test_scheduler_plan_rejects_newline_source_for_systemd_units(

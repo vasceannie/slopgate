@@ -131,9 +131,10 @@ def _add_platform_install_parser(
     if name not in {"install", "uninstall"}:
         return
     _ = parser.add_argument(
-        "--with-autoupdate",
-        action="store_true",
-        help="Also install/remove the current OS's periodic GitHub updater",
+        "--disable-autoupdate",
+        action="store_false",
+        dest="with_autoupdate",
+        help="Skip installing/removing the periodic GitHub updater",
     )
     _add_install_scope_arguments(parser)
     if name == "uninstall":
@@ -179,14 +180,15 @@ def _add_suite_command_parser(
 def _add_suite_parsers(sub: SubparserRegistry) -> None:
     install_suite = _add_suite_command_parser(
         sub,
-        "install-suite",
+        "setup",
         help_text="Install all detected harness hooks and optionally the auto-updater",
         func=cmd_install_suite,
     )
     _ = install_suite.add_argument(
-        "--with-autoupdate",
-        action="store_true",
-        help="Install the current OS's periodic GitHub updater",
+        "--disable-autoupdate",
+        action="store_false",
+        dest="with_autoupdate",
+        help="Skip installing the periodic GitHub updater",
     )
     _ = install_suite.add_argument(
         "--interval-minutes",
@@ -197,7 +199,7 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
 
     _ = _add_suite_command_parser(
         sub,
-        "update-suite",
+        "update",
         help_text="Update Slopgate from GitHub and refresh detected hook sites",
         func=cmd_update_suite,
     )

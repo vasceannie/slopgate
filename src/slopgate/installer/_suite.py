@@ -31,7 +31,7 @@ class SuiteInstallOptions:
 
     dry_run: bool = False
     include_missing: bool = False
-    with_autoupdate: bool = False
+    with_autoupdate: bool = True
     source: str = DEFAULT_UPDATE_SOURCE
     interval_minutes: int = DEFAULT_UPDATE_INTERVAL_MINUTES
     install_scope: str = "user"
@@ -44,7 +44,7 @@ class SuiteUninstallOptions:
 
     dry_run: bool = False
     include_missing: bool = False
-    with_autoupdate: bool = False
+    with_autoupdate: bool = True
     install_scope: str = "user"
     project_root: Path | None = None
 

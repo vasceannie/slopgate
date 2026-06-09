@@ -39,7 +39,7 @@ def _validate_update_source(source: str) -> None:
 
 
 def _update_suite_args(source: str, *, include_missing: bool) -> list[str]:
-    args = [*base_invocation(find_binary()), "update-suite", "--source", source]
+    args = [*base_invocation(find_binary()), "update", "--source", source]
     if include_missing:
         args.append("--include-missing")
     return args

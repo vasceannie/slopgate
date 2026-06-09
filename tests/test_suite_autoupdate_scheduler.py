@@ -66,7 +66,7 @@ def test_install_with_autoupdate_stops_when_platform_install_fails(
     monkeypatch.setattr(installer_module, "install_platform", fail_install)
     monkeypatch.setattr(suite, "install_autoupdate", fake_autoupdate)
 
-    args = build_parser().parse_args(["install", "claude", "--with-autoupdate"])
+    args = build_parser().parse_args(["install", "claude"])
     assert args.func is cmd_install
     assert cmd_install(args) == 1
     assert calls == []
