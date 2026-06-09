@@ -210,22 +210,39 @@ class TestEnforcementModes:
         # from '/' with no package.json in scope.
         assert "QUALITY-POST-001" not in finding_ids(result)
 
-        # Confirm a normal mutating bash command in a valid npm project
-        # still fires QUALITY-POST-001.
-        npm_repo = tmp_path / "repo_with_package_json"
-        _write_slopgate(npm_repo)
-        _ = (npm_repo / "package.json").write_text("{\"scripts\": {\"lint\": \"exit 1\"}}\n")
-        result_mutating = evaluate_payload(_post_edit_bash_payload(
-            npm_repo,
-            "echo 'export const x = 1;' > app.js",
-        ))
+    def test_post_edit_quality_runs_npm_when_package_json_exists(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        """QUALITY-POST-001 must fire for mutating bash in an npm project
+        that has a package.json."""
+        repo = tmp_path / "repo_with_package_json"
+        _write_slopgate(repo)
+        _ = (repo / "package.json").write_text(
+            '{"scripts": {"lint": "exit 1"}}\n'
+        )
+
+        def enable_npm_quality(defaults: dict[str, object]) -> None:
+            post_edit_quality = defaults["post_edit_quality"]
+            assert isinstance(post_edit_quality, dict)
+            post_edit_quality["enabled"] = True
+            post_edit_quality["block_on_failure"] = True
+            post_edit_quality["commands_by_language"] = {"js_ts": ["npm run lint"]}
+
+        _write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
+
+        result = evaluate_payload(
+            _post_edit_bash_payload(
+                repo,
+                "echo 'export const x = 1;' > app.js",
+            )
+        )
         nm_findings = [
-            f for f in result_mutating.findings
+            f for f in result.findings
             if f.rule_id == "QUALITY-POST-001"
         ]
         assert nm_findings, (
             "Mutating bash in an npm project with package.json should "
-            f"fire QUALITY-POST-001; got {finding_ids(result_mutating)}"
+            f"fire QUALITY-POST-001; got {finding_ids(result)}"
         )
 
     def test_repo_toml_can_enable_post_edit_quality(
