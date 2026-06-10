@@ -27,7 +27,7 @@ jobs:
         run: uv run pytest tests/test_suite_autoupdate.py tests/test_installer.py tests/test_opencode_installer.py -q
 
       - name: Dry-run native all-device install
-        run: uv run slopgate install all --with-autoupdate --dry-run --include-missing
+        run: uv run slopgate install all --dry-run --include-missing
 
       - name: Dry-run GitHub update path
-        run: uv run slopgate update-suite --dry-run --include-missing
+        run: uv run slopgate update --dry-run --include-missing

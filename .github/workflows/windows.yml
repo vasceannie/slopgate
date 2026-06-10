@@ -23,10 +23,10 @@ jobs:
           uv run pytest
           tests/test_installer.py
           tests/test_windows_compat.py
-          tests/test_engine.py::test_shell_command_paths_captures_powershell_paths
-          tests/test_engine.py::test_powershell_git_no_verify_denied
-          tests/test_engine.py::test_powershell_windows_system_path_denied
-          tests/test_engine.py::test_powershell_linter_config_edit_denied
+          tests/test_engine_inline_deny_tests.py::test_powershell_git_no_verify_denied
+          tests/test_engine_inline_deny_tests.py::test_powershell_windows_system_path_denied
+          tests/test_engine_inline_deny_tests.py::test_powershell_path_commands_are_evaluated_through_rules
+          tests/engine/test_02_inline_payload_denies_to_shell_command_paths_ignore_wrapped_absolute_executable_position.py::TestInlinePayloadDenies::test_linter_config_edit_like_aliases_are_denied
           -q
 
       - name: Run full test suite
