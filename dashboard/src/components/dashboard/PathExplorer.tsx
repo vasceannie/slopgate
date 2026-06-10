@@ -183,7 +183,7 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
   node: PathNode; depth: number; onPathFilter: (path: string | null) => void; activePathFilter: string | null;
   expandOverride?: boolean | null; sortKey: SortKey; repoRoot?: string | null;
 }) {
-  const [open, setOpen] = useState(depth < 1);
+  const [open, setOpen] = useState(false);
   const isOpen = expandOverride !== null && expandOverride !== undefined ? expandOverride : open;
   const hasChildren = node.children.size > 0;
   const isFile = !hasChildren;
