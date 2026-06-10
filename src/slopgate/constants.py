@@ -45,7 +45,6 @@ SAFE_READ_SHELL_VERBS = {
     "ls",
     "find",
     "awk",
-    "sed",
     "sort",
     "uniq",
     "diff",

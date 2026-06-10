@@ -69,7 +69,13 @@ def _force_python_ast_import_error(monkeypatch: MonkeyPatch) -> None:
         raising=False,
     )
     monkeypatch.setattr(
+        slopgate.rules, "_python_ast_import_error", None, raising=False
+    )
+    monkeypatch.setattr(
         slopgate.rules, "_PYTHON_AST_IMPORT_REPORTED", False, raising=False
+    )
+    monkeypatch.setattr(
+        slopgate.rules, "_python_ast_import_reported", False, raising=False
     )
 
 

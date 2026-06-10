@@ -124,8 +124,10 @@ class TestInlinePayloadDenies:
     ) -> None:
         nested = tmp_path / "a" / "b" / "c" / "d"
         nested.mkdir(parents=True)
+        # xdist popen workers add an extra tmp_path segment; escape to root dynamically.
+        escape_target = "/".join([".."] * len(nested.resolve().parts)) + "/etc/passwd"
         result = evaluate_payload(
-            pretool_bash("cat ../../../../../../../../etc/passwd", cwd=str(nested))
+            pretool_bash(f"cat {escape_target}", cwd=str(nested))
         )
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result), (

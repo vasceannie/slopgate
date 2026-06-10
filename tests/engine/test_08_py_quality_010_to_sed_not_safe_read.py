@@ -261,19 +261,15 @@ class TestFlatFileSiblings:
 
 
 class TestSedNotSafeRead:
-    """sed is a transform tool, not a read tool. Even without -i,
-    `sed 's/x/y/' file > file` is destructive. It should not be
-    in SAFE_READ_SHELL_VERBS.
+    """Substitution sed is a transform tool, not a read tool. Only sed -n print
+    inspection is treated as safe read; other sed forms must not bypass protected
+    path checks.
     """
 
-    @pytest.mark.xfail(
-        reason="sed is in SAFE_READ_SHELL_VERBS; plain sed without -i/redirect on protected paths does not trigger BUILTIN-PROTECTED-PATHS or GLOBAL-BUILTIN-HOOK-INFRA-EXEC yet"
-    )
     def test_sed_without_redirect_blocked_on_protected_path(
         self, pretool_bash: BashBuilder
     ) -> None:
-        """Plain sed (no -i, no redirect) on a protected path should be denied.
-        Currently passes because sed is in SAFE_READ_SHELL_VERBS."""
+        """Plain sed substitution on a protected path should be denied."""
         result = evaluate_payload(
             pretool_bash("sed 's/true/false/' .claude/hooks/run-pretool.sh")
         )

@@ -62,6 +62,18 @@ def _has_unsafe_shell_redirection(command: str) -> bool:
     return False
 
 
+def _is_readonly_sed_command(command: str) -> bool:
+    """Return True for sed -n print-only inspection (not substitution transforms)."""
+    lowered = command.lower()
+    if not command_has_word(lowered, "sed"):
+        return False
+    if "sed -i" in lowered:
+        return False
+    if _has_unsafe_shell_redirection(lowered):
+        return False
+    return bool(re.search(r"(?:^|\s)-n(?:\s|$)", lowered))
+
+
 def is_safe_read_shell_command(
     command: str, *, reject_find_mutation: bool = False
 ) -> bool:
@@ -85,7 +97,7 @@ def is_safe_read_shell_command(
         return False
     if reject_find_mutation and find_command_has_mutation(shell_tokens(lowered)):
         return False
-    return any(
+    return _is_readonly_sed_command(command) or any(
         command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS
     ) or any(
         command_has_word(lowered, verb)
