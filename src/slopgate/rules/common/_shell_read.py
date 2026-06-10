@@ -20,13 +20,7 @@ from slopgate.util.payloads import (
     path_matches_glob,
 )
 
-from ._shell_safe_read import (
-    FIND_MUTATING_ACTIONS,
-    command_has_word,
-    find_command_has_mutation,
-    is_safe_read_shell_command,
-    shell_tokens,
-)
+from ._shell_safe_read import is_safe_read_shell_command, shell_tokens
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext

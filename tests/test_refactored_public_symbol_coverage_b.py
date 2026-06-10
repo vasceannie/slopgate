@@ -138,13 +138,8 @@ from slopgate.rules.common._sensitive_system_git import (
     match_system_command,
     detect_git_bypass,
 )
-from slopgate.rules.common._shell_read import (
-    command_has_word,
-    find_command_has_mutation,
-    is_safe_read_shell_command,
-    path_matches_any,
-    read_context_fragment,
-)
+from slopgate.rules.common import _shell_safe_read
+from slopgate.rules.common._shell_read import path_matches_any, read_context_fragment
 from slopgate.cli._lint_commands import (
     discover_project_root,
     lint_check,
@@ -255,11 +250,13 @@ PUBLIC_SYMBOL_GROUPS_b: dict[str, tuple[object, ...]] = {
         match_system_command,
         detect_git_bypass,
     ),
+    "_shell_safe_read": (
+        _shell_safe_read.command_has_word,
+        _shell_safe_read.shell_tokens,
+        _shell_safe_read.find_command_has_mutation,
+        _shell_safe_read.is_safe_read_shell_command,
+    ),
     "_shell_read": (
-        command_has_word,
-        shell_tokens,
-        find_command_has_mutation,
-        is_safe_read_shell_command,
         path_matches_any,
         read_context_fragment,
     ),

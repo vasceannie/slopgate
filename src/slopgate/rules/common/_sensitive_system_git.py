@@ -13,7 +13,8 @@ from slopgate.util.platform import resolve_path_for_match
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from ._shell_read import GIT_NO_VERIFY_SHORTCUT, shell_tokens
+from ._shell_read import GIT_NO_VERIFY_SHORTCUT
+from ._shell_safe_read import shell_tokens
 
 META_CHARS = frozenset("[](){}*+?|^$\\")
 compiled_sensitive_cache: dict[tuple[str, ...], list[re.Pattern[str]]] = {}

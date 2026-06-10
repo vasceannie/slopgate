@@ -144,14 +144,13 @@ def _trace_python_ast_import_error(ctx: HookContext, error: Exception) -> None:
 
 
 def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
-    global _PYTHON_AST_IMPORT_REPORTED, _python_ast_import_reported
+    global _python_ast_import_reported
 
     current_error = _PYTHON_AST_IMPORT_ERROR or _python_ast_import_error
     already_reported = _PYTHON_AST_IMPORT_REPORTED or _python_ast_import_reported
     if current_error is None:
         return None
     if not already_reported:
-        _PYTHON_AST_IMPORT_REPORTED = True
         _python_ast_import_reported = True
         _trace_python_ast_import_error(ctx, current_error)
     return [PythonAstImportFailureRule(current_error)]

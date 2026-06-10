@@ -25,7 +25,7 @@ from ._quality_lint_guidance import (
     lint_target_summary,
     post_lint_oversized_guidance,
 )
-from ._shell_read import command_has_word
+from ._shell_safe_read import command_has_word
 
 
 class SearchReminderRule(Rule):

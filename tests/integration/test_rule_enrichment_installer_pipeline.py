@@ -25,7 +25,7 @@ from slopgate.installer._shared import (
     shell_command,
 )
 from slopgate.models import RuleFinding, Severity
-from slopgate.rules.common._shell_read import (
+from slopgate.rules.common._shell_safe_read import (
     command_has_word,
     is_safe_read_shell_command,
 )

@@ -11,7 +11,7 @@ from hypothesis import given, strategies
 from slopgate.config._repo import enroll_repo
 from slopgate.enrichment.fixtures import discover_fixtures, find_parametrize_examples
 from slopgate.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
-from slopgate.rules.common._shell_read import is_safe_read_shell_command
+from slopgate.rules.common._shell_safe_read import is_safe_read_shell_command
 from slopgate.search import runtime
 from slopgate.search.runtime import (
     choose_litellm_model,
