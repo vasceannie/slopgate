@@ -206,9 +206,8 @@ def _import_python_ast_rule_classes() -> tuple[type[Rule], ...]:
 def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
     global _python_ast_import_error
 
-    import_failure = _python_ast_import_failure_rules(ctx)
-    if import_failure is not None:
-        return import_failure
+    if _PYTHON_AST_IMPORT_ERROR is not None or _python_ast_import_error is not None:
+        return []
 
     try:
         rule_classes = _import_python_ast_rule_classes()
@@ -219,11 +218,15 @@ def _build_python_ast_rules(ctx: HookContext) -> list[Rule]:
 
 
 def build_always_on_rules(ctx: HookContext) -> list[Rule]:
-    return [
+    rules: list[Rule] = [
         ProtectedPathsRule(),
         SensitiveDataRule(),
         SystemProtectionRule(),
     ]
+    import_failure = _python_ast_import_failure_rules(ctx)
+    if import_failure is not None:
+        rules.extend(import_failure)
+    return rules
 
 
 def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:

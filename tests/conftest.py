@@ -26,6 +26,22 @@ def reset_lint_config() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def reset_python_ast_import_globals() -> Generator[None, None, None]:
+    """Reset module-level Python AST import failure flags between tests."""
+    import slopgate.rules
+
+    slopgate.rules._PYTHON_AST_IMPORT_ERROR = None
+    slopgate.rules._python_ast_import_error = None
+    slopgate.rules._PYTHON_AST_IMPORT_REPORTED = False
+    slopgate.rules._python_ast_import_reported = False
+    yield
+    slopgate.rules._PYTHON_AST_IMPORT_ERROR = None
+    slopgate.rules._python_ast_import_error = None
+    slopgate.rules._PYTHON_AST_IMPORT_REPORTED = False
+    slopgate.rules._python_ast_import_reported = False
+
+
+@pytest.fixture(autouse=True)
 def _slopgate_env(tmp_path: Path) -> Generator[None, None, None]:
     """Set up slopgate env vars for every test.
 
@@ -46,13 +62,11 @@ def _slopgate_env(tmp_path: Path) -> Generator[None, None, None]:
     _ = os.environ.pop("CLAUDE_HOOK_LAYER_ROOT", None)
     _ = os.environ.pop("HOOK_LAYER_ROOT", None)
     enrollment_marker = BUNDLE_ROOT / "slopgate.toml"
-    created_enrollment_marker = False
     if not enrollment_marker.exists():
         enrollment_marker.write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
-        created_enrollment_marker = True
     yield
-    if created_enrollment_marker:
-        enrollment_marker.unlink(missing_ok=True)
+    # Keep slopgate.toml in place: xdist workers share this repo and teardown races
+    # break enrollment when one worker deletes the marker another still needs.
     if old_root is None:
         _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:

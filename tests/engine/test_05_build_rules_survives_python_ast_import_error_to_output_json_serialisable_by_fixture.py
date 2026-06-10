@@ -80,13 +80,14 @@ def _force_python_ast_import_error(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_python_ast_import_error_allows_bash_validation_commands(
-    pretool_bash: BashBuilder, monkeypatch: MonkeyPatch
+    pretool_bash: BashBuilder, monkeypatch: MonkeyPatch, bundle_root: Path
 ) -> None:
     _force_python_ast_import_error(monkeypatch)
     result = evaluate_payload(
         pretool_bash(
-            "uv run ruff check src/logging/runtime.py && uv run basedpyright src/logging/runtime.py 2>&1 | tail -5",
-            cwd="/home/trav/repos/job-hunter",
+            "uv run ruff check src/slopgate/engine/_evaluation.py && "
+            "uv run basedpyright src/slopgate/engine/_evaluation.py 2>&1 | tail -5",
+            cwd=str(bundle_root),
         )
     )
     assert any((f.rule_id == "PY-AST-IMPORT-001" for f in result.findings))

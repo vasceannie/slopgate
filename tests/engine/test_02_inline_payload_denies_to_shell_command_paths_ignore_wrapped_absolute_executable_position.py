@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from tests.test_engine import (
     BUNDLE_ROOT,
     BashBuilder,
@@ -124,8 +126,7 @@ class TestInlinePayloadDenies:
     ) -> None:
         nested = tmp_path / "a" / "b" / "c" / "d"
         nested.mkdir(parents=True)
-        # xdist popen workers add an extra tmp_path segment; escape to root dynamically.
-        escape_target = "/".join([".."] * len(nested.resolve().parts)) + "/etc/passwd"
+        escape_target = os.path.relpath("/etc/passwd", nested.resolve())
         result = evaluate_payload(
             pretool_bash(f"cat {escape_target}", cwd=str(nested))
         )
