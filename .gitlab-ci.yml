@@ -6,186 +6,186 @@
 image: python:3.12-slim
 
 variables:
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PYTHONUNBUFFERED: "1"
-  UV_VERSION: "0.11.19"
-  SLOPGATE_TEST_HOME: /tmp/slopgate-ci-home
-  CI_SCRIPTS: .gitlab-ci/scripts
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PYTHONUNBUFFERED: "1"
+    UV_VERSION: "0.11.19"
+    SLOPGATE_TEST_HOME: /tmp/slopgate-ci-home
+    CI_SCRIPTS: .gitlab-ci/scripts
 
 .common-setup: &common-setup
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq curl git > /dev/null 2>&1
-    - curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - uv --version
-    - uv tool install --force "${CI_PROJECT_DIR}"
-    - slopgate --version
+    before_script:
+        - apt-get update -qq && apt-get install -y -qq curl git > /dev/null 2>&1
+        - curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - uv --version
+        - uv tool install --force "${CI_PROJECT_DIR}"
+        - slopgate --version
 
 stages:
-  - test
-  - lint
-  - install-verify
-  - hook-install-verify
-  - hook-uninstall-verify
-  - windows-install
+    - test
+    - lint
+    - install-verify
+    - hook-install-verify
+    - hook-uninstall-verify
+    - windows-install
 
 # ===================================================================
 # TEST — pytest unit tests
 # ===================================================================
 pytest:
-  stage: test
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - cd "${CI_PROJECT_DIR}"
-    - uv sync --frozen
-    - uv run python -m pytest -x --no-header -q --tb=short -n auto
-  artifacts:
-    when: always
-    expire_in: 30 days
+    stage: test
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - cd "${CI_PROJECT_DIR}"
+        - uv sync --frozen
+        - uv run python -m pytest -x --no-header -q --tb=short -n auto
+    artifacts:
+        when: always
+        expire_in: 30 days
 
 # ===================================================================
 # TEST — slopgate built-in self-test smoke
 # ===================================================================
 self-test:
-  stage: test
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - slopgate test
-  needs: []
+    stage: test
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - slopgate test
+    needs: []
 
 # ===================================================================
 # LINT — slopgate project lint (zero new violations required)
 # ===================================================================
 lint-check:
-  stage: lint
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - cd "${CI_PROJECT_DIR}"
-    - slopgate lint check --details
-  needs: []
+    stage: lint
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - cd "${CI_PROJECT_DIR}"
+        - slopgate lint check --details
+    needs: []
 
 # ===================================================================
 # LINT — strict gate (zero total violations required)
 # ===================================================================
 lint-strict:
-  stage: lint
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - cd "${CI_PROJECT_DIR}"
-    - slopgate lint strict
-  needs: []
+    stage: lint
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - cd "${CI_PROJECT_DIR}"
+        - slopgate lint strict
+    needs: []
 
 # ===================================================================
 # INSTALL-VERIFY — confirm slopgate binary, config, and dry-run
 # ===================================================================
 install-verify:
-  stage: install-verify
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - slopgate version
-    - slopgate config path
-    - slopgate check "${CI_PROJECT_DIR}"
-    - slopgate config show 2>&1 | head -30
-    - slopgate install claude --dry-run
-    - slopgate install codex --dry-run
-    - slopgate install cursor --dry-run
-    - slopgate install opencode --dry-run
-    - slopgate uninstall all --dry-run
-  needs: []
+    stage: install-verify
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - slopgate version
+        - slopgate config path
+        - slopgate check "${CI_PROJECT_DIR}"
+        - slopgate config show 2>&1 | head -30
+        - slopgate install claude --dry-run
+        - slopgate install codex --dry-run
+        - slopgate install cursor --dry-run
+        - slopgate install opencode --dry-run
+        - slopgate uninstall all --dry-run
+    needs: []
 
 # ===================================================================
 # WINDOWS-INSTALL — Windows-specific install & schtasks verification
 # Requires a GitLab runner with the `windows` tag.
 # ===================================================================
 windows-install:
-  stage: windows-install
-  tags:
-    - windows
-  script:
-    - pip install --upgrade pip
-    - pip install --editable "${env:CI_PROJECT_DIR}"
-    - slopgate version
-    - slopgate config path
-    - slopgate config show | Select-Object -First 30
-    - slopgate install claude --dry-run
-    - slopgate install codex --dry-run
-    - slopgate install opencode --dry-run
-    - slopgate uninstall all --dry-run
-  needs: []
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_MERGE_REQUEST_ID'  # optional: run on MRs with Windows runner
+    stage: windows-install
+    tags:
+        - windows
+    script:
+        - pip install --upgrade pip
+        - pip install --editable "${env:CI_PROJECT_DIR}"
+        - slopgate version
+        - slopgate config path
+        - slopgate config show | Select-Object -First 30
+        - slopgate install claude --dry-run
+        - slopgate install codex --dry-run
+        - slopgate install opencode --dry-run
+        - slopgate uninstall all --dry-run
+    needs: []
+    rules:
+        - if: '$CI_PIPELINE_SOURCE == "schedule"'
+        - if: "$CI_MERGE_REQUEST_ID" # optional: run on MRs with Windows runner
 
 # ===================================================================
 # HOOK-INSTALL-VERIFY — install hooks into disposable harness configs
 # ===================================================================
 hook-install-verify:
-  stage: hook-install-verify
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - export HOME="${SLOPGATE_TEST_HOME}"
-    - rm -rf "${HOME}" && mkdir -p "${HOME}"
-    - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor" "${HOME}/.config/opencode/plugins"
-    - echo '{}' > "${HOME}/.claude/settings.json"
-    - echo '{}' > "${HOME}/.codex/hooks.json"
-    - echo '{}' > "${HOME}/.cursor/hooks.json"
-    - slopgate install claude --install-scope user --disable-autoupdate
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
-    - slopgate install codex --install-scope user --disable-autoupdate
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" codex
-    - slopgate install cursor --install-scope user --disable-autoupdate
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" cursor
-    - slopgate install opencode --install-scope user --disable-autoupdate
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
-    - rm -rf "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
-    - echo '{}' > "${HOME}/.claude/settings.json"
-    - echo '{}' > "${HOME}/.codex/hooks.json"
-    - echo '{}' > "${HOME}/.cursor/hooks.json"
-    - slopgate install all --install-scope user --disable-autoupdate
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" codex
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" cursor
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
-  needs:
-    - install-verify
+    stage: hook-install-verify
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - export HOME="${SLOPGATE_TEST_HOME}"
+        - rm -rf "${HOME}" && mkdir -p "${HOME}"
+        - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor" "${HOME}/.config/opencode/plugins"
+        - echo '{}' > "${HOME}/.claude/settings.json"
+        - echo '{}' > "${HOME}/.codex/hooks.json"
+        - echo '{}' > "${HOME}/.cursor/hooks.json"
+        - slopgate install claude --install-scope user --disable-autoupdate
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
+        - slopgate install codex --install-scope user --disable-autoupdate
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" codex
+        - slopgate install cursor --install-scope user --disable-autoupdate
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" cursor
+        - slopgate install opencode --install-scope user --disable-autoupdate
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
+        - rm -rf "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
+        - echo '{}' > "${HOME}/.claude/settings.json"
+        - echo '{}' > "${HOME}/.codex/hooks.json"
+        - echo '{}' > "${HOME}/.cursor/hooks.json"
+        - slopgate install all --install-scope user --disable-autoupdate
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" codex
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" cursor
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
+    needs:
+        - install-verify
 
 # ===================================================================
 # HOOK-UNINSTALL-VERIFY — non-destructive uninstall verification
 # ===================================================================
 hook-uninstall-verify:
-  stage: hook-uninstall-verify
-  <<: *common-setup
-  script:
-    - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    - export HOME="${SLOPGATE_TEST_HOME}"
-    - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-non-destructive-uninstall.sh" "${SLOPGATE_TEST_HOME}"
-  needs:
-    - hook-install-verify
+    stage: hook-uninstall-verify
+    <<: *common-setup
+    script:
+        - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+        - export HOME="${SLOPGATE_TEST_HOME}"
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-non-destructive-uninstall.sh" "${SLOPGATE_TEST_HOME}"
+    needs:
+        - hook-install-verify
 
 # ===================================================================
-# WINDOWS-INSTALL — install test on Windows runner (manual gate)
+# WINDOWS-INSTALL (extended) — unit tests on Windows runner (manual gate)
 # ===================================================================
-windows-install:
-  stage: windows-install
-  tags:
-    - windows
-  before_script:
-    - pip install --upgrade pip
-    - pip install --editable "${CI_PROJECT_DIR}"
-  script:
-    - slopgate version
-    - python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
-    - slopgate install claude --dry-run
-    - slopgate install codex --dry-run
-  needs:
-    - hook-install-verify
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: never
-    - when: manual
+windows-install-tests:
+    stage: windows-install
+    tags:
+        - windows
+    before_script:
+        - pip install --upgrade pip
+        - pip install --editable "${CI_PROJECT_DIR}"
+    script:
+        - slopgate version
+        - python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
+        - slopgate install claude --dry-run
+        - slopgate install codex --dry-run
+    needs:
+        - hook-install-verify
+    rules:
+        - if: '$CI_PIPELINE_SOURCE == "schedule"'
+          when: never
+        - when: manual

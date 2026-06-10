@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Sequence, cast
 
 import pytest
 
@@ -19,10 +20,11 @@ from slopgate.installer._suite_autoupdate_windows import (
 
 class TestQueryWindowsTaskXml:
     def test_returns_none_on_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            subprocess, "run",
-            lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, stdout=""),
-        )
+        def _fake_run_fail(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            assert "schtasks" in str(args), f"Expected schtasks in args: {args}"
+            return subprocess.CompletedProcess(cast(Sequence[str], args), 1, stdout="")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run_fail)
         result = query_windows_task_xml()
         assert result is None, (
             f"Expected None when schtasks returns non-zero, got {result!r}"
@@ -30,10 +32,12 @@ class TestQueryWindowsTaskXml:
 
     def test_returns_stdout_on_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         xml = "<Task><Actions><Exec><Command>slopgate.exe</Command></Exec></Actions></Task>"
-        monkeypatch.setattr(
-            subprocess, "run",
-            lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=xml),
-        )
+
+        def _fake_run_success(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            assert "schtasks" in str(args), f"Expected schtasks in args: {args}"
+            return subprocess.CompletedProcess(cast(Sequence[str], args), 0, stdout=xml)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run_success)
         result = query_windows_task_xml()
         assert result == xml, (
             f"Expected XML stdout, got {result!r}"

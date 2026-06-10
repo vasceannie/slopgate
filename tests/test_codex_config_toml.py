@@ -89,10 +89,10 @@ class TestEnableCodexHooksToml:
         content = config_path.read_text(encoding="utf-8")
         lines = content.splitlines()
         features_idx = next(
-            i for i, l in enumerate(lines) if l.strip() == "[features]"
+            i for i, line in enumerate(lines) if line.strip() == "[features]"
         )
         hooks_line_idx = next(
-            (i for i, l in enumerate(lines) if "hooks = true" in l), None
+            (i for i, line in enumerate(lines) if "hooks = true" in line), None
         )
         assert hooks_line_idx is not None, "Expected a hooks line in the output"
         assert hooks_line_idx > features_idx, (
