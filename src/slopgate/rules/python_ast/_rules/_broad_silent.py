@@ -18,11 +18,12 @@ from .._helpers import (
     evaluate_common,
     parse_module,
 )
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-def _is_broad_exception(handler: ast.ExceptHandler) -> bool:
+def is_broad_exception(handler: ast.ExceptHandler) -> bool:
     exc_type = handler.type
     if exc_type is None:
         return True
@@ -36,15 +37,17 @@ def _is_broad_exception(handler: ast.ExceptHandler) -> bool:
     return False
 
 
-def _is_logger_call(node: ast.AST) -> bool:
+def is_logger_call(node: ast.AST) -> bool:
     match node:
         case ast.Call(func=ast.Attribute(value=ast.Name(id=name))):
             return name in {"logger", "logging"}
         case ast.Call(func=ast.Attribute(attr=method)):
             return method in {"error", "warning", "warn", "exception", "info"}
-    return False
+        case _:
+            return False
 
-def _is_empty_default_return(node: ast.Return) -> bool:
+
+def is_empty_default_return(node: ast.Return) -> bool:
     value = node.value
     if value is None:
         return True
@@ -73,10 +76,18 @@ class PythonBroadExceptLoggerRule(Rule):
             if not isinstance(node, ast.Try):
                 continue
             for handler in node.handlers:
-                if not _is_broad_exception(handler):
+                if not is_broad_exception(handler):
                     continue
-                has_logger = any(_is_logger_call(inner) for stmt in handler.body for inner in ast.walk(stmt))
-                has_raise = any(isinstance(inner, ast.Raise) for stmt in handler.body for inner in ast.walk(stmt))
+                has_logger = any(
+                    is_logger_call(inner)
+                    for stmt in handler.body
+                    for inner in ast.walk(stmt)
+                )
+                has_raise = any(
+                    isinstance(inner, ast.Raise)
+                    for stmt in handler.body
+                    for inner in ast.walk(stmt)
+                )
                 if has_logger and not has_raise:
                     return [
                         RuleFinding(
@@ -116,7 +127,7 @@ class PythonSilentExceptRule(Rule):
             if not isinstance(node, ast.Try):
                 continue
             for handler in node.handlers:
-                if not _is_broad_exception(handler):
+                if not is_broad_exception(handler):
                     continue
                 for stmt in handler.body:
                     if isinstance(stmt, (ast.Pass, ast.Continue)):
@@ -130,7 +141,7 @@ class PythonSilentExceptRule(Rule):
                                 metadata={METADATA_PATH: path_value},
                             )
                         ]
-                    if isinstance(stmt, ast.Return) and _is_empty_default_return(stmt):
+                    if isinstance(stmt, ast.Return) and is_empty_default_return(stmt):
                         return [
                             RuleFinding(
                                 rule_id=self.rule_id,

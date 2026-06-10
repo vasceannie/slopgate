@@ -8,8 +8,9 @@ from tests.test_adapters import (
     require_nested,
     require_rendered,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestClaudeAdapterEdgeCases:
     """Claude adapter — edge cases: failures, context-only, unknown events."""
@@ -60,7 +61,7 @@ class TestClaudeAdapterEdgeCases:
             "decision",
         )
         assert inner["behavior"] == "deny"
-        assert "X" in test_support.required_string(inner, "message")
+        assert "X" in support.required_string(inner, "message")
 
     def test_posttool_use_failure_advisory(self) -> None:
         adapter = ClaudeAdapter()
@@ -146,7 +147,7 @@ class TestClaudeAdapterEdgeCases:
         )
         rendered = require_rendered(output)
         assert rendered["decision"] == "block", "Stop block must set decision=block"
-        reason = test_support.required_string(rendered, "reason")
+        reason = support.required_string(rendered, "reason")
         assert "STOP-001" in reason, "rule id must appear in reason"
         assert "also check lint" in reason, "context must be appended to reason"
 

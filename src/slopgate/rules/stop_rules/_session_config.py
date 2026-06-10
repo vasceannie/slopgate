@@ -8,21 +8,22 @@ from typing_extensions import override
 from slopgate._types import bool_value, object_dict, string_value
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-_GIT_COMMANDS: list[tuple[list[str], str]] = [
+GIT_COMMANDS: list[tuple[list[str], str]] = [
     (["git", "log", "--oneline", "-10"], "## Recent commits\n```\n{output}\n```"),
     (["git", "status", "--short"], "## Working tree status\n```\n{output}\n```"),
     (["git", "branch", "--show-current"], "Current branch: `{output}`"),
 ]
 
 
-def _collect_git_context(cwd: str) -> list[str]:
+def collect_git_context(cwd: str) -> list[str]:
     """Run git commands and collect non-empty output fragments."""
     fragments: list[str] = []
-    for cmd, template in _GIT_COMMANDS:
+    for cmd, template in GIT_COMMANDS:
         try:
             result = subprocess.run(
                 cmd,
@@ -50,7 +51,7 @@ class SessionStartContextRule(Rule):
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        fragments = _collect_git_context(str(ctx.cwd))
+        fragments = collect_git_context(str(ctx.cwd))
         if not fragments:
             return []
         return [
@@ -69,7 +70,7 @@ class SessionStartContextRule(Rule):
 # Config change guard
 # ---------------------------------------------------------------------------
 
-_CONFIG_BLOCKED_SOURCES = (
+CONFIG_BLOCKED_SOURCES = (
     "project_settings",
     "local_settings",
     "user_settings",
@@ -88,7 +89,7 @@ class ConfigChangeGuardRule(Rule):
         if not is_rule_enabled(ctx, self.rule_id):
             return []
         source = string_value(ctx.payload.payload.get("source")) or ""
-        if source not in _CONFIG_BLOCKED_SOURCES:
+        if source not in CONFIG_BLOCKED_SOURCES:
             return []
         changes = object_dict(ctx.payload.payload.get("changes"))
         if not changes:

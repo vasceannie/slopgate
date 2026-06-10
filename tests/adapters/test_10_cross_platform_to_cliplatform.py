@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from pytest import MonkeyPatch
+
 from tests.test_adapters import (
     Path,
-    _config_with_enabled_rules,
+    config_with_enabled_rules,
     evaluate_payload,
     object_dict,
     pytest,
     require_spec,
     string_value,
-    test_support,
+    support,
 )
+
 
 class TestCrossPlatform:
     """Same payload through all adapters produces correct per-platform output."""
@@ -17,7 +20,7 @@ class TestCrossPlatform:
     def _git_no_verify_payload(self) -> dict[str, object]:
         return {
             "session_id": "cross-test",
-            "cwd": str(test_support.BUNDLE_ROOT),
+            "cwd": str(support.BUNDLE_ROOT),
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "git commit --no-verify -m 'test'"},
@@ -26,22 +29,22 @@ class TestCrossPlatform:
     def _permission_spec_for_platform(self, platform: str) -> dict[str, object]:
         result = evaluate_payload(self._git_no_verify_payload(), platform=platform)
         assert result.output is not None, f"{platform} should produce output"
-        return require_spec(test_support.require_output(result))
+        return require_spec(support.require_output(result))
 
     def test_claude_and_codex_produce_same_structure(self) -> None:
         """Claude and Codex both use hookSpecificOutput.permissionDecision."""
         claude_spec = self._permission_spec_for_platform("claude")
         codex_spec = self._permission_spec_for_platform("codex")
-        assert test_support.output_string(claude_spec, "permissionDecision") == "deny", (
-            "Claude should deny"
-        )
-        assert test_support.output_string(codex_spec, "permissionDecision") == "deny", (
+        assert (
+            support.output_string(claude_spec, "permissionDecision") == "deny"
+        ), "Claude should deny"
+        assert support.output_string(codex_spec, "permissionDecision") == "deny", (
             "Codex should deny"
         )
-        assert "GIT-001" in test_support.output_string(
+        assert "GIT-001" in support.output_string(
             claude_spec, "permissionDecisionReason"
         ), "GIT-001 should appear in Claude reason"
-        assert "GIT-001" in test_support.output_string(
+        assert "GIT-001" in support.output_string(
             codex_spec, "permissionDecisionReason"
         ), "GIT-001 should appear in Codex reason"
 
@@ -55,9 +58,9 @@ class TestCrossPlatform:
 
         result = evaluate_payload(oc_payload, platform="opencode")
         assert result.output is not None, "OpenCode should produce output"
-        rendered = test_support.require_output(result)
+        rendered = support.require_output(result)
         assert rendered["action"] == "block", "OpenCode should produce block action"
-        assert "GIT-001" in test_support.required_string(rendered, "reason"), (
+        assert "GIT-001" in support.required_string(rendered, "reason"), (
             "GIT-001 should appear in reason"
         )
 
@@ -107,10 +110,10 @@ class TestCrossPlatform:
         return dirty_initial_reads, denied_follow_ups
 
     def test_full_read_unlock_survives_relative_follow_up_for_claude_and_codex(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
         """Adapter/platform selection must not break stateful read-path normalization."""
-        _config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
+        config_with_enabled_rules(tmp_path, monkeypatch, "BUILTIN-ENFORCE-FULL-READ")
         target = tmp_path / "module.py"
         target.write_text("print('hi')\nprint('bye')\n", encoding="utf-8")
         initial_payload: dict[str, object] = {
@@ -130,10 +133,13 @@ class TestCrossPlatform:
         dirty_initial_reads, denied_follow_ups = self._full_read_unlock_failures(
             initial_payload, follow_up_payload
         )
-        assert dirty_initial_reads == [], "Full reads should stay clean for all platforms"
+        assert dirty_initial_reads == [], (
+            "Full reads should stay clean for all platforms"
+        )
         assert denied_follow_ups == [], (
             "Full-read unlock should survive relative follow-up paths"
         )
+
 
 class TestCLIPlatform:
     def test_handle_with_platform_flag(self) -> None:
@@ -170,7 +176,7 @@ class TestCLIPlatform:
             _ = build_parser().parse_args(["handle", "--platform", "vim"])
 
     def test_safe_main_returns_130_on_keyboard_interrupt(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: MonkeyPatch
     ) -> None:
         from slopgate import cli
 

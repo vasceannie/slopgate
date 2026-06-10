@@ -10,7 +10,7 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from slopgate.constants import ENRICHMENT_MAX_READ_BYTES
+from slopgate.constants import ENRICHMENT_MAX_READ_BYTES, METADATA_PATH
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -80,3 +80,25 @@ def relative_path(path: Path, root: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return str(path)
+
+
+def metadata_str(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def loaded_source_at_path(path_str: str, root: Path) -> tuple[Path, str] | None:
+    full_path = resolve_path(path_str, root)
+    source = safe_read(full_path)
+    if not source:
+        return None
+    return full_path, source
+
+
+def path_source_from_metadata(
+    finding: RuleFinding, ctx: HookContext
+) -> tuple[Path, str] | None:
+    path_str = metadata_str(finding.metadata, METADATA_PATH)
+    if path_str is None:
+        return None
+    return loaded_source_at_path(path_str, ctx.config.root)

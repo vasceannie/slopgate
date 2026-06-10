@@ -17,6 +17,19 @@ INSTALL_SCOPES: frozenset[str] = frozenset({"user", "project", "both"})
 # Backward-compatible alias used by early Cursor installer exports.
 CURSOR_INSTALL_SCOPES = INSTALL_SCOPES
 
+__all__ = [
+    "CURSOR_INSTALL_SCOPES",
+    "INSTALL_SCOPES",
+    "InstallScope",
+    "json_has_owned_slopgate_hooks",
+    "normalize_install_scope",
+    "opencode_plugin_has_owned_slopgate",
+    "resolve_project_root",
+    "ResidualInstallScopeWarning",
+    "scope_paths",
+    "warn_residual_install_scope",
+]
+
 
 def normalize_install_scope(scope: str) -> InstallScope:
     normalized = scope.strip().lower()
@@ -57,7 +70,7 @@ def _hooks_dict_has_owned_slopgate(hooks: dict[object, object]) -> bool:
     for entries in hooks.values():
         if not isinstance(entries, list):
             continue
-        for entry in entries:
+        for entry in cast("list[object]", entries):
             if isinstance(entry, dict) and command_is_slopgate_hook(
                 cast(dict[object, object], entry).get(METADATA_COMMAND)
             ):
@@ -65,7 +78,7 @@ def _hooks_dict_has_owned_slopgate(hooks: dict[object, object]) -> bool:
     return False
 
 
-def _json_has_owned_slopgate_hooks(path: Path) -> bool:
+def json_has_owned_slopgate_hooks(path: Path) -> bool:
     if not path.exists():
         return False
     try:
@@ -75,13 +88,14 @@ def _json_has_owned_slopgate_hooks(path: Path) -> bool:
     if not isinstance(parsed, dict):
         return False
 
-    hooks = parsed.get("hooks")
+    parsed_dict: dict[str, object] = cast("dict[str, object]", parsed)
+    hooks = parsed_dict.get("hooks")
     if isinstance(hooks, dict) and hooks:
-        return _hooks_dict_has_owned_slopgate(cast(dict[object, object], hooks))
+        return _hooks_dict_has_owned_slopgate(cast("dict[object, object]", hooks))
     return False
 
 
-def _opencode_plugin_has_owned_slopgate(path: Path) -> bool:
+def opencode_plugin_has_owned_slopgate(path: Path) -> bool:
     if not path.exists():
         return False
     content = path.read_text(encoding="utf-8", errors="replace")

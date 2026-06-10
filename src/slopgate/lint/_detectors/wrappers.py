@@ -16,12 +16,12 @@ from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_source_files,
-    _without_leading_docstring,
+    without_leading_docstring,
 )
 
 
 def _single_delegated_call(body: list[ast.stmt]) -> ast.Call | None:
-    stmts = _without_leading_docstring(body)
+    stmts = without_leading_docstring(body)
     if len(stmts) != 1:
         return None
     stmt = stmts[0]

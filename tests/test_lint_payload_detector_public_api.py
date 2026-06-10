@@ -192,9 +192,7 @@ def test_schema_bypass_detector_ignores_low_risk_casts_property(name: str) -> No
 @given(IDENTIFIERS)
 def test_weak_assertion_detector_ignores_value_comparisons_property(name: str) -> None:
     parsed = parsed_temp_source(
-        f"def test_{name}() -> None:\n"
-        "    result = 3\n"
-        "    assert result == 3\n",
+        f"def test_{name}() -> None:\n    result = 3\n    assert result == 3\n",
         "test_weak_property.py",
     )
     assert detect_weak_assertions(parsed) == []

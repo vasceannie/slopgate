@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from tests.test_ast_rules import (
     BUNDLE_ROOT,
-    _assert_denied_by,
-    _assert_not_denied,
+    assert_denied_by,
+    assert_not_denied,
     evaluate_payload,
     unittest,
 )
+
 
 class TestFeatureEnvy(unittest.TestCase):
     def test_param_exempt(self) -> None:
@@ -28,7 +29,7 @@ class TestFeatureEnvy(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-012" for finding in result.findings)
 
     def test_envy_nonparam_context(self) -> None:
@@ -52,7 +53,7 @@ class TestFeatureEnvy(unittest.TestCase):
         }
         result = evaluate_payload(payload)
         # Should NOT be denied (decision is now context, not deny)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert any(finding.rule_id == "PY-CODE-012" for finding in result.findings)
 
     def test_self_exempt(self) -> None:
@@ -66,8 +67,9 @@ class TestFeatureEnvy(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-012" for finding in result.findings)
+
 
 class TestThinWrapper(unittest.TestCase):
     def test_thin_blocked(self) -> None:
@@ -79,7 +81,7 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-CODE-013")
+        assert_denied_by(result, "PY-CODE-013")
         assert any(finding.rule_id == "PY-CODE-013" for finding in result.findings)
 
     def test_dunder_exempt(self) -> None:
@@ -91,7 +93,7 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-013" for finding in result.findings)
 
     def test_decorated_exempt(self) -> None:
@@ -103,7 +105,7 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-013" for finding in result.findings)
 
     def test_cast_wrapper_exempt(self) -> None:
@@ -119,7 +121,7 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-CODE-013" not in rule_ids, "typing.cast wrapper should stay exempt"
 
@@ -138,9 +140,11 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
-        assert "PY-CODE-013" not in rule_ids, "test helper self-delegate should stay exempt"
+        assert "PY-CODE-013" not in rule_ids, (
+            "test helper self-delegate should stay exempt"
+        )
 
     def test_test_helper_list_wrapper_exempt(self) -> None:
         code = (
@@ -157,9 +161,12 @@ class TestThinWrapper(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
-        assert "PY-CODE-013" not in rule_ids, "test helper list wrapper should stay exempt"
+        assert "PY-CODE-013" not in rule_ids, (
+            "test helper list wrapper should stay exempt"
+        )
+
 
 class TestGodClass(unittest.TestCase):
     def test_god_blocked(self) -> None:
@@ -172,7 +179,7 @@ class TestGodClass(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-CODE-014")
+        assert_denied_by(result, "PY-CODE-014")
         assert any(finding.rule_id == "PY-CODE-014" for finding in result.findings)
 
     def test_10_methods_ok(self) -> None:
@@ -185,8 +192,9 @@ class TestGodClass(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-014" for finding in result.findings)
+
 
 class TestCyclomaticComplexity(unittest.TestCase):
     def test_complex_blocked(self) -> None:
@@ -199,7 +207,7 @@ class TestCyclomaticComplexity(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-CODE-015")
+        assert_denied_by(result, "PY-CODE-015")
         assert any(finding.rule_id == "PY-CODE-015" for finding in result.findings)
 
     def test_complexity_10_ok(self) -> None:
@@ -212,8 +220,9 @@ class TestCyclomaticComplexity(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-015" for finding in result.findings)
+
 
 class TestDeadCode(unittest.TestCase):
     def test_dead_blocked(self) -> None:
@@ -225,7 +234,7 @@ class TestDeadCode(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-CODE-016")
+        assert_denied_by(result, "PY-CODE-016")
         assert any(finding.rule_id == "PY-CODE-016" for finding in result.findings)
 
     def test_return_at_end_ok(self) -> None:
@@ -237,5 +246,5 @@ class TestDeadCode(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-016" for finding in result.findings)

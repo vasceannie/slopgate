@@ -51,8 +51,13 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 include = ["src", "tests"]
-extraPaths = ["src", "."]
+extraPaths = ["src", ".", "dashboard/scripts"]
 typeCheckingMode = "strict"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src", ".", "dashboard/scripts"]
+reportPrivateUsage = false
 
 [tool.pyrefly]
 pythonVersion = "3.12"
@@ -66,6 +71,7 @@ typeCheckingMode = "strict"
 [tool.ty.environment]
 python = ".venv"
 python-version = "3.12"
+extra-paths = ["dashboard/scripts"]
 
 [dependency-groups]
 dev = [

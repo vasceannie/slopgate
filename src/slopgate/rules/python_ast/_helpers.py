@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from slopgate.models import RuleFinding
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util.path_filters import is_authored_python_path
 from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
 
 if TYPE_CHECKING:
@@ -52,12 +52,6 @@ def parse_module(source: str, max_chars: int) -> ast.Module | None:
         return None
 
 
-def _authored_python_path(path_value: str) -> bool:
-    if not path_value.lower().endswith((".py", ".pyi")):
-        return False
-    return not is_third_party_or_virtualenv_path(path_value)
-
-
 def _read_candidate_source(ctx: HookContext, path_value: str) -> str | None:
     full_path = (
         (ctx.cwd / path_value).resolve()
@@ -74,7 +68,7 @@ def _pre_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
     return [
         (ct.content, ct.path)
         for ct in ctx.content_targets
-        if _authored_python_path(ct.path)
+        if is_authored_python_path(ct.path)
     ]
 
 
@@ -83,7 +77,7 @@ def _post_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
         return []
     sources: list[tuple[str, str]] = []
     for path_value in ctx.candidate_paths:
-        if not _authored_python_path(path_value):
+        if not is_authored_python_path(path_value):
             continue
         source = _read_candidate_source(ctx, path_value)
         if source is not None:

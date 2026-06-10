@@ -10,16 +10,16 @@ from slopgate.models import ContentTarget, RuntimeConfig
 from ._basic import detect_language, first_present, shell_kind_for_tool
 from ._shell import shell_command_paths
 from ._targets import (
-    _direct_candidate_paths,
-    _multi_edit_candidate_paths,
-    _multi_edit_content_targets,
-    _patch_candidate_paths,
-    _patch_content_targets,
-    _tool_input_content_target,
-    _tool_input_path,
-    _tool_response_candidate_paths,
-    _unique_content_targets,
-    _unique_paths,
+    direct_candidate_paths,
+    multi_edit_candidate_paths,
+    multi_edit_content_targets,
+    patch_candidate_paths,
+    patch_content_targets,
+    tool_input_content_target,
+    tool_input_path,
+    tool_response_candidate_paths,
+    unique_content_targets,
+    unique_paths,
 )
 
 
@@ -87,25 +87,25 @@ class _TargetHookPayloadProperties(_ShellHookPayloadProperties):
     @cached_property
     def content_targets(self) -> list[ContentTarget]:
         targets: list[ContentTarget] = []
-        fallback_path = _tool_input_path(self.tool_input, self.payload)
-        input_target = _tool_input_content_target(self.tool_input, fallback_path)
+        fallback_path = tool_input_path(self.tool_input, self.payload)
+        input_target = tool_input_content_target(self.tool_input, fallback_path)
         if input_target is not None:
             targets.append(input_target)
-        targets.extend(_multi_edit_content_targets(self.tool_input, fallback_path))
-        targets.extend(_patch_content_targets(self.tool_input))
-        return _unique_content_targets(targets)
+        targets.extend(multi_edit_content_targets(self.tool_input, fallback_path))
+        targets.extend(patch_content_targets(self.tool_input))
+        return unique_content_targets(targets)
 
     @cached_property
     def candidate_paths(self) -> list[str]:
         values = [
-            *_direct_candidate_paths(self.payload, self.tool_input),
-            *_multi_edit_candidate_paths(self.tool_input),
-            *_patch_candidate_paths(self.tool_input),
-            *_tool_response_candidate_paths(self.payload),
+            *direct_candidate_paths(self.payload, self.tool_input),
+            *multi_edit_candidate_paths(self.tool_input),
+            *patch_candidate_paths(self.tool_input),
+            *tool_response_candidate_paths(self.payload),
         ]
         if self.shell_command:
             values.extend(shell_command_paths(self.shell_command, self.shell_kind))
-        return _unique_paths(values)
+        return unique_paths(values)
 
     @cached_property
     def languages(self) -> set[str]:

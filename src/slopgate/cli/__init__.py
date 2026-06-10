@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+__all__ = [
+    "build_parser",
+    "main",
+    "safe_main",
+    "os",
+    "sys",
+    "warnings",
+    "EXIT_KEYBOARD_INTERRUPT",
+    "_DEPRECATED_CLI_NAMES",
+]
+
 import os
 import sys
 import warnings

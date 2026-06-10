@@ -12,7 +12,9 @@ UNLINK = BUNDLE_ROOT / "scripts" / "unlink-local.sh"
 INTELLIGENT_SKILL = BUNDLE_ROOT / "shared" / "skills" / "intelligent-coding-patterns"
 
 
-def run_script(script: Path, tmp_home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run_script(
+    script: Path, tmp_home: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(tmp_home)
     return subprocess.run(
@@ -39,7 +41,9 @@ def prepare_exact_and_legacy_links(tmp_home: Path) -> tuple[Path, Path, Path]:
 
 def assert_legacy_link_preserved(legacy: Path, legacy_target: Path) -> None:
     assert legacy.is_symlink(), "legacy non-bundle symlink should not be unlinked"
-    assert legacy.resolve(strict=False) == legacy_target, "legacy symlink target should remain unchanged"
+    assert legacy.resolve(strict=False) == legacy_target, (
+        "legacy symlink target should remain unchanged"
+    )
 
 
 def test_verify_default_allows_mixed_migration_state_concisely(tmp_path: Path) -> None:
@@ -51,7 +55,9 @@ def test_verify_default_allows_mixed_migration_state_concisely(tmp_path: Path) -
     assert "warnings=" in result.stdout
 
 
-def test_verify_strict_fails_when_manifest_destinations_are_not_exact_links(tmp_path: Path) -> None:
+def test_verify_strict_fails_when_manifest_destinations_are_not_exact_links(
+    tmp_path: Path,
+) -> None:
     result = run_script(VERIFY, tmp_path, "--only", "claude", "--strict")
 
     assert result.returncode != 0
@@ -59,7 +65,9 @@ def test_verify_strict_fails_when_manifest_destinations_are_not_exact_links(tmp_
     assert "verify failed:" in result.stderr or "verify failed:" in result.stdout
 
 
-def test_verify_accepts_exact_manifest_link_but_warns_for_legacy_symlink(tmp_path: Path) -> None:
+def test_verify_accepts_exact_manifest_link_but_warns_for_legacy_symlink(
+    tmp_path: Path,
+) -> None:
     exact, _, _ = prepare_exact_and_legacy_links(tmp_path)
 
     result = run_script(VERIFY, tmp_path, "--only", "claude", "--verbose")

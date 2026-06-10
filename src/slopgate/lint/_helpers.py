@@ -184,7 +184,7 @@ def _span_lines(nodes: list[ast.stmt]) -> int:
     return end - start + 1
 
 
-def _without_leading_docstring(nodes: list[ast.stmt]) -> list[ast.stmt]:
+def without_leading_docstring(nodes: list[ast.stmt]) -> list[ast.stmt]:
     if not nodes:
         return []
     first = nodes[0]
@@ -199,7 +199,7 @@ def _without_leading_docstring(nodes: list[ast.stmt]) -> list[ast.stmt]:
 
 def function_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     """Count the lines in a function body (excluding decorators and docstrings)."""
-    return _span_lines(_without_leading_docstring(node.body))
+    return _span_lines(without_leading_docstring(node.body))
 
 
 def class_body_lines(node: ast.ClassDef) -> int:

@@ -13,13 +13,14 @@ from slopgate.state import RetryLockPayload
 from slopgate.util.payloads import is_edit_like_tool
 
 from ._hints import (
-    _REPLAN_PROMPT,
-    _denial_context,
-    _failure_class,
-    _finding_path,
-    _retry_budget_relevant_denials,
-    _rule_hint,
+    REPLAN_PROMPT,
+    denial_context,
+    failure_class,
+    finding_path,
+    retry_budget_relevant_denials,
+    rule_hint,
 )
+
 
 def _normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
     raw_path = Path(path_value)
@@ -70,10 +71,10 @@ def _attempt_fingerprint(ctx: HookContext) -> str | None:
 
 
 def _current_denied_rule_ids(findings: list[RuleFinding]) -> list[str]:
-    return sorted({item.rule_id for item in _retry_budget_relevant_denials(findings)})
+    return sorted({item.rule_id for item in retry_budget_relevant_denials(findings)})
 
 
-def _dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
+def dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     unique_by_key = {
         (item.rule_id, item.decision, item.message, item.additional_context): item
         for item in reversed(findings)
@@ -81,14 +82,22 @@ def _dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     return list(reversed(unique_by_key.values()))
 
 
-def _filter_search_reminder_dedupe(ctx: HookContext, findings: list[RuleFinding]) -> list[RuleFinding]:
-    reminder_indexes = [idx for idx, item in enumerate(findings) if item.rule_id == "REMIND-SEARCH-001"]
+def filter_search_reminder_dedupe(
+    ctx: HookContext, findings: list[RuleFinding]
+) -> list[RuleFinding]:
+    reminder_indexes = [
+        idx for idx, item in enumerate(findings) if item.rule_id == "REMIND-SEARCH-001"
+    ]
     if not reminder_indexes:
         return findings
     if ctx.state.should_emit_search_reminder(ctx.session_id):
         ctx.state.record_search_reminder(ctx.session_id)
         first = reminder_indexes[0]
-        return [item for idx, item in enumerate(findings) if item.rule_id != "REMIND-SEARCH-001" or idx == first]
+        return [
+            item
+            for idx, item in enumerate(findings)
+            if item.rule_id != "REMIND-SEARCH-001" or idx == first
+        ]
     return [item for item in findings if item.rule_id != "REMIND-SEARCH-001"]
 
 
@@ -97,7 +106,7 @@ def _record_denial_attempt(
     item: RuleFinding,
     attempt_fingerprint: str | None,
 ) -> int:
-    path_value = _finding_path(item)
+    path_value = finding_path(item)
     state_path = _normalize_attempt_path(ctx, path_value) if path_value else None
     repeat_count = ctx.state.record_deny_hit(
         ctx.session_id,
@@ -105,7 +114,7 @@ def _record_denial_attempt(
         state_path,
         attempt_fingerprint,
     )
-    item.metadata["failure_class"] = _failure_class(item.rule_id)
+    item.metadata["failure_class"] = failure_class(item.rule_id)
     item.metadata["repeat_count"] = repeat_count
     if attempt_fingerprint:
         item.metadata["attempt_fingerprint"] = attempt_fingerprint
@@ -116,7 +125,9 @@ def _apply_repeat_escalation(item: RuleFinding, repeat_count: int) -> bool:
     if repeat_count < 2:
         return False
     item.metadata["repeat_hit"] = True
-    item.message = ((item.message or "").rstrip() + " Change design before retrying.").strip()
+    item.message = (
+        (item.message or "").rstrip() + " Change design before retrying."
+    ).strip()
     if repeat_count >= 3 and item.decision != "block":
         item.decision = "block"
         item.severity = max(item.severity, Severity.HIGH)
@@ -129,12 +140,14 @@ def _repeat_denial_hints(
     item: RuleFinding,
     repeat_count: int,
 ) -> list[str]:
-    hints = [_denial_context(ctx, item, repeat_count), _REPLAN_PROMPT]
-    rule_hint = _rule_hint(ctx, item)
-    if rule_hint:
-        hints.append(rule_hint)
+    hints = [denial_context(ctx, item, repeat_count), REPLAN_PROMPT]
+    hint = rule_hint(ctx, item)
+    if hint:
+        hints.append(hint)
     if repeat_count >= 2:
-        hints.append("Repeated deny detected: write a short repair plan before your next write.")
+        hints.append(
+            "Repeated deny detected: write a short repair plan before your next write."
+        )
     return hints
 
 
@@ -165,7 +178,7 @@ def _clear_resolved_thin_wrapper_hits(
         (
             item.rule_id,
             _normalize_attempt_path(ctx, path_value)
-            if (path_value := _finding_path(item)) is not None
+            if (path_value := finding_path(item)) is not None
             else "__pathless__",
         )
         for item in denied
@@ -178,8 +191,8 @@ def _clear_resolved_thin_wrapper_hits(
                 ctx.state.clear_deny_hit(ctx.session_id, rule_id, normalized)
 
 
-def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
-    denied = _retry_budget_relevant_denials(findings)
+def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
+    denied = retry_budget_relevant_denials(findings)
     attempt_fingerprint = _attempt_fingerprint(ctx)
     current_rule_ids = _current_denied_rule_ids(findings)
     repeated_rule_ids: set[str] = set()
@@ -206,13 +219,18 @@ def _apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) ->
     _clear_resolved_thin_wrapper_hits(ctx, denied)
 
 
-def _inject_recent_failure_context(ctx: HookContext, findings: list[RuleFinding]) -> None:
+def inject_recent_failure_context(
+    ctx: HookContext, findings: list[RuleFinding]
+) -> None:
     if ctx.event_name != "SessionStart":
         return
     repeated = ctx.state.recent_repeated_failures(ctx.session_id, limit=4)
     if not repeated:
         return
-    lines = ["## Recent repeated failures", "Avoid repeating these patterns this session:"]
+    lines = [
+        "## Recent repeated failures",
+        "Avoid repeating these patterns this session:",
+    ]
     for item in repeated:
         rule_id = item.get("rule_id", "unknown")
         path = item.get(METADATA_PATH, "__pathless__")
@@ -240,7 +258,9 @@ class _RetryBudgetBlock:
     matched_rule_ids: list[str]
 
 
-def _retry_budget_block(ctx: HookContext, findings: list[RuleFinding]) -> _RetryBudgetBlock | None:
+def _retry_budget_block(
+    ctx: HookContext, findings: list[RuleFinding]
+) -> _RetryBudgetBlock | None:
     lock = ctx.state.get_retry_lock(ctx.session_id)
     if not lock:
         return None
@@ -303,7 +323,7 @@ def _retry_budget_finding(block: _RetryBudgetBlock) -> RuleFinding:
     )
 
 
-def _enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
+def enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
     if ctx.event_name not in {PRE_TOOL_USE, PERMISSION_REQUEST}:
         return
     if not is_edit_like_tool(ctx.tool_name):
@@ -313,7 +333,7 @@ def _enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None
         findings.append(_retry_budget_finding(block))
 
 
-def _capture_repair_plan_signal(ctx: HookContext) -> None:
+def capture_repair_plan_signal(ctx: HookContext) -> None:
     if ctx.event_name not in {"UserPromptSubmit", "SessionStart"}:
         return
     prompt = ctx.user_prompt.lower()

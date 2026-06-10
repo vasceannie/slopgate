@@ -1,28 +1,33 @@
 """Repeated magic-number hook rule."""
 
 from __future__ import annotations
-
 import ast
 from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
-
-from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from slopgate.lint._detectors.duplicates import _is_docstring_node
-from slopgate.lint._helpers import build_parent_map as _build_parent_map
+from slopgate.constants import (
+    METADATA_PATH,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
+from slopgate.lint._detectors.duplicates import is_docstring_node
+from slopgate.lint._helpers import build_parent_map
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.rules.python_ast._staging.duplicate_rules._shared import _finding_count
-
+from slopgate.rules.python_ast._staging.duplicate_rules._shared import finding_count
 from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
+
 def _is_reportable_number(
-    node: ast.Constant, parent_map: dict[int, ast.AST], allowed_numbers: frozenset[int | float]
+    node: ast.Constant,
+    parent_map: dict[int, ast.AST],
+    allowed_numbers: frozenset[int | float],
 ) -> bool:
-    if isinstance(node.value, bool) or _is_docstring_node(node, parent_map):
+    if isinstance(node.value, bool) or is_docstring_node(node, parent_map):
         return False
     return isinstance(node.value, (int, float)) and node.value not in allowed_numbers
 
@@ -30,13 +35,15 @@ def _is_reportable_number(
 def _count_magic_numbers(
     module: ast.Module, allowed_numbers: frozenset[int | float]
 ) -> dict[int | float, int]:
-    parent_map = _build_parent_map(module)
+    parent_map = build_parent_map(module)
     counts: dict[int | float, int] = defaultdict(int)
     for node in ast.walk(module):
         if not isinstance(node, ast.Constant):
             continue
         value = node.value
-        if isinstance(value, (int, float)) and _is_reportable_number(node, parent_map, allowed_numbers):
+        if isinstance(value, (int, float)) and _is_reportable_number(
+            node, parent_map, allowed_numbers
+        ):
             counts[value] += 1
     return counts
 
@@ -52,9 +59,8 @@ class PythonRepeatedMagicNumberRule(Rule):
     rule_id = "PY-DUP-004"
     title = "Block repeated magic numbers"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
-
     _ALLOWED_NUMBERS = frozenset({0, 1, -1, 0.0, 1.0, -1.0, 2, 2.0})
-    _MAX_OCCURRENCES = 3  # flag if a number appears more than this many times
+    _MAX_OCCURRENCES = 3
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
@@ -62,30 +68,26 @@ class PythonRepeatedMagicNumberRule(Rule):
         module = parse_module(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
             return []
-
         counts = _count_magic_numbers(module, self._ALLOWED_NUMBERS)
-
         findings: list[RuleFinding] = []
         for val, count in counts.items():
             if count > self._MAX_OCCURRENCES:
-                findings.append(RuleFinding(
-                    rule_id=self.rule_id,
-                    title=self.title,
-                    severity=Severity.LOW,
-                    decision=decision_for_context(ctx),
-                    message=(
-                        f"Magic number {repr(val)} appears {count} times in "
-                        f"`{path_value}`. Extract into a named constant."
-                    ),
-                    metadata={
-                        METADATA_PATH: path_value,
-                        "value": val,
-                        "count": count,
-                    },
-                ))
-        # Only report the worst offender to avoid noise
+                findings.append(
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.LOW,
+                        decision=decision_for_context(ctx),
+                        message=f"Magic number {repr(val)} appears {count} times in `{path_value}`. Extract into a named constant.",
+                        metadata={
+                            METADATA_PATH: path_value,
+                            "value": val,
+                            "count": count,
+                        },
+                    )
+                )
         if findings:
-            return [max(findings, key=_finding_count)]
+            return [max(findings, key=finding_count)]
         return findings
 
     @override

@@ -1,14 +1,7 @@
 from __future__ import annotations
+import json
+from tests.test_engine import BashBuilder, Path, evaluate_payload, finding_ids, pytest
 
-import json as _json
-
-from tests.test_engine import (
-    BashBuilder,
-    Path,
-    evaluate_payload,
-    finding_ids,
-    pytest,
-)
 
 class TestFindMutationsNotSafeRead:
     """find is only read-only when invoked without mutating predicates/actions."""
@@ -17,24 +10,19 @@ class TestFindMutationsNotSafeRead:
         "command",
         [
             pytest.param("find .claude/hooks -delete", id="delete_predicate"),
-            pytest.param(
-                "find .claude/hooks -exec rm {} +",
-                id="exec_rm_action",
-            ),
+            pytest.param("find .claude/hooks -exec rm {} +", id="exec_rm_action"),
         ],
     )
     def test_find_mutation_on_hook_path_blocked(
         self, pretool_bash: BashBuilder, command: str
     ) -> None:
         result = evaluate_payload(pretool_bash(command))
-        blocked_rules = {
-            "BUILTIN-PROTECTED-PATHS",
-            "GLOBAL-BUILTIN-HOOK-INFRA-EXEC",
-        }
+        blocked_rules = {"BUILTIN-PROTECTED-PATHS", "GLOBAL-BUILTIN-HOOK-INFRA-EXEC"}
         ids = finding_ids(result)
         assert ids & blocked_rules, (
             f"Expected protected hook path denial for {command!r}, got {ids}"
         )
+
 
 class TestStopTranscriptReading:
     """STOP-001 should handle large transcripts without reading
@@ -70,20 +58,18 @@ class TestStopTranscriptReading:
     ) -> Path:
         transcript = tmp_path / "transcript.jsonl"
         lines = [
-            _json.dumps(
+            json.dumps(
                 {
                     "type": "assistant",
                     "message": {
-                        "content": [
-                            {"type": "text", "text": f"Working on step {i}..."}
-                        ]
+                        "content": [{"type": "text", "text": f"Working on step {i}..."}]
                     },
                 }
             )
             for i in range(padding_count)
         ]
         lines.append(
-            _json.dumps(
+            json.dumps(
                 {
                     "type": "assistant",
                     "message": {"content": [{"type": "text", "text": final_text}]},
@@ -99,8 +85,8 @@ class TestStopTranscriptReading:
         """STOP-001 should read from transcript_path when provided."""
         transcript = tmp_path / "transcript.jsonl"
         lines = [
-            _json.dumps({"type": "user", "message": {"content": "fix the bug"}}),
-            _json.dumps(
+            json.dumps({"type": "user", "message": {"content": "fix the bug"}}),
+            json.dumps(
                 {
                     "type": "assistant",
                     "message": {
@@ -142,6 +128,7 @@ class TestStopTranscriptReading:
         result = evaluate_payload(payload)
         assert "STOP-001" in finding_ids(result)
 
+
 class TestTraceWriterInit:
     """TraceWriter should not duplicate mkdir calls that config already did."""
 
@@ -162,6 +149,7 @@ class TestTraceWriterInit:
         tw = TraceWriter(trace_dir)
         tw.event({"test": True})
         assert (trace_dir / "events.jsonl").exists()
+
 
 class TestRemindPytestMultiprocessing:
     """Advisory hook: when Claude runs pytest without -n flag,

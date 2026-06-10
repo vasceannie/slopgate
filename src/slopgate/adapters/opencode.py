@@ -14,7 +14,14 @@ from slopgate.adapters._payload_fields import (
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.models import RuleFinding
 
-from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    BLOCK,
+    DENY,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
+
 OPENCODE_EVENT_MAP: dict[str, str] = {
     "tool.execute.before": PRE_TOOL_USE,
     "tool.execute.after": POST_TOOL_USE,
@@ -73,7 +80,9 @@ class OpenCodeAdapter(PlatformAdapter):
             self.decision_findings(request.findings, request.decision)
         )
 
-    def _block_output(self, request: _OpenCodeRenderRequest, action: str = BLOCK) -> ObjectDict:
+    def _block_output(
+        self, request: _OpenCodeRenderRequest, action: str = BLOCK
+    ) -> ObjectDict:
         return {"action": action, "reason": self._decision_reason(request)}
 
     @staticmethod
@@ -89,7 +98,10 @@ class OpenCodeAdapter(PlatformAdapter):
                 result["context"] = request.context
             return result
         if request.decision == "allow" and request.updated_input:
-            result: ObjectDict = {"action": "allow", "updated_args": request.updated_input}
+            result: ObjectDict = {
+                "action": "allow",
+                "updated_args": request.updated_input,
+            }
             if request.context:
                 result["context"] = request.context
             return result

@@ -10,7 +10,11 @@ from slopgate.lint._detectors import code_smells
 from slopgate.lint._detectors import logging_conventions
 from slopgate.lint._detectors import stale_code
 from slopgate.lint._detectors import wrappers
-from slopgate.lint._detectors.test_smells import _basic_detection
+from slopgate.lint._detectors.test_smells import (
+    detect_assertion_free_tests,
+    detect_eager_tests,
+    detect_long_tests,
+)
 from slopgate.lint import _helpers
 from slopgate.lint._config import get_config
 from slopgate.lint._helpers import (
@@ -48,11 +52,16 @@ def _source_detector_results(parsed: ParsedFile) -> tuple[object, ...]:
         code_smells.detect_deep_nesting([parsed]),
         code_smells.detect_god_classes([parsed]),
         code_smells.detect_oversized_modules([parsed]),
-        [violation.rule for violation in wrappers.detect_unnecessary_wrappers([parsed])],
+        [
+            violation.rule
+            for violation in wrappers.detect_unnecessary_wrappers([parsed])
+        ],
     )
 
 
-def test_source_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_source_detectors_reuse_parsed_files_without_reparsing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     parsed = _parsed(
         "def wrapper(value):\n"
         "    return target(value)\n"
@@ -64,10 +73,20 @@ def test_source_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pyte
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
 
-    assert _source_detector_results(parsed) == ([], [], [], [], [], [], ["unnecessary-wrapper"])
+    assert _source_detector_results(parsed) == (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        ["unnecessary-wrapper"],
+    )
 
 
-def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_line_based_and_logging_detectors_reuse_parsed_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     parsed = _parsed(
         "import logging\n"
         "log = logging.getLogger(__name__)\n"
@@ -98,7 +117,9 @@ def test_line_based_and_logging_detectors_reuse_parsed_files(monkeypatch: pytest
     )
 
 
-def test_basic_test_detectors_reuse_parsed_files_without_reparsing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_basic_test_detectors_reuse_parsed_files_without_reparsing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     parsed = _parsed(
         "def test_no_assertion():\n"
         "    exercise()\n"
@@ -110,8 +131,8 @@ def test_basic_test_detectors_reuse_parsed_files_without_reparsing(monkeypatch: 
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
 
     detector_results = (
-        _basic_detection.detect_long_tests([parsed]),
-        _basic_detection.detect_eager_tests([parsed]),
-        [v.rule for v in _basic_detection.detect_assertion_free_tests([parsed])],
+        detect_long_tests([parsed]),
+        detect_eager_tests([parsed]),
+        [v.rule for v in detect_assertion_free_tests([parsed])],
     )
     assert detector_results == ([], [], ["assertion-free-test"])

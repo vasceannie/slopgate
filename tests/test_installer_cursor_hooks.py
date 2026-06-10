@@ -1,17 +1,23 @@
 from __future__ import annotations
-
+import pytest
 import json
 from pathlib import Path
-from typing import Any
-
-from slopgate.installer import _cursor_hooks_block, _install_cursor, _uninstall_cursor
-from slopgate.installer._cursor import _cursor_user_hooks_path
-import slopgate.installer._shared as installer_shared
+from typing import cast
+from slopgate._types import (
+    ObjectDict,
+    is_object_dict,
+    object_dict,
+    object_list,
+    string_value,
+)
+from slopgate.installer import cursor_hooks_block, install_cursor, uninstall_cursor
+from slopgate.installer._cursor import cursor_user_hooks_path
+import slopgate.installer._shared
 from slopgate.installer._shared import HOOK_TIMEOUT_STANDARD
 
 
 def _cursor_hooks_block_snapshot(binary: str) -> dict[str, object]:
-    hooks = _cursor_hooks_block(binary)
+    hooks = cursor_hooks_block(binary)
     shell_entry = hooks["beforeShellExecution"][0]
     return {
         "command": shell_entry["command"],
@@ -40,12 +46,14 @@ def test_cursor_hooks_block_uses_native_events_and_cursor_platform() -> None:
     }
 
 
-def _cursor_install_merge_snapshot(tmp_path: Path, monkeypatch: Any) -> dict[str, object]:
+def _cursor_install_merge_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, int | list[str] | ObjectDict]:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    import slopgate.installer._cursor as cursor_installer
-
-    monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
-    hooks_path = _cursor_user_hooks_path()
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    hooks_path = cursor_user_hooks_path()
     hooks_path.parent.mkdir(parents=True)
     hooks_path.write_text(
         json.dumps(
@@ -60,38 +68,46 @@ def _cursor_install_merge_snapshot(tmp_path: Path, monkeypatch: Any) -> dict[str
         ),
         encoding="utf-8",
     )
-
-    install_status = _install_cursor(dry_run=False)
-    parsed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    commands = [entry["command"] for entry in parsed["hooks"]["beforeShellExecution"]]
+    install_status = install_cursor(dry_run=False)
+    parsed = object_dict(json.loads(hooks_path.read_text(encoding="utf-8")))
+    hooks = object_dict(parsed.get("hooks"))
+    before_shell = object_list(hooks.get("beforeShellExecution"))
+    commands: list[str] = []
+    for entry in before_shell:
+        if not is_object_dict(entry):
+            continue
+        command = string_value(entry.get("command"))
+        if command is not None:
+            commands.append(command)
     backup_count = len(list(hooks_path.parent.glob("hooks.json.slopgate-bak-*")))
-
-    uninstall_status = _uninstall_cursor(dry_run=False)
-    parsed_after_uninstall = json.loads(hooks_path.read_text(encoding="utf-8"))
-
+    uninstall_status = uninstall_cursor(dry_run=False)
+    parsed_after_uninstall = object_dict(
+        json.loads(hooks_path.read_text(encoding="utf-8"))
+    )
     return {
         "install_status": install_status,
         "commands": commands,
         "backup_count": backup_count,
         "uninstall_status": uninstall_status,
-        "remaining_hooks": parsed_after_uninstall["hooks"],
+        "remaining_hooks": object_dict(parsed_after_uninstall.get("hooks")),
     }
 
 
 def test_cursor_install_merges_owned_hooks_without_clobbering_existing(
-    tmp_path: Path,
-    monkeypatch: Any,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     snapshot = _cursor_install_merge_snapshot(tmp_path, monkeypatch)
+    commands = cast(list[str], snapshot["commands"])
+    remaining_hooks = cast(ObjectDict, snapshot["remaining_hooks"])
     assert {
         "install_status": snapshot["install_status"],
-        "keeps_existing": "./existing.sh" in snapshot["commands"],
+        "keeps_existing": "./existing.sh" in commands,
         "installs_cursor": any(
-            "handle --platform cursor" in command for command in snapshot["commands"]
+            ("handle --platform cursor" in command for command in commands)
         ),
         "backup_count": snapshot["backup_count"],
         "uninstall_status": snapshot["uninstall_status"],
-        "remaining_hooks": snapshot["remaining_hooks"],
+        "remaining_hooks": remaining_hooks,
     } == {
         "install_status": 0,
         "keeps_existing": True,
@@ -105,19 +121,17 @@ def test_cursor_install_merges_owned_hooks_without_clobbering_existing(
 
 
 def test_cursor_install_project_scope_writes_repo_hooks(
-    tmp_path: Path,
-    monkeypatch: Any,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import slopgate.installer._cursor as cursor_installer
+    import slopgate.installer._cursor
+    from slopgate.installer import _shared as installer_shared
 
     monkeypatch.setattr(installer_shared, "find_binary", lambda: "/tmp/slopgate")
     monkeypatch.chdir(tmp_path)
-
-    status = cursor_installer._install_cursor(dry_run=False, scope="project")
+    status = slopgate.installer._cursor.install_cursor(dry_run=False, scope="project")
     hooks_path = tmp_path / ".cursor" / "hooks.json"
     parsed = json.loads(hooks_path.read_text(encoding="utf-8"))
     command = parsed["hooks"]["preToolUse"][0]["command"]
-
     assert status == 0
     assert "beforeTabFileRead" in parsed["hooks"]
     assert command.endswith("handle --platform cursor")

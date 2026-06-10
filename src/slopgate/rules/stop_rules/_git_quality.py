@@ -1,30 +1,23 @@
 """Stop/session runtime rules."""
 
 from __future__ import annotations
-
-import json as _json
+import json
 import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from typing_extensions import override
-from slopgate.constants import (
-    PERMISSION_REQUEST,
-    PRE_TOOL_USE,
-    METADATA_PATH,
-)
+from slopgate.constants import PERMISSION_REQUEST, PRE_TOOL_USE, METADATA_PATH
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+TAIL_BYTES = 32768
+SLOPGATE_REPO_SUFFIX = "/claude/slopgate"
 
 
-_TAIL_BYTES = 32_768
-
-_SLOPGATE_REPO_SUFFIX = "/claude/slopgate"
-
-
-def _resolve_candidate_path(path_str: str, cwd: Path | None = None) -> Path:
+def resolve_candidate_path(path_str: str, cwd: Path | None = None) -> Path:
     """Resolve a candidate path relative to the hook cwd when needed."""
     path = Path(path_str).expanduser()
     if not path.is_absolute() and cwd is not None:
@@ -32,7 +25,7 @@ def _resolve_candidate_path(path_str: str, cwd: Path | None = None) -> Path:
     return path.resolve()
 
 
-def _git_output(
+def git_output(
     args: list[str], cwd: Path | None = None, timeout: int = 3
 ) -> str | None:
     """Run a git command and return stripped stdout on success."""
@@ -52,75 +45,70 @@ def _git_output(
     return output or None
 
 
-def _git_repo_root(path_str: str, cwd: Path | None = None) -> Path | None:
+def git_repo_root(path_str: str, cwd: Path | None = None) -> Path | None:
     """Return the git toplevel containing *path_str*, if any."""
-    resolved = _resolve_candidate_path(path_str, cwd)
+    resolved = resolve_candidate_path(path_str, cwd)
     base = resolved if resolved.is_dir() else resolved.parent
-    repo_root = _git_output(
+    repo_root = git_output(
         ["git", "-C", str(base), "rev-parse", "--show-toplevel"], timeout=3
     )
     return Path(repo_root) if repo_root else None
 
 
-def _normalize_git_remote(url: str) -> str:
+def normalize_git_remote(url: str) -> str:
     """Normalize a git remote for comparison."""
     raw = url.strip().rstrip("/")
     if raw.endswith(".git"):
         raw = raw[:-4]
-
-    ssh_match = re.match(r"^git@([^:]+):(.+)$", raw)
+    ssh_match = re.match("^git@([^:]+):(.+)$", raw)
     if ssh_match:
         host = ssh_match.group(1).lower()
         path = ssh_match.group(2).strip("/")
         return f"{host}/{path}"
-
-    proto_match = re.match(r"^[a-z]+://([^/]+)/(.+)$", raw, re.IGNORECASE)
+    proto_match = re.match("^[a-z]+://([^/]+)/(.+)$", raw, re.IGNORECASE)
     if proto_match:
         host = proto_match.group(1).lower()
         path = proto_match.group(2).strip("/")
         return f"{host}/{path}"
-
     return raw.lower()
 
 
-def _is_worktree(path_str: str, cwd: Path | None = None) -> bool:
+def is_worktree(path_str: str, cwd: Path | None = None) -> bool:
     """Check if a path is inside a git worktree (not the main working tree).
 
     A worktree has a .git *file* (not directory) containing "gitdir: ..." pointing
     back to the main repo's .git/worktrees/<name>/ directory.
     """
-    repo_root = _git_repo_root(path_str, cwd)
+    repo_root = git_repo_root(path_str, cwd)
     if repo_root is None:
         return False
     git_entry = repo_root / ".git"
-    # In a worktree, .git is a file (not a directory) containing "gitdir: ..."
     return git_entry.is_file()
 
 
-def _is_slopgate_repo(path_str: str, cwd: Path | None = None) -> bool:
+def is_slopgate_repo(path_str: str, cwd: Path | None = None) -> bool:
     """Return True when the target path belongs to the slopgate repo."""
-    repo_root = _git_repo_root(path_str, cwd)
+    repo_root = git_repo_root(path_str, cwd)
     if repo_root is None:
         return False
-    remote = _git_output(
+    remote = git_output(
         ["git", "-C", str(repo_root), "remote", "get-url", "origin"], timeout=5
     )
     if remote is None:
         return False
-    normalized = _normalize_git_remote(remote)
-    return normalized.endswith(_SLOPGATE_REPO_SUFFIX)
+    normalized = normalize_git_remote(remote)
+    return normalized.endswith(SLOPGATE_REPO_SUFFIX)
 
 
-def _default_branch_name(repo_root: Path) -> str | None:
+def default_branch_name(repo_root: Path) -> str | None:
     """Infer the repository default branch name."""
-    remote_head = _git_output(
+    remote_head = git_output(
         ["git", "-C", str(repo_root), "symbolic-ref", "refs/remotes/origin/HEAD"],
         timeout=5,
     )
     if remote_head and remote_head.startswith("refs/remotes/origin/"):
         return remote_head.rsplit("/", 1)[-1]
-
-    local_heads = _git_output(
+    local_heads = git_output(
         [
             "git",
             "-C",
@@ -133,7 +121,6 @@ def _default_branch_name(repo_root: Path) -> str | None:
     )
     if not local_heads:
         return None
-
     branches = {branch.strip() for branch in local_heads.splitlines() if branch.strip()}
     if "main" in branches:
         return "main"
@@ -144,20 +131,21 @@ def _default_branch_name(repo_root: Path) -> str | None:
     return None
 
 
-def _is_non_default_branch(path_str: str, cwd: Path | None = None) -> bool:
+def is_non_default_branch(path_str: str, cwd: Path | None = None) -> bool:
     """Return True when the target path is on a branch other than the default."""
-    repo_root = _git_repo_root(path_str, cwd)
+    repo_root = git_repo_root(path_str, cwd)
     if repo_root is None:
         return False
-    current_branch = _git_output(
+    current_branch = git_output(
         ["git", "-C", str(repo_root), "branch", "--show-current"], timeout=5
     )
-    default_branch = _default_branch_name(repo_root)
-    return bool(current_branch and default_branch and current_branch != default_branch)
+    default_branch = default_branch_name(repo_root)
+    return bool(
+        current_branch and default_branch and (current_branch != default_branch)
+    )
 
 
-
-def _tail_read(file_path: Path, num_bytes: int) -> str:
+def tail_read(file_path: Path, num_bytes: int) -> str:
     """Read the last *num_bytes* of a file as UTF-8 text."""
     with open(file_path, "rb") as fh:
         try:
@@ -167,7 +155,7 @@ def _tail_read(file_path: Path, num_bytes: int) -> str:
         return fh.read().decode("utf-8", errors="replace")
 
 
-def _extract_content_text(msg: object) -> str:
+def extract_content_text(msg: object) -> str:
     """Extract text from an assistant message content field."""
     if isinstance(msg, str):
         return msg
@@ -188,19 +176,19 @@ def _extract_content_text(msg: object) -> str:
     return ""
 
 
-def _last_assistant_response(transcript_path: str) -> str:
+def last_assistant_response(transcript_path: str) -> str:
     """Read the last assistant turn from a Claude Code JSONL transcript."""
     tp = Path(transcript_path)
     if not tp.exists():
         return ""
     try:
-        tail = _tail_read(tp, _TAIL_BYTES)
+        tail = tail_read(tp, TAIL_BYTES)
     except OSError:
         return ""
     for line in reversed(tail.strip().splitlines()[-20:]):
         try:
-            raw_entry: object = cast(object, _json.loads(line))
-        except _json.JSONDecodeError:
+            raw_entry: object = cast(object, json.loads(line))
+        except json.JSONDecodeError:
             continue
         if not isinstance(raw_entry, dict):
             continue
@@ -215,22 +203,22 @@ def _last_assistant_response(transcript_path: str) -> str:
             continue
         msg_container = cast(dict[str, object], raw_msg_container)
         msg: object = msg_container.get("content", "")
-        return _extract_content_text(msg)
+        return extract_content_text(msg)
     return ""
 
 
-def _get_stop_response(ctx: HookContext) -> str:
+def get_stop_response(ctx: HookContext) -> str:
     """Extract the assistant response from a Stop/SubagentStop event."""
     transcript_path = ctx.payload.payload.get("transcript_path", "")
     if isinstance(transcript_path, str) and transcript_path:
-        response = _last_assistant_response(transcript_path)
+        response = last_assistant_response(transcript_path)
         if response:
             return response
     fallback = ctx.payload.payload.get("stop_response", "")
     return str(fallback) if fallback else ""
 
 
-_PREEXISTING_PHRASES = (
+PREEXISTING_PHRASES = (
     "pre-existing",
     "preexisting",
     "already existed",
@@ -254,11 +242,11 @@ class IgnorePreexistingRule(Rule):
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        response = _get_stop_response(ctx)
+        response = get_stop_response(ctx)
         if not response:
             return []
         lowered = response.lower()
-        for phrase in _PREEXISTING_PHRASES:
+        for phrase in PREEXISTING_PHRASES:
             if phrase in lowered:
                 return [
                     RuleFinding(
@@ -266,22 +254,14 @@ class IgnorePreexistingRule(Rule):
                         title=self.title,
                         severity=Severity.HIGH,
                         decision="block",
-                        message=(
-                            "Do not dismiss issues as pre-existing. "
-                            "If you found a problem, fix it or "
-                            "explicitly flag it for follow-up."
-                        ),
+                        message="Do not dismiss issues as pre-existing. If you found a problem, fix it or explicitly flag it for follow-up.",
                         metadata={"matched_phrase": phrase},
                     )
                 ]
         return []
 
 
-_QUALITY_REMINDER = (
-    "Before stopping, verify tests pass and quality gates are clean. "
-    "Run `slopgate lint check` (or your project-specific quality "
-    "command) before finishing this task."
-)
+QUALITY_REMINDER = "Before stopping, verify tests pass and quality gates are clean. Run `slopgate lint check` (or your project-specific quality command) before finishing this task."
 
 
 class RequireQualityCheckRule(Rule):
@@ -297,8 +277,8 @@ class RequireQualityCheckRule(Rule):
             return []
         if not ctx.state.should_emit_stop_quality_reminder(ctx.session_id):
             return []
-        response = _get_stop_response(ctx).lower()
-        if any(phrase in response for phrase in _PREEXISTING_PHRASES):
+        response = get_stop_response(ctx).lower()
+        if any((phrase in response for phrase in PREEXISTING_PHRASES)):
             return []
         ctx.state.record_stop_quality_reminder(ctx.session_id)
         return [
@@ -306,7 +286,7 @@ class RequireQualityCheckRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.LOW,
-                additional_context=_QUALITY_REMINDER,
+                additional_context=QUALITY_REMINDER,
             )
         ]
 
@@ -317,7 +297,7 @@ class WarnLargeFileRule(Rule):
     rule_id: str = "WARN-LARGE-001"
     title: str = "Warn on large file"
     events: tuple[str, ...] = (PRE_TOOL_USE, PERMISSION_REQUEST)
-    MAX_CHARS: int = 50_000
+    MAX_CHARS: int = 50000
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -332,11 +312,7 @@ class WarnLargeFileRule(Rule):
                         rule_id=self.rule_id,
                         title=self.title,
                         severity=Severity.MEDIUM,
-                        additional_context=(
-                            f"WARNING: File {target.path} content "
-                            f"is {char_count:,} characters. Consider "
-                            f"splitting into smaller modules."
-                        ),
+                        additional_context=f"WARNING: File {target.path} content is {char_count:,} characters. Consider splitting into smaller modules.",
                         metadata={METADATA_PATH: target.path, "chars": char_count},
                     )
                 )

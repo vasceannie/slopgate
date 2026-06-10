@@ -3,16 +3,17 @@ from __future__ import annotations
 from tests.test_adapters import (
     FIXTURES_DIR,
     Path,
-    _load_platform_fixture,
-    _repo_with_quality_gate,
+    load_platform_fixture,
+    repo_with_quality_gate,
     cast,
     evaluate_payload,
     json,
     object_dict,
     pytest,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestFixtureReplay:
     """Load real fixtures and replay them through the engine.
@@ -22,23 +23,23 @@ class TestFixtureReplay:
     """
 
     def test_codex_git_no_verify_denied(self, tmp_path: Path) -> None:
-        payload = _load_platform_fixture("codex", "pretool_bash_git_no_verify.json")
-        repo = _repo_with_quality_gate(tmp_path)
+        payload = load_platform_fixture("codex", "pretool_bash_git_no_verify.json")
+        repo = repo_with_quality_gate(tmp_path)
         payload["cwd"] = str(repo)
         result = evaluate_payload(payload, platform="codex")
         assert result.output is not None
-        spec = require_spec(test_support.require_output(result))
-        assert test_support.output_string(spec, "permissionDecision") == "deny"
-        assert "GIT-001" in test_support.output_string(spec, "permissionDecisionReason")
+        spec = require_spec(support.require_output(result))
+        assert support.output_string(spec, "permissionDecision") == "deny"
+        assert "GIT-001" in support.output_string(spec, "permissionDecisionReason")
         # Also verify findings list
         ids = {f.rule_id for f in result.findings}
         assert "GIT-001" in ids
 
     def test_codex_rm_rf_denied(self) -> None:
-        payload = _load_platform_fixture("codex", "pretool_bash_rm_rf.json")
+        payload = load_platform_fixture("codex", "pretool_bash_rm_rf.json")
         result = evaluate_payload(payload, platform="codex")
-        spec = require_spec(test_support.require_output(result))
-        assert test_support.output_string(spec, "permissionDecision") == "deny"
+        spec = require_spec(support.require_output(result))
+        assert support.output_string(spec, "permissionDecision") == "deny"
 
     def test_codex_session_start_produces_context(self) -> None:
         payload = object_dict(
@@ -54,14 +55,14 @@ class TestFixtureReplay:
         assert result.errors == []
 
     def test_opencode_git_no_verify_denied(self, tmp_path: Path) -> None:
-        payload = _load_platform_fixture("opencode", "pretool_bash_git_no_verify.json")
-        repo = _repo_with_quality_gate(tmp_path)
+        payload = load_platform_fixture("opencode", "pretool_bash_git_no_verify.json")
+        repo = repo_with_quality_gate(tmp_path)
         payload["cwd"] = str(repo)
         result = evaluate_payload(payload, platform="opencode")
         assert result.output is not None
-        rendered = test_support.require_output(result)
+        rendered = support.require_output(result)
         assert rendered["action"] == "block"
-        assert "GIT-001" in test_support.required_string(rendered, "reason")
+        assert "GIT-001" in support.required_string(rendered, "reason")
 
     def test_opencode_write_protected_denied(self) -> None:
         payload = object_dict(
@@ -111,7 +112,7 @@ class TestFixtureReplay:
         assert result.output is not None, (
             "permission_asked fixture should produce output"
         )
-        assert test_support.require_output(result)["action"] == "block"
+        assert support.require_output(result)["action"] == "block"
 
     def test_codex_posttool_no_crash(self) -> None:
         payload = object_dict(

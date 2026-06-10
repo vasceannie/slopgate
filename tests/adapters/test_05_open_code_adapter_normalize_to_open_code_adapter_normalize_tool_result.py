@@ -8,6 +8,7 @@ from tests.test_adapters import (
     require_rendered,
 )
 
+
 class TestOpenCodeAdapterNormalize:
     """Event name and tool name normalization."""
 
@@ -140,6 +141,7 @@ class TestOpenCodeAdapterNormalize:
         canonical = adapter.normalize_payload(raw)
         assert canonical["tool_name"] == "", "empty tool name should remain empty"
 
+
 class TestOpenCodeAdapterNormalizeToolResult:
     """tool_result / tool_response aliasing behavior."""
 
@@ -227,5 +229,10 @@ class TestOpenCodeAdapterRender:
             decision="block",
             message="Keep going.",
         )
-        output = require_rendered(adapter.render_output("Stop", [finding], decision="block"))
-        assert output == {"action": "continue", "reason": "[STOP-001 | HIGH] Keep going."}
+        output = require_rendered(
+            adapter.render_output("Stop", [finding], decision="block")
+        )
+        assert output == {
+            "action": "continue",
+            "reason": "[STOP-001 | HIGH] Keep going.",
+        }

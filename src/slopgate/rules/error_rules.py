@@ -16,6 +16,7 @@ from typing_extensions import override
 from slopgate._types import object_dict, string_value
 from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE
 from slopgate.models import RuleFinding, Severity
+from slopgate.rules._error_output_signals import has_error_signals
 from slopgate.rules.base import Rule
 from slopgate.util.payloads import is_shell_tool
 
@@ -133,73 +134,6 @@ def _is_benign_failure(command: str) -> bool:
     return False
 
 
-# ── Error signal detection in output ────────────────────────────────────
-
-# Patterns that indicate real errors in command output (for exit-0 commands)
-_ERROR_PATTERNS = [
-    # Test frameworks
-    re.compile(r"\bFAILED\b.*test", re.IGNORECASE),
-    re.compile(r"\bFAIL\s+(?:src/|tests/)", re.IGNORECASE),
-    re.compile(r"Tests?:\s+\d+\s+failed", re.IGNORECASE),
-    re.compile(r"test result: FAILED", re.IGNORECASE),
-    re.compile(r"\d+\s+failed,\s+\d+\s+passed", re.IGNORECASE),
-    # Compilation / build errors
-    re.compile(r"^.*:\d+:\d+:\s+error:", re.MULTILINE),
-    re.compile(r"make:\s+\*\*\*.*Error\s+\d+", re.IGNORECASE),
-    re.compile(r"Build FAILED", re.IGNORECASE),
-    re.compile(r"compilation\s+error", re.IGNORECASE),
-    # Python tracebacks
-    re.compile(r"Traceback \(most recent call last\)"),
-    re.compile(
-        r"(?:SyntaxError|TypeError|NameError|ValueError|AttributeError"
-        + r"|ImportError|KeyError|IndexError|RuntimeError|AssertionError"
-        + r"|FileNotFoundError|ModuleNotFoundError|OSError|PermissionError):",
-        re.MULTILINE,
-    ),
-    # Lint / type-check
-    re.compile(r"Found\s+\d+\s+error", re.IGNORECASE),
-    re.compile(r"error\[E\d+\]", re.IGNORECASE),  # Rust compiler
-    re.compile(r"✗|✘"),  # Failure symbols
-]
-
-# Patterns that look like errors but aren't (for suppression)
-_FALSE_POSITIVE_PATTERNS = [
-    # "X passed" with no failures
-    re.compile(r"^\s*\d+\s+passed(?:\s+in\s+[\d.]+s)?\s*$", re.MULTILINE),
-    # Deprecation/pip warnings are not actionable errors
-    re.compile(
-        r"DEPRECATION:|DeprecationWarning|PendingDeprecationWarning", re.IGNORECASE
-    ),
-    # Docker build warnings (non-fatal)
-    re.compile(r"\d+\s+warnings?\s+found\s+\(use\s+docker", re.IGNORECASE),
-    # "Successfully" anything
-    re.compile(r"Successfully\s+(built|installed|tagged|created)", re.IGNORECASE),
-]
-
-
-def _has_error_signals(output: str) -> bool:
-    """Check if command output contains real error signals."""
-    if not output or len(output.strip()) < 10:
-        return False
-
-    # Check for false-positive suppressors first
-    has_success = any(p.search(output) for p in _FALSE_POSITIVE_PATTERNS)
-
-    # Check for error patterns
-    error_hits = sum(1 for p in _ERROR_PATTERNS if p.search(output))
-
-    if error_hits == 0:
-        return False
-
-    # If we have success signals and only weak error matches, suppress
-    # (e.g., "4 passed" + test file names containing "error")
-    if has_success and error_hits <= 1:
-        # Check if the only hit is in a filename/path context
-        return False
-
-    return True
-
-
 # ── Context message ─────────────────────────────────────────────────────
 
 _SECRET_VALUE_PATTERN = re.compile(
@@ -293,10 +227,14 @@ class BashOutputErrorRule(Rule):
         if command is None or _is_read_only_command(command):
             return []
         output = _extract_bash_output(ctx)
-        if not output or not _has_error_signals(output):
+        if not output or not has_error_signals(output):
             return []
-        quality_command = re.search(r"\b(?:slopgate|vfc|isx)\s+lint\s+", command, re.IGNORECASE)
-        context_template = _QUALITY_COMMAND_CONTEXT if quality_command else _ERROR_CONTEXT
+        quality_command = re.search(
+            r"\b(?:slopgate|vfc|isx)\s+lint\s+", command, re.IGNORECASE
+        )
+        context_template = (
+            _QUALITY_COMMAND_CONTEXT if quality_command else _ERROR_CONTEXT
+        )
         return [
             RuleFinding(
                 rule_id=self.rule_id,

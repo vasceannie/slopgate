@@ -89,11 +89,15 @@ Found 2 error-like quality findings.
             "slopgate lint check --details",
             "tail-only",
         )
-        missing = [fragment for fragment in expected_fragments if fragment not in message]
+        missing = [
+            fragment for fragment in expected_fragments if fragment not in message
+        ]
         assert not missing, f"missing quality-lint guidance fragments: {missing}"
         assert "Rerun the smallest failing command" not in message
 
-    def _quality_lint_alias_guidance_gaps(self, alias: str) -> tuple[list[str], list[str]]:
+    def _quality_lint_alias_guidance_gaps(
+        self, alias: str
+    ) -> tuple[list[str], list[str]]:
         payload = self._post_bash(
             f"{alias} lint check 2>&1 | tail -8",
             """
@@ -109,7 +113,9 @@ Found 1 error-like quality finding.
             "slopgate lint check --details",
             "tail-only",
         )
-        missing: list[str] = [fragment for fragment in expected if fragment not in message]
+        missing: list[str] = [
+            fragment for fragment in expected if fragment not in message
+        ]
         unexpected: list[str] = [
             fragment
             for fragment in ("Rerun the smallest failing command",)
@@ -170,10 +176,16 @@ class TestBashFailureReinforcement:
     def test_build_failure_context_names_trigger_and_next_action(self) -> None:
         result = evaluate_payload(self._failure_bash("make build"))
         message = required_string(result.output or {}, "systemMessage")
-        assert "ERRORS-FAIL-001" in message, "system message should name the failure rule"
+        assert "ERRORS-FAIL-001" in message, (
+            "system message should name the failure rule"
+        )
         assert "make build" in message, "system message should echo the failing command"
-        assert "exited non-zero" in message, "system message should explain the failure trigger"
-        assert "Inspect stdout/stderr" in message, "system message should include the next action"
+        assert "exited non-zero" in message, (
+            "system message should explain the failure trigger"
+        )
+        assert "Inspect stdout/stderr" in message, (
+            "system message should include the next action"
+        )
 
     def test_grep_failure_skipped(self) -> None:
         result = evaluate_payload(self._failure_bash("grep pattern file.txt"))
@@ -195,9 +207,7 @@ class TestBashFailureReinforcement:
             "cwd": str(BUNDLE_ROOT),
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
-            "tool_input": {
-                "command": 'rg -l "RunSummaryEvent" -t py 2>/dev/null'
-            },
+            "tool_input": {"command": 'rg -l "RunSummaryEvent" -t py 2>/dev/null'},
         }
         result = evaluate_payload(payload)
         reason = required_string(hook_output(result), "permissionDecisionReason")

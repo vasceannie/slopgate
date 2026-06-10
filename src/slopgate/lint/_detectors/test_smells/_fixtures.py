@@ -13,7 +13,7 @@ from slopgate.lint._helpers import (
 )
 
 
-def _is_pytest_fixture_decorator(dec: ast.expr) -> bool:
+def is_pytest_fixture_decorator(dec: ast.expr) -> bool:
     """True if *dec* looks like ``@pytest.fixture``, ``@pytest.fixture(...)``,
     or ``@fixture`` / ``@fixture(...)`` (when imported directly).
     """
@@ -29,11 +29,11 @@ def _is_pytest_fixture_decorator(dec: ast.expr) -> bool:
         return dec.id == "fixture"
     # @pytest.fixture(...) or @fixture(...)
     if isinstance(dec, ast.Call):
-        return _is_pytest_fixture_decorator(dec.func)
+        return is_pytest_fixture_decorator(dec.func)
     return False
 
 
-def _is_fixture_support_module(path: Path) -> bool:
+def is_fixture_support_module(path: Path) -> bool:
     """True for dedicated test fixture/support implementation modules."""
     normalized_parts = tuple(part.lower() for part in path.parts)
     return "_fixtures" in normalized_parts or "support" in normalized_parts
@@ -58,13 +58,13 @@ def detect_fixtures_outside_conftest(
     violations: list[Violation] = []
 
     for pf in parsed:
-        if pf.path.name == "conftest.py" or _is_fixture_support_module(pf.path):
+        if pf.path.name == "conftest.py" or is_fixture_support_module(pf.path):
             continue
         for node in ast.walk(pf.tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for dec in node.decorator_list:
-                if _is_pytest_fixture_decorator(dec):
+                if is_pytest_fixture_decorator(dec):
                     violations.append(
                         Violation(
                             rule="fixture-outside-conftest",

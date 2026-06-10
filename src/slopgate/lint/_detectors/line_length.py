@@ -8,6 +8,7 @@ line length.
 Uses AST-derived string-literal line ranges instead of fragile triple-quote
 counting.
 """
+
 from __future__ import annotations
 
 import re
@@ -73,6 +74,3 @@ def detect_long_lines(
                 )
 
     return violations
-
-
-

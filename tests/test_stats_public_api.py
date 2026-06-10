@@ -54,7 +54,9 @@ def test_load_entries_ignores_malformed_json_lines(
     assert load_entries(log_path, days=None) == []
 
 
-def test_print_report_renders_analyzed_stats(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_report_renders_analyzed_stats(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     stats = analyze(
         [
             {

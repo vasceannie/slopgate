@@ -7,12 +7,17 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
-from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    METADATA_PATH,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.lint._detectors.duplicates import (
-    _has_skip_decorator,
-    _normalize_ast,
-    _skip_docstring,
-    _structure_hash,
+    has_skip_decorator,
+    normalize_ast,
+    skip_docstring,
+    structure_hash,
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
@@ -21,6 +26,7 @@ from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+
 
 def _semantic_clone_groups(
     module: ast.Module,
@@ -32,9 +38,9 @@ def _semantic_clone_groups(
         candidate = _semantic_clone_candidate(node, min_body_lines=min_body_lines)
         if candidate is None:
             continue
-        body = _skip_docstring(candidate.body)
-        canonical = "|".join(_normalize_ast(stmt) for stmt in body)
-        groups[_structure_hash(canonical)].append((candidate.name, candidate.lineno))
+        body = skip_docstring(candidate.body)
+        canonical = "|".join(normalize_ast(stmt) for stmt in body)
+        groups[structure_hash(canonical)].append((candidate.name, candidate.lineno))
     return groups
 
 
@@ -47,9 +53,9 @@ def _semantic_clone_candidate(
         return None
     if node.name.startswith("__") and node.name.endswith("__"):
         return None
-    if _has_skip_decorator(node):
+    if has_skip_decorator(node):
         return None
-    if not _skip_docstring(node.body):
+    if not skip_docstring(node.body):
         return None
     if node.end_lineno and (node.end_lineno - node.lineno) < min_body_lines:
         return None

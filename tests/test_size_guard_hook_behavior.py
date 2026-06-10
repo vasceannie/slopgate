@@ -20,7 +20,7 @@ OVERSIZED_MODULE_RULE = "PY-CODE-018"
 QUALITY_LINT_RULE = "QUALITY-LINT-001"
 
 
-def _enroll_repo(repo: Path) -> None:
+def enroll_repo(repo: Path) -> None:
     (repo / "src").mkdir(parents=True, exist_ok=True)
     (repo / "logs" / "async").mkdir(parents=True, exist_ok=True)
     (repo / "slopgate.toml").write_text(
@@ -28,11 +28,13 @@ def _enroll_repo(repo: Path) -> None:
     )
 
 
-def _assignment_module(line_count: int) -> str:
+def assignment_module(line_count: int) -> str:
     return "".join(f"VALUE_{idx} = None\n" for idx in range(line_count))
 
 
-def _class_with_body_lines(class_name: str = "HugeByLines", body_lines: int = 401) -> str:
+def class_with_body_lines(
+    class_name: str = "HugeByLines", body_lines: int = 401
+) -> str:
     # Use None assignments so the desired god-class/line-span tests are not
     # satisfied by unrelated magic-number rules first.
     body = "".join(f"    attr_{idx} = None\n" for idx in range(body_lines))
@@ -44,7 +46,7 @@ def _add_file_patch(path: str, content: str) -> str:
     return f"*** Begin Patch\n*** Add File: {path}\n{added}*** End Patch\n"
 
 
-def _pre_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def pre_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     return {
         "session_id": "size-guard-test",
         "cwd": str(repo),
@@ -54,7 +56,7 @@ def _pre_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     }
 
 
-def _pre_patch_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def pre_patch_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     return {
         "session_id": "size-guard-test",
         "cwd": str(repo),
@@ -64,7 +66,7 @@ def _pre_patch_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     }
 
 
-def _pre_edit_payload(
+def pre_edit_payload(
     repo: Path,
     file_path: str,
     existing_content: str,
@@ -87,7 +89,7 @@ def _pre_edit_payload(
     }
 
 
-def _opencode_before_edit_payload(
+def opencode_before_edit_payload(
     repo: Path,
     file_path: str,
     existing_content: str,
@@ -110,7 +112,7 @@ def _opencode_before_edit_payload(
     }
 
 
-def _pre_multiedit_payload(
+def pre_multiedit_payload(
     repo: Path,
     file_path: str,
     existing_content: str,
@@ -137,7 +139,7 @@ def _pre_multiedit_payload(
     }
 
 
-def _post_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def post_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     full_path = repo / file_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_text(content, encoding="utf-8")
@@ -151,7 +153,7 @@ def _post_write_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     }
 
 
-def _post_bash_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def post_bash_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     full_path = repo / file_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_text(content, encoding="utf-8")
@@ -165,7 +167,7 @@ def _post_bash_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     }
 
 
-def _opencode_before_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def opencode_before_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     return {
         "session_id": "size-guard-test",
         "cwd": str(repo),
@@ -175,7 +177,7 @@ def _opencode_before_payload(repo: Path, file_path: str, content: str) -> Object
     }
 
 
-def _opencode_after_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
+def opencode_after_payload(repo: Path, file_path: str, content: str) -> ObjectDict:
     full_path = repo / file_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_text(content, encoding="utf-8")
@@ -219,27 +221,27 @@ def _finding_text(finding: RuleFinding) -> str:
     )
 
 
-def _result_text(result: EngineResult) -> str:
+def result_text(result: EngineResult) -> str:
     output_text = json.dumps(result.output or {}, sort_keys=True)
     finding_text = "\n".join(_finding_text(finding) for finding in result.findings)
     return f"{output_text}\n{finding_text}".lower()
 
 
-def _finding_ids(result: EngineResult) -> list[str]:
+def finding_ids(result: EngineResult) -> list[str]:
     return [finding.rule_id for finding in result.findings]
 
 
-def _rule_count(result: EngineResult, rule_id: str) -> int:
+def rule_count(result: EngineResult, rule_id: str) -> int:
     return sum(finding.rule_id == rule_id for finding in result.findings)
 
 
-def _findings_for_rule(result: EngineResult, rule_id: str) -> list[RuleFinding]:
+def findings_for_rule(result: EngineResult, rule_id: str) -> list[RuleFinding]:
     return [finding for finding in result.findings if finding.rule_id == rule_id]
 
 
 def assert_hook_prevents(result: EngineResult, *, expected_text: str) -> None:
     decision = _output_decision(result)
-    details = _result_text(result)
+    details = result_text(result)
     assert decision in {"deny", "block"}, (
         f"Expected hook to deny/block, got {decision!r}.\n{details}"
     )
@@ -247,5 +249,38 @@ def assert_hook_prevents(result: EngineResult, *, expected_text: str) -> None:
         f"Expected hook evidence to mention {expected_text!r}.\n{details}"
     )
 
+
 # Exported test support used by split test modules.
-__all__ = ('EngineResult', 'GOD_CLASS_RULE', 'OVERSIZED_MODULE_RULE', 'ObjectDict', 'Path', 'QUALITY_LINT_RULE', 'RuleFinding', '_add_file_patch', '_assignment_module', '_class_with_body_lines', '_enroll_repo', '_finding_ids', '_finding_text', '_findings_for_rule', '_opencode_after_payload', '_opencode_before_edit_payload', '_opencode_before_payload', '_output_decision', '_post_bash_payload', '_post_write_payload', '_pre_edit_payload', '_pre_multiedit_payload', '_pre_patch_payload', '_pre_write_payload', '_result_text', '_rule_count', 'assert_hook_prevents', 'evaluate_payload', 'json', 'object_dict', 'string_value')
+__all__ = (
+    "EngineResult",
+    "GOD_CLASS_RULE",
+    "OVERSIZED_MODULE_RULE",
+    "ObjectDict",
+    "Path",
+    "QUALITY_LINT_RULE",
+    "RuleFinding",
+    "_add_file_patch",
+    "assignment_module",
+    "class_with_body_lines",
+    "enroll_repo",
+    "finding_ids",
+    "_finding_text",
+    "findings_for_rule",
+    "opencode_after_payload",
+    "opencode_before_edit_payload",
+    "opencode_before_payload",
+    "_output_decision",
+    "post_bash_payload",
+    "post_write_payload",
+    "pre_edit_payload",
+    "pre_multiedit_payload",
+    "pre_patch_payload",
+    "pre_write_payload",
+    "result_text",
+    "rule_count",
+    "assert_hook_prevents",
+    "evaluate_payload",
+    "json",
+    "object_dict",
+    "string_value",
+)

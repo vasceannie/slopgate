@@ -12,8 +12,9 @@ from tests.test_adapters import (
     engine_module,
     require_rendered,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestMultiFindingBehavior:
     """Test what happens when the engine produces multiple findings with
@@ -55,15 +56,15 @@ class TestMultiFindingBehavior:
     ) -> tuple[str | None, str | None, ObjectDict]:
         decision = cast(
             Callable[[list[RuleFinding]], str | None],
-            getattr(engine_module, "_top_decision"),
+            getattr(engine_module, "top_decision"),
         )(findings)
         context = cast(
             Callable[[list[RuleFinding]], str | None],
-            getattr(engine_module, "_collect_context"),
+            getattr(engine_module, "collect_context"),
         )(findings)
         updated = cast(
             Callable[[list[RuleFinding]], ObjectDict],
-            getattr(engine_module, "_merge_updated_input"),
+            getattr(engine_module, "merge_updated_input"),
         )(findings)
         return decision, context, updated
 
@@ -83,7 +84,7 @@ class TestMultiFindingBehavior:
         spec = require_spec(output)
         # Deny wins
         assert spec["permissionDecision"] == "deny", "deny should win over allow"
-        assert "DENY-001" in test_support.required_string(
+        assert "DENY-001" in support.required_string(
             spec, "permissionDecisionReason"
         ), "DENY-001 should appear in reason"
         # Context still included
@@ -109,7 +110,7 @@ class TestMultiFindingBehavior:
         )
         spec = require_spec(output)
         assert spec["permissionDecision"] == "deny", "Codex deny should win over allow"
-        assert "DENY-001" in test_support.required_string(
+        assert "DENY-001" in support.required_string(
             spec, "permissionDecisionReason"
         ), "DENY-001 should appear in reason"
 
@@ -129,7 +130,7 @@ class TestMultiFindingBehavior:
         assert rendered["action"] == "block", (
             "OpenCode deny should produce block action"
         )
-        assert "DENY-001" in test_support.required_string(rendered, "reason"), (
+        assert "DENY-001" in support.required_string(rendered, "reason"), (
             "DENY-001 should appear in reason"
         )
         # Context included despite block
@@ -161,7 +162,7 @@ class TestMultiFindingBehavior:
         ]
         context = cast(
             Callable[[list[RuleFinding]], str | None],
-            getattr(engine_module, "_collect_context"),
+            getattr(engine_module, "collect_context"),
         )(findings)
         assert context == "same thing\n\ndifferent thing"
 
@@ -183,6 +184,6 @@ class TestMultiFindingBehavior:
         ]
         merged = cast(
             Callable[[list[RuleFinding]], ObjectDict],
-            getattr(engine_module, "_merge_updated_input"),
+            getattr(engine_module, "merge_updated_input"),
         )(findings)
         assert merged == {"command": "second", "extra": "value"}

@@ -3,6 +3,7 @@
 Flags lines matching configurable regex patterns (e.g. old-style typing
 imports that should use modern ``X | Y`` syntax).
 """
+
 from __future__ import annotations
 
 import re

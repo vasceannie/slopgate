@@ -7,8 +7,9 @@ from tests.test_adapters import (
     Severity,
     pytest,
     require_rendered,
-    test_support,
+    support,
 )
+
 
 class TestOpenCodeAdapterRenderPostTool:
     """render_output for PostToolUse, Stop, SessionStart, and unknown events."""
@@ -33,7 +34,7 @@ class TestOpenCodeAdapterRenderPostTool:
         )
         assert output is not None, "PostToolUse block should produce output"
         assert output["action"] == "block", "PostToolUse block should map to block"
-        assert "Q-001" in test_support.required_string(output, "reason"), (
+        assert "Q-001" in support.required_string(output, "reason"), (
             "rule id should appear in reason"
         )
 
@@ -60,7 +61,7 @@ class TestOpenCodeAdapterRenderPostTool:
         rendered = require_rendered(output)
         assert rendered["action"] == "block", "PostToolUse block should map to block"
         assert rendered["context"] == "consider adding tests", "context not included"
-        assert "Q-001" in test_support.required_string(rendered, "reason"), (
+        assert "Q-001" in support.required_string(rendered, "reason"), (
             "rule id should appear in reason"
         )
 
@@ -106,7 +107,7 @@ class TestOpenCodeAdapterRenderPostTool:
         )
         assert output is not None, "Stop with block should produce output"
         assert output["action"] == "continue", "Stop block should map to continue"
-        assert "STOP-001" in test_support.required_string(output, "reason"), (
+        assert "STOP-001" in support.required_string(output, "reason"), (
             "rule id should appear in reason"
         )
 
@@ -173,6 +174,7 @@ class TestOpenCodeAdapterRenderPostTool:
             )
             is None
         ), "unknown event should return None"
+
 
 class TestBaseAdapterHelpers:
     """Test the static helper methods on PlatformAdapter."""

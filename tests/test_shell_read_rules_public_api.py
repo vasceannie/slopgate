@@ -1,14 +1,17 @@
 from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
-
-
+from slopgate.context import HookContext
 from slopgate.rules.common._shell_read import (
     FullFileReadRule,
     PromptContextRule,
     ProtectedPathsRule,
 )
+
+
+def _always_enabled(_ctx: HookContext, _rule_id: str, default: bool = True) -> bool:
+    _ = default
+    return True
 
 
 def _make_ctx(
@@ -33,19 +36,16 @@ def _make_ctx(
 
 def test_prompt_context_rule_has_expected_rule_id() -> None:
     rule = PromptContextRule()
-
     assert rule.rule_id == "BUILTIN-INJECT-PROMPT"
 
 
 def test_prompt_context_rule_evaluates_user_prompt_submit_event() -> None:
     rule = PromptContextRule()
-
     assert "UserPromptSubmit" in rule.events
 
 
 def test_full_file_read_rule_has_expected_rule_id() -> None:
     rule = FullFileReadRule()
-
     assert rule.rule_id == "BUILTIN-ENFORCE-FULL-READ"
 
 
@@ -53,42 +53,35 @@ def test_full_file_read_rule_returns_empty_for_non_read_tool() -> None:
     rule = FullFileReadRule()
     ctx = _make_ctx(tool_name="Write", candidate_paths=["src/app.py"])
     ctx.config.enabled_rules = {}
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original = base_mod.is_rule_enabled
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original)
     assert result == []
 
 
 def test_protected_paths_rule_has_expected_rule_id() -> None:
     rule = ProtectedPathsRule()
-
     assert rule.rule_id == "BUILTIN-PROTECTED-PATHS"
 
 
 def test_protected_paths_rule_returns_empty_when_no_patterns_configured() -> None:
     rule = ProtectedPathsRule()
     ctx = _make_ctx(
-        tool_name="Write",
-        candidate_paths=["src/app.py"],
-        protected_paths=[],
+        tool_name="Write", candidate_paths=["src/app.py"], protected_paths=[]
     )
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original = base_mod.is_rule_enabled
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original)
     assert result == []
 
 
@@ -96,22 +89,17 @@ def test_protected_paths_rule_denies_matching_path(tmp_path: Path) -> None:
     rule = ProtectedPathsRule()
     target = str(tmp_path / "slopgate.toml")
     ctx = _make_ctx(
-        tool_name="Write",
-        candidate_paths=[target],
-        protected_paths=[target],
+        tool_name="Write", candidate_paths=[target], protected_paths=[target]
     )
     ctx.state = MagicMock()
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original_enabled = base_mod.is_rule_enabled
-
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original_enabled = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original_enabled
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original_enabled)
     assert len(result) == 1
     assert result[0].rule_id == "BUILTIN-PROTECTED-PATHS"
     assert result[0].decision == "deny"
@@ -125,16 +113,14 @@ def test_protected_paths_rule_allows_readonly_sed_of_makefile() -> None:
         shell_command="sed -n '1,160p' Makefile",
         protected_paths=["Makefile"],
     )
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original_enabled = base_mod.is_rule_enabled
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original_enabled = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original_enabled
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original_enabled)
     assert result == []
 
 
@@ -146,36 +132,30 @@ def test_protected_paths_rule_allows_make_target_execution() -> None:
         shell_command="make eval-dataset-ats",
         protected_paths=["Makefile"],
     )
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original_enabled = base_mod.is_rule_enabled
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original_enabled = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original_enabled
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original_enabled)
     assert result == []
 
 
 def test_protected_paths_rule_asks_for_makefile_edits() -> None:
     rule = ProtectedPathsRule()
     ctx = _make_ctx(
-        tool_name="Write",
-        candidate_paths=["Makefile"],
-        protected_paths=["Makefile"],
+        tool_name="Write", candidate_paths=["Makefile"], protected_paths=["Makefile"]
     )
+    import slopgate.rules.base
 
-    import slopgate.rules.base as base_mod
-
-    original_enabled = base_mod.is_rule_enabled
-    base_mod.is_rule_enabled = lambda _ctx, _rule_id: True
+    original_enabled = slopgate.rules.base.is_rule_enabled
+    setattr(slopgate.rules.base, "is_rule_enabled", _always_enabled)
     try:
         result = rule.evaluate(ctx)
     finally:
-        base_mod.is_rule_enabled = original_enabled
-
+        setattr(slopgate.rules.base, "is_rule_enabled", original_enabled)
     assert len(result) == 1
     assert result[0].rule_id == "BUILTIN-PROTECTED-PATHS"
     assert result[0].decision == "ask"

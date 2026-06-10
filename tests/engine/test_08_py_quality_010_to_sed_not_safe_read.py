@@ -5,13 +5,14 @@ from tests.test_engine import (
     ObjectDict,
     Path,
     WriteBuilder,
-    _init_git_worktree,
+    init_git_worktree,
     evaluate_payload,
     finding_ids,
     output_string,
     pytest,
 )
 from slopgate.models import RuleFinding
+
 
 @pytest.mark.parametrize(
     "code, should_deny",
@@ -41,6 +42,7 @@ def test_py_quality_010(
     assert ("PY-QUALITY-010" in ids) is should_deny, (
         f"Unexpected PY-QUALITY-010 result for code:\n{code}"
     )
+
 
 def test_py_code_012_feature_envy(tmp_project: Path) -> None:
     """Function where >60% of attribute accesses target one external object."""
@@ -72,6 +74,7 @@ def test_py_code_012_feature_envy(tmp_project: Path) -> None:
         "PY-CODE-012 must remain advisory when emitted"
     )
 
+
 def test_py_code_013_thin_wrapper_positive(tmp_project: Path) -> None:
     """Single-line delegation should fire PY-CODE-013."""
     code = "def get_all_users():\n    return UserRepository.find_all()\n"
@@ -90,6 +93,7 @@ def test_py_code_013_thin_wrapper_positive(tmp_project: Path) -> None:
     finding_013 = next((f for f in result.findings if f.rule_id == "PY-CODE-013"), None)
     assert finding_013 is not None, "Expected PY-CODE-013 finding"
     assert finding_013.rule_id == "PY-CODE-013"
+
 
 def test_py_code_013_multi_line_not_thin(tmp_project: Path) -> None:
     """Multi-statement functions are not thin wrappers."""
@@ -112,6 +116,7 @@ def test_py_code_013_multi_line_not_thin(tmp_project: Path) -> None:
     result = evaluate_payload(payload)
     assert not any(f.rule_id == "PY-CODE-013" for f in result.findings)
 
+
 def test_py_code_016_dead_code_after_return(tmp_project: Path) -> None:
     """Code after unconditional return should fire PY-CODE-016."""
     code = "def func():\n    return 42\n    x = 1\n    y = 2\n    print(x + y)\n"
@@ -130,6 +135,7 @@ def test_py_code_016_dead_code_after_return(tmp_project: Path) -> None:
     finding_016 = next((f for f in result.findings if f.rule_id == "PY-CODE-016"), None)
     assert finding_016 is not None, "Expected PY-CODE-016 finding"
     assert finding_016.rule_id == "PY-CODE-016"
+
 
 @pytest.mark.parametrize(
     "path, should_deny",
@@ -151,6 +157,7 @@ def test_py_quality_011(
     assert ("PY-QUALITY-011" in ids) is should_deny, (
         f"Unexpected PY-QUALITY-011 result for path: {path}"
     )
+
 
 class TestFlatFileSiblings:
     def _posttool(self, tmp_project: Path, rel_path: str) -> ObjectDict:
@@ -229,7 +236,7 @@ class TestFlatFileSiblings:
 
     @staticmethod
     def _worktree_with_flat_siblings(tmp_path: Path) -> tuple[Path, Path, Path]:
-        repo, worktree = _init_git_worktree(tmp_path)
+        repo, worktree = init_git_worktree(tmp_path)
         pkg = worktree / "src" / "agents"
         pkg.mkdir(parents=True, exist_ok=True)
         _ = (pkg / "_parser_lexer.py").write_text("pass")
@@ -252,13 +259,16 @@ class TestFlatFileSiblings:
         assert str(worktree) in directory
         assert Path(directory) != repo / "src" / "agents"
 
+
 class TestSedNotSafeRead:
     """sed is a transform tool, not a read tool. Even without -i,
     `sed 's/x/y/' file > file` is destructive. It should not be
     in SAFE_READ_SHELL_VERBS.
     """
 
-    @pytest.mark.xfail(reason="sed is in SAFE_READ_SHELL_VERBS; plain sed without -i/redirect on protected paths does not trigger BUILTIN-PROTECTED-PATHS or GLOBAL-BUILTIN-HOOK-INFRA-EXEC yet")
+    @pytest.mark.xfail(
+        reason="sed is in SAFE_READ_SHELL_VERBS; plain sed without -i/redirect on protected paths does not trigger BUILTIN-PROTECTED-PATHS or GLOBAL-BUILTIN-HOOK-INFRA-EXEC yet"
+    )
     def test_sed_without_redirect_blocked_on_protected_path(
         self, pretool_bash: BashBuilder
     ) -> None:

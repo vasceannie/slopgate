@@ -23,7 +23,7 @@ def _pair_counts(stats: ObjectDict, key: str) -> dict[str, int]:
     return counts
 
 
-def _string_list(mapping: ObjectDict, key: str) -> list[str]:
+def string_list(mapping: ObjectDict, key: str) -> list[str]:
     return [value for value in object_list(mapping.get(key)) if isinstance(value, str)]
 
 
@@ -166,7 +166,7 @@ class TestAnalyze:
         entries = [self._entry()] * 5
         stats = _analyze(entries)
         examples = object_dict(stats.get("rule_examples"))
-        assert len(_string_list(examples, "GIT-001")) <= 3, (
+        assert len(string_list(examples, "GIT-001")) <= 3, (
             "rule examples must be capped at 3"
         )
 
@@ -204,7 +204,9 @@ class TestAnalyze:
             for idx in range(4)
         ]
         metrics = [
-            self._entry(rule_id="_ENRICHMENT_METRICS", decision="info", session=f"met-{idx}")
+            self._entry(
+                rule_id="_ENRICHMENT_METRICS", decision="info", session=f"met-{idx}"
+            )
             for idx in range(3)
         ]
         enforced = [

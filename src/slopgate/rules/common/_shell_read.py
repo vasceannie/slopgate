@@ -22,12 +22,13 @@ from slopgate.util.payloads import (
     is_shell_tool,
     path_matches_glob,
 )
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-_FIND_MUTATING_ACTIONS = frozenset({"-delete", "-exec", "-execdir", "-ok", "-okdir"})
-_GIT_NO_VERIFY_SHORTCUT = "-n (shorthand for --no-verify)"
+FIND_MUTATING_ACTIONS = frozenset({"-delete", "-exec", "-execdir", "-ok", "-okdir"})
+GIT_NO_VERIFY_SHORTCUT = "-n (shorthand for --no-verify)"
 
 
 def command_has_word(command: str, word: str) -> bool:
@@ -37,15 +38,15 @@ def command_has_word(command: str, word: str) -> bool:
     return bool(re.search(pattern, command, re.IGNORECASE))
 
 
-def _shell_tokens(command: str) -> list[str]:
+def shell_tokens(command: str) -> list[str]:
     try:
         return shlex.split(command, posix=True)
     except ValueError:
         return command.split()
 
 
-def _find_command_has_mutation(tokens: list[str]) -> bool:
-    return "find" in tokens and bool(_FIND_MUTATING_ACTIONS & set(tokens))
+def find_command_has_mutation(tokens: list[str]) -> bool:
+    return "find" in tokens and bool(FIND_MUTATING_ACTIONS & set(tokens))
 
 
 _SHELL_REDIRECT_RE = re.compile(r"(?:[12]?>>?|&>)\s*([^\s;&|]+)")
@@ -61,7 +62,9 @@ def _has_unsafe_shell_redirection(command: str) -> bool:
     return False
 
 
-def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = False) -> bool:
+def is_safe_read_shell_command(
+    command: str, *, reject_find_mutation: bool = False
+) -> bool:
     lowered = command.lower()
     if "sed -i" in lowered or "tee " in lowered:
         return False
@@ -80,9 +83,11 @@ def is_safe_read_shell_command(command: str, *, reject_find_mutation: bool = Fal
         return False
     if _has_unsafe_shell_redirection(lowered):
         return False
-    if reject_find_mutation and _find_command_has_mutation(_shell_tokens(lowered)):
+    if reject_find_mutation and find_command_has_mutation(shell_tokens(lowered)):
         return False
-    return any(command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS) or any(
+    return any(
+        command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS
+    ) or any(
         command_has_word(lowered, verb)
         for verb in ("get-content", "select-string", "test-path")
     )
@@ -113,7 +118,7 @@ def _is_claude_plan_markdown_path(path_value: str) -> bool:
     return bool(plan_name) and "/" not in plan_name and plan_name.endswith(".md")
 
 
-def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
+def path_matches_any(path_value: str, patterns: list[str]) -> str | None:
     for pattern in patterns:
         if not path_matches_glob(path_value, pattern):
             continue
@@ -126,7 +131,7 @@ def _path_matches_any(path_value: str, patterns: list[str]) -> str | None:
     return None
 
 
-def _read_context_fragment(root: Path, relative: str) -> str | None:
+def read_context_fragment(root: Path, relative: str) -> str | None:
     """Read a prompt context file and return its fragment, or None to skip."""
     path = root / relative
     if not path.exists():
@@ -150,7 +155,7 @@ class PromptContextRule(Rule):
         fragments = [
             frag
             for relative in ctx.config.prompt_context_files
-            if (frag := _read_context_fragment(ctx.config.root, relative)) is not None
+            if (frag := read_context_fragment(ctx.config.root, relative)) is not None
         ]
         if not fragments:
             return []
@@ -165,7 +170,7 @@ class PromptContextRule(Rule):
         ]
 
 
-def _find_read_target(
+def find_read_target(
     paths: list[str],
     exempt: tuple[str, ...],
 ) -> str | None:
@@ -178,7 +183,7 @@ def _find_read_target(
     return target
 
 
-def _is_large_file(path_str: str, threshold: int) -> bool:
+def is_large_file(path_str: str, threshold: int) -> bool:
     try:
         return Path(path_str).stat().st_size > threshold
     except OSError:
@@ -219,7 +224,7 @@ class FullFileReadRule(Rule):
             return []
         if ctx.tool_name != "Read":
             return []
-        target = _find_read_target(ctx.candidate_paths, self.EXEMPT_SUFFIXES)
+        target = find_read_target(ctx.candidate_paths, self.EXEMPT_SUFFIXES)
         if target is None:
             return []
         if is_third_party_or_virtualenv_path(target):
@@ -230,7 +235,7 @@ class FullFileReadRule(Rule):
             return []
         if ctx.state.has_full_read(ctx.session_id, normalized_target):
             return []
-        if _is_large_file(normalized_target, self.LARGE_FILE_BYTES):
+        if is_large_file(normalized_target, self.LARGE_FILE_BYTES):
             return []
         msg = (
             f"Please read `{target}` in full first "
@@ -249,13 +254,13 @@ class FullFileReadRule(Rule):
         ]
 
 
-def _is_readonly_tool(tool_name: str | None) -> bool:
+def is_readonly_tool(tool_name: str | None) -> bool:
     from slopgate.constants import READ_TOOL_NAMES
 
     return bool(tool_name and tool_name.lower() in READ_TOOL_NAMES)
 
 
-def _is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
+def is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
     return (
         tool_name is not None
         and is_shell_tool(tool_name)
@@ -264,12 +269,12 @@ def _is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
     )
 
 
-def _find_matched_protected_path(
+def find_matched_protected_path(
     candidate_paths: list[str],
     patterns: list[str],
 ) -> str | None:
     for path_value in candidate_paths:
-        if _path_matches_any(path_value, patterns):
+        if path_matches_any(path_value, patterns):
             return path_value
     return None
 
@@ -279,10 +284,12 @@ def _is_makefile_path(path_value: str) -> bool:
     return normalized.rsplit("/", 1)[-1] == "Makefile"
 
 
-def _is_makefile_target_execution(tool_name: str | None, bash_command: str | None) -> bool:
+def _is_makefile_target_execution(
+    tool_name: str | None, bash_command: str | None
+) -> bool:
     if tool_name is None or bash_command is None or not is_shell_tool(tool_name):
         return False
-    tokens = _shell_tokens(bash_command)
+    tokens = shell_tokens(bash_command)
     return bool(tokens) and Path(tokens[0]).name == "make"
 
 
@@ -304,12 +311,12 @@ class ProtectedPathsRule(Rule):
         patterns = ctx.config.protected_paths
         if not patterns:
             return []
-        if _is_readonly_tool(ctx.tool_name):
+        if is_readonly_tool(ctx.tool_name):
             return []
-        matched_path = _find_matched_protected_path(ctx.candidate_paths, patterns)
+        matched_path = find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:
             return []
-        if _is_safe_bash_read(ctx.tool_name, ctx.shell_command):
+        if is_safe_bash_read(ctx.tool_name, ctx.shell_command):
             return []
         if _is_makefile_path(matched_path) and _is_makefile_target_execution(
             ctx.tool_name,

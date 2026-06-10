@@ -19,6 +19,7 @@ from slopgate.rules import build_always_on_rules, build_repo_strict_rules
 from slopgate.rules.base import Rule
 from slopgate.util import warning
 
+
 def _apply_severity_overrides(
     findings: list[RuleFinding],
     overrides: dict[str, str],
@@ -34,6 +35,7 @@ def _apply_severity_overrides(
         else:
             finding.severity = Severity.from_value(override)
 
+
 def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
     return {
         "platform": platform,
@@ -43,7 +45,7 @@ def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
     }
 
 
-def _platform_capability(platform: str) -> tuple[str, str | None]:
+def platform_capability(platform: str) -> tuple[str, str | None]:
     normalized = platform.strip().lower()
     if normalized == "opencode":
         return (
@@ -82,7 +84,7 @@ def _error_trace_payload(
 
 
 @dataclass(slots=True)
-class _EvalAccumulator:
+class EvalAccumulator:
     """Groups mutable state passed through the evaluation pipeline."""
 
     findings: list[RuleFinding] = field(default_factory=list)
@@ -116,7 +118,7 @@ def _run_rule(
     rule: Rule,
     ctx: HookContext,
     platform: str,
-    acc: _EvalAccumulator,
+    acc: EvalAccumulator,
 ) -> None:
     """Evaluate a single rule, collecting findings and errors."""
     identity = _trace_identity(ctx, platform)
@@ -145,7 +147,7 @@ def _run_rule(
 def _safe_enrich(
     ctx: HookContext,
     platform: str,
-    acc: _EvalAccumulator,
+    acc: EvalAccumulator,
 ) -> None:
     """Run enrichment with error capture instead of silent swallow."""
     identity = _trace_identity(ctx, platform)
@@ -183,7 +185,7 @@ def _safe_enrich(
 EnforcementMode = Literal["outside_repo", "repo_strict", "repo_relaxed"]
 
 
-def _resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
+def resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
     repo_cwd = Path(ctx.cwd) if ctx.cwd else Path.cwd()
     repo_root = resolve_repo_root(repo_cwd) or repo_cwd.resolve()
 
@@ -196,16 +198,20 @@ def _resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
     return "repo_strict"
 
 
-def _run_rules(ctx: HookContext, platform: str, mode: EnforcementMode) -> _EvalAccumulator:
+def run_rules(
+    ctx: HookContext, platform: str, mode: EnforcementMode
+) -> EvalAccumulator:
     """Build and evaluate applicable rules for the selected enforcement mode."""
-    acc = _EvalAccumulator()
+    acc = EvalAccumulator()
     disabled = set(ctx.config.disabled_rules)
 
     rules: list[Rule] = [*build_always_on_rules(ctx)]
     repo_root = resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd())
     effective_root = repo_root or (Path(ctx.cwd) if ctx.cwd else Path.cwd())
 
-    if mode == "repo_strict" and not is_path_skipped(effective_root, ctx.config.skip_paths):
+    if mode == "repo_strict" and not is_path_skipped(
+        effective_root, ctx.config.skip_paths
+    ):
         rules.extend(build_repo_strict_rules(ctx))
 
     for rule in rules:

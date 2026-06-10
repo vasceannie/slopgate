@@ -5,6 +5,7 @@ from pathlib import Path
 
 from slopgate.util.platform import is_windows, user_config_dir
 
+
 def config_dir() -> Path:
     """Return the slopgate config directory.
 

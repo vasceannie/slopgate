@@ -6,13 +6,14 @@ from pathlib import Path
 
 from slopgate.lint._baseline import Violation
 from slopgate.lint._details._metadata import (
-    _BRANCH_RULES,
-    _DUPLICATE_RULES,
-    _EXCEPTION_RULES,
-    _LITERAL_RULES,
-    _TEST_RULES,
-    _TYPE_RULES,
+    BRANCH_RULES,
+    DUPLICATE_RULES,
+    EXCEPTION_RULES,
+    LITERAL_RULES,
+    TEST_RULES,
+    TYPE_RULES,
 )
+
 
 def _module_split_scaffold(violation: Violation) -> list[str]:
     path = Path(violation.relative_path)
@@ -58,7 +59,7 @@ def _structural_prognosis(rule_name: str) -> list[str] | None:
             "    prognosis: function is doing multiple phases inline.",
             "    scaffold: extract named helpers for parse/validate/transform/persist/render phases; keep data flow explicit.",
         ]
-    if rule_name in _BRANCH_RULES:
+    if rule_name in BRANCH_RULES:
         return [
             "    prognosis: branching shape is hiding the domain decision table.",
             "    scaffold: use guard clauses, named predicates, or a dispatch table before adding behavior.",
@@ -72,12 +73,12 @@ def _structural_prognosis(rule_name: str) -> list[str] | None:
 
 
 def _duplicate_or_literal_prognosis(rule_name: str) -> list[str] | None:
-    if rule_name in _DUPLICATE_RULES:
+    if rule_name in DUPLICATE_RULES:
         return [
             "    prognosis: duplicated behavior will drift unless the shared concept gets one owner.",
             "    scaffold: compare affected files first, extract the smallest shared helper/service, and keep call sites explicit.",
         ]
-    if rule_name in _LITERAL_RULES:
+    if rule_name in LITERAL_RULES:
         return [
             "    prognosis: repeated literal is acting like unnamed policy or shared vocabulary.",
             "    scaffold: define an UPPER_CASE constant or resource entry near the owning domain, then replace all occurrences intentionally.",
@@ -136,14 +137,14 @@ _TYPE_OR_TEST_PROGNOSES: dict[str, tuple[str, ...]] = {
 
 
 def _type_or_test_prognosis(rule_name: str) -> list[str] | None:
-    if rule_name in _TYPE_RULES:
+    if rule_name in TYPE_RULES:
         return [
             "    prognosis: type boundary is being erased instead of modeled.",
             "    scaffold: replace Any/suppression with a Protocol, TypedDict, overload, local stub, or narrowed runtime validation.",
         ]
     if rule_name in _TYPE_OR_TEST_PROGNOSES:
         return list(_TYPE_OR_TEST_PROGNOSES[rule_name])
-    if rule_name in _TEST_RULES:
+    if rule_name in TEST_RULES:
         return [
             "    prognosis: test intent is not isolated enough for readable failure diagnosis.",
             "    scaffold: split one behavior per test, parametrize cases with ids, and make each assertion describe the contract being checked.",
@@ -152,7 +153,7 @@ def _type_or_test_prognosis(rule_name: str) -> list[str] | None:
 
 
 def _exception_prognosis(rule_name: str) -> list[str] | None:
-    if rule_name in _EXCEPTION_RULES:
+    if rule_name in EXCEPTION_RULES:
         return [
             "    prognosis: error path hides failures that should be observable.",
             "    scaffold: catch the specific expected exception, log/return structured context, and let corruption or infrastructure failures propagate.",
@@ -160,7 +161,7 @@ def _exception_prognosis(rule_name: str) -> list[str] | None:
     return None
 
 
-def _prognosis(rule_name: str, violation: Violation) -> list[str]:
+def prognosis(rule_name: str, violation: Violation) -> list[str]:
     if rule_name in {"oversized-module", "oversized-module-soft"}:
         return _module_split_scaffold(violation)
     for provider in (

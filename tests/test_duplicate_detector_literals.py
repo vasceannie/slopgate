@@ -1,20 +1,37 @@
 """Tests for repeated-string-literal metadata in duplicate detection."""
-# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import cast
 
-from tests.test_duplicate_detector import _make_parsed
-from slopgate.lint._detectors.duplicates import _collect_block_windows
+from slopgate.lint._detectors.duplicates import collect_block_windows
 from slopgate.lint._detectors.duplicates import detect_repeated_literals
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import load_config, set_config
+from slopgate.lint._helpers import (
+    ParsedFile,
+    build_parent_map,
+    compute_string_line_ranges,
+)
 
 
-def _repeated_skipped_literal_parsed() -> list:
+def make_parsed(source: str, rel: str = "test.py") -> ParsedFile:
+    tree = ast.parse(source)
+    return ParsedFile(
+        path=Path(rel),
+        rel=rel,
+        tree=tree,
+        lines=source.splitlines(),
+        parent_map=build_parent_map(tree),
+        string_line_ranges=compute_string_line_ranges(tree),
+    )
+
+
+def _repeated_skipped_literal_parsed() -> list[ParsedFile]:
     return [
-        _make_parsed(
+        make_parsed(
             "from __future__ import annotations\n\n"
             f"LIMIT = {idx}\n"
             "def flag() -> str:\n"
@@ -27,7 +44,7 @@ def _repeated_skipped_literal_parsed() -> list:
     ]
 
 
-def _violations_by_rule(parsed: list) -> dict[str, Violation]:
+def _violations_by_rule(parsed: list[ParsedFile]) -> dict[str, Violation]:
     return {violation.rule: violation for violation in detect_repeated_literals(parsed)}
 
 
@@ -81,30 +98,43 @@ class TestRepeatedStringLiteralMetadata:
         set_config(cfg)
 
         parsed = [
-            _make_parsed('print("E_CONN_RESET")\n', rel=f"src/file_{idx}.py")
+            make_parsed('print("E_CONN_RESET")\n', rel=f"src/file_{idx}.py")
             for idx in range(11)
         ]
         violations = detect_repeated_literals(parsed)
         repeated = [v for v in violations if v.rule == "repeated-string-literal"]
         assert repeated, "expected repeated-string-literal violation"
         metadata = repeated[0].metadata
-        assert "already_defined" in metadata, "Expected metadata to identify the existing constant"
+        assert "already_defined" in metadata, (
+            "Expected metadata to identify the existing constant"
+        )
         already_defined = cast(dict[str, object], metadata["already_defined"])
-        assert already_defined["name"] == "SHARED_ERROR", "Expected existing constant name in metadata"
-        assert already_defined["path"] == "src/constants.py", "Expected existing constant path in metadata"
-        assert already_defined["line"] == 1, "Expected existing constant line in metadata"
-        assert "src/constants.py:1" in repeated[0].detail, "Expected detail to cite existing constant location"
+        assert already_defined["name"] == "SHARED_ERROR", (
+            "Expected existing constant name in metadata"
+        )
+        assert already_defined["path"] == "src/constants.py", (
+            "Expected existing constant path in metadata"
+        )
+        assert already_defined["line"] == 1, (
+            "Expected existing constant line in metadata"
+        )
+        assert "src/constants.py:1" in repeated[0].detail, (
+            "Expected detail to cite existing constant location"
+        )
         assert (
-            "do not duplicate it or hide the literal with string fragments" in repeated[0].detail
+            "do not duplicate it or hide the literal with string fragments"
+            in repeated[0].detail
         ), "Expected detail to warn against hiding the duplicate literal"
 
-    def test_suggests_candidate_name_when_constant_missing(self, tmp_path: Path) -> None:
+    def test_suggests_candidate_name_when_constant_missing(
+        self, tmp_path: Path
+    ) -> None:
         _ = (tmp_path / "src").mkdir()
         cfg = load_config(tmp_path)
         set_config(cfg)
 
         parsed = [
-            _make_parsed('print("retry later")\n', rel=f"src/file_{idx}.py")
+            make_parsed('print("retry later")\n', rel=f"src/file_{idx}.py")
             for idx in range(11)
         ]
         violations = detect_repeated_literals(parsed)
@@ -120,7 +150,7 @@ class TestRepeatedStringLiteralMetadata:
         set_config(cfg)
 
         parsed = [
-            _make_parsed(
+            make_parsed(
                 "\n".join(
                     [
                         'print(":")',
@@ -144,7 +174,7 @@ class TestRepeatedStringLiteralMetadata:
         set_config(cfg)
 
         parsed = [
-            _make_parsed('event = "PreToolUse"\n', rel=f"src/file_{idx}.py")
+            make_parsed('event = "PreToolUse"\n', rel=f"src/file_{idx}.py")
             for idx in range(11)
         ]
         violations = detect_repeated_literals(parsed)
@@ -172,8 +202,8 @@ class TestRepeatedStringLiteralMetadata:
             "return y\n"
         )
 
-        groups = _collect_block_windows(
-            [_make_parsed(source_a, rel="a.py"), _make_parsed(source_b, rel="b.py")]
+        groups = collect_block_windows(
+            [make_parsed(source_a, rel="a.py"), make_parsed(source_b, rel="b.py")]
         )
 
         assert groups

@@ -5,8 +5,8 @@ from tests.test_engine import (
     MonkeyPatch,
     Path,
     WriteBuilder,
-    _fake_slopgate_worktree_git_output,
-    _init_git_worktree,
+    fake_slopgate_worktree_git_output,
+    init_git_worktree,
     assert_denied_by,
     assert_not_denied,
     evaluate_payload,
@@ -14,6 +14,7 @@ from tests.test_engine import (
     pytest,
     subprocess,
 )
+
 
 class TestTypeScriptRules:
     def test_ts_type_001_any_denied(self, pretool_write: WriteBuilder) -> None:
@@ -72,6 +73,7 @@ class TestTypeScriptRules:
         )
         assert "TS-LINT-001" in finding_ids(result)
 
+
 class TestRustRules:
     def test_rs_quality_001_todo_denied(self, pretool_write: WriteBuilder) -> None:
         code = 'fn main() {\n    // TODO: fix this\n    println!("hello");\n}\n'
@@ -102,6 +104,7 @@ class TestRustRules:
         result = evaluate_payload(pretool_write("src/retry.rs", code))
         assert "RS-QUALITY-003" not in finding_ids(result)
 
+
 class TestConfigProtection:
     def test_config_002_write_denied(self, pretool_write: WriteBuilder) -> None:
         result = evaluate_payload(
@@ -128,11 +131,12 @@ class TestConfigProtection:
         result = evaluate_payload(pretool_bash("cat .claude/hook-layer/config.json"))
         assert "CONFIG-003" not in finding_ids(result)
 
+
 class TestHookInfraWorktreeException:
     def test_worktree_exception_requires_slopgate_repo_and_non_default_branch(
         self, tmp_path: Path, pretool_write: WriteBuilder, monkeypatch: MonkeyPatch
     ) -> None:
-        repo, worktree = _init_git_worktree(tmp_path)
+        repo, worktree = init_git_worktree(tmp_path)
 
         def fake_git_output(
             args: list[str], cwd: Path | None = None, timeout: int = 3
@@ -150,7 +154,7 @@ class TestHookInfraWorktreeException:
             return result.stdout.strip() or None
 
         monkeypatch.setattr(
-            "slopgate.rules.stop_rules._git_output",
+            "slopgate.rules.stop_rules.git_output",
             fake_git_output,
         )
 
@@ -167,10 +171,10 @@ class TestHookInfraWorktreeException:
     def test_worktree_exception_denied_on_default_branch(
         self, tmp_path: Path, pretool_write: WriteBuilder, monkeypatch: MonkeyPatch
     ) -> None:
-        _repo, worktree = _init_git_worktree(tmp_path)
+        _repo, worktree = init_git_worktree(tmp_path)
         monkeypatch.setattr(
-            "slopgate.rules.stop_rules._git_output",
-            _fake_slopgate_worktree_git_output,
+            "slopgate.rules.stop_rules.git_output",
+            fake_slopgate_worktree_git_output,
         )
 
         result = evaluate_payload(
@@ -188,7 +192,7 @@ class TestHookInfraWorktreeException:
     def test_worktree_exception_denied_for_non_slopgate_repo(
         self, tmp_path: Path, pretool_write: WriteBuilder
     ) -> None:
-        _repo, worktree = _init_git_worktree(tmp_path)
+        _repo, worktree = init_git_worktree(tmp_path)
 
         result = evaluate_payload(
             pretool_write(
@@ -201,6 +205,7 @@ class TestHookInfraWorktreeException:
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result), (
             "worktree hook exceptions should not apply to non-slopgate repos"
         )
+
 
 @pytest.mark.parametrize(
     "command, rule_id",
@@ -218,6 +223,7 @@ def test_linter_shell_edit_denied(
 ) -> None:
     result = evaluate_payload(pretool_bash(command))
     assert rule_id in finding_ids(result), f"Expected {rule_id} on: {command}"
+
 
 class TestQAPathRules:
     def test_qa_path_001_write_denied(self, pretool_write: WriteBuilder) -> None:
@@ -244,6 +250,7 @@ class TestQAPathRules:
         result = evaluate_payload(pretool_bash("cat tests/quality/test_lint.py"))
         assert "QA-PATH-004" not in finding_ids(result)
 
+
 class TestSearchReminder:
     def test_grep_triggers_reminder(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(pretool_bash("grep -rn 'TODO' src/"))
@@ -253,6 +260,7 @@ class TestSearchReminder:
     def test_ripgrep_no_reminder(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(pretool_bash("rg 'TODO' src/"))
         assert "REMIND-SEARCH-001" not in finding_ids(result)
+
 
 class TestBaselineWarnings:
     def test_baseline_path_warns(self, pretool_write: WriteBuilder) -> None:

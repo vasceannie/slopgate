@@ -24,7 +24,7 @@ from slopgate.lint._config import get_config
 SCHEMA_VERSION = 1
 
 
-def _baseline_path() -> Path:
+def baseline_path() -> Path:
     """Return the baseline file path — from config or default."""
     cfg = get_config()
     if cfg.baseline_path:
@@ -71,7 +71,7 @@ class BaselineResult:
 
 def load_baseline() -> dict[str, set[str]]:
     """Load the baseline file and return ``{rule: {stable_id, …}}``."""
-    bp = _baseline_path()
+    bp = baseline_path()
     if not bp.exists():
         return {}
     data = cast(object, json.loads(bp.read_text(encoding="utf-8")))
@@ -95,7 +95,7 @@ def load_baseline() -> dict[str, set[str]]:
 
 def save_baseline_ids(rules: dict[str, set[str]]) -> None:
     """Persist baseline rule → stable_id sets (empty rules are omitted)."""
-    bp = _baseline_path()
+    bp = baseline_path()
     data = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -178,9 +178,7 @@ def _count_new_synced_ids(
     old_baseline: dict[str, set[str]],
     synced: dict[str, set[str]],
 ) -> int:
-    return sum(
-        len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items()
-    )
+    return sum(len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items())
 
 
 def apply_lint_baseline_sync(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import textwrap
 
 _OPENCODE_PLUGIN_SOURCE = textwrap.dedent(
-        """\
+    """\
         import { existsSync } from "node:fs"
         import type { Plugin } from "@opencode-ai/plugin"
         import { tool } from "@opencode-ai/plugin"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -15,25 +15,23 @@ BUNDLE_ROOT = Path(__file__).resolve().parents[1]
 # Fixture type aliases — import in test files to annotate fixture params.
 # ---------------------------------------------------------------------------
 
-LoadFixture = Callable[[str], dict[str, object]]
+LoadFixture = Callable[[str], ObjectDict]
 
 
 class WriteBuilder(Protocol):
     def __call__(
         self, file_path: str, content: str, cwd: str | None = ...
-    ) -> dict[str, object]: ...
+    ) -> ObjectDict: ...
 
 
 class BashBuilder(Protocol):
-    def __call__(
-        self, command: str, cwd: str | None = ...
-    ) -> dict[str, object]: ...
+    def __call__(self, command: str, cwd: str | None = ...) -> ObjectDict: ...
 
 
 class EvaluateFn(Protocol):
     def __call__(
         self,
-        payload_dict: Mapping[str, object],
+        payload_dict: ObjectDict,
         platform: str = ...,
     ) -> EngineResult: ...
 
@@ -95,9 +93,7 @@ def assert_denied_by(
         )
 
 
-def assert_asked_by(
-    result: EngineResult, rule_id: str, msg_fragment: str = ""
-) -> None:
+def assert_asked_by(result: EngineResult, rule_id: str, msg_fragment: str = "") -> None:
     spec = hook_output(result)
     decision = output_string(spec, "permissionDecision") or None
     if decision is None:
@@ -136,3 +132,13 @@ def assert_not_denied(result: EngineResult) -> None:
 
 def finding_ids(result: EngineResult) -> set[str]:
     return {f.rule_id for f in result.findings}
+
+
+def pretool_delete_payload(cwd: Path, file_path: str) -> ObjectDict:
+    return {
+        "session_id": "t",
+        "cwd": str(cwd),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Delete",
+        "tool_input": {"file_path": file_path},
+    }

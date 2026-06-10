@@ -21,11 +21,11 @@ _CALLABLE_RULES = {
     "assertion-roulette",
     "conditional-assertion",
 }
-_BRANCH_RULES = {"high-complexity", "deep-nesting"}
-_DUPLICATE_RULES = {"semantic-clone", "repeated-code-block", "duplicate-call-sequence"}
-_LITERAL_RULES = {"repeated-magic-number", "repeated-string-literal"}
-_TYPE_RULES = {"banned-any", "type-suppression"}
-_TEST_RULES = {
+BRANCH_RULES = {"high-complexity", "deep-nesting"}
+DUPLICATE_RULES = {"semantic-clone", "repeated-code-block", "duplicate-call-sequence"}
+LITERAL_RULES = {"repeated-magic-number", "repeated-string-literal"}
+TYPE_RULES = {"banned-any", "type-suppression"}
+TEST_RULES = {
     "long-test",
     "eager-test",
     "assertion-free-test",
@@ -41,7 +41,7 @@ _TEST_RULES = {
     "hand-built-test-payload",
     "mocked-integration-test",
 }
-_TEST_INTEGRITY_RULES = {
+TEST_INTEGRITY_RULES = {
     "untested-production-code",
     "missing-integration-test",
     "hypothesis-candidate",
@@ -52,8 +52,8 @@ _TEST_INTEGRITY_RULES = {
     "hand-built-test-payload",
     "mocked-integration-test",
 }
-_EXCEPTION_RULES = {"broad-except-swallow", "silent-except", "silent-datetime-fallback"}
-_ASSERT_CALL_NAMES = {
+EXCEPTION_RULES = {"broad-except-swallow", "silent-except", "silent-datetime-fallback"}
+ASSERT_CALL_NAMES = {
     "assertEqual",
     "assertIn",
     "assertIs",
@@ -88,7 +88,7 @@ def _line_hint(violation: Violation) -> str | None:
     return f"{start}-{end}" if end else start
 
 
-def _line_number(violation: Violation) -> int | None:
+def line_number(violation: Violation) -> int | None:
     hint = _line_hint(violation)
     if hint is None:
         return None
@@ -98,14 +98,14 @@ def _line_number(violation: Violation) -> int | None:
     return int(first)
 
 
-def _location(violation: Violation) -> str:
+def location(violation: Violation) -> str:
     line_hint = _line_hint(violation)
     if line_hint:
         return f"{violation.relative_path}:{line_hint}"
     return violation.relative_path
 
 
-def _signature(rule_name: str, violation: Violation) -> str:
+def signature(rule_name: str, violation: Violation) -> str:
     identifier = violation.identifier
     if rule_name in _CALLABLE_RULES:
         return f"callable `{identifier}`"
@@ -115,7 +115,7 @@ def _signature(rule_name: str, violation: Violation) -> str:
         return f"module `{identifier}`"
     if rule_name in {"semantic-clone", "duplicate-call-sequence"}:
         return f"duplicate signature `{identifier}`"
-    if rule_name in _LITERAL_RULES:
+    if rule_name in LITERAL_RULES:
         return f"literal `{identifier}`"
     return f"identifier `{identifier}`"
 
@@ -141,7 +141,7 @@ def _flatten_metadata(value: object) -> list[str]:
     return []
 
 
-def _metadata_lines(metadata: ObjectDict) -> list[str]:
+def metadata_lines(metadata: ObjectDict) -> list[str]:
     if not metadata:
         return []
     lines: list[str] = []

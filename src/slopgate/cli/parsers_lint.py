@@ -1,9 +1,8 @@
 """Lint subcommand argparse wiring."""
 
 from __future__ import annotations
-
 from dataclasses import dataclass
-
+from typing import cast
 from slopgate._argparse_types import SubparserRegistry
 from slopgate.cli.lint import cmd_lint
 
@@ -18,17 +17,14 @@ class LintAnalysisParserSpec:
 
 
 def _add_lint_analysis_parser(
-    lint_sub: SubparserRegistry,
-    spec: LintAnalysisParserSpec,
+    lint_sub: SubparserRegistry, spec: LintAnalysisParserSpec
 ) -> None:
-    from slopgate.cli import parsers as core
+    from slopgate.cli import parsers
 
     parser = lint_sub.add_parser(
-        spec.name,
-        help=spec.help_text,
-        description=spec.description,
+        spec.name, help=spec.help_text, description=spec.description
     )
-    core._add_details_argument(parser, help_text=spec.details_help)
+    parsers.add_details_argument(parser, help_text=spec.details_help)
     parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
 
 
@@ -38,13 +34,8 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
         LintAnalysisParserSpec(
             name="check",
             help_text="Lint the current project root, including test-integrity checks",
-            description=(
-                "Lint the current project root, including test-integrity checks. "
-                "No path argument is accepted."
-            ),
-            details_help=(
-                "Show extended violation locations, signatures, and repair prognosis"
-            ),
+            description="Lint the current project root, including test-integrity checks. No path argument is accepted.",
+            details_help="Show extended violation locations, signatures, and repair prognosis",
             lint_command="check",
         ),
     )
@@ -53,13 +44,8 @@ def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
         LintAnalysisParserSpec(
             name="strict",
             help_text="Commit gate: fail if any violation exists (not just NEW)",
-            description=(
-                "Lint the current project root and fail when any violation is present. "
-                "Use for git pre-commit; agent stop hooks should use `lint check` instead."
-            ),
-            details_help=(
-                "Show extended violation locations, signatures, and repair prognosis"
-            ),
+            description="Lint the current project root and fail when any violation is present. Use for git pre-commit; agent stop hooks should use `lint check` instead.",
+            details_help="Show extended violation locations, signatures, and repair prognosis",
             lint_command="strict",
         ),
     )
@@ -84,17 +70,14 @@ class _LintPathSubcommandSpec:
 
 
 def _add_lint_path_subcommand(
-    lint_sub: SubparserRegistry,
-    spec: _LintPathSubcommandSpec,
+    lint_sub: SubparserRegistry, spec: _LintPathSubcommandSpec
 ) -> None:
-    from slopgate.cli import parsers as core
+    from slopgate.cli import parsers
 
     parser = lint_sub.add_parser(
-        spec.name,
-        help=spec.help_text,
-        description=spec.description,
+        spec.name, help=spec.help_text, description=spec.description
     )
-    core._add_optional_path_argument(parser)
+    parsers.add_optional_path_argument(parser)
     parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
 
 
@@ -102,10 +85,7 @@ _LINT_PATH_SUBCOMMANDS = (
     _LintPathSubcommandSpec(
         name="freeze",
         help_text="One-time baseline snapshot when rules are empty",
-        description=(
-            "Write current lint findings to baselines.json. "
-            "Only allowed while the baseline rules map is empty."
-        ),
+        description="Write current lint findings to baselines.json. Only allowed while the baseline rules map is empty.",
         lint_command="freeze",
     ),
     _LintPathSubcommandSpec(
@@ -123,29 +103,27 @@ def _add_lint_path_subcommands(lint_sub: SubparserRegistry) -> None:
 
 
 def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
-    from slopgate.cli import parsers as core
+    from slopgate.cli import parsers
 
     init = lint_sub.add_parser("init", help="Scaffold slopgate.toml")
-    core._add_optional_path_argument(init)
+    parsers.add_optional_path_argument(init)
     init.set_defaults(func=cmd_lint, lint_command="init")
 
 
 def _add_lint_update_parser(lint_sub: SubparserRegistry) -> None:
-    from slopgate.cli import parsers as core
+    from slopgate.cli import parsers
 
     update = lint_sub.add_parser("update", help="Add missing config keys")
-    core._add_optional_path_argument(update)
-    core._add_dry_run_argument(update)
+    parsers.add_optional_path_argument(update)
+    parsers.add_dry_run_argument(update)
     update.set_defaults(func=cmd_lint, lint_command="update")
 
 
 def add_lint_parsers(sub: SubparserRegistry) -> None:
     lint = sub.add_parser("lint", help="Batch code quality analysis")
-    lint_sub = lint.add_subparsers(dest="lint_command")
-
+    lint_sub = cast(SubparserRegistry, lint.add_subparsers(dest="lint_command"))
     _add_lint_analysis_parsers(lint_sub)
     _add_lint_path_subcommands(lint_sub)
     _add_lint_init_parser(lint_sub)
     _add_lint_update_parser(lint_sub)
-
     lint.set_defaults(func=cmd_lint, lint_command="check")

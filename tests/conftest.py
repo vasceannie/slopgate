@@ -1,34 +1,21 @@
 """Shared fixtures for slopgate tests."""
 
 from __future__ import annotations
-
 import json
 import os
 import shutil
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import cast
-
 import pytest
-
 from slopgate._types import ObjectDict, object_dict, string_value
 from slopgate.lint._config import reset_config
-from slopgate.engine import evaluate_payload as _evaluate_payload
+from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
-
-# pytest discovers fixtures by name — declare autouse fixtures as exported
-# so basedpyright's reportUnusedFunction doesn't flag them.
 __all__ = ["_slopgate_env", "reset_lint_config"]
-
-# slopgate config lives under src/slopgate/resources/
 _RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
-
-
-# ---------------------------------------------------------------------------
-# Core fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -48,35 +35,24 @@ def _slopgate_env(tmp_path: Path) -> Generator[None, None, None]:
     old_root = os.environ.get("SLOPGATE_ROOT")
     old_config = os.environ.get("SLOPGATE_CONFIG")
     old_legacy = os.environ.get("CLAUDE_HOOK_LAYER_ROOT")
-
-    # Create a temp slopgate root with prompt context
     test_root = tmp_path / "slopgate_root"
     test_root.mkdir(exist_ok=True)
     (test_root / "logs").mkdir(exist_ok=True)
     (test_root / "logs" / "async").mkdir(exist_ok=True)
-
-    # Copy prompt context
     if (_RESOURCES / "prompt_context").exists():
         _ = shutil.copytree(_RESOURCES / "prompt_context", test_root / "prompt_context")
-
     os.environ["SLOPGATE_ROOT"] = str(test_root)
     os.environ["SLOPGATE_CONFIG"] = str(_RESOURCES / "defaults.json")
-    # Clear legacy env to avoid fallback
     _ = os.environ.pop("CLAUDE_HOOK_LAYER_ROOT", None)
     _ = os.environ.pop("HOOK_LAYER_ROOT", None)
-
     enrollment_marker = BUNDLE_ROOT / "slopgate.toml"
     created_enrollment_marker = False
     if not enrollment_marker.exists():
         enrollment_marker.write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
         created_enrollment_marker = True
-
     yield
-
     if created_enrollment_marker:
         enrollment_marker.unlink(missing_ok=True)
-
-    # Restore
     if old_root is None:
         _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
@@ -117,7 +93,7 @@ def load_fixture() -> Callable[[str], ObjectDict]:
 @pytest.fixture
 def evaluate() -> Callable[[ObjectDict], EngineResult]:
     """Return the evaluate_payload callable."""
-    return _evaluate_payload
+    return evaluate_payload
 
 
 @pytest.fixture
@@ -130,20 +106,15 @@ def tmp_project(tmp_path: Path) -> Generator[Path, None, None]:
     _ = (project_dir / "slopgate.toml").write_text(
         "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
-
-    # Copy prompt context
     if (_RESOURCES / "prompt_context").exists():
         _ = shutil.copytree(
             _RESOURCES / "prompt_context", project_dir / "prompt_context"
         )
-
     old_root = os.environ.get("SLOPGATE_ROOT")
     old_config = os.environ.get("SLOPGATE_CONFIG")
     os.environ["SLOPGATE_ROOT"] = str(project_dir)
     os.environ["SLOPGATE_CONFIG"] = str(_RESOURCES / "defaults.json")
-
     yield project_dir
-
     if old_root is None:
         _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
@@ -167,7 +138,6 @@ def langgraph_project(tmp_path: Path) -> Generator[Path, None, None]:
     _ = (tmp_path / "slopgate.toml").write_text(
         "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
-
     old_root = os.environ.get("SLOPGATE_ROOT")
     os.environ["SLOPGATE_ROOT"] = str(tmp_path)
     yield tmp_path
@@ -175,11 +145,6 @@ def langgraph_project(tmp_path: Path) -> Generator[Path, None, None]:
         _ = os.environ.pop("SLOPGATE_ROOT", None)
     else:
         os.environ["SLOPGATE_ROOT"] = old_root
-
-
-# ---------------------------------------------------------------------------
-# Payload builders
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -212,11 +177,6 @@ def pretool_bash() -> Callable[[str, str | None], ObjectDict]:
         }
 
     return _build
-
-
-# ---------------------------------------------------------------------------
-# Assertion helpers
-# ---------------------------------------------------------------------------
 
 
 def require_output(result: EngineResult) -> ObjectDict:

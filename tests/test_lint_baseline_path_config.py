@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from slopgate.lint._baseline import _baseline_path
+from slopgate.lint._baseline import baseline_path
 from slopgate.lint._config import load_config, set_config
 from slopgate.lint._toml_overrides import resolve_baseline_path
 from tests.lint_paths_support import write_slopgate_toml
@@ -21,7 +21,7 @@ def test_load_config_ignores_tests_quality_baselines_without_toml_override(
     cfg = load_config(tmp_path)
     set_config(cfg)
 
-    assert (cfg.baseline_path, _baseline_path()) == (None, tmp_path / "baselines.json")
+    assert (cfg.baseline_path, baseline_path()) == (None, tmp_path / "baselines.json")
 
 
 def test_load_config_honors_paths_baseline_path(tmp_path: Path) -> None:
@@ -31,7 +31,7 @@ def test_load_config_honors_paths_baseline_path(tmp_path: Path) -> None:
     set_config(cfg)
 
     expected = tmp_path / "custom" / "baseline.json"
-    assert (cfg.baseline_path, _baseline_path()) == (expected, expected)
+    assert (cfg.baseline_path, baseline_path()) == (expected, expected)
 
 
 def test_resolve_baseline_path_supports_absolute_paths(tmp_path: Path) -> None:

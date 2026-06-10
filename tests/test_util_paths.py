@@ -8,8 +8,8 @@ import pytest
 from slopgate.util import logger
 from slopgate.util.payloads import is_bash_tool, is_shell_tool, shell_kind_for_tool
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
+from slopgate.util import platform
 from slopgate.util.platform import (
-    is_windows,
     looks_like_windows_absolute_path,
     lower_path_for_match,
     normalize_path_for_match,
@@ -44,7 +44,7 @@ def _xdg_helper_results(
     monkeypatch.delenv("APPDATA", raising=False)
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     return {
-        "is_windows_bool": isinstance(is_windows(), bool),
+        "is_windows_bool": platform.is_windows(),
         "config": user_config_dir("slopgate-test"),
         "data": user_data_dir("slopgate-test"),
         "data_root_exists": data_root.exists(),
@@ -72,10 +72,11 @@ def test_user_platform_dirs_respect_xdg_config_home(
 ) -> None:
     config_root = tmp_path / "xdg-config"
     data_root = tmp_path / "xdg-data"
+    monkeypatch.setattr(platform, "is_windows", lambda: False)
     results = _xdg_helper_results(monkeypatch, config_root, data_root)
 
     assert results == {
-        "is_windows_bool": True,
+        "is_windows_bool": False,
         "config": config_root / "slopgate-test",
         "data": Path.home() / ".local" / "share" / "slopgate-test",
         "data_root_exists": False,
@@ -109,9 +110,7 @@ def test_logger_helpers_emit_json_levels(capsys: pytest.CaptureFixture[str]) -> 
     logger.warning("warning event", path="src/warning.py")
     logger.error("error event", path="src/error.py")
 
-    payloads = [
-        json.loads(line) for line in capsys.readouterr().err.splitlines()
-    ]
+    payloads = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
     expected_events = [
         {"level": "debug", "message": "debug event", "path": "src/debug.py"},
         {"level": "info", "message": "info event", "path": "src/info.py"},

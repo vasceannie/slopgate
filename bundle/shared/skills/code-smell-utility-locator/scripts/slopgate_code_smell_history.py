@@ -7,7 +7,7 @@ import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
 CODE_SMELL_RULES = {
     "PY-CODE-008",
@@ -46,14 +46,16 @@ def iter_jsonl(path: Path) -> Iterable[dict[str, object]]:
 def pick_path(record: dict[str, object]) -> str:
     metadata = record.get("metadata")
     if isinstance(metadata, dict):
-        value = metadata.get("path") or metadata.get("file")
+        metadata_dict = cast(dict[str, object], metadata)
+        value = metadata_dict.get("path") or metadata_dict.get("file")
         if isinstance(value, str):
             return value
-        hits = metadata.get("hits")
+        hits = metadata_dict.get("hits")
         if isinstance(hits, list) and hits:
             first = hits[0]
             if isinstance(first, dict):
-                candidate = first.get("path") or first.get("file")
+                first_dict = cast(dict[str, object], first)
+                candidate = first_dict.get("path") or first_dict.get("file")
                 if isinstance(candidate, str):
                     return candidate
     for key in ("path", "file", "file_path", "target_path"):

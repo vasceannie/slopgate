@@ -1,24 +1,16 @@
 """CLI subcommands for slopgate search (isx integration)."""
 
 from __future__ import annotations
-
 import argparse
 import json
 import os
 from pathlib import Path
 from typing import cast
-
 from slopgate._argparse_types import SubparserRegistry
 from slopgate._types import object_dict
 from urllib.parse import urlparse, urlunparse
-
 from slopgate.search.completions import print_completion
-from slopgate.search.config import (
-    APP_NAME,
-    IsxError,
-    SearchConfig,
-    load_config,
-)
+from slopgate.search.config import APP_NAME, IsxError, SearchConfig, load_config
 from slopgate.search.git_utils import resolve_add_repo
 from slopgate.search.index_ops import (
     find_local_index,
@@ -34,12 +26,7 @@ from slopgate.search.runtime import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Token resolution
-# ---------------------------------------------------------------------------
-
-
-def _string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
+def string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
     value = getattr(args, name, default)
     return value if isinstance(value, str) else default
 
@@ -56,20 +43,16 @@ def _string_list_arg(args: argparse.Namespace, name: str) -> list[str]:
     return [item for item in cast(list[object], raw_value) if isinstance(item, str)]
 
 
-def _token_from_cli(
-    args: argparse.Namespace,
-) -> tuple[str | None, dict[str, str]]:
+def _token_from_cli(args: argparse.Namespace) -> tuple[str | None, dict[str, str]]:
     """Check ``--token`` and ``--token-env`` flags."""
     extra: dict[str, str] = {}
-    token = _string_arg(args, "token")
+    token = string_arg(args, "token")
     if token:
         extra["ISLANDS_GIT_TOKEN"] = token
-        return "--token", extra
-
-    token_env = _string_arg(args, "token_env")
+        return ("--token", extra)
+    token_env = string_arg(args, "token_env")
     if not token_env:
-        return None, extra
-
+        return (None, extra)
     value = os.environ.get(token_env)
     if not value:
         raise IsxError(
@@ -77,7 +60,7 @@ def _token_from_cli(
             + "Set it or use --token <value> instead."
         )
     extra["ISLANDS_GIT_TOKEN"] = value
-    return token_env, extra
+    return (token_env, extra)
 
 
 def _token_from_config(repo_url: str | None) -> str | None:
@@ -97,26 +80,22 @@ def _token_from_config(repo_url: str | None) -> str | None:
 
 
 def _resolve_token(
-    args: argparse.Namespace,
-    repo_url: str | None = None,
+    args: argparse.Namespace, repo_url: str | None = None
 ) -> tuple[str | None, dict[str, str]]:
     """Resolve a git token from CLI flags, config, or env."""
     source, extra = _token_from_cli(args)
     if source:
-        return source, extra
-
+        return (source, extra)
     config_token = _token_from_config(repo_url)
     if config_token:
         host = urlparse(repo_url or "").hostname or ""
         extra["ISLANDS_GIT_TOKEN"] = config_token
-        return f"config:{host}", extra
-
+        return (f"config:{host}", extra)
     env_val = os.environ.get("ISLANDS_GIT_TOKEN")
     if env_val:
         extra["ISLANDS_GIT_TOKEN"] = env_val
-        return "ISLANDS_GIT_TOKEN", extra
-
-    return None, extra
+        return ("ISLANDS_GIT_TOKEN", extra)
+    return (None, extra)
 
 
 def _embed_token_in_url(url: str, token: str) -> str:
@@ -124,16 +103,11 @@ def _embed_token_in_url(url: str, token: str) -> str:
     if not url.startswith("https://"):
         return url
     parsed = urlparse(url)
-    authed = parsed._replace(
-        netloc=f"oauth2:{token}@{parsed.hostname}",
-    )
+    authed = parsed._replace(netloc=f"oauth2:{token}@{parsed.hostname}")
     return urlunparse(authed)
 
 
-def _build_add_args(
-    repo: str,
-    extra: dict[str, str],
-) -> list[str]:
+def _build_add_args(repo: str, extra: dict[str, str]) -> list[str]:
     """Build islands ``add`` args, optionally rewriting the URL."""
     add_args = ["add"]
     token_val = extra.get("ISLANDS_GIT_TOKEN")
@@ -144,23 +118,18 @@ def _build_add_args(
     return add_args
 
 
-# ---------------------------------------------------------------------------
-# Subcommand handlers
-# ---------------------------------------------------------------------------
-
-
 def cmd_init(args: argparse.Namespace) -> int:
     """Write wrapper and islands configs."""
-    from slopgate.search._cli_init import cmd_init as _cmd_init
+    from slopgate.search._cli_init import cmd_init
 
-    return _cmd_init(args)
+    return cmd_init(args)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Check runtime config and endpoint reachability."""
-    from slopgate.search._cli_doctor import cmd_doctor as _cmd_doctor
+    from slopgate.search._cli_doctor import cmd_doctor
 
-    return _cmd_doctor(args)
+    return cmd_doctor(args)
 
 
 def cmd_models(args: argparse.Namespace) -> int:
@@ -171,19 +140,11 @@ def cmd_models(args: argparse.Namespace) -> int:
     shown = (
         models if _bool_arg(args, "all") else [m for m in models if embedding_like(m)]
     )
-
     if _bool_arg(args, "json"):
-        print(
-            json.dumps(
-                {"current": current, "models": shown},
-                indent=2,
-            )
-        )
+        print(json.dumps({"current": current, "models": shown}, indent=2))
         return 0
-
     if not shown:
         raise IsxError("no models matched the current filter")
-
     print(f"Current model: {current}")
     for model in shown:
         marker = "*" if model == current else " "
@@ -194,10 +155,9 @@ def cmd_models(args: argparse.Namespace) -> int:
 def cmd_use(args: argparse.Namespace) -> int:
     """Switch to a different embedding model."""
     cfg = load_config()
-    model = _string_arg(args, "model").strip()
+    model = string_arg(args, "model").strip()
     if not model:
         raise IsxError("model name is required")
-
     if not _bool_arg(args, "force"):
         models = fetch_runtime_models(cfg)
         if model not in models:
@@ -205,13 +165,12 @@ def cmd_use(args: argparse.Namespace) -> int:
                 f"model not found in /v1/models: {model}. "
                 + "Run `isx models --all` to inspect available routes."
             )
-
     save_runtime_model(cfg, model)
     print(f"Updated model to {model}")
     print(f"Wrote {current_islands_config_path(cfg)}")
     print(
         "Note: if your existing indexes were built with a different "
-        + "embedding dimension, re-add or rebuild them before searching.",
+        + "embedding dimension, re-add or rebuild them before searching."
     )
     return 0
 
@@ -220,16 +179,13 @@ def cmd_list(args: argparse.Namespace) -> int:
     """List locally known indexes."""
     cfg = load_config()
     items = local_indexes(cfg)
-
     if _bool_arg(args, "json"):
         print(json.dumps(items, indent=2))
         return 0
-
     if not items:
         print("No local indexes found.")
         print(f"Try: {APP_NAME} add https://github.com/panbanda/islands")
         return 0
-
     print(f"Local indexes ({len(items)}):")
     for item in items:
         repo = object_dict(item.get("repository"))
@@ -241,10 +197,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def _run_add_repository(
-    args: argparse.Namespace,
-    repo_url: str,
-    *,
-    cfg: SearchConfig,
+    args: argparse.Namespace, repo_url: str, *, cfg: SearchConfig
 ) -> int:
     token_source, extra = _resolve_token(args, repo_url=repo_url)
     if token_source:
@@ -256,7 +209,7 @@ def _run_add_repository(
 def cmd_add(args: argparse.Namespace) -> int:
     """Index a repository URL."""
     cfg = load_config()
-    repo = resolve_add_repo(_string_arg(args, "repo"), cwd=Path.cwd())
+    repo = resolve_add_repo(string_arg(args, "repo"), cwd=Path.cwd())
     return _run_add_repository(args, repo, cfg=cfg)
 
 
@@ -272,15 +225,12 @@ def cmd_search(args: argparse.Namespace) -> int:
 def cmd_remove(args: argparse.Namespace) -> int:
     """Remove an index by name or repo identity."""
     cfg = load_config()
-    item = find_local_index(cfg, _string_arg(args, "target"))
+    item = find_local_index(cfg, string_arg(args, "target"))
     if not item:
-        raise IsxError(
-            f"could not resolve local index: {_string_arg(args, 'target')}",
-        )
+        raise IsxError(f"could not resolve local index: {string_arg(args, 'target')}")
     index_name = item.get("name")
     if not index_name:
         raise IsxError("matched index metadata is missing its name")
-
     print(f"Removing index: {index_name}", flush=True)
     remove_args = ["remove"]
     if _bool_arg(args, "force"):
@@ -299,11 +249,8 @@ def cmd_reindex(args: argparse.Namespace) -> int:
     """Remove and rebuild an index from its clone URL."""
     cfg = load_config()
     index_name, repo_url = resolve_reindex_target(
-        cfg,
-        _string_arg(args, "target"),
-        cwd=Path.cwd(),
+        cfg, string_arg(args, "target"), cwd=Path.cwd()
     )
-
     if index_name:
         print(f"Removing existing index: {index_name}", flush=True)
         code = run_islands(cfg, ["remove", "--force", index_name])
@@ -311,23 +258,22 @@ def cmd_reindex(args: argparse.Namespace) -> int:
             return code
     else:
         print(
-            f"No existing local index matched {_string_arg(args, 'target')}, adding fresh from URL",
+            f"No existing local index matched {string_arg(args, 'target')}, adding fresh from URL",
             flush=True,
         )
-
     print(f"Adding repository: {repo_url}", flush=True)
     return _run_add_repository(args, repo_url, cfg=cfg)
 
 
 def cmd_completions(args: argparse.Namespace) -> int:
     """Print shell completion script."""
-    return print_completion(_string_arg(args, "shell"))
+    return print_completion(string_arg(args, "shell"))
 
 
 def build_search_parser(
     subparsers: SubparserRegistry | None = None,
 ) -> argparse.ArgumentParser:
     """Build the ``search`` subcommand parser."""
-    from slopgate.search._cli_parser import build_search_parser as _build_search_parser
+    from slopgate.search._cli_parser import build_search_parser
 
-    return _build_search_parser(subparsers)
+    return build_search_parser(subparsers)

@@ -1,16 +1,25 @@
 from __future__ import annotations
-
 import configparser
+import importlib
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised via subprocess import hook
-    import tomli as tomllib
-
+_toml_loads: Callable[[str], object] | None = None
+_toml_decode_error: type[Exception] | None = None
+for _module_name in ("tomllib", "tomli"):
+    try:
+        _toml_module = importlib.import_module(_module_name)
+    except ModuleNotFoundError:
+        continue
+    _loads = getattr(_toml_module, "loads", None)
+    if callable(_loads):
+        _toml_loads = cast(Callable[[str], object], _loads)
+        _toml_decode_error = cast(
+            type[Exception], getattr(_toml_module, "TOMLDecodeError", ValueError)
+        )
+        break
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
@@ -31,7 +40,7 @@ def _mapping_value(data: object, key: str) -> object | None:
     return cast("Mapping[str, object]", data).get(key)
 
 
-def _string_value(data: object) -> str | None:
+def string_value(data: object) -> str | None:
     if not isinstance(data, str):
         return None
     stripped = data.strip().lower()
@@ -56,16 +65,18 @@ def _addopts_asyncio_mode(data: object) -> str | None:
         return None
     for index, token in enumerate(tokens):
         if token.startswith("--asyncio-mode="):
-            return _string_value(token.split("=", 1)[1])
+            return string_value(token.split("=", 1)[1])
         if token == "--asyncio-mode" and index + 1 < len(tokens):
-            return _string_value(tokens[index + 1])
+            return string_value(tokens[index + 1])
     return None
 
 
 def _pyproject_config(path: Path) -> _PytestAsyncioConfig | None:
+    if _toml_loads is None or _toml_decode_error is None:
+        return None
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
+        data = _toml_loads(path.read_text(encoding="utf-8"))
+    except (OSError, _toml_decode_error):
         return None
     tool = _mapping_value(data, "tool")
     pytest_section = _mapping_value(tool, "pytest")
@@ -75,8 +86,8 @@ def _pyproject_config(path: Path) -> _PytestAsyncioConfig | None:
     options = cast("Mapping[str, object]", ini_options)
     return _PytestAsyncioConfig(
         _addopts_asyncio_mode(_mapping_value(options, "addopts"))
-        or _string_value(_mapping_value(options, "asyncio_mode")),
-        _string_value(_mapping_value(options, "asyncio_default_fixture_loop_scope")),
+        or string_value(_mapping_value(options, "asyncio_mode")),
+        string_value(_mapping_value(options, "asyncio_default_fixture_loop_scope")),
     )
 
 
@@ -86,7 +97,9 @@ def _ini_config(path: Path, *, recognize_empty: bool) -> _PytestAsyncioConfig | 
         parser.read(path, encoding="utf-8")
     except configparser.Error:
         return _EMPTY_CONFIG if recognize_empty else None
-    if not recognize_empty and not any(parser.has_section(section) for section in _INI_SECTIONS):
+    if not recognize_empty and (
+        not any((parser.has_section(section) for section in _INI_SECTIONS))
+    ):
         return None
     return _PytestAsyncioConfig(
         _ini_asyncio_mode(parser),
@@ -97,7 +110,7 @@ def _ini_config(path: Path, *, recognize_empty: bool) -> _PytestAsyncioConfig | 
 def _ini_option(parser: configparser.ConfigParser, option_name: str) -> str | None:
     for section in _INI_SECTIONS:
         if parser.has_option(section, option_name):
-            return _string_value(parser.get(section, option_name))
+            return string_value(parser.get(section, option_name))
     return None
 
 
@@ -108,7 +121,7 @@ def _ini_asyncio_mode(parser: configparser.ConfigParser) -> str | None:
             if addopts_mode is not None:
                 return addopts_mode
         if parser.has_option(section, "asyncio_mode"):
-            return _string_value(parser.get(section, "asyncio_mode"))
+            return string_value(parser.get(section, "asyncio_mode"))
     return None
 
 

@@ -11,33 +11,68 @@ Use --install-scope {user,project,both} (alias: --cursor-scope) on install/unins
 
 from __future__ import annotations
 
+__all__ = [
+    "CLAUDE_EVENTS",
+    "CODEX_EVENTS",
+    "CURSOR_INSTALL_SCOPES",
+    "INSTALL_SCOPES",
+    "CURSOR_EVENTS",
+    "cursor_project_hooks_path",
+    "claude_hooks_block",
+    "codex_hooks_block",
+    "cursor_hooks_block",
+    "enable_codex_hooks_toml",
+    "install_claude",
+    "install_codex",
+    "install_cursor",
+    "install_opencode",
+    "uninstall_claude",
+    "uninstall_codex",
+    "uninstall_cursor",
+    "uninstall_opencode",
+    "install_platform",
+    "install_suite",
+    "SuiteInstallOptions",
+    "SuiteUninstallOptions",
+    "SuiteUpdateOptions",
+    "uninstall_autoupdate",
+    "uninstall_platform",
+    "uninstall_suite",
+    "update_suite",
+    "Path",
+    "_claude",
+    "_codex",
+    "_cursor",
+    "_opencode",
+    "_suite",
+    "find_binary",
+    "_INSTALLERS",
+]
 from pathlib import Path
-
 from slopgate.installer import _claude, _codex, _cursor, _opencode, _suite
-from slopgate.installer._claude import _CLAUDE_EVENTS, _claude_hooks_block
+from slopgate.installer._claude import CLAUDE_EVENTS, claude_hooks_block
 from slopgate.installer._codex import (
-    _CODEX_EVENTS,
-    _codex_hooks_block,
-    _enable_codex_hooks_toml,
+    CODEX_EVENTS,
+    codex_hooks_block,
+    enable_codex_hooks_toml,
 )
 from slopgate.installer._cursor import (
     CURSOR_INSTALL_SCOPES,
-    _CURSOR_EVENTS,
-    _cursor_hooks_block,
-    _cursor_project_hooks_path,
+    CURSOR_EVENTS,
+    cursor_hooks_block,
+    cursor_project_hooks_path,
 )
 from slopgate.installer._install_scope import INSTALL_SCOPES
-from slopgate.installer._shared import find_binary as _find_binary
+from slopgate.installer._shared import find_binary
 
-_install_claude = _claude._install_claude
-_uninstall_claude = _claude._uninstall_claude
-_install_codex = _codex._install_codex
-_uninstall_codex = _codex._uninstall_codex
-_install_opencode = _opencode._install_opencode
-_uninstall_opencode = _opencode._uninstall_opencode
-_install_cursor = _cursor._install_cursor
-_uninstall_cursor = _cursor._uninstall_cursor
-
+install_claude = _claude.install_claude
+uninstall_claude = _claude.uninstall_claude
+install_codex = _codex.install_codex
+uninstall_codex = _codex.uninstall_codex
+install_opencode = _opencode.install_opencode
+uninstall_opencode = _opencode.uninstall_opencode
+install_cursor = _cursor.install_cursor
+uninstall_cursor = _cursor.uninstall_cursor
 install_suite = _suite.install_suite
 SuiteInstallOptions = _suite.SuiteInstallOptions
 SuiteUninstallOptions = _suite.SuiteUninstallOptions
@@ -45,12 +80,11 @@ SuiteUpdateOptions = _suite.SuiteUpdateOptions
 uninstall_autoupdate = _suite.uninstall_autoupdate
 uninstall_suite = _suite.uninstall_suite
 update_suite = _suite.update_suite
-
 _INSTALLERS = {
-    "claude": (_claude._install_claude, _claude._uninstall_claude),
-    "codex": (_codex._install_codex, _codex._uninstall_codex),
-    "cursor": (_cursor._install_cursor, _cursor._uninstall_cursor),
-    "opencode": (_opencode._install_opencode, _opencode._uninstall_opencode),
+    "claude": (_claude.install_claude, _claude.uninstall_claude),
+    "codex": (_codex.install_codex, _codex.uninstall_codex),
+    "cursor": (_cursor.install_cursor, _cursor.uninstall_cursor),
+    "opencode": (_opencode.install_opencode, _opencode.uninstall_opencode),
 }
 
 
@@ -96,35 +130,3 @@ def uninstall_platform(
     except ValueError as exc:
         print(exc)
         return 1
-
-
-__all__ = [
-    "_CLAUDE_EVENTS",
-    "_CODEX_EVENTS",
-    "CURSOR_INSTALL_SCOPES",
-    "INSTALL_SCOPES",
-    "_CURSOR_EVENTS",
-    "_cursor_project_hooks_path",
-    "_claude_hooks_block",
-    "_codex_hooks_block",
-    "_cursor_hooks_block",
-    "_enable_codex_hooks_toml",
-    "_find_binary",
-    "_install_claude",
-    "_install_codex",
-    "_install_cursor",
-    "_install_opencode",
-    "_uninstall_claude",
-    "_uninstall_codex",
-    "_uninstall_cursor",
-    "_uninstall_opencode",
-    "install_platform",
-    "install_suite",
-    "SuiteInstallOptions",
-    "SuiteUninstallOptions",
-    "SuiteUpdateOptions",
-    "uninstall_autoupdate",
-    "uninstall_platform",
-    "uninstall_suite",
-    "update_suite",
-]

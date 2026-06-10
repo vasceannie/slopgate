@@ -4,13 +4,16 @@ import re
 import shlex
 from pathlib import Path
 
+
 def _is_shell_glob_token(value: str) -> bool:
     """Return True when a shell token is a glob pattern, not a literal path."""
     return any(char in value for char in "*?[")
 
 
 _COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|"})
-_COMMAND_WRAPPER_NAMES = frozenset({"env", "command", "builtin", "exec", "time", "nohup"})
+_COMMAND_WRAPPER_NAMES = frozenset(
+    {"env", "command", "builtin", "exec", "time", "nohup"}
+)
 _SHELL_REDIRECTION_PATTERN = re.compile(r"(?:\d*>>?|\d*<)\s*([^\s;|&]+)")
 _SHELL_PATHISH_PATTERN = re.compile(
     r"(?:[A-Za-z]:[\\/])?(?:[~./\\A-Za-z0-9_-]+[/\\])*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+"
@@ -66,12 +69,12 @@ def _shell_command_executable_indexes(tokens: list[str]) -> set[int]:
 
 def shell_command_executable_paths(command: str) -> list[str]:
     """Return path-like executable tokens that appear in command position."""
-    tokens = _shell_tokens(command)
+    tokens = shell_tokens(command)
     executable_indexes = _shell_command_executable_indexes(tokens)
     return [tokens[index].strip("\"'") for index in sorted(executable_indexes)]
 
 
-def _shell_tokens(command: str) -> list[str]:
+def shell_tokens(command: str) -> list[str]:
     try:
         return shlex.split(command, posix=True)
     except ValueError:
@@ -157,7 +160,7 @@ def _shell_redirection_paths(command: str) -> list[str]:
 
 def shell_command_paths(command: str, shell_kind: str | None = None) -> list[str]:
     seen = _powershell_candidate_paths(command) if shell_kind == "powershell" else []
-    tokens = _shell_tokens(command)
+    tokens = shell_tokens(command)
     executable_indexes = _shell_command_executable_indexes(tokens)
 
     for index, token in enumerate(tokens):

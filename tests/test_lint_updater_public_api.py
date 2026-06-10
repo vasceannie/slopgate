@@ -4,6 +4,7 @@ from pathlib import Path
 
 from hypothesis import given, strategies
 
+from slopgate.lint import __version__
 from slopgate.lint._updater import (
     diff_config,
     render_slopgate_toml,
@@ -70,7 +71,7 @@ def test_update_toml_file_preserves_existing_values_and_injects_missing(
 
     assert {
         "enabled": "enabled = false" in updated,
-        "version_added": 'version = "0.1.0"' in updated,
+        "version_added": f'version = "{__version__}"' in updated,
         "thresholds_added": "[thresholds]" in updated,
         "missing_quality_gate": "version" in missing["slopgate"],
     } == {

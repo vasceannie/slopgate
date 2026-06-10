@@ -7,6 +7,7 @@ import pytest
 from hypothesis import given, strategies
 
 import slopgate.lint._baseline
+from slopgate._types import object_dict
 from slopgate.adapters.base import (
     hook_specific_context_output,
     render_permission_request_output,
@@ -123,7 +124,7 @@ def test_save_baseline_writes_sorted_stable_ids(
     baseline_path = tmp_path / "baselines.json"
     monkeypatch.setattr(
         slopgate.lint._baseline,
-        "_baseline_path",
+        "baseline_path",
         lambda: baseline_path,
     )
     first = Violation("demo-rule", "src/b.py", "B")
@@ -146,7 +147,7 @@ def test_load_baseline_reads_rule_sets(
     )
     monkeypatch.setattr(
         slopgate.lint._baseline,
-        "_baseline_path",
+        "baseline_path",
         lambda: baseline_path,
     )
 
@@ -176,7 +177,9 @@ def test_baseline_result_and_hash_helpers_are_deterministic() -> None:
 
 @given(strategies.text(alphabet="-* abc/._", max_size=80))
 def test_patch_added_content_never_includes_patch_headers(line: str) -> None:
-    patch_blob = "\n".join(["+++ b/src/example.py", "*** Update File: x.py", f"+{line}"])
+    patch_blob = "\n".join(
+        ["+++ b/src/example.py", "*** Update File: x.py", f"+{line}"]
+    )
 
     assert extract_added_patch_content(patch_blob) == line
 
@@ -204,7 +207,7 @@ def test_permission_request_allow_only_carries_updated_input(
         "PermissionRequest",
         "allow",
         "approved",
-        updated_input=updated_input,
+        updated_input=object_dict(updated_input),
     )
 
     assert rendered == {

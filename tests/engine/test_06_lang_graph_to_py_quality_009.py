@@ -10,8 +10,9 @@ from tests.test_engine import (
     pytest,
 )
 
+
 class TestLangGraph:
-    def _posttool_payload(
+    def posttool_payload(
         self, tmp_project: Path, rel_path: str, code: str
     ) -> ObjectDict:
         target = tmp_project / rel_path
@@ -49,7 +50,7 @@ class TestLangGraph:
     def test_lg_state_001(
         self, tmp_project: Path, code: str, should_flag: bool
     ) -> None:
-        payload = self._posttool_payload(tmp_project, "graph/state.py", code)
+        payload = self.posttool_payload(tmp_project, "graph/state.py", code)
         result = evaluate_payload(payload)
         finding = next(
             (f for f in result.findings if f.rule_id == "LG-STATE-001"), None
@@ -84,7 +85,7 @@ class TestLangGraph:
         ],
     )
     def test_lg_node_001(self, tmp_project: Path, code: str, should_flag: bool) -> None:
-        payload = self._posttool_payload(tmp_project, "graph/nodes.py", code)
+        payload = self.posttool_payload(tmp_project, "graph/nodes.py", code)
         result = evaluate_payload(payload)
         finding = next((f for f in result.findings if f.rule_id == "LG-NODE-001"), None)
         assert (not should_flag and finding is None) or (
@@ -93,7 +94,7 @@ class TestLangGraph:
 
     def test_non_graph_file_ignored(self, tmp_project: Path) -> None:
         code = "from typing import TypedDict\nclass Config(TypedDict):\n    items: list[str]\n"
-        payload = self._posttool_payload(tmp_project, "utils/helpers.py", code)
+        payload = self.posttool_payload(tmp_project, "utils/helpers.py", code)
         result = evaluate_payload(payload)
         lg_findings = [f for f in result.findings if f.rule_id.startswith("LG-")]
         assert not lg_findings
@@ -104,7 +105,7 @@ class TestLangGraph:
             "graph = StateGraph(MyState)\n"
             'graph.set_entry_point("start")\n'
         )
-        payload = self._posttool_payload(tmp_project, "builder.py", code)
+        payload = self.posttool_payload(tmp_project, "builder.py", code)
         result = evaluate_payload(payload)
         findings = [f for f in result.findings if f.rule_id == "LG-API-001"]
         assert findings
@@ -116,7 +117,7 @@ class TestLangGraph:
             "graph = StateGraph(MyState)\n"
             'graph.add_edge(START, "start")\n'
         )
-        payload = self._posttool_payload(tmp_project, "builder.py", code)
+        payload = self.posttool_payload(tmp_project, "builder.py", code)
         result = evaluate_payload(payload)
         api_findings = [f for f in result.findings if f.rule_id == "LG-API-001"]
         assert not api_findings
@@ -127,7 +128,7 @@ class TestLangGraph:
             "class BadState(TypedDict):\n    items: list[str]\n\n"
             'def bad_node(state):\n    state["items"].append("x")\n    return state\n'
         )
-        payload = self._posttool_payload(tmp_project, "graph/bad.py", code)
+        payload = self.posttool_payload(tmp_project, "graph/bad.py", code)
         result = evaluate_payload(payload)
         lg_findings = [f for f in result.findings if f.rule_id.startswith("LG-")]
         assert lg_findings
@@ -174,6 +175,7 @@ class TestLangGraph:
         lg_findings = [f for f in result.findings if f.rule_id.startswith("LG-")]
         assert not lg_findings
 
+
 @pytest.mark.parametrize(
     "code, should_deny",
     [
@@ -190,6 +192,7 @@ def test_py_log_001(pretool_write: WriteBuilder, code: str, should_deny: bool) -
     assert ("PY-LOG-001" in ids) is should_deny, (
         f"Unexpected PY-LOG-001 result for code:\n{code}"
     )
+
 
 @pytest.mark.parametrize(
     "code, should_deny",
@@ -214,6 +217,7 @@ def test_py_type_002(pretool_write: WriteBuilder, code: str, should_deny: bool) 
         f"Unexpected PY-TYPE-002 result for code:\n{code}"
     )
 
+
 class TestCommentedOutCode:
     def test_two_commented_lines_denied(self, pretool_write: WriteBuilder) -> None:
         code = "# def old_func():\n# import os\nx = 1\n"
@@ -229,6 +233,7 @@ class TestCommentedOutCode:
         code = "# This module handles user authentication.\n# It should be imported early.\nx = 1\n"
         result = evaluate_payload(pretool_write("src/auth.py", code))
         assert "PY-QUALITY-008" not in finding_ids(result)
+
 
 @pytest.mark.parametrize(
     "code, should_deny",

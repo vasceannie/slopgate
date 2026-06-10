@@ -5,15 +5,11 @@ sibling test files, and requirements files so enrichment can discover them.
 """
 
 from __future__ import annotations
-
 import time
 from pathlib import Path
-
 import pytest
-
-from tests import support as test_support
+from tests import support
 from tests.support import LoadFixture
-
 from slopgate._types import ObjectDict
 from slopgate.engine import evaluate_payload
 from slopgate.enrichment import (
@@ -25,20 +21,15 @@ from slopgate.enrichment import quality_enrichers
 from slopgate.models import RuleFinding, Severity
 
 
-# ===========================================================================
-# Helpers
-# ===========================================================================
-
-
-def _mkdir(directory: Path, *, parents: bool = False, exist_ok: bool = False) -> None:
+def mkdir(directory: Path, *, parents: bool = False, exist_ok: bool = False) -> None:
     _ = directory.mkdir(parents=parents, exist_ok=exist_ok)
 
 
-def _write_text(path: Path, content: str) -> None:
+def write_text(path: Path, content: str) -> None:
     _ = path.write_text(content, encoding="utf-8")
 
 
-def _make_conftest(
+def make_conftest(
     directory: Path, fixtures: list[str], with_params: list[str] | None = None
 ) -> Path:
     """Create a conftest.py with the given fixture names."""
@@ -52,29 +43,24 @@ def _make_conftest(
         else:
             lines.append(f"@pytest.fixture\ndef {name}():\n    return 'value'\n\n")
     conftest = directory / "conftest.py"
-    _write_text(conftest, "\n".join(lines))
+    write_text(conftest, "\n".join(lines))
     return conftest
 
 
-def _make_sibling_test(
+def make_sibling_test(
     directory: Path, name: str, has_parametrize: bool = False
 ) -> Path:
     """Create a sibling test file, optionally with @pytest.mark.parametrize."""
     if has_parametrize:
-        content = (
-            "import pytest\n\n"
-            '@pytest.mark.parametrize("x,expected", [(1, True), (2, False)])\n'
-            "def test_example(x, expected):\n"
-            "    assert process(x) == expected\n"
-        )
+        content = 'import pytest\n\n@pytest.mark.parametrize("x,expected", [(1, True), (2, False)])\ndef test_example(x, expected):\n    assert process(x) == expected\n'
     else:
         content = "def test_simple():\n    assert True\n"
     path = directory / name
-    _write_text(path, content)
+    write_text(path, content)
     return path
 
 
-def _pretool_write_payload(file_path: str, content: str, cwd: str) -> ObjectDict:
+def pretool_write_payload(file_path: str, content: str, cwd: str) -> ObjectDict:
     return {
         "session_id": "test-enrichment",
         "cwd": cwd,
@@ -84,104 +70,23 @@ def _pretool_write_payload(file_path: str, content: str, cwd: str) -> ObjectDict
     }
 
 
-# ===========================================================================
-# Unit tests: _discover_fixtures
-# ===========================================================================
-
-
-# ===========================================================================
-# Unit tests: _find_parametrize_examples
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TEST-003 enrichment through engine
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TEST-001 enrichment
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TEST-004 enrichment
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TEST-002 enrichment
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TYPE-001 enrichment
-# ===========================================================================
-
-
-# ===========================================================================
-# Safety: enrichment errors don't break the pipeline
-# ===========================================================================
-
-
-# ===========================================================================
-# Existing fixture-based tests still pass (regression)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-008 enrichment (long methods)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-009 enrichment (long params)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-013 enrichment (thin wrappers)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-015 enrichment (cyclomatic complexity)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-012 enrichment (feature envy)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-CODE-013 enrichment (thin wrappers)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-EXC-002 enrichment (silent exceptions)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-LOG-001 enrichment (stdlib logger)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-TYPE-002 enrichment (type suppressions)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-QUALITY-010 enrichment (magic numbers)
-# ===========================================================================
-
-
-# ===========================================================================
-# Integration: PY-QUALITY-009 enrichment (hardcoded paths)
-# ===========================================================================
-
-# Exported test support used by split test modules.
-__all__ = ('LoadFixture', 'ObjectDict', 'Path', 'RuleFinding', 'Severity', '_make_conftest', '_make_sibling_test', '_mkdir', '_pretool_write_payload', '_write_text', 'discover_fixtures', 'enrich_findings', 'evaluate_payload', 'find_parametrize_examples', 'pytest', 'quality_enrichers', 'test_support', 'time')
+__all__ = (
+    "LoadFixture",
+    "ObjectDict",
+    "Path",
+    "RuleFinding",
+    "Severity",
+    "make_conftest",
+    "make_sibling_test",
+    "mkdir",
+    "pretool_write_payload",
+    "write_text",
+    "discover_fixtures",
+    "enrich_findings",
+    "evaluate_payload",
+    "find_parametrize_examples",
+    "pytest",
+    "quality_enrichers",
+    "support",
+    "time",
+)

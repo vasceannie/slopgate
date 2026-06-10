@@ -7,27 +7,33 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
-from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    METADATA_PATH,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.lint._detectors.duplicates import (
-    _is_import_stmt,
-    _normalize_ast,
-    _skip_docstring,
-    _structure_hash,
+    is_import_stmt,
+    normalize_ast,
+    skip_docstring,
+    structure_hash,
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.rules.python_ast._staging.duplicate_rules._shared import _MIN_BLOCK_SIZE
+from slopgate.rules.python_ast._staging.duplicate_rules._shared import MIN_BLOCK_SIZE
 
 from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
+
 def _strip_module_preamble(body: list[ast.stmt]) -> list[ast.stmt]:
     """Remove the contiguous top-of-file docstring/import preamble."""
-    stripped = _skip_docstring(body)
+    stripped = skip_docstring(body)
     idx = 0
-    while idx < len(stripped) and _is_import_stmt(stripped[idx]):
+    while idx < len(stripped) and is_import_stmt(stripped[idx]):
         idx += 1
     return stripped[idx:]
 
@@ -36,7 +42,7 @@ def _block_scopes(module: ast.Module) -> list[tuple[str, list[ast.stmt]]]:
     scopes: list[tuple[str, list[ast.stmt]]] = []
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            scopes.append((node.name, _skip_docstring(node.body)))
+            scopes.append((node.name, skip_docstring(node.body)))
         elif isinstance(node, ast.Module):
             scopes.append(("<module>", _strip_module_preamble(node.body)))
     return scopes
@@ -45,14 +51,17 @@ def _block_scopes(module: ast.Module) -> list[tuple[str, list[ast.stmt]]]:
 def _record_block_windows(
     groups: dict[str, list[tuple[str, int, int]]], scope: str, body: list[ast.stmt]
 ) -> None:
-    if len(body) < _MIN_BLOCK_SIZE:
+    if len(body) < MIN_BLOCK_SIZE:
         return
-    norms = [_normalize_ast(stmt) for stmt in body]
-    for start_index in range(len(norms) - _MIN_BLOCK_SIZE + 1):
-        if all(_is_import_stmt(body[index]) for index in range(start_index, start_index + _MIN_BLOCK_SIZE)):
+    norms = [normalize_ast(stmt) for stmt in body]
+    for start_index in range(len(norms) - MIN_BLOCK_SIZE + 1):
+        if all(
+            is_import_stmt(body[index])
+            for index in range(start_index, start_index + MIN_BLOCK_SIZE)
+        ):
             continue
-        h = _structure_hash("|".join(norms[start_index : start_index + _MIN_BLOCK_SIZE]))
-        end_node = body[start_index + _MIN_BLOCK_SIZE - 1]
+        h = structure_hash("|".join(norms[start_index : start_index + MIN_BLOCK_SIZE]))
+        end_node = body[start_index + MIN_BLOCK_SIZE - 1]
         end_lineno = end_node.end_lineno or body[start_index].lineno
         groups[h].append((scope, body[start_index].lineno, end_lineno))
 

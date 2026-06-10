@@ -70,7 +70,10 @@ def _default_return_value_label(val: ast.AST | None) -> str | None:
 
 def _is_default_return(node: ast.stmt) -> bool:
     """True when *node* is ``return <sentinel>`` (None, {}, [], "", 0, False)."""
-    return isinstance(node, ast.Return) and _default_return_value_label(node.value) is not None
+    return (
+        isinstance(node, ast.Return)
+        and _default_return_value_label(node.value) is not None
+    )
 
 
 def _is_broad_except(handler: ast.ExceptHandler) -> bool:

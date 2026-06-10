@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from slopgate.constants import MAX_LINT_VIOLATIONS_SHOWN
+from slopgate.cli._lint_report_format import colorize, existing_location_lines
 from slopgate.lint._baseline import BaselineSyncResult, Violation
 
 if TYPE_CHECKING:
@@ -21,27 +22,6 @@ BASELINE_DISABLED_MESSAGE = (
 )
 
 
-def _colorize(code: str, text: str, enabled: bool) -> str:
-    return f"\033[{code}m{text}\033[0m" if enabled else text
-
-
-def _existing_location_lines(violation: Violation, *, color: bool) -> list[str]:
-    if "; locations:" in violation.detail:
-        return []
-    raw_locations = violation.metadata.get("existing_locations")
-    if not isinstance(raw_locations, list):
-        return []
-    locations = [item for item in raw_locations if isinstance(item, str)]
-    if not locations:
-        return []
-    location_text = ", ".join(locations)
-    raw_more = violation.metadata.get("existing_locations_more")
-    if isinstance(raw_more, int) and raw_more > 0:
-        location_text += f", ... +{raw_more} more"
-    marker = _colorize("2", "↳", color)
-    return [f"      {marker} existing locations: {location_text}"]
-
-
 @dataclass(frozen=True, slots=True)
 class _RuleCounts:
     allowed: set[str]
@@ -51,23 +31,23 @@ class _RuleCounts:
 
 
 @dataclass(frozen=True, slots=True)
-class _LintFiles:
+class LintFiles:
     cfg: "QualityConfig"
     src_files: list[Path]
     test_files: list[Path]
 
 
 @dataclass(frozen=True, slots=True)
-class _LintHeader:
+class LintHeader:
     lint_version: str
     label: str
-    files: _LintFiles
+    files: LintFiles
     gate: LintGateMode = "new"
     git_base_note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class _TallyInput:
+class TallyInput:
     rule_name: str
     violations: list[Violation]
     baseline: dict[str, set[str]]
@@ -76,14 +56,14 @@ class _TallyInput:
 
 
 @dataclass(frozen=True, slots=True)
-class _LintRunTotals:
+class LintRunTotals:
     violations: int
     new: int
     fixed: int
 
 
 @dataclass(frozen=True, slots=True)
-class _BaselineInputs:
+class BaselineInputs:
     stored: dict[str, set[str]]
     accepted: dict[str, set[str]]
 
@@ -93,11 +73,11 @@ class _BaselineInputs:
 
 
 def _coerce_baseline_inputs(
-    baseline: dict[str, set[str]] | _BaselineInputs,
-) -> _BaselineInputs:
-    if isinstance(baseline, _BaselineInputs):
+    baseline: dict[str, set[str]] | BaselineInputs,
+) -> BaselineInputs:
+    if isinstance(baseline, BaselineInputs):
         return baseline
-    return _BaselineInputs(stored=baseline, accepted={})
+    return BaselineInputs(stored=baseline, accepted={})
 
 
 def _merge_rule_ids(
@@ -129,7 +109,7 @@ def _rule_counts(
 def _rule_status(rule_name: str, *, failed: bool, color: bool) -> str:
     code = "31" if failed else "32"
     marker = "✗" if failed else "✓"
-    return _colorize(code, f"{marker} {rule_name}", color)
+    return colorize(code, f"{marker} {rule_name}", color)
 
 
 def _rule_count_text(
@@ -140,23 +120,23 @@ def _rule_count_text(
 ) -> str:
     parts = [f"{total} total"]
     if counts.new_violations:
-        parts.append(_colorize("31", f"{len(counts.new_violations)} NEW", color))
+        parts.append(colorize("31", f"{len(counts.new_violations)} NEW", color))
     if counts.fixed_ids:
-        parts.append(_colorize("32", f"{len(counts.fixed_ids)} fixed", color))
+        parts.append(colorize("32", f"{len(counts.fixed_ids)} fixed", color))
     text = ", ".join(parts)
     if counts.allowed:
-        text += f" {_colorize('2', f'(known debt: {len(counts.allowed)})', color)}"
+        text += f" {colorize('2', f'(known debt: {len(counts.allowed)})', color)}"
     return text
 
 
 def _print_new_violations(violations: list[Violation], *, color: bool) -> None:
     for violation in violations[:MAX_LINT_VIOLATIONS_SHOWN]:
-        print(f"    {_colorize('31', '+', color)} {violation}")
-        for line in _existing_location_lines(violation, color=color):
+        print(f"    {colorize('31', '+', color)} {violation}")
+        for line in existing_location_lines(violation, color=color):
             print(line)
     if len(violations) > MAX_LINT_VIOLATIONS_SHOWN:
         remaining = len(violations) - MAX_LINT_VIOLATIONS_SHOWN
-        print(f"    {_colorize('2', f'... and {remaining} more', color)}")
+        print(f"    {colorize('2', f'... and {remaining} more', color)}")
 
 
 def _print_detailed_violations(
@@ -175,10 +155,12 @@ def _print_detailed_violations(
             print(line)
 
 
-def _tally_rule(input: _TallyInput) -> tuple[int, int, int]:
+def tally_rule(input: TallyInput) -> tuple[int, int, int]:
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     counts = _rule_counts(input.rule_name, input.violations, input.baseline)
-    failed = bool(counts.new_violations) if input.gate == "new" else bool(input.violations)
+    failed = (
+        bool(counts.new_violations) if input.gate == "new" else bool(input.violations)
+    )
     status = _rule_status(input.rule_name, failed=failed, color=color)
     print(f"  {status}  {_rule_count_text(len(input.violations), counts, color=color)}")
     _print_new_violations(counts.new_violations, color=color)
@@ -187,15 +169,17 @@ def _tally_rule(input: _TallyInput) -> tuple[int, int, int]:
     return len(input.violations), len(counts.new_violations), len(counts.fixed_ids)
 
 
-def _print_lint_summary(totals: _LintRunTotals, color: bool, *, gate: LintGateMode = "new") -> int:
+def print_lint_summary(
+    totals: LintRunTotals, color: bool, *, gate: LintGateMode = "new"
+) -> int:
     print()
     if gate == "all":
         if totals.violations == 0:
-            print(_colorize("32", "✓ No violations", color))
+            print(colorize("32", "✓ No violations", color))
             return 0
         known_debt = totals.violations - totals.new
         print(
-            _colorize(
+            colorize(
                 "31",
                 f"✗ {totals.violations} violation(s) must be fixed before commit "
                 f"({totals.new} NEW, {known_debt} known debt)",
@@ -205,17 +189,17 @@ def _print_lint_summary(totals: _LintRunTotals, color: bool, *, gate: LintGateMo
         return 1
     if totals.new == 0:
         if totals.violations == 0:
-            print(_colorize("32", "✓ No violations", color))
+            print(colorize("32", "✓ No violations", color))
         else:
             print(
-                _colorize(
+                colorize(
                     "32",
                     f"✓ No new violations ({totals.violations} known-debt hits remain)",
                     color,
                 )
             )
         return 0
-    print(_colorize("31", f"✗ {totals.new} new violation(s) introduced", color))
+    print(colorize("31", f"✗ {totals.new} new violation(s) introduced", color))
     print(f"  {totals.violations} total across all rules")
     return 1
 
@@ -228,13 +212,13 @@ def _print_scan_roots(label: str, roots: tuple[Path, ...], file_count: int) -> N
     print(f"  {label + ':':8} [{joined}]  ({file_count} files)")
 
 
-def _print_lint_header(header: _LintHeader) -> None:
-    from slopgate.lint._baseline import _baseline_path
+def print_lint_header(header: LintHeader) -> None:
+    from slopgate.lint._baseline import baseline_path
 
     suffix = f" {header.label}" if header.label else ""
     print(f"slopgate lint {header.lint_version}{suffix}")
     print(f"  project:  {header.files.cfg.project_root}")
-    print(f"  baseline: {_baseline_path()}")
+    print(f"  baseline: {baseline_path()}")
     if header.git_base_note:
         print(f"  git base: {header.git_base_note}")
     if header.gate == "all":
@@ -246,7 +230,9 @@ def _print_lint_header(header: _LintHeader) -> None:
             "  note:     agent/stop gate — fails on branch/WIP violations; prunes fixed debt after run"
         )
     _print_scan_roots("src", header.files.cfg.src_roots, len(header.files.src_files))
-    _print_scan_roots("tests", header.files.cfg.test_roots, len(header.files.test_files))
+    _print_scan_roots(
+        "tests", header.files.cfg.test_roots, len(header.files.test_files)
+    )
     print()
 
 
@@ -255,12 +241,12 @@ class _BaselineLintSyncContext:
     collectors: list[tuple[str, list[Violation]]]
     baseline: dict[str, set[str]]
     accepted_baseline: dict[str, set[str]]
-    totals: _LintRunTotals
+    totals: LintRunTotals
     gate: LintGateMode
     color: bool
 
 
-def _lint_prune_only(totals: _LintRunTotals, *, gate: LintGateMode) -> bool:
+def _lint_prune_only(totals: LintRunTotals, *, gate: LintGateMode) -> bool:
     if gate == "new":
         return totals.new > 0
     return totals.violations > 0
@@ -285,7 +271,7 @@ def _print_baseline_sync_result(
         parts.append("pruned fixed debt")
     if parts:
         detail = ", ".join(parts)
-        print(_colorize("32", f"  ✓ Updated baselines.json ({detail})", color))
+        print(colorize("32", f"  ✓ Updated baselines.json ({detail})", color))
 
 
 def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
@@ -305,21 +291,21 @@ def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
     )
 
 
-def _print_collector_results(
+def print_collector_results(
     collectors: list[tuple[str, list[Violation]]],
-    baseline: dict[str, set[str]] | _BaselineInputs,
+    baseline: dict[str, set[str]] | BaselineInputs,
     *,
     gate: LintGateMode = "new",
     details: bool,
 ) -> int:
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     baseline_inputs = _coerce_baseline_inputs(baseline)
-    totals = _LintRunTotals(0, 0, 0)
+    totals = LintRunTotals(0, 0, 0)
     for rule_name, violations in collectors:
         if not violations:
             continue
-        rule_total, rule_new, rule_fixed = _tally_rule(
-            _TallyInput(
+        rule_total, rule_new, rule_fixed = tally_rule(
+            TallyInput(
                 rule_name=rule_name,
                 violations=violations,
                 baseline=baseline_inputs.effective,
@@ -327,12 +313,12 @@ def _print_collector_results(
                 details=details,
             )
         )
-        totals = _LintRunTotals(
+        totals = LintRunTotals(
             totals.violations + rule_total,
             totals.new + rule_new,
             totals.fixed + rule_fixed,
         )
-    exit_code = _print_lint_summary(totals, color, gate=gate)
+    exit_code = print_lint_summary(totals, color, gate=gate)
     _sync_baseline_after_lint(
         _BaselineLintSyncContext(
             collectors=collectors,

@@ -28,7 +28,7 @@ from slopgate.search.runtime import (
 from slopgate.search.scaffolds import scaffold_opencode_plugin, scaffold_skill
 
 
-def _string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
+def string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
     value = getattr(args, name, default)
     return value if isinstance(value, str) else default
 
@@ -39,8 +39,8 @@ def _bool_arg(args: argparse.Namespace, name: str, default: bool = False) -> boo
 
 
 def _resolve_init_provider(args: argparse.Namespace) -> tuple[str, str]:
-    provider = _string_arg(args, "provider") or detect_provider()
-    base_url = _string_arg(args, "base_url")
+    provider = string_arg(args, "provider") or detect_provider()
+    base_url = string_arg(args, "base_url")
     if base_url:
         return provider, base_url
     if provider == "litellm":
@@ -52,11 +52,11 @@ def _resolve_litellm_model(
     args: argparse.Namespace,
     base_url: str,
 ) -> dict[str, str | list[str] | None]:
-    api_key_env = _string_arg(args, "api_key_env") or "LITELLM_API_KEY"
+    api_key_env = string_arg(args, "api_key_env") or "LITELLM_API_KEY"
     model, discovered, warning = choose_litellm_model(
         base_url,
         api_key_env,
-        _string_arg(args, "model") or None,
+        string_arg(args, "model") or None,
     )
     return {
         "model": model,
@@ -75,9 +75,9 @@ def _resolve_init_model(
     if provider == "litellm":
         return _resolve_litellm_model(args, base_url)
     return {
-        "model": _string_arg(args, "model") or "nomic-embed-text",
-        "api_key_env": _string_arg(args, "api_key_env") or None,
-        "api_key_value": _string_arg(args, "api_key_value") or "ollama",
+        "model": string_arg(args, "model") or "nomic-embed-text",
+        "api_key_env": string_arg(args, "api_key_env") or None,
+        "api_key_value": string_arg(args, "api_key_value") or "ollama",
         "discovered": None,
         "warning": None,
     }
@@ -85,9 +85,13 @@ def _resolve_init_model(
 
 def _guard_overwrite(islands_cfg: Path, force: bool) -> None:
     if APP_CONFIG.exists() and not force:
-        raise IsxError(f"{APP_CONFIG} already exists. Re-run with --force to overwrite it.")
+        raise IsxError(
+            f"{APP_CONFIG} already exists. Re-run with --force to overwrite it."
+        )
     if islands_cfg.exists() and not force:
-        raise IsxError(f"{islands_cfg} already exists. Re-run with --force to overwrite it.")
+        raise IsxError(
+            f"{islands_cfg} already exists. Re-run with --force to overwrite it."
+        )
 
 
 def _scaffold_integration(
@@ -96,15 +100,17 @@ def _scaffold_integration(
 ) -> tuple[list[Path], Path | None]:
     if integration == "skill":
         paths = scaffold_skill(
-            _string_arg(args, "skill_name", DEFAULT_SKILL_NAME),
-            _string_arg(args, "skill_target", "both"),
+            string_arg(args, "skill_name", DEFAULT_SKILL_NAME),
+            string_arg(args, "skill_target", "both"),
             force=_bool_arg(args, "force"),
         )
         return paths, None
     if integration == "opencode-tool":
         plugin = scaffold_opencode_plugin(
-            expand(_string_arg(args, "opencode_plugin_path"), DEFAULT_OPENCODE_PLUGIN_PATH),
-            expand(_string_arg(args, "opencode_config"), DEFAULT_OPENCODE_CONFIG),
+            expand(
+                string_arg(args, "opencode_plugin_path"), DEFAULT_OPENCODE_PLUGIN_PATH
+            ),
+            expand(string_arg(args, "opencode_config"), DEFAULT_OPENCODE_CONFIG),
             force=_bool_arg(args, "force"),
         )
         return [], plugin
@@ -162,7 +168,7 @@ def _print_scaffold_results(
             print(f"    - {path}")
     if plugin_path:
         print(f"  OpenCode tool:  {plugin_path}")
-        oc = expand(_string_arg(args, "opencode_config"), DEFAULT_OPENCODE_CONFIG)
+        oc = expand(string_arg(args, "opencode_config"), DEFAULT_OPENCODE_CONFIG)
         print(f"  OpenCode config:{oc}")
 
 
@@ -191,16 +197,16 @@ def _print_next_steps() -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    integration = _string_arg(args, "integration") or _prompt_integration_choice()
+    integration = string_arg(args, "integration") or _prompt_integration_choice()
     provider, base_url = _resolve_init_provider(args)
     info = _resolve_init_model(args, provider, base_url)
     model = str(info["model"])
-    islands_cfg = expand(_string_arg(args, "islands_config"), DEFAULT_ISLANDS_CONFIG)
+    islands_cfg = expand(string_arg(args, "islands_config"), DEFAULT_ISLANDS_CONFIG)
     _guard_overwrite(islands_cfg, _bool_arg(args, "force"))
 
     cli_cfg: SearchConfig = {
         "provider": provider,
-        "binary": _string_arg(args, "binary", "islands-ollama"),
+        "binary": string_arg(args, "binary", "islands-ollama"),
         "base_url": base_url,
         "api_key_env": info["api_key_env"],
         "api_key_value": info["api_key_value"],

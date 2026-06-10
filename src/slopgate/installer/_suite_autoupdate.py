@@ -5,8 +5,6 @@ from __future__ import annotations
 import plistlib
 import subprocess
 import sys
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 from slopgate.installer._shared import (
@@ -15,22 +13,19 @@ from slopgate.installer._shared import (
     find_binary,
     shell_command,
 )
+from slopgate.installer._suite_autoupdate_types import (
+    AUTOUPDATE_MARKER,
+    SchedulerPlan,
+    WINDOWS_TASK_NAME,
+)
+from slopgate.installer._suite_autoupdate_windows import (
+    prepare_windows_task_replacement,
+    scheduler_file_is_owned,
+)
 from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
 DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@master"
 DEFAULT_UPDATE_INTERVAL_MINUTES = 3 * 10
-_AUTOUPDATE_MARKER = "Slopgate auto-update managed file"
-_WINDOWS_TASK_NAME = "Slopgate Auto Update"
-
-
-@dataclass(frozen=True)
-class SchedulerPlan:
-    """OS-specific auto-update scheduler plan."""
-
-    kind: str
-    target_path: Path
-    content: str
-    enable_command: list[str] | None
 
 
 def _validate_update_source(source: str) -> None:
@@ -53,10 +48,12 @@ def _linux_systemd_plan(
     config_dir = user_config_dir("systemd") / "user"
     service_path = config_dir / "slopgate-auto-update.service"
     timer_path = config_dir / "slopgate-auto-update.timer"
-    update_command = shell_command(_update_suite_args(source, include_missing=include_missing))
+    update_command = shell_command(
+        _update_suite_args(source, include_missing=include_missing)
+    )
     service = "\n".join(
         [
-            f"# {_AUTOUPDATE_MARKER}",
+            f"# {AUTOUPDATE_MARKER}",
             "[Unit]",
             "Description=Update Slopgate package without rewriting harness hooks",
             "Documentation=https://github.com/vasceannie/slopgate",
@@ -70,7 +67,7 @@ def _linux_systemd_plan(
     )
     timer = "\n".join(
         [
-            f"# {_AUTOUPDATE_MARKER}",
+            f"# {AUTOUPDATE_MARKER}",
             "[Unit]",
             "Description=Run Slopgate auto-update while this device is awake",
             "",
@@ -98,7 +95,10 @@ def _macos_launchd_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
     plist_path = (
-        Path.home() / "Library" / "LaunchAgents" / "rocks.baked.slopgate.autoupdate.plist"
+        Path.home()
+        / "Library"
+        / "LaunchAgents"
+        / "rocks.baked.slopgate.autoupdate.plist"
     )
     interval_seconds = max(60, interval_minutes * 60)
     payload = {
@@ -110,7 +110,7 @@ def _macos_launchd_plan(
     raw_content = plistlib.dumps(payload, sort_keys=False).decode("utf-8")
     content = raw_content.replace(
         "<!DOCTYPE plist",
-        f"<!-- {_AUTOUPDATE_MARKER} -->\n<!DOCTYPE plist",
+        f"<!-- {AUTOUPDATE_MARKER} -->\n<!DOCTYPE plist",
         1,
     )
     return SchedulerPlan(
@@ -131,7 +131,7 @@ def _windows_task_plan(
     binary = args[0].replace("'", "''")
     content = "\n".join(
         [
-            f"# {_AUTOUPDATE_MARKER}",
+            f"# {AUTOUPDATE_MARKER}",
             "$ErrorActionPreference = 'Stop'",
             f"& '{binary}' {ps_args}",
             "",
@@ -154,7 +154,7 @@ def _windows_task_plan(
             "/MO",
             str(max(1, interval_minutes)),
             "/TN",
-            _WINDOWS_TASK_NAME,
+            WINDOWS_TASK_NAME,
             "/TR",
             task_command,
         ],
@@ -190,7 +190,9 @@ def _systemd_plan_files(plan: SchedulerPlan) -> list[tuple[Path, str]]:
         if line.startswith("# ") and "slopgate-auto-update." in line
     ]
     if len(header_indexes) != 2:
-        raise ValueError("systemd auto-update plan must contain service and timer headers")
+        raise ValueError(
+            "systemd auto-update plan must contain service and timer headers"
+        )
     service_index, timer_index = header_indexes
     service_path = Path(lines[service_index].removeprefix("# "))
     timer_path = Path(lines[timer_index].removeprefix("# "))
@@ -211,69 +213,8 @@ def _scheduler_disable_command(plan: SchedulerPlan) -> list[str] | None:
     if plan.kind == "launchd":
         return ["launchctl", "unload", "-w", str(plan.target_path)]
     if plan.kind == "windows-schtasks":
-        return ["schtasks", "/Delete", "/F", "/TN", _WINDOWS_TASK_NAME]
+        return ["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK_NAME]
     return None
-
-
-def _scheduler_file_is_owned(path: Path) -> bool:
-    content = path.read_text(encoding="utf-8", errors="replace")
-    marker_line = f"# {_AUTOUPDATE_MARKER}"
-    plist_marker = f"<!-- {_AUTOUPDATE_MARKER} -->"
-    return any(line.strip() in {marker_line, plist_marker} for line in content.splitlines()[:3])
-
-
-def _query_windows_task_xml() -> str | None:
-    completed = subprocess.run(
-        ["schtasks", "/Query", "/TN", _WINDOWS_TASK_NAME, "/XML"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        return None
-    return completed.stdout or ""
-
-
-def _path_appears_in_task_xml(path: Path, xml: str) -> bool:
-    raw_path = str(path)
-    candidates = {
-        raw_path,
-        raw_path.replace("/", "\\"),
-        raw_path.replace("\\", "/"),
-    }
-    folded_xml = xml.casefold()
-    return any(candidate.casefold() in folded_xml for candidate in candidates)
-
-
-def _windows_task_is_owned(plan: SchedulerPlan, xml: str) -> bool:
-    return (
-        _path_appears_in_task_xml(plan.target_path, xml)
-        and plan.target_path.exists()
-        and _scheduler_file_is_owned(plan.target_path)
-    )
-
-
-def _backup_existing_windows_task_xml(plan: SchedulerPlan, xml: str) -> None:
-    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    backup_path = plan.target_path.with_name(
-        f"slopgate-auto-update-task.xml.slopgate-bak-{timestamp}"
-    )
-    backup_path.parent.mkdir(parents=True, exist_ok=True)
-    backup_path.write_text(xml, encoding="utf-8")
-    print(f"Backed up existing auto-update task XML to {backup_path}")
-
-
-def _prepare_windows_task_replacement(plan: SchedulerPlan) -> int:
-    if plan.kind != "windows-schtasks":
-        return 0
-    xml = _query_windows_task_xml()
-    if xml is None:
-        return 0
-    if not _windows_task_is_owned(plan, xml):
-        print(f"Refusing to overwrite unrecognized scheduled task: {_WINDOWS_TASK_NAME}")
-        return 1
-    _backup_existing_windows_task_xml(plan, xml)
-    return 0
 
 
 def install_autoupdate(
@@ -297,11 +238,11 @@ def install_autoupdate(
             print("Would run: " + shell_command(plan.enable_command))
         return 0
 
-    if _prepare_windows_task_replacement(plan) != 0:
+    if prepare_windows_task_replacement(plan) != 0:
         return 1
 
     for target_path, _content in _scheduler_plan_files(plan):
-        if target_path.exists() and not _scheduler_file_is_owned(target_path):
+        if target_path.exists() and not scheduler_file_is_owned(target_path):
             print(f"Refusing to overwrite unrecognized auto-update file: {target_path}")
             return 1
 
@@ -319,14 +260,16 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     """Remove the current OS's periodic suite updater without touching unknown files."""
     plan = build_scheduler_plan()
     entries = _scheduler_plan_files(plan)
-    existing_paths = [target_path for target_path, _content in entries if target_path.exists()]
+    existing_paths = [
+        target_path for target_path, _content in entries if target_path.exists()
+    ]
     print(f"Auto-update scheduler: {plan.kind}")
     if not existing_paths:
         print("No Slopgate auto-update scheduler files found.")
         return 0
 
     for target_path in existing_paths:
-        if not _scheduler_file_is_owned(target_path):
+        if not scheduler_file_is_owned(target_path):
             print(f"Refusing to remove unrecognized auto-update file: {target_path}")
             return 1
 

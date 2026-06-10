@@ -10,6 +10,7 @@ from tests.test_engine import (
     pytest,
 )
 
+
 class TestSensitiveDataSafeSuffixes:
     """Test that .example, .sample, .template etc. bypass the sensitive data rule."""
 
@@ -200,6 +201,7 @@ class TestSensitiveDataSafeSuffixes:
         assert "GLOBAL-BUILTIN-SENSITIVE-DATA" in finding_ids(result), (
             "mixed safe and unsafe env command should remain blocked"
         )
+
 
 class TestSensitiveDataSafeSuffixEdgeCases:
     """Edge cases for safe-suffix bypass: cert files, package files, unrelated paths."""

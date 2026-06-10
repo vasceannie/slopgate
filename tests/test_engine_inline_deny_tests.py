@@ -1,10 +1,12 @@
 """Inline payload deny tests — split from test_engine.py to keep module size under limit."""
+
 from __future__ import annotations
 
 import pytest
 
+from slopgate._types import ObjectDict, is_object_dict, object_dict
+
 from tests.test_engine import (
-    MonkeyPatch,
     Path,
     WriteBuilder,
     BashBuilder,
@@ -12,15 +14,19 @@ from tests.test_engine import (
     assert_denied_by,
     evaluate_payload,
     finding_ids,
-    _write_config_from_defaults,
-    _keep_default_config,
+    write_config_from_defaults,
+    keep_default_config,
 )
 
 
 def _assert_protected_path_asks(result: EngineResult) -> None:
-    output = getattr(result, "output", None) or {}
-    hook_specific = output.get("hookSpecificOutput")
-    assert isinstance(hook_specific, dict)
+    raw_output = getattr(result, "output", None)
+    output: ObjectDict = (
+        object_dict(raw_output) if is_object_dict(raw_output) else ObjectDict()
+    )
+    hook_specific_value = output.get("hookSpecificOutput")
+    assert is_object_dict(hook_specific_value)
+    hook_specific = hook_specific_value
     assert hook_specific.get("permissionDecision") == "ask"
     reason = str(hook_specific.get("permissionDecisionReason") or "")
     assert "BUILTIN-PROTECTED-PATHS" in reason
@@ -29,14 +35,13 @@ def _assert_protected_path_asks(result: EngineResult) -> None:
 
 
 class TestInlinePayloadDenies:
-
     def test_default_claude_control_plane_markdown_denied(
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(tmp_path, monkeypatch, _keep_default_config)
+        write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
         result = evaluate_payload(
             pretool_write(
                 ".claude/CLAUDE.md",
@@ -50,12 +55,14 @@ class TestInlinePayloadDenies:
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(
+        write_config_from_defaults(
             tmp_path,
             monkeypatch,
-            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+            lambda defaults: defaults.update(
+                {"protected_paths": [".claude/", "Makefile"]}
+            ),
         )
         result = evaluate_payload(
             pretool_write(
@@ -69,12 +76,14 @@ class TestInlinePayloadDenies:
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(
+        write_config_from_defaults(
             tmp_path,
             monkeypatch,
-            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+            lambda defaults: defaults.update(
+                {"protected_paths": [".claude/", "Makefile"]}
+            ),
         )
         result = evaluate_payload(
             pretool_write(
@@ -89,9 +98,9 @@ class TestInlinePayloadDenies:
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(tmp_path, monkeypatch, _keep_default_config)
+        write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
         result = evaluate_payload(
             pretool_write(
                 "/home/trav/.claude/plans/review-my-logs-and-partitioned-charm.md",
@@ -104,9 +113,9 @@ class TestInlinePayloadDenies:
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(tmp_path, monkeypatch, _keep_default_config)
+        write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
         result = evaluate_payload(
             pretool_write(
                 "/home/trav/.claude/plans/not-a-plan.json",
@@ -120,12 +129,14 @@ class TestInlinePayloadDenies:
         self,
         pretool_write: WriteBuilder,
         tmp_path: Path,
-        monkeypatch: MonkeyPatch,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _write_config_from_defaults(
+        write_config_from_defaults(
             tmp_path,
             monkeypatch,
-            lambda defaults: defaults.update({"protected_paths": [".claude/", "Makefile"]}),
+            lambda defaults: defaults.update(
+                {"protected_paths": [".claude/", "Makefile"]}
+            ),
         )
         result = evaluate_payload(
             pretool_write(
@@ -165,7 +176,9 @@ class TestInlinePayloadDenies:
     def test_exec_protection_still_denies_writing_protected_rule_path_with_redirect(
         self, pretool_bash: BashBuilder
     ) -> None:
-        result = evaluate_payload(pretool_bash("rg boundary src > ~/.claude/rules/boundary.md"))
+        result = evaluate_payload(
+            pretool_bash("rg boundary src > ~/.claude/rules/boundary.md")
+        )
         assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
         assert any(f.rule_id == "BUILTIN-PROTECTED-PATHS" for f in result.findings)
 

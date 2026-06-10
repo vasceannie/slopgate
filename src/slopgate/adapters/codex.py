@@ -23,7 +23,13 @@ from slopgate.adapters.base import (
     render_request_from_call,
     render_permission_request_output,
 )
-from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    BLOCK,
+    DENY,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.models import RuleFinding, Severity
 
 CODEX_EVENTS = {
@@ -46,7 +52,9 @@ _CODEX_EVENT_ALIASES: dict[str, str] = {
 
 
 def _canonical_codex_event(raw: ObjectMapping) -> str:
-    event = string_value(raw.get("hook_event_name")) or string_value(raw.get("hookEventName"))
+    event = string_value(raw.get("hook_event_name")) or string_value(
+        raw.get("hookEventName")
+    )
     if not event:
         return ""
     if event in CODEX_EVENTS:
@@ -99,9 +107,7 @@ def _render_codex_pre_tool_use(
     specific: ObjectDict = {"hookEventName": PRE_TOOL_USE}
     if request.decision in {DENY, BLOCK, "ask"}:
         specific["permissionDecision"] = DENY
-        specific["permissionDecisionReason"] = _codex_decision_reason(
-            adapter, request
-        )
+        specific["permissionDecisionReason"] = _codex_decision_reason(adapter, request)
     elif request.decision == "allow":
         specific["permissionDecision"] = "allow"
     if request.decision == "allow":
@@ -142,7 +148,9 @@ def _render_critical_codex_posttool(
         "stopReason": adapter.join_messages(critical_blocks),
     }
     if request.context:
-        critical_response.update(hook_specific_context_output(POST_TOOL_USE, request.context))
+        critical_response.update(
+            hook_specific_context_output(POST_TOOL_USE, request.context)
+        )
     return critical_response
 
 
@@ -166,7 +174,9 @@ def _render_codex_prompt_submit(
     payload: ObjectDict = {}
     _apply_codex_block_decision(adapter, payload, request)
     if request.context:
-        payload.update(hook_specific_context_output("UserPromptSubmit", request.context))
+        payload.update(
+            hook_specific_context_output("UserPromptSubmit", request.context)
+        )
     return payload or None
 
 

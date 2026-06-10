@@ -10,6 +10,7 @@ from tests.test_engine import (
     required_string,
 )
 
+
 @pytest.mark.parametrize(
     "fixture_name, rule_id, msg_fragment",
     [
@@ -42,6 +43,7 @@ def test_fixture_denies(
     assert rule_id in finding_ids(result), (
         f"fixture {fixture_name} should trigger expected rule {rule_id}"
     )
+
 
 class TestMultiRuleDenyFixtures:
     def test_default_swallow(self, load_fixture: LoadFixture) -> None:

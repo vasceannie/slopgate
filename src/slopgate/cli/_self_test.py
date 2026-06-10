@@ -39,7 +39,15 @@ def _self_test_cases(strict_cwd: str, outside_cwd: str) -> list[SelfTestCase]:
     env_path = str(Path.home() / ".env")
     noverify: ObjectDict = {"command": "git commit --no-verify -m 'test'"}
     return [
-        ("git --no-verify → deny", "PreToolUse", "Bash", noverify, "claude", True, strict_cwd),
+        (
+            "git --no-verify → deny",
+            "PreToolUse",
+            "Bash",
+            noverify,
+            "claude",
+            True,
+            strict_cwd,
+        ),
         (
             ".env write → deny",
             "PreToolUse",
@@ -58,7 +66,15 @@ def _self_test_cases(strict_cwd: str, outside_cwd: str) -> list[SelfTestCase]:
             False,
             strict_cwd,
         ),
-        ("codex adapter → deny", "PreToolUse", "Bash", noverify, "codex", True, strict_cwd),
+        (
+            "codex adapter → deny",
+            "PreToolUse",
+            "Bash",
+            noverify,
+            "codex",
+            True,
+            strict_cwd,
+        ),
         (
             "opencode adapter → deny",
             "tool.execute.before",

@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 import ast
 from typing import TYPE_CHECKING
 from typing_extensions import override
@@ -13,15 +12,16 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-    parse_module,
-)
+from .._helpers import decision_for_context, evaluate_common, parse_module
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-
-from ._import_helpers import _allowed_import_alias as _allowed_import_alias, _import_alias_full_name as _import_alias_full_name, _import_alias_replacement as _import_alias_replacement, _patch_added_source as _patch_added_source
+from ._import_helpers import (
+    allowed_import_alias,
+    import_alias_full_name,
+    import_alias_replacement,
+    patch_added_source,
+)
 
 
 class PythonImportAliasRule(Rule):
@@ -43,7 +43,7 @@ class PythonImportAliasRule(Rule):
         if module is not None:
             modules.append(module)
             return modules
-        added_source = _patch_added_source(source)
+        added_source = patch_added_source(source)
         if added_source is None:
             return modules
         added_module = parse_module(added_source, max_chars)
@@ -58,39 +58,34 @@ class PythonImportAliasRule(Rule):
             if not isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
             for name in node.names:
-                if name.asname is None or _allowed_import_alias(node, name):
+                if name.asname is None or allowed_import_alias(node, name):
                     continue
-                replacement, usage = _import_alias_replacement(node, name)
-                aliases.append((
-                    node.lineno,
-                    _import_alias_full_name(node, name),
-                    name.asname,
-                    replacement,
-                    usage,
-                ))
+                replacement, usage = import_alias_replacement(node, name)
+                aliases.append(
+                    (
+                        node.lineno,
+                        import_alias_full_name(node, name),
+                        name.asname,
+                        replacement,
+                        usage,
+                    )
+                )
         return aliases
 
     def _check_source(
-        self,
-        source: str,
-        path_value: str,
-        ctx: HookContext,
+        self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
         max_chars = ctx.config.python_ast_max_parse_chars
         for module in self._iter_modules(source, max_chars):
-            for lineno, imported_name, asname, replacement, usage in self._collect_aliases(module):
-                message = (
-                    f"`{path_value}` imports `{imported_name} as {asname}` on line "
-                    f"{lineno}. Non-standard import aliases are blocked because "
-                    "they hide duplicated code from clone/repeated-block detectors. "
-                    "Use the real module/name or extract shared behavior instead. "
-                    "Only canonical library aliases are allowed, e.g. `pandas as pd`, "
-                    "`polars as pl`, `numpy as np`, or `matplotlib.pyplot as plt`.\n\n"
-                    "Use this instead:\n"
-                    f"    {replacement}\n"
-                    f"Then call: `{usage}`"
-                )
+            for (
+                lineno,
+                imported_name,
+                asname,
+                replacement,
+                usage,
+            ) in self._collect_aliases(module):
+                message = f"`{path_value}` imports `{imported_name} as {asname}` on line {lineno}. Non-standard import aliases are blocked because they hide duplicated code from clone/repeated-block detectors. Use the real module/name or extract shared behavior instead. Only canonical library aliases are allowed, e.g. `pandas as pd`, `polars as pl`, `numpy as np`, or `matplotlib.pyplot as plt`.\n\nUse this instead:\n    {replacement}\nThen call: `{usage}`"
                 findings.append(
                     RuleFinding(
                         rule_id=self.rule_id,
@@ -98,10 +93,7 @@ class PythonImportAliasRule(Rule):
                         severity=Severity.HIGH,
                         decision=decision_for_context(ctx),
                         message=message,
-                        additional_context=(
-                            "Remove the alias or refactor the duplicated block; do "
-                            "not rename imports to make duplicate code look unique."
-                        ),
+                        additional_context="Remove the alias or refactor the duplicated block; do not rename imports to make duplicate code look unique.",
                         metadata={
                             METADATA_PATH: path_value,
                             "line": lineno,

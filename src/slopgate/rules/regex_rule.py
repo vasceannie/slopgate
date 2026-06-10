@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
@@ -11,48 +10,16 @@ from slopgate.constants import (
 )
 from slopgate.models import RegexRuleConfig, RuleFinding, Severity
 from slopgate.rules.base import Rule
-from slopgate.util.payloads import any_path_matches
+from slopgate.rules.regex_rule_matching import RegexHit, RegexRuleMatcher
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-@dataclass(slots=True)
-class RegexHit:
-    path: str | None
-    snippet: str | None = None
-
-
-def _collect_content_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
-    hits: list[RegexHit] = []
-    for content_target in ctx.content_targets:
-        hit = rule._path_hit(content_target.path, content_target.content)
-        if hit is not None:
-            hits.append(hit)
-    return hits
-
-
-def _collect_command_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
-    return rule._scalar_hit(ctx.shell_command)
-
-
-def _collect_path_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
-    hits: list[RegexHit] = []
-    for path_value in ctx.candidate_paths:
-        hit = rule._path_hit(path_value, path_value)
-        if hit is not None:
-            hits.append(hit)
-    return hits
-
-
-def _collect_prompt_hits(rule: RegexRule, ctx: HookContext) -> list[RegexHit]:
-    return rule._scalar_hit(ctx.user_prompt)
-
-
 @final
 class RegexRule(Rule):
     config: RegexRuleConfig
-    _patterns: list[re.Pattern[str]]
+    _matcher: RegexRuleMatcher
 
     def __init__(self, config: RegexRuleConfig, enabled: bool = True) -> None:
         super().__init__(enabled=enabled)
@@ -65,27 +32,8 @@ class RegexRule(Rule):
             flags |= re.MULTILINE | re.DOTALL
         if not config.case_sensitive:
             flags |= re.IGNORECASE
-        self._patterns = [re.compile(pattern, flags) for pattern in config.patterns]
-
-    def _tool_matches(self, tool_name: str) -> bool:
-        if not self.config.tool_matchers:
-            return True
-        return any(
-            re.fullmatch(pattern, tool_name) for pattern in self.config.tool_matchers
-        )
-
-    def _path_allowed(self, path_value: str | None) -> bool:
-        if not path_value:
-            return True
-        if self.config.path_globs and not any_path_matches(
-            path_value, self.config.path_globs
-        ):
-            return False
-        if self.config.exclude_path_globs and any_path_matches(
-            path_value, self.config.exclude_path_globs
-        ):
-            return False
-        return True
+        patterns = [re.compile(pattern, flags) for pattern in config.patterns]
+        self._matcher = RegexRuleMatcher(config=config, patterns=patterns)
 
     def _render_message(self, hits: list[RegexHit]) -> str:
         if not self.config.message:
@@ -96,18 +44,27 @@ class RegexRule(Rule):
             path=first_path, matched_paths=all_paths, rule_id=self.rule_id
         )
 
-    def _matches_text(self, value: str) -> bool:
-        return any(pattern.search(value) for pattern in self._patterns)
+    def _collect_content_hits(self, ctx: HookContext) -> list[RegexHit]:
+        hits: list[RegexHit] = []
+        for content_target in ctx.content_targets:
+            hit = self._matcher.path_hit(content_target.path, content_target.content)
+            if hit is not None:
+                hits.append(hit)
+        return hits
 
-    def _path_hit(self, path_value: str, text: str) -> RegexHit | None:
-        if not self._path_allowed(path_value):
-            return None
-        if not self._matches_text(text):
-            return None
-        return RegexHit(path=path_value)
+    def _collect_command_hits(self, ctx: HookContext) -> list[RegexHit]:
+        return self._matcher.scalar_hit(ctx.shell_command)
 
-    def _scalar_hit(self, value: str) -> list[RegexHit]:
-        return [RegexHit(path=None)] if value and self._matches_text(value) else []
+    def _collect_path_hits(self, ctx: HookContext) -> list[RegexHit]:
+        hits: list[RegexHit] = []
+        for path_value in ctx.candidate_paths:
+            hit = self._matcher.path_hit(path_value, path_value)
+            if hit is not None:
+                hits.append(hit)
+        return hits
+
+    def _collect_prompt_hits(self, ctx: HookContext) -> list[RegexHit]:
+        return self._matcher.scalar_hit(ctx.user_prompt)
 
     def _build_finding(self, hits: list[RegexHit]) -> RuleFinding:
         is_context = self.config.action == "context"
@@ -128,19 +85,19 @@ class RegexRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not self.enabled or not self.supports(ctx.event_name):
             return []
-        if not self._tool_matches(ctx.tool_name):
+        if not self._matcher.tool_matches(ctx.tool_name):
             return []
 
         collectors = {
-            "content": _collect_content_hits,
-            "command": _collect_command_hits,
-            METADATA_PATH: _collect_path_hits,
-            "prompt": _collect_prompt_hits,
+            "content": self._collect_content_hits,
+            "command": self._collect_command_hits,
+            METADATA_PATH: self._collect_path_hits,
+            "prompt": self._collect_prompt_hits,
         }
         collector = collectors.get(self.config.target)
         if collector is None:
             return []
-        hits = collector(self, ctx)
+        hits = collector(ctx)
         if not hits:
             return []
         return [self._build_finding(hits)]

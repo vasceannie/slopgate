@@ -5,14 +5,18 @@ from __future__ import annotations
 from slopgate.util.payloads import lower_path
 
 
-def _module_split_scenario(path_value: str) -> str:
+def module_split_scenario(path_value: str) -> str:
     """Classify an oversized module so hook guidance can be specific."""
     normalized = lower_path(path_value)
     name = normalized.rsplit("/", 1)[-1]
     name_scenarios = {"conftest.py": "conftest", "__init__.py": "package-init"}
     if scenario := name_scenarios.get(name):
         return scenario
-    if name.startswith("test_") or normalized.startswith("tests/") or "/tests/" in normalized:
+    if (
+        name.startswith("test_")
+        or normalized.startswith("tests/")
+        or "/tests/" in normalized
+    ):
         return "test-module"
     entrypoint_names = {"cli.py", "main.py", "app.py"}
     if name in entrypoint_names or normalized.endswith("/routes.py"):
@@ -20,7 +24,7 @@ def _module_split_scenario(path_value: str) -> str:
     return "module-to-package"
 
 
-_OVERSIZED_SPLIT_PLANS = {
+OVERSIZED_SPLIT_PLANS = {
     "conftest": (
         "conftest.py is a fixture registry, not a dumping ground. Keep pytest "
         "fixtures and local plugin hooks there; move event factories, fake clients, "
@@ -56,7 +60,7 @@ _OVERSIZED_SPLIT_PLANS = {
 }
 
 
-def _oversized_module_split_guidance(path_value: str, scenario: str) -> str:
+def oversized_module_split_guidance(path_value: str, scenario: str) -> str:
     """Return scenario-aware recovery guidance for an oversized Python module."""
     verification = (
         f"Verify after the split: `python3 -m py_compile {path_value}` plus the "
@@ -71,5 +75,7 @@ def _oversized_module_split_guidance(path_value: str, scenario: str) -> str:
         "formatting, or shuffle comments just to duck the threshold; ruff/formatters "
         "will normalize style while the oversized-module design smell remains."
     )
-    plan = _OVERSIZED_SPLIT_PLANS.get(scenario, _OVERSIZED_SPLIT_PLANS["module-to-package"])
+    plan = OVERSIZED_SPLIT_PLANS.get(
+        scenario, OVERSIZED_SPLIT_PLANS["module-to-package"]
+    )
     return f"{plan}\n\n{common}\n{verification}"

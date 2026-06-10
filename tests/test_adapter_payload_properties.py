@@ -50,7 +50,9 @@ def test_merge_standard_session_fields_composes_session_and_cwd(
 @given(
     payload=strategies.fixed_dictionaries(
         {
-            "tool_response": strategies.fixed_dictionaries({"ok": strategies.booleans()}),
+            "tool_response": strategies.fixed_dictionaries(
+                {"ok": strategies.booleans()}
+            ),
         }
     ),
 )

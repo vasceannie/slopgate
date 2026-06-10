@@ -2,25 +2,27 @@ from __future__ import annotations
 
 from tests.test_enrichment import (
     Path,
-    _mkdir,
-    _pretool_write_payload,
-    _write_text,
+    mkdir,
+    pretool_write_payload,
+    write_text,
     evaluate_payload,
-    test_support,
+    support,
 )
+
 
 def _write_source_and_denial_reason(
     tmp_project: Path, relative_path: str, code: str, rule_id: str
 ) -> str:
     target = tmp_project / relative_path
-    _mkdir(target.parent, exist_ok=True)
-    _write_text(target, code)
-    payload = _pretool_write_payload(relative_path, code, str(tmp_project))
+    mkdir(target.parent, exist_ok=True)
+    write_text(target, code)
+    payload = pretool_write_payload(relative_path, code, str(tmp_project))
     result = evaluate_payload(payload)
-    test_support.assert_denied_by(result, rule_id)
-    return test_support.required_string(
-        test_support.hook_output(result), "permissionDecisionReason"
+    support.assert_denied_by(result, rule_id)
+    return support.required_string(
+        support.hook_output(result), "permissionDecisionReason"
     )
+
 
 class TestPYCODE008Enrichment:
     """PY-CODE-008: long method denial includes function structure."""
@@ -53,23 +55,24 @@ class TestPYCODE008Enrichment:
             f"Expected split advice: {reason}"
         )
 
+
 class TestPYCODE009Enrichment:
     def test_lists_parameters(self, tmp_project: Path) -> None:
         """Denial should list the actual parameter names."""
         src_dir = tmp_project / "src"
-        _mkdir(src_dir, exist_ok=True)
+        mkdir(src_dir, exist_ok=True)
         code = (
             "def configure(host, port, user, password, database, timeout, retries):\n"
             "    pass\n"
         )
-        _write_text(src_dir / "db.py", code)
+        write_text(src_dir / "db.py", code)
 
-        payload = _pretool_write_payload("src/db.py", code, str(tmp_project))
+        payload = pretool_write_payload("src/db.py", code, str(tmp_project))
         result = evaluate_payload(payload)
-        test_support.assert_denied_by(result, "PY-CODE-009")
+        support.assert_denied_by(result, "PY-CODE-009")
 
-        reason = test_support.required_string(
-            test_support.hook_output(result), "permissionDecisionReason"
+        reason = support.required_string(
+            support.hook_output(result), "permissionDecisionReason"
         )
         assert "`host`" in reason or "`port`" in reason, (
             f"Expected parameter names in reason: {reason}"
@@ -78,7 +81,7 @@ class TestPYCODE009Enrichment:
     def test_finds_existing_dataclass(self, tmp_project: Path) -> None:
         """When file has dataclasses, enrichment mentions them."""
         src_dir = tmp_project / "src"
-        _mkdir(src_dir, exist_ok=True)
+        mkdir(src_dir, exist_ok=True)
         code = (
             "from dataclasses import dataclass\n\n"
             "@dataclass\n"
@@ -88,43 +91,45 @@ class TestPYCODE009Enrichment:
             "def configure(host, port, user, password, database, timeout, retries):\n"
             "    pass\n"
         )
-        _write_text(src_dir / "db.py", code)
+        write_text(src_dir / "db.py", code)
 
-        payload = _pretool_write_payload("src/db.py", code, str(tmp_project))
+        payload = pretool_write_payload("src/db.py", code, str(tmp_project))
         result = evaluate_payload(payload)
-        test_support.assert_denied_by(result, "PY-CODE-009")
+        support.assert_denied_by(result, "PY-CODE-009")
 
-        reason = test_support.required_string(
-            test_support.hook_output(result), "permissionDecisionReason"
+        reason = support.required_string(
+            support.hook_output(result), "permissionDecisionReason"
         )
         assert "DbConfig" in reason, f"Expected existing dataclass ref: {reason}"
+
 
 class TestPYCODE013RepoLocalEnrichment:
     def test_thin_wrapper_cites_repo_local_call_sites(self, tmp_project: Path) -> None:
         src_dir = tmp_project / "src"
-        _mkdir(src_dir, exist_ok=True)
+        mkdir(src_dir, exist_ok=True)
         code = (
             "def load_config(path):\n"
-            "    return {\"path\": path}\n\n"
+            '    return {"path": path}\n\n'
             "def read_config(path):\n"
             "    return load_config(path)\n"
         )
-        _write_text(src_dir / "api.py", code)
-        _write_text(
+        write_text(src_dir / "api.py", code)
+        write_text(
             src_dir / "cli.py",
             "from .api import read_config\n\nVALUE = read_config('settings.toml')\n",
         )
 
-        payload = _pretool_write_payload("src/api.py", code, str(tmp_project))
+        payload = pretool_write_payload("src/api.py", code, str(tmp_project))
         result = evaluate_payload(payload)
-        test_support.assert_denied_by(result, "PY-CODE-013")
-        reason = test_support.required_string(
-            test_support.hook_output(result), "permissionDecisionReason"
+        support.assert_denied_by(result, "PY-CODE-013")
+        reason = support.required_string(
+            support.hook_output(result), "permissionDecisionReason"
         )
 
         assert "Local call sites" in reason
         assert "src/cli.py" in reason
         assert "read_config" in reason
+
 
 class TestPYCODE015Enrichment:
     def test_shows_complexity_breakdown(self, tmp_project: Path) -> None:
@@ -152,11 +157,12 @@ class TestPYCODE015Enrichment:
             f"Expected complexity breakdown: {reason}"
         )
 
+
 class TestPYCODE012Enrichment:
     def test_shows_envied_object_context(self, tmp_project: Path) -> None:
         """Denial should include advice about the envied object."""
         src_dir = tmp_project / "src"
-        _mkdir(src_dir, exist_ok=True)
+        mkdir(src_dir, exist_ok=True)
         # Feature envy rule excludes parameters — use a module-level object
         # and access it enough times (>= min_accesses, default 6) with
         # >60% of total accesses targeting one object
@@ -172,9 +178,9 @@ class TestPYCODE012Enrichment:
             "    g = config.retries\n"
             "    return a, b, c, d, e, f, g\n"
         )
-        _write_text(src_dir / "envy.py", code)
+        write_text(src_dir / "envy.py", code)
 
-        payload = _pretool_write_payload("src/envy.py", code, str(tmp_project))
+        payload = pretool_write_payload("src/envy.py", code, str(tmp_project))
         result = evaluate_payload(payload)
 
         # Feature envy is decision="context", not deny — check findings directly
@@ -187,6 +193,7 @@ class TestPYCODE012Enrichment:
         assert "moving" in msg.lower() or "restructur" in msg.lower(), (
             f"Expected refactoring advice: {msg}"
         )
+
 
 class TestPYCODE013Enrichment:
     def test_shows_call_count(self, tmp_project: Path) -> None:
@@ -207,6 +214,7 @@ class TestPYCODE013Enrichment:
         )
         assert "Replace each `get_value(...)` call with `lookup(...)`" in reason
 
+
 class TestPYEXC002Enrichment:
     SILENT_EXCEPT_CODE = (
         "def load_config(path):\n"
@@ -219,16 +227,16 @@ class TestPYEXC002Enrichment:
 
     def test_lists_called_functions(self, tmp_project: Path) -> None:
         """Denial should list functions called in the try block."""
-        payload = _pretool_write_payload(
+        payload = pretool_write_payload(
             "src/config.py",
             self.SILENT_EXCEPT_CODE,
             str(tmp_project),
         )
         result = evaluate_payload(payload)
-        test_support.assert_denied_by(result, "PY-EXC-002")
+        support.assert_denied_by(result, "PY-EXC-002")
 
-        reason = test_support.required_string(
-            test_support.hook_output(result), "permissionDecisionReason"
+        reason = support.required_string(
+            support.hook_output(result), "permissionDecisionReason"
         )
         assert "`read_file`" in reason or "`parse_json`" in reason, (
             f"Expected called function names: {reason}"
@@ -236,16 +244,16 @@ class TestPYEXC002Enrichment:
 
     def test_includes_common_exceptions(self, tmp_project: Path) -> None:
         """Denial should include common specific exception suggestions."""
-        payload = _pretool_write_payload(
+        payload = pretool_write_payload(
             "src/config.py",
             self.SILENT_EXCEPT_CODE,
             str(tmp_project),
         )
         result = evaluate_payload(payload)
-        test_support.assert_denied_by(result, "PY-EXC-002")
+        support.assert_denied_by(result, "PY-EXC-002")
 
-        reason = test_support.required_string(
-            test_support.hook_output(result), "permissionDecisionReason"
+        reason = support.required_string(
+            support.hook_output(result), "permissionDecisionReason"
         )
         assert "FileNotFoundError" in reason or "ValueError" in reason, (
             f"Expected specific exception suggestions: {reason}"

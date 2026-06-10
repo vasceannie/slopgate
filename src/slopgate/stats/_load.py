@@ -9,7 +9,8 @@ from typing import cast
 
 from slopgate._types import object_dict
 
-def _default_log_path() -> Path:
+
+def default_log_path() -> Path:
     """Find the results.jsonl log file."""
     from slopgate.config import config_dir
 

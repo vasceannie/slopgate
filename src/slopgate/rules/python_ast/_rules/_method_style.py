@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 import ast
 import io
 import tokenize
@@ -18,14 +17,11 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-)
+from .._helpers import decision_for_context, evaluate_common
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-
-from ._source_parse import _parse_strict as _parse_strict, _parsed_functions as _parsed_functions
+from ._source_parse import parse_strict, parsed_functions
 
 
 class PythonLongMethodRule(Rule):
@@ -51,7 +47,7 @@ class PythonLongMethodRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         """Return findings for any too-long functions in source."""
-        module = _parse_strict(source, ctx.config.python_ast_max_parse_chars)
+        module = parse_strict(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
             return []
         worst = self._worst_function(module, ctx.config.python_long_method_lines)
@@ -62,17 +58,20 @@ class PythonLongMethodRule(Rule):
         decision = (
             DENY if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) else BLOCK
         )
-        return [RuleFinding(
-            rule_id=self.rule_id,
-            title=self.title,
-            severity=Severity.HIGH,
-            decision=decision,
-            message=(
-                f"Python function `{name}` in `{path_value}` is {span} lines long. "
-                f"Keep functions under {limit} lines or split them into helpers."
-            ),
-            metadata={METADATA_PATH: path_value, METADATA_FUNCTION: name, "lines": span},
-        )]
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.HIGH,
+                decision=decision,
+                message=f"Python function `{name}` in `{path_value}` is {span} lines long. Keep functions under {limit} lines or split them into helpers.",
+                metadata={
+                    METADATA_PATH: path_value,
+                    METADATA_FUNCTION: name,
+                    "lines": span,
+                },
+            )
+        ]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -110,7 +109,7 @@ class PythonLongParameterRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         """Return findings for any too-long parameter lists in source."""
-        module = _parse_strict(source, ctx.config.python_ast_max_parse_chars)
+        module = parse_strict(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
             return []
         worst = self._worst_param_count(module, ctx.config.python_long_parameter_limit)
@@ -121,28 +120,26 @@ class PythonLongParameterRule(Rule):
         decision = (
             DENY if ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) else BLOCK
         )
-        return [RuleFinding(
-            rule_id=self.rule_id,
-            title=self.title,
-            severity=Severity.MEDIUM,
-            decision=decision,
-            message=(
-                f"Python function `{name}` in `{path_value}` declares {count} parameters. "
-                f"Keep functions at or below {limit} parameters or group inputs into objects."
-            ),
-            metadata={METADATA_PATH: path_value, METADATA_FUNCTION: name, "parameter_count": count},
-        )]
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.MEDIUM,
+                decision=decision,
+                message=f"Python function `{name}` in `{path_value}` declares {count} parameters. Keep functions at or below {limit} parameters or group inputs into objects.",
+                metadata={
+                    METADATA_PATH: path_value,
+                    METADATA_FUNCTION: name,
+                    "parameter_count": count,
+                },
+            )
+        ]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
         return evaluate_common(self, ctx, self._check_source)
-
-
-# ---------------------------------------------------------------------------
-# New rules (PY-CODE-010 through PY-CODE-016)
-# ---------------------------------------------------------------------------
 
 
 @final
@@ -188,7 +185,7 @@ class PythonLongLineRule(Rule):
             if code_length > max_length and code_length > worst_length:
                 worst_lineno = lineno
                 worst_length = code_length
-        return worst_lineno, worst_length
+        return (worst_lineno, worst_length)
 
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
@@ -199,20 +196,20 @@ class PythonLongLineRule(Rule):
         worst_lineno, worst_length = self._find_worst_line(source, max_length)
         if worst_length <= max_length:
             return []
-        return [RuleFinding(
-            rule_id=self.rule_id,
-            title=self.title,
-            severity=Severity.MEDIUM,
-            decision=decision_for_context(ctx),
-            message=(
-                f"Line {worst_lineno} in `{path_value}` is {worst_length} code characters long. "
-                f"Keep executable code lines at or below {max_length} characters. "
-                "Docstrings/string literals and whitespace-only padding are ignored; "
-                "wrap the expression or extract an intermediate variable instead of "
-                "mangling docs or spacing."
-            ),
-            metadata={METADATA_PATH: path_value, "line": worst_lineno, "length": worst_length},
-        )]
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.MEDIUM,
+                decision=decision_for_context(ctx),
+                message=f"Line {worst_lineno} in `{path_value}` is {worst_length} code characters long. Keep executable code lines at or below {max_length} characters. Docstrings/string literals and whitespace-only padding are ignored; wrap the expression or extract an intermediate variable instead of mangling docs or spacing.",
+                metadata={
+                    METADATA_PATH: path_value,
+                    "line": worst_lineno,
+                    "length": worst_length,
+                },
+            )
+        ]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -228,7 +225,6 @@ class PythonDeepNestingRule(Rule):
     rule_id = "PY-CODE-011"
     title = "Block deep nesting"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
-
     _NESTING_TYPES = (
         ast.If,
         ast.For,
@@ -255,7 +251,7 @@ class PythonDeepNestingRule(Rule):
     ) -> list[RuleFinding]:
         worst_name = ""
         worst_depth = 0
-        for node in _parsed_functions(source, ctx):
+        for node in parsed_functions(source, ctx):
             depth = self._max_nesting(node, 0)
             if depth > ctx.config.python_max_nesting_depth and depth > worst_depth:
                 worst_name = node.name
@@ -263,17 +259,20 @@ class PythonDeepNestingRule(Rule):
         if not worst_name:
             return []
         limit = ctx.config.python_max_nesting_depth
-        return [RuleFinding(
-            rule_id=self.rule_id,
-            title=self.title,
-            severity=Severity.HIGH,
-            decision=decision_for_context(ctx),
-            message=(
-                f"Function `{worst_name}` in `{path_value}` has nesting depth {worst_depth}. "
-                f"Keep nesting at or below {limit} levels."
-            ),
-            metadata={METADATA_PATH: path_value, METADATA_FUNCTION: worst_name, "depth": worst_depth},
-        )]
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.HIGH,
+                decision=decision_for_context(ctx),
+                message=f"Function `{worst_name}` in `{path_value}` has nesting depth {worst_depth}. Keep nesting at or below {limit} levels.",
+                metadata={
+                    METADATA_PATH: path_value,
+                    METADATA_FUNCTION: worst_name,
+                    "depth": worst_depth,
+                },
+            )
+        ]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:

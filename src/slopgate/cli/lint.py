@@ -6,42 +6,42 @@ import argparse
 from pathlib import Path
 
 from slopgate.cli._lint_commands import (
-    _discover_project_root,
-    _lint_baseline,
-    _lint_check,
-    _lint_freeze,
-    _lint_init,
-    _lint_strict,
-    _lint_test_integrity,
-    _lint_update,
+    discover_project_root,
+    lint_baseline,
+    lint_check,
+    lint_freeze,
+    lint_init,
+    lint_strict,
+    lint_test_integrity,
+    lint_update,
 )
 from slopgate.cli.lint_report import (
     BASELINE_DISABLED_MESSAGE,
     LintGateMode,
-    _LintRunTotals,
-    _TallyInput,
-    _LintFiles,
-    _print_collector_results,
-    _print_lint_header,
-    _print_lint_summary,
-    _tally_rule,
+    LintRunTotals,
+    TallyInput,
+    LintFiles,
+    print_collector_results,
+    print_lint_header,
+    print_lint_summary,
+    tally_rule,
 )
 
 _LintGateMode = LintGateMode
 
 __all__ = [
     "BASELINE_DISABLED_MESSAGE",
-    "_discover_project_root",
-    "_lint_check",
-    "_lint_freeze",
-    "_lint_strict",
-    "_LintFiles",
-    "_LintRunTotals",
-    "_print_collector_results",
-    "_print_lint_header",
-    "_print_lint_summary",
-    "_TallyInput",
-    "_tally_rule",
+    "discover_project_root",
+    "lint_check",
+    "lint_freeze",
+    "lint_strict",
+    "LintFiles",
+    "LintRunTotals",
+    "print_collector_results",
+    "print_lint_header",
+    "print_lint_summary",
+    "TallyInput",
+    "tally_rule",
     "cmd_lint",
 ]
 
@@ -53,25 +53,25 @@ def cmd_lint(args: argparse.Namespace) -> int:
     path_value = raw_path if isinstance(raw_path, str) and raw_path else "."
     root = Path(path_value).resolve()
     dispatch = {
-        "baseline": _lint_baseline,
-        "freeze": _lint_freeze,
-        "init": _lint_init,
+        "baseline": lint_baseline,
+        "freeze": lint_freeze,
+        "init": lint_init,
     }
     if lint_command == "check":
         raw_details = getattr(args, "details", False)
-        return _lint_check(
+        return lint_check(
             Path.cwd(),
             details=raw_details if isinstance(raw_details, bool) else False,
         )
     if lint_command == "strict":
         raw_details = getattr(args, "details", False)
-        return _lint_strict(
+        return lint_strict(
             Path.cwd(),
             details=raw_details if isinstance(raw_details, bool) else False,
         )
     if lint_command == "test-integrity":
         raw_details = getattr(args, "details", False)
-        return _lint_test_integrity(
+        return lint_test_integrity(
             Path.cwd(),
             details=raw_details if isinstance(raw_details, bool) else False,
         )
@@ -80,8 +80,8 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return handler(root)
     if lint_command == "update":
         raw_dry_run = getattr(args, "dry_run", False)
-        return _lint_update(
-            _discover_project_root(root),
+        return lint_update(
+            discover_project_root(root),
             dry_run=raw_dry_run if isinstance(raw_dry_run, bool) else False,
         )
     return 1

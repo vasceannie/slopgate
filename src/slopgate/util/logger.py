@@ -27,4 +27,6 @@ def _logger(level: str) -> _LogFn:
     return log
 
 
-debug, info, warning, error = (_logger(level) for level in ("debug", "info", "warning", "error"))
+debug, info, warning, error = (
+    _logger(level) for level in ("debug", "info", "warning", "error")
+)

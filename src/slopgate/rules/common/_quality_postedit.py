@@ -1,16 +1,10 @@
 """Post-edit quality gate command execution helpers and rule."""
 
 from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from slopgate.constants import (
-    POST_TOOL_USE,
-    SESSION_ID,
-    BLOCK,
-    METADATA_COMMAND,
-)
+from slopgate.constants import POST_TOOL_USE, SESSION_ID, BLOCK, METADATA_COMMAND
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
@@ -18,17 +12,14 @@ from slopgate.util.subprocesses import run_shell
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+from ._shell_read import is_safe_bash_read
 
-from ._shell_read import _is_safe_bash_read as _is_safe_bash_read
 
-
-def _collect_quality_commands(ctx: HookContext) -> list[str]:
+def collect_quality_commands(ctx: HookContext) -> list[str]:
     """Gather post-edit quality commands for detected languages."""
     commands: list[str] = []
     for language in sorted(ctx.languages):
-        commands.extend(
-            ctx.config.post_edit_quality_commands.get(language, []),
-        )
+        commands.extend(ctx.config.post_edit_quality_commands.get(language, []))
     return commands
 
 
@@ -61,10 +52,7 @@ def _resolve_quality_cwd(command: str, ctx: HookContext) -> Path | None:
     return None
 
 
-def _run_quality_commands(
-    commands: list[str],
-    ctx: HookContext,
-) -> list[str]:
+def run_quality_commands(commands: list[str], ctx: HookContext) -> list[str]:
     """Run each command and return formatted failure descriptions."""
     failures: list[str] = []
     for command in commands:
@@ -100,11 +88,7 @@ def _run_quality_commands(
             }
         )
         if result.returncode != 0:
-            desc = (
-                f"$ {result.command}\n"
-                f"[exit {result.returncode}]\n"
-                f"{result.stdout}{result.stderr}"
-            ).strip()
+            desc = f"$ {result.command}\n[exit {result.returncode}]\n{result.stdout}{result.stderr}".strip()
             failures.append(desc)
     return failures
 
@@ -114,7 +98,7 @@ def _should_run_post_edit_quality(ctx: HookContext) -> bool:
     if is_edit_like_tool(ctx.tool_name):
         return True
     if is_shell_tool(ctx.tool_name):
-        return not _is_safe_bash_read(ctx.tool_name, ctx.shell_command)
+        return not is_safe_bash_read(ctx.tool_name, ctx.shell_command)
     return False
 
 
@@ -131,10 +115,10 @@ class PostEditQualityRule(Rule):
             return []
         if not ctx.config.post_edit_quality_enabled or not ctx.languages:
             return []
-        commands = _collect_quality_commands(ctx)
+        commands = collect_quality_commands(ctx)
         if not commands:
             return []
-        failures = _run_quality_commands(commands, ctx)
+        failures = run_quality_commands(commands, ctx)
         if not failures:
             return []
         joined = "\n\n".join(failures)

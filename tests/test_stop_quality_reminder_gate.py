@@ -9,7 +9,9 @@ from slopgate.engine import evaluate_payload
 from tests.support import assert_blocked, finding_ids, output_string, require_output
 
 
-def _stop_payload(bundle_root: Path, session_id: str, response: str) -> dict[str, object]:
+def _stop_payload(
+    bundle_root: Path, session_id: str, response: str
+) -> dict[str, object]:
     return {
         "session_id": session_id,
         "cwd": str(bundle_root),
@@ -28,11 +30,17 @@ def _opencode_idle_payload(bundle_root: Path, session_id: str) -> dict[str, obje
 
 
 def _opencode_stop_ids(bundle_root: Path, session_id: str) -> set[str]:
-    return finding_ids(evaluate_payload(_opencode_idle_payload(bundle_root, session_id), platform="opencode"))
+    return finding_ids(
+        evaluate_payload(
+            _opencode_idle_payload(bundle_root, session_id), platform="opencode"
+        )
+    )
 
 
 def _assert_opencode_context_reminder(bundle_root: Path, session_id: str) -> None:
-    result = evaluate_payload(_opencode_idle_payload(bundle_root, session_id), platform="opencode")
+    result = evaluate_payload(
+        _opencode_idle_payload(bundle_root, session_id), platform="opencode"
+    )
     assert output_string(require_output(result), "action") == "context"
     assert "STOP-002" in finding_ids(result)
 
@@ -53,7 +61,9 @@ def test_opencode_stop_quality_reminder_allows_new_session(bundle_root: Path) ->
     assert "STOP-002" in _opencode_stop_ids(bundle_root, f"{session_id}-next")
 
 
-def test_stop_quality_reminder_dedupe_preserves_blocking_stop_rules(bundle_root: Path) -> None:
+def test_stop_quality_reminder_dedupe_preserves_blocking_stop_rules(
+    bundle_root: Path,
+) -> None:
     session_id = "stop-dedupe-block-session"
     _ = evaluate_payload(
         _stop_payload(bundle_root, session_id, "All tasks completed successfully.")

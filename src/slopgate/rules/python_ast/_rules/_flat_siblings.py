@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, final
 from typing_extensions import override
@@ -16,16 +15,13 @@ from slopgate.constants import (
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
-from slopgate.util.payloads import (
-    first_present,
-    is_bash_tool,
-    is_edit_like_tool,
-)
+from slopgate.util.payloads import first_present, is_bash_tool, is_edit_like_tool
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-class _FlatSiblingFindingInput(NamedTuple):
+class FlatSiblingFindingInput(NamedTuple):
     parent: Path
     prefix: str
     files: list[str]
@@ -33,16 +29,16 @@ class _FlatSiblingFindingInput(NamedTuple):
     reason: str
 
 
-def _flat_sibling_resolve_candidate_path(ctx: HookContext, path_value: str) -> Path:
+def flat_sibling_resolve_candidate_path(ctx: HookContext, path_value: str) -> Path:
     raw_path = Path(path_value)
     return raw_path if raw_path.is_absolute() else (Path(ctx.cwd) / raw_path).resolve()
 
 
-def _flat_sibling_patch_blob(ctx: HookContext) -> str:
+def flat_sibling_patch_blob(ctx: HookContext) -> str:
     return first_present(ctx.tool_input, ("patch", "patchText", "patch_text"))
 
 
-def _flat_sibling_patch_added_and_removed_paths(
+def flat_sibling_patch_added_and_removed_paths(
     patch_blob: str,
 ) -> tuple[list[str], list[str]]:
     added: list[str] = []
@@ -65,22 +61,22 @@ def _flat_sibling_patch_added_and_removed_paths(
                 removed.append(current_update_path)
             added.append(line.replace("*** Move to: ", "", 1).strip())
             current_update_path = ""
-    return added, removed
+    return (added, removed)
 
 
-def _flat_sibling_projected_removed_files(ctx: HookContext) -> dict[Path, set[str]]:
+def flat_sibling_projected_removed_files(ctx: HookContext) -> dict[Path, set[str]]:
     """Return flat sibling filenames a patch is deleting/moving away."""
-    patch_blob = _flat_sibling_patch_blob(ctx)
+    patch_blob = flat_sibling_patch_blob(ctx)
     if not patch_blob:
         return {}
-    _, removed_paths = _flat_sibling_patch_added_and_removed_paths(patch_blob)
+    _, removed_paths = flat_sibling_patch_added_and_removed_paths(patch_blob)
     removed_by_parent: dict[Path, set[str]] = {}
     for path_value in removed_paths:
         if not path_value.lower().endswith((".py", ".pyi")):
             continue
         if is_third_party_or_virtualenv_path(path_value):
             continue
-        full = _flat_sibling_resolve_candidate_path(ctx, path_value)
+        full = flat_sibling_resolve_candidate_path(ctx, path_value)
         prefix = PythonFlatFileSiblingsRule.prefix_for_name(full.name)
         if prefix is None:
             continue
@@ -103,16 +99,15 @@ class PythonFlatFileSiblingsRule(Rule):
     rule_id = "PY-CODE-017"
     title = "Block flat prefix_* sibling file sprawl"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
-
     _MIN_SIBLINGS = 3
     _IGNORED_PREFIXES = frozenset({"test"})
 
     @staticmethod
     def prefix_for_name(name: str) -> str | None:
         """Return the package prefix for prefix_*.py and _prefix_*.py names."""
-        import re as _re
+        import re
 
-        match = _re.match(r"^_?([a-z][a-z0-9]*)_[a-z0-9_]+\.pyi?$", name)
+        match = re.match("^_?([a-z][a-z0-9]*)_[a-z0-9_]+\\.pyi?$", name)
         if match is None:
             return None
         prefix = match.group(1)
@@ -154,7 +149,10 @@ class PythonFlatFileSiblingsRule(Rule):
     def _build_pkg_block(cls, files: list[str], prefix: str) -> str:
         """Return indented child-module lines for the suggested package layout."""
         return "\n".join(
-            "        " + module for module in cls._module_name_for_package(files, prefix)
+            (
+                "        " + module
+                for module in cls._module_name_for_package(files, prefix)
+            )
         )
 
     @staticmethod
@@ -162,21 +160,15 @@ class PythonFlatFileSiblingsRule(Rule):
         package = parent / prefix
         return package.is_dir() and (package / "__init__.py").exists()
 
-    def _finding_for_group(self, group: _FlatSiblingFindingInput) -> RuleFinding:
+    def _finding_for_group(self, group: FlatSiblingFindingInput) -> RuleFinding:
         sorted_files = sorted(group.files)
         files_str = ", ".join(sorted_files[:5])
         pkg_block = self._build_pkg_block(group.files, group.prefix)
-        representative_path = str(group.parent / sorted_files[0]) if sorted_files else str(group.parent)
-        nl = "\n"
-        msg = (
-            f"Directory `{group.parent.name}/` has flat `{group.prefix}_*.py` "
-            f"sibling modules ({files_str}); {group.reason}. "
-            f"Convert to a sub-package instead:{nl}{nl}"
-            f"    {group.parent.name}/{group.prefix}/{nl}"
-            f"        __init__.py   (re-export public API){nl}"
-            f"{pkg_block}{nl}{nl}"
-            f"The __init__.py should re-export so external imports don't change."
+        representative_path = (
+            str(group.parent / sorted_files[0]) if sorted_files else str(group.parent)
         )
+        nl = "\n"
+        msg = f"Directory `{group.parent.name}/` has flat `{group.prefix}_*.py` sibling modules ({files_str}); {group.reason}. Convert to a sub-package instead:{nl}{nl}    {group.parent.name}/{group.prefix}/{nl}        __init__.py   (re-export public API){nl}{pkg_block}{nl}{nl}The __init__.py should re-export so external imports don't change."
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
@@ -209,7 +201,7 @@ class PythonFlatFileSiblingsRule(Rule):
             if has_package:
                 findings.append(
                     self._finding_for_group(
-                        _FlatSiblingFindingInput(
+                        FlatSiblingFindingInput(
                             parent,
                             prefix,
                             files,
@@ -221,7 +213,7 @@ class PythonFlatFileSiblingsRule(Rule):
             elif len(files) >= self._MIN_SIBLINGS:
                 findings.append(
                     self._finding_for_group(
-                        _FlatSiblingFindingInput(
+                        FlatSiblingFindingInput(
                             parent,
                             prefix,
                             files,
@@ -239,7 +231,7 @@ class PythonFlatFileSiblingsRule(Rule):
                 continue
             if is_third_party_or_virtualenv_path(path_value):
                 continue
-            full = _flat_sibling_resolve_candidate_path(ctx, path_value)
+            full = flat_sibling_resolve_candidate_path(ctx, path_value)
             parent = full.parent
             if parent.exists() and parent.is_dir():
                 files = dirs.setdefault(parent, set())
@@ -271,16 +263,15 @@ class PythonFlatFileSiblingsRule(Rule):
             return []
         if not self._should_evaluate(ctx):
             return []
-        decision = DENY if ctx.event_name in {PRE_TOOL_USE, PERMISSION_REQUEST} else BLOCK
+        decision = (
+            DENY if ctx.event_name in {PRE_TOOL_USE, PERMISSION_REQUEST} else BLOCK
+        )
         findings: list[RuleFinding] = []
-        removed_by_parent = _flat_sibling_projected_removed_files(ctx)
+        removed_by_parent = flat_sibling_projected_removed_files(ctx)
         for parent, extra_files in self._resolve_candidate_dirs(ctx).items():
             findings.extend(
                 self._findings_for_directory(
-                    parent,
-                    extra_files,
-                    decision,
-                    removed_by_parent.get(parent),
+                    parent, extra_files, decision, removed_by_parent.get(parent)
                 )
             )
         return findings

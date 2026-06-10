@@ -10,10 +10,9 @@ Staging: not yet registered in the rule registry.
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, final
-from typing_extensions import TypeGuard, override
+from typing_extensions import override
 
 from slopgate.constants import (
     METADATA_FUNCTION,
@@ -23,17 +22,20 @@ from slopgate.constants import (
     PRE_TOOL_USE,
 )
 from slopgate.lint._detectors.test_smells import (
-    _count_sut_calls,
-    _is_pytest_fixture_decorator,
-    _max_bare_assert_run,
+    count_sut_calls,
+    is_pytest_fixture_decorator,
+    max_bare_assert_run,
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-    parse_module,
+from .._helpers import decision_for_context, evaluate_common
+from ._test_smell_rule_helpers import (
+    contains_assertion,
+    is_test_function,
+    is_type_checking_block,
+    iter_test_module_nodes,
+    walk_skip_nested_funcs,
 )
 
 if TYPE_CHECKING:
@@ -42,95 +44,9 @@ if TYPE_CHECKING:
 _TEST_RULE_EVENTS = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
 # ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-_ASSERT_PATTERNS = frozenset({
-    "assert", "assertEqual", "assertRaises", "assertIn",
-    "assertTrue", "assertFalse", "assertIsNone", "assertIsNotNone",
-    "assertAlmostEqual", "assertGreater", "assertLess",
-    "assertRegex", "assertNotEqual", "assertIs",
-    "assert_called", "assert_called_once", "assert_called_with",
-    "assert_called_once_with", "assert_not_called",
-    "assert_any_call", "assert_has_calls",
-})
-
-
-def _is_test_function(
-    node: ast.AST,
-) -> TypeGuard[ast.FunctionDef | ast.AsyncFunctionDef]:
-    """True if node is a test function (starts with test_)."""
-    return (
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name.startswith("test_")
-    )
-
-
-def _is_test_file(path: str) -> bool:
-    """Heuristic: is this path likely a test file?"""
-    p = path.replace("\\", "/").lower()
-    return "test" in p.split("/")[-1].split(".")[0].split("_") or "test_" in p
-
-
-
-def _contains_assertion(node: ast.AST) -> bool:
-    """True if the subtree contains any assertion."""
-    for child in ast.walk(node):
-        if isinstance(child, ast.Assert):
-            return True
-        if isinstance(child, ast.Call):
-            func = child.func
-            name = ""
-            if isinstance(func, ast.Name):
-                name = func.id
-            elif isinstance(func, ast.Attribute):
-                name = func.attr
-            if name in _ASSERT_PATTERNS:
-                return True
-    return False
-
-
-def _walk_skip_nested_funcs(node: ast.AST) -> Iterator[ast.AST]:
-    """Walk AST without descending into nested FunctionDef/AsyncFunctionDef."""
-    from collections import deque
-
-    todo = deque(ast.iter_child_nodes(node))
-    while todo:
-        child = todo.popleft()
-        yield child
-        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            todo.extend(ast.iter_child_nodes(child))
-
-
-def _is_type_checking_block(node: ast.AST) -> bool:
-    """True if node is `if TYPE_CHECKING:` or `if typing.TYPE_CHECKING:`."""
-    match node:
-        case ast.If(test=ast.Name(id="TYPE_CHECKING")):
-            return True
-        case ast.If(test=ast.Attribute(attr="TYPE_CHECKING", value=ast.Name(id="typing"))):
-            return True
-        case _:
-            return False
-
-
-def _parse_test_module(source: str, path_value: str, ctx: HookContext) -> ast.Module | None:
-    if not _is_test_file(path_value):
-        return None
-    return parse_module(source, ctx.config.python_ast_max_parse_chars)
-
-
-def _iter_test_module_nodes(
-    source: str, path_value: str, ctx: HookContext
-) -> Iterator[ast.AST]:
-    module = _parse_test_module(source, path_value, ctx)
-    if module is None:
-        return
-    yield from ast.walk(module)
-
-
-# ---------------------------------------------------------------------------
 # PY-TEST-001: Eager tests (too many SUT calls)
 # ---------------------------------------------------------------------------
+
 
 @final
 class PythonEagerTestRule(Rule):
@@ -150,27 +66,29 @@ class PythonEagerTestRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for node in _iter_test_module_nodes(source, path_value, ctx):
-            if not _is_test_function(node):
+        for node in iter_test_module_nodes(source, path_value, ctx):
+            if not is_test_function(node):
                 continue
-            calls = _count_sut_calls(node)
+            calls = count_sut_calls(node)
             if calls > self._MAX_SUT_CALLS:
-                findings.append(RuleFinding(
-                    rule_id=self.rule_id,
-                    title=self.title,
-                    severity=Severity.MEDIUM,
-                    decision=decision_for_context(ctx),
-                    message=(
-                        f"Test `{node.name}` in `{path_value}` makes {calls} "
-                        f"SUT calls (max: {self._MAX_SUT_CALLS}). "
-                        f"Split into focused single-behaviour tests."
-                    ),
-                    metadata={
-                        METADATA_PATH: path_value,
-                        METADATA_FUNCTION: node.name,
-                        "sut_calls": calls,
-                    },
-                ))
+                findings.append(
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.MEDIUM,
+                        decision=decision_for_context(ctx),
+                        message=(
+                            f"Test `{node.name}` in `{path_value}` makes {calls} "
+                            f"SUT calls (max: {self._MAX_SUT_CALLS}). "
+                            f"Split into focused single-behaviour tests."
+                        ),
+                        metadata={
+                            METADATA_PATH: path_value,
+                            METADATA_FUNCTION: node.name,
+                            "sut_calls": calls,
+                        },
+                    )
+                )
         return findings
 
     @override
@@ -183,6 +101,7 @@ class PythonEagerTestRule(Rule):
 # ---------------------------------------------------------------------------
 # PY-TEST-002: Assertion roulette (bare asserts without messages)
 # ---------------------------------------------------------------------------
+
 
 @final
 class PythonAssertionRouletteRule(Rule):
@@ -202,27 +121,29 @@ class PythonAssertionRouletteRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for node in _iter_test_module_nodes(source, path_value, ctx):
-            if not _is_test_function(node):
+        for node in iter_test_module_nodes(source, path_value, ctx):
+            if not is_test_function(node):
                 continue
-            max_run = _max_bare_assert_run(node.body)
+            max_run = max_bare_assert_run(node.body)
             if max_run > self._MAX_CONSECUTIVE:
-                findings.append(RuleFinding(
-                    rule_id=self.rule_id,
-                    title=self.title,
-                    severity=Severity.MEDIUM,
-                    decision=decision_for_context(ctx),
-                    message=(
-                        f"Test `{node.name}` in `{path_value}` has {max_run} "
-                        f"consecutive bare asserts (max: {self._MAX_CONSECUTIVE}). "
-                        f"Add descriptive messages or use named matchers."
-                    ),
-                    metadata={
-                        METADATA_PATH: path_value,
-                        METADATA_FUNCTION: node.name,
-                        "consecutive_bare_asserts": max_run,
-                    },
-                ))
+                findings.append(
+                    RuleFinding(
+                        rule_id=self.rule_id,
+                        title=self.title,
+                        severity=Severity.MEDIUM,
+                        decision=decision_for_context(ctx),
+                        message=(
+                            f"Test `{node.name}` in `{path_value}` has {max_run} "
+                            f"consecutive bare asserts (max: {self._MAX_CONSECUTIVE}). "
+                            f"Add descriptive messages or use named matchers."
+                        ),
+                        metadata={
+                            METADATA_PATH: path_value,
+                            METADATA_FUNCTION: node.name,
+                            "consecutive_bare_asserts": max_run,
+                        },
+                    )
+                )
         return findings
 
     @override
@@ -235,6 +156,7 @@ class PythonAssertionRouletteRule(Rule):
 # ---------------------------------------------------------------------------
 # PY-TEST-003: Fixtures outside conftest.py
 # ---------------------------------------------------------------------------
+
 
 @final
 class PythonFixtureOutsideConftestRule(Rule):
@@ -255,27 +177,29 @@ class PythonFixtureOutsideConftestRule(Rule):
         if Path(path_value).name == "conftest.py":
             return []
         findings: list[RuleFinding] = []
-        for node in _iter_test_module_nodes(source, path_value, ctx):
+        for node in iter_test_module_nodes(source, path_value, ctx):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for dec in node.decorator_list:
-                if _is_pytest_fixture_decorator(dec):
-                    findings.append(RuleFinding(
-                        rule_id=self.rule_id,
-                        title=self.title,
-                        severity=Severity.MEDIUM,
-                        decision=decision_for_context(ctx),
-                        message=(
-                            f"Fixture `{node.name}` defined outside conftest.py "
-                            f"in `{path_value}` (line {node.lineno}). "
-                            f"Move to the nearest conftest.py for discoverability."
-                        ),
-                        metadata={
-                            METADATA_PATH: path_value,
-                            METADATA_FUNCTION: node.name,
-                            "line": node.lineno,
-                        },
-                    ))
+                if is_pytest_fixture_decorator(dec):
+                    findings.append(
+                        RuleFinding(
+                            rule_id=self.rule_id,
+                            title=self.title,
+                            severity=Severity.MEDIUM,
+                            decision=decision_for_context(ctx),
+                            message=(
+                                f"Fixture `{node.name}` defined outside conftest.py "
+                                f"in `{path_value}` (line {node.lineno}). "
+                                f"Move to the nearest conftest.py for discoverability."
+                            ),
+                            metadata={
+                                METADATA_PATH: path_value,
+                                METADATA_FUNCTION: node.name,
+                                "line": node.lineno,
+                            },
+                        )
+                    )
                     break  # one finding per function
         return findings
 
@@ -289,6 +213,7 @@ class PythonFixtureOutsideConftestRule(Rule):
 # ---------------------------------------------------------------------------
 # PY-TEST-004: Conditional assertions (asserts inside if/for/while)
 # ---------------------------------------------------------------------------
+
 
 @final
 class PythonConditionalAssertionRule(Rule):
@@ -306,32 +231,34 @@ class PythonConditionalAssertionRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for node in _iter_test_module_nodes(source, path_value, ctx):
-            if not _is_test_function(node):
+        for node in iter_test_module_nodes(source, path_value, ctx):
+            if not is_test_function(node):
                 continue
-            for child in _walk_skip_nested_funcs(node):
+            for child in walk_skip_nested_funcs(node):
                 if isinstance(child, (ast.For, ast.While, ast.If, ast.AsyncFor)):
-                    if _is_type_checking_block(child):
+                    if is_type_checking_block(child):
                         continue
-                    if _contains_assertion(child):
-                        findings.append(RuleFinding(
-                            rule_id=self.rule_id,
-                            title=self.title,
-                            severity=Severity.MEDIUM,
-                            decision=decision_for_context(ctx),
-                            message=(
-                                f"Test `{node.name}` in `{path_value}` has "
-                                f"assertions inside a {type(child).__name__} "
-                                f"at line {child.lineno}. "
-                                f"Extract into a separate focused test."
-                            ),
-                            metadata={
-                                METADATA_PATH: path_value,
-                                METADATA_FUNCTION: node.name,
-                                "control_flow": type(child).__name__,
-                                "line": child.lineno,
-                            },
-                        ))
+                    if contains_assertion(child):
+                        findings.append(
+                            RuleFinding(
+                                rule_id=self.rule_id,
+                                title=self.title,
+                                severity=Severity.MEDIUM,
+                                decision=decision_for_context(ctx),
+                                message=(
+                                    f"Test `{node.name}` in `{path_value}` has "
+                                    f"assertions inside a {type(child).__name__} "
+                                    f"at line {child.lineno}. "
+                                    f"Extract into a separate focused test."
+                                ),
+                                metadata={
+                                    METADATA_PATH: path_value,
+                                    METADATA_FUNCTION: node.name,
+                                    "control_flow": type(child).__name__,
+                                    "line": child.lineno,
+                                },
+                            )
+                        )
                         break  # one finding per test function
         return findings
 

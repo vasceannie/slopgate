@@ -8,6 +8,7 @@ Output shapes follow https://cursor.com/docs/agent/hooks — notably
 
 from __future__ import annotations
 
+from typing import cast
 from typing_extensions import override
 
 from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
@@ -155,7 +156,7 @@ def _workspace_cwd(raw: ObjectMapping, canonical: ObjectDict) -> None:
         return
     roots = raw.get("workspace_roots")
     if isinstance(roots, list):
-        for item in roots:
+        for item in cast("list[object]", roots):
             root = string_value(item)
             if root and root.strip():
                 canonical["cwd"] = root.strip()
@@ -168,7 +169,9 @@ class CursorAdapter(PlatformAdapter):
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
         canonical = object_dict(raw)
-        cursor_event = _first_string(raw, "hook_event_name", "hookEventName", "event_name", "event")
+        cursor_event = _first_string(
+            raw, "hook_event_name", "hookEventName", "event_name", "event"
+        )
         canonical["hook_event_name"] = _CURSOR_EVENT_MAP.get(cursor_event, cursor_event)
         if cursor_event:
             canonical["cursor_hook_event"] = cursor_event

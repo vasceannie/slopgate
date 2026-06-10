@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from slopgate._types import ObjectDict, object_dict, object_list, string_value
 from slopgate.constants import METADATA_PATH, SESSION_ID
 
+
 @dataclass
 class _Counters:
     """Mutable accumulators for the analysis pass."""

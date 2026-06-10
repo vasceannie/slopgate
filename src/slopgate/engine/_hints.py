@@ -11,7 +11,14 @@ from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
 
-_REPLAN_PROMPT = (
+__all__ = [
+    "denial_context",
+    "REPLAN_PROMPT",
+    "retry_budget_relevant_denials",
+    "rule_hint",
+]
+
+REPLAN_PROMPT = (
     "If a hook denies or blocks your change, do not immediately retry the same edit pattern. "
     "Classify the failure first: structural, policy/tooling, or quality. Change approach before retrying. "
     "If the same file or rule is denied twice, stop and make a short repair plan before the next write. "
@@ -78,8 +85,7 @@ _RULE_HINTS: dict[str, str] = {
         "corruption/infrastructure failures."
     ),
     "PY-QUALITY-010": (
-        "Next step: define UPPER_CASE constants first, then replace "
-        "repeated literals."
+        "Next step: define UPPER_CASE constants first, then replace repeated literals."
     ),
     "GLOBAL-BUILTIN-SYSTEM-PROTECTION": (
         "Next step: do not touch protected system paths as file targets. "
@@ -115,7 +121,7 @@ def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
     phase_note = ""
     if ctx.event_name == POST_TOOL_USE:
         phase_note = "PostToolUse already-mutated repair protocol: "
-    path = _finding_path(item)
+    path = finding_path(item)
     pathless_note = ""
     if path is None:
         pathless_note = (
@@ -165,10 +171,12 @@ def _flatten_strings(value: object) -> list[str]:
         return [value]
     if isinstance(value, (int, float, bool)):
         return [str(value)]
-    if isinstance(value, dict):
+    obj_dict = object_dict(value)
+    if obj_dict:
         flattened: list[str] = []
-        for item in object_dict(value).values():
-            flattened.extend(_flatten_strings(item))
+        for item in obj_dict.values():
+            item_obj: object = item
+            flattened.extend(_flatten_strings(item_obj))
         return flattened
     flattened = []
     for item in object_list(value):
@@ -192,7 +200,7 @@ def _quality_lint_symbols(item: RuleFinding) -> list[str]:
 
 def _quality_lint_paths(item: RuleFinding) -> list[str]:
     paths: list[str] = []
-    path = _finding_path(item)
+    path = finding_path(item)
     if path:
         _append_unique(paths, path)
     for value in _flatten_strings(item.metadata.get("paths")):
@@ -246,7 +254,7 @@ def _quality_lint_has_collector_prefix(
 
 
 def _long_params_hint(item: RuleFinding) -> str:
-    path = _finding_path(item)
+    path = finding_path(item)
     if _is_test_path(path):
         return (
             "Next step: this test helper is pretending to be a constructor. Prefer "
@@ -261,7 +269,7 @@ def _long_params_hint(item: RuleFinding) -> str:
     )
 
 
-def _rule_hint(ctx: HookContext, item: RuleFinding) -> str | None:
+def rule_hint(ctx: HookContext, item: RuleFinding) -> str | None:
     if item.rule_id == "QUALITY-LINT-001":
         return _quality_lint_hint(ctx, item)
     if item.rule_id == "PY-CODE-009":
@@ -269,7 +277,7 @@ def _rule_hint(ctx: HookContext, item: RuleFinding) -> str | None:
     return _RULE_HINTS.get(item.rule_id)
 
 
-def _failure_class(rule_id: str) -> str:
+def failure_class(rule_id: str) -> str:
     if rule_id.startswith("PY-CODE") or rule_id.startswith("PY-QUALITY"):
         return "structural" if rule_id.startswith("PY-CODE") else "quality"
     if "SHELL" in rule_id or rule_id.startswith("GIT-"):
@@ -277,7 +285,7 @@ def _failure_class(rule_id: str) -> str:
     return "quality"
 
 
-def _finding_path(item: RuleFinding) -> str | None:
+def finding_path(item: RuleFinding) -> str | None:
     path = item.metadata.get(METADATA_PATH)
     if isinstance(path, str) and path:
         display_path = _quality_display_path(path)
@@ -305,21 +313,22 @@ def _first_hit_path(item: RuleFinding) -> str | None:
             display_path = _quality_display_path(hit)
             if display_path:
                 return display_path
-        if isinstance(hit, dict):
-            hit_path = string_value(object_dict(hit).get(METADATA_PATH))
+        hit_dict = object_dict(hit)
+        if hit_dict:
+            hit_path = string_value(hit_dict.get(METADATA_PATH))
             display_path = _quality_display_path(hit_path)
             if display_path:
                 return display_path
     return None
 
 
-def _denial_context(ctx: HookContext, item: RuleFinding, repeat_count: int) -> str:
+def denial_context(ctx: HookContext, item: RuleFinding, repeat_count: int) -> str:
     parts = [
         f"Hook phase: {ctx.event_name}",
         f"tool: {ctx.tool_name or 'unknown'}",
-        f"failure class: {_failure_class(item.rule_id)}",
+        f"failure class: {failure_class(item.rule_id)}",
     ]
-    path = _finding_path(item)
+    path = finding_path(item)
     if path:
         parts.append(f"target: {path}")
         if item.metadata.get(METADATA_PATH) == "content":
@@ -333,5 +342,9 @@ def _denial_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     return [item for item in findings if item.decision in {DENY, "block"}]
 
 
-def _retry_budget_relevant_denials(findings: list[RuleFinding]) -> list[RuleFinding]:
-    return [item for item in _denial_findings(findings) if item.rule_id != "RETRY-BUDGET-001"]
+def retry_budget_relevant_denials(findings: list[RuleFinding]) -> list[RuleFinding]:
+    return [
+        item
+        for item in _denial_findings(findings)
+        if item.rule_id != "RETRY-BUDGET-001"
+    ]

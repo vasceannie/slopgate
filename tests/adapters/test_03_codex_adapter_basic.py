@@ -7,8 +7,9 @@ from tests.test_adapters import (
     require_nested,
     require_rendered,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestCodexAdapterBasic:
     """Codex adapter — normalize, core pretool/stop/session/posttool events."""
@@ -50,7 +51,7 @@ class TestCodexAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "deny must set permissionDecision=deny"
         )
-        assert "GIT-001" in test_support.required_string(
+        assert "GIT-001" in support.required_string(
             spec, "permissionDecisionReason"
         )
 
@@ -144,7 +145,7 @@ class TestCodexAdapterBasic:
         )
         inner = require_nested(require_spec(output), "decision")
         assert inner["behavior"] == "deny"
-        assert "PERM-001" in test_support.required_string(inner, "message")
+        assert "PERM-001" in support.required_string(inner, "message")
 
     def test_permission_request_allow(self) -> None:
         adapter = CodexAdapter()
@@ -186,7 +187,7 @@ class TestCodexAdapterBasic:
         )
         rendered = require_rendered(output)
         assert rendered["decision"] == "block", "Stop block must set decision=block"
-        assert "STOP-001" in test_support.required_string(rendered, "reason")
+        assert "STOP-001" in support.required_string(rendered, "reason")
 
     def test_session_start_context(self) -> None:
         adapter = CodexAdapter()
@@ -205,7 +206,7 @@ class TestCodexAdapterBasic:
             context="workspace conventions",
             updated_input={},
         )
-        assert "workspace conventions" in test_support.required_string(
+        assert "workspace conventions" in support.required_string(
             require_spec(output), "additionalContext"
         )
 
@@ -249,7 +250,7 @@ class TestCodexAdapterBasic:
             context="files were updated",
             updated_input={},
         )
-        assert "files were updated" in test_support.required_string(
+        assert "files were updated" in support.required_string(
             require_spec(output), "additionalContext"
         )
 

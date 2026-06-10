@@ -1,31 +1,32 @@
 """Persistent hook-state store."""
 
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from time import time
 from slopgate.constants import METADATA_PATH, SESSION_ID
-from slopgate._types import (
-    ObjectDict,
-    ObjectMapping,
-    object_dict,
-    string_value,
+from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from ._files import StateSnapshotMixin
+from ._models import (
+    DenyKeyPattern,
+    HookStateSnapshot,
+    IntStateSection,
+    ObjectStateSection,
 )
 
-from ._files import _StateSnapshotMixin as _StateSnapshotMixin
-from ._models import _DenyKeyPattern as _DenyKeyPattern, _HookStateSnapshot as _HookStateSnapshot, _IntStateSection as _IntStateSection, _ObjectStateSection as _ObjectStateSection
 
-
-def _failure_count(item: ObjectDict) -> int:
+def failure_count(item: ObjectDict) -> int:
     count = item.get("count")
     return count if isinstance(count, int) else 0
 
 
-class _StateKeyMixin:
+class StateKeyMixin:
     def _full_read_key(self, session_id: str, path: str) -> str:
         return json.dumps(
-            {SESSION_ID: session_id.strip(), METADATA_PATH: self._normalize_path(path.strip())},
+            {
+                SESSION_ID: session_id.strip(),
+                METADATA_PATH: self._normalize_path(path.strip()),
+            },
             sort_keys=True,
         )
 
@@ -47,11 +48,7 @@ class _StateKeyMixin:
             sort_keys=True,
         )
 
-    def _deny_key_matches(
-        self,
-        key: str,
-        pattern: _DenyKeyPattern,
-    ) -> bool:
+    def _deny_key_matches(self, key: str, pattern: DenyKeyPattern) -> bool:
         try:
             parsed = object_dict(json.loads(key))
         except json.JSONDecodeError:
@@ -60,26 +57,25 @@ class _StateKeyMixin:
             return False
         if string_value(parsed.get("rule_id")) != pattern.rule_id.strip():
             return False
-        expected_path = self._normalize_path(pattern.path) if pattern.path else "__pathless__"
+        expected_path = (
+            self._normalize_path(pattern.path) if pattern.path else "__pathless__"
+        )
         if string_value(parsed.get(METADATA_PATH)) != expected_path:
             return False
         if pattern.attempt_fingerprint is None:
             return True
-        return string_value(parsed.get("attempt_fingerprint")) == pattern.attempt_fingerprint
+        return (
+            string_value(parsed.get("attempt_fingerprint"))
+            == pattern.attempt_fingerprint
+        )
 
     def _object_state_entry(
-        self,
-        state: _HookStateSnapshot,
-        section: _ObjectStateSection,
-        session_id: str,
+        self, state: HookStateSnapshot, section: ObjectStateSection, session_id: str
     ) -> ObjectDict | None:
         return state[section].get(session_id.strip())
 
     def _mark_recent_int_entry(
-        self,
-        state: _HookStateSnapshot,
-        section: _IntStateSection,
-        session_id: str,
+        self, state: HookStateSnapshot, section: IntStateSection, session_id: str
     ) -> None:
         state[section][session_id.strip()] = int(time())
 
@@ -90,12 +86,17 @@ class _StateKeyMixin:
             return str(Path(path).absolute())
 
 
-class _SessionStateMutationMixin(_StateKeyMixin, _StateSnapshotMixin):
+__all__ = [
+    "DenyHitStateMixin",
+    "FullReadStateMixin",
+    "SearchReminderStateMixin",
+    "SessionStateMutationMixin",
+]
+
+
+class SessionStateMutationMixin(StateKeyMixin, StateSnapshotMixin):
     def _write_object_state_entry(
-        self,
-        section: _ObjectStateSection,
-        session_id: str,
-        values: ObjectMapping,
+        self, section: ObjectStateSection, session_id: str, values: ObjectMapping
     ) -> None:
         with self._locked_state():
             state = self._load_state()
@@ -106,7 +107,7 @@ class _SessionStateMutationMixin(_StateKeyMixin, _StateSnapshotMixin):
             self._save_state(state)
 
 
-class _FullReadStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+class FullReadStateMixin(StateKeyMixin, StateSnapshotMixin):
     def has_full_read(self, session_id: str, path: str) -> bool:
         key = self._full_read_key(session_id, path)
         state = self._load_state()
@@ -123,7 +124,7 @@ class _FullReadStateMixin(_StateKeyMixin, _StateSnapshotMixin):
             self._save_state(state)
 
 
-class _SearchReminderStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+class SearchReminderStateMixin(StateKeyMixin, StateSnapshotMixin):
     _STOP_QUALITY_REMINDER_PREFIX = "stop-quality-reminder:"
 
     def should_emit_search_reminder(self, session_id: str) -> bool:
@@ -153,7 +154,7 @@ class _SearchReminderStateMixin(_StateKeyMixin, _StateSnapshotMixin):
             self._save_state(state)
 
 
-class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
+class DenyHitStateMixin(StateKeyMixin, StateSnapshotMixin):
     def record_deny_hit(
         self,
         session_id: str,
@@ -192,7 +193,7 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
                 for key in deny_hits
                 if self._deny_key_matches(
                     key,
-                    _DenyKeyPattern(
+                    DenyKeyPattern(
                         session_id=session_id,
                         rule_id=rule_id,
                         path=path,
@@ -206,9 +207,7 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
             self._save_state(state)
 
     def recent_repeated_failures(
-        self,
-        session_id: str,
-        limit: int = 5,
+        self, session_id: str, limit: int = 5
     ) -> list[ObjectDict]:
         key_prefix = session_id.strip()
         state = self._load_state()
@@ -228,5 +227,5 @@ class _DenyHitStateMixin(_StateKeyMixin, _StateSnapshotMixin):
                 continue
             path = string_value(parsed.get(METADATA_PATH)) or "__pathless__"
             pairs.append({"rule_id": rule_id, METADATA_PATH: path, "count": count})
-        pairs.sort(key=_failure_count, reverse=True)
+        pairs.sort(key=failure_count, reverse=True)
         return pairs[:limit]

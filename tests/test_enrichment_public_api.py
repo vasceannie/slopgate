@@ -72,7 +72,9 @@ def handler(payload: dict[str, Any]) -> None:  # type: ignore[arg-type]
 IRRELEVANT_TEXT = strategies.text(alphabet="abc xyz\n#", max_size=80)
 
 
-def context_for_source(tmp_path: Path, source: str, path: str = "sample.py") -> HookContext:
+def context_for_source(
+    tmp_path: Path, source: str, path: str = "sample.py"
+) -> HookContext:
     config = load_config(
         root=tmp_path,
         ensure_enrollment=False,
@@ -269,7 +271,9 @@ def test_type_suppression_enricher_reports_specific_advice(tmp_path: Path) -> No
 
 
 @given(IRRELEVANT_TEXT)
-def test_feature_envy_enricher_ignores_incomplete_metadata_property(source: str) -> None:
+def test_feature_envy_enricher_ignores_incomplete_metadata_property(
+    source: str,
+) -> None:
     with TemporaryDirectory() as raw_path:
         ctx = context_for_source(Path(raw_path), source)
         item = RuleFinding("feature-envy", "feature-envy", Severity.MEDIUM)
@@ -278,10 +282,14 @@ def test_feature_envy_enricher_ignores_incomplete_metadata_property(source: str)
 
 
 @given(IRRELEVANT_TEXT)
-def test_thin_wrapper_enricher_ignores_incomplete_metadata_property(source: str) -> None:
+def test_thin_wrapper_enricher_ignores_incomplete_metadata_property(
+    source: str,
+) -> None:
     with TemporaryDirectory() as raw_path:
         ctx = context_for_source(Path(raw_path), source)
-        item = RuleFinding("unnecessary-wrapper", "unnecessary-wrapper", Severity.MEDIUM)
+        item = RuleFinding(
+            "unnecessary-wrapper", "unnecessary-wrapper", Severity.MEDIUM
+        )
         enrich_thin_wrapper(item, ctx)
     assert item.message is None
 

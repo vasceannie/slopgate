@@ -1,41 +1,29 @@
 """Stop/session runtime rules."""
 
 from __future__ import annotations
-
 import re
 from typing import TYPE_CHECKING
 from typing_extensions import override
-from slopgate.constants import (
-    DENY,
-    PERMISSION_REQUEST,
-    PRE_TOOL_USE,
-    METADATA_PATH,
-)
+from slopgate.constants import DENY, PERMISSION_REQUEST, PRE_TOOL_USE, METADATA_PATH
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.rules.common import is_safe_read_shell_command
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+from ._git_quality import is_non_default_branch, is_slopgate_repo, is_worktree
 
-from ._git_quality import _is_non_default_branch as _is_non_default_branch, _is_slopgate_repo as _is_slopgate_repo, _is_worktree as _is_worktree
-
-
-_READ_TOOLS = frozenset({"read", "grep", "glob"})
-
-_INFRA_FRAGMENTS = (
+READ_TOOLS = frozenset({"read", "grep", "glob"})
+INFRA_FRAGMENTS = (
     "hook-layer/config.json",
     "hook_layer/",
     "slopgate/",
     ".claude/hooks/",
 )
-
-_CONFIG_FRAGMENTS = (
-    "config/slopgate/config.json",
-    "config/slopgate/rules",
-)
+CONFIG_FRAGMENTS = ("config/slopgate/config.json", "config/slopgate/rules")
 
 
-def _path_contains_fragment(path_value: str, fragment: str) -> bool:
+def path_contains_fragment(path_value: str, fragment: str) -> bool:
     """Return True when path matches a protected fragment or a child below it."""
     lowered = path_value.lower()
     normalized_fragment = fragment.rstrip("/")
@@ -46,7 +34,7 @@ def _path_contains_fragment(path_value: str, fragment: str) -> bool:
     )
 
 
-def _is_safe_bash_for_path(ctx: HookContext) -> bool:
+def is_safe_bash_for_path(ctx: HookContext) -> bool:
     """Return True if the bash command is a safe read-only operation."""
     from slopgate.util.payloads import is_shell_tool
 
@@ -55,7 +43,7 @@ def _is_safe_bash_for_path(ctx: HookContext) -> bool:
     return is_safe_read_shell_command(ctx.shell_command.lower())
 
 
-def _is_modifying_tool(ctx: HookContext) -> bool:
+def is_modifying_tool(ctx: HookContext) -> bool:
     """Return True if the tool can modify files (bash or edit-like)."""
     from slopgate.util.payloads import is_shell_tool
 
@@ -66,7 +54,7 @@ def _is_modifying_tool(ctx: HookContext) -> bool:
     return is_edit_like_tool(ctx.tool_name)
 
 
-def _infra_deny(path_value: str, fragment: str, kind: str) -> list[RuleFinding]:
+def infra_deny(path_value: str, fragment: str, kind: str) -> list[RuleFinding]:
     label = "config" if kind == "config" else "infrastructure"
     return [
         RuleFinding(
@@ -74,43 +62,39 @@ def _infra_deny(path_value: str, fragment: str, kind: str) -> list[RuleFinding]:
             title="Hook layer execution protection",
             severity=Severity.CRITICAL,
             decision=DENY,
-            message=(
-                f"Modifying the hook layer {label} "
-                f"({path_value}) is blocked. "
-                f"These files are protected."
-            ),
+            message=f"Modifying the hook layer {label} ({path_value}) is blocked. These files are protected.",
             metadata={METADATA_PATH: path_value, "fragment": fragment, "kind": kind},
         )
     ]
 
 
-def _check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
+def check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
     """Check config fragments — always protected, no worktree exception."""
-    for cfrag in _CONFIG_FRAGMENTS:
-        if not _path_contains_fragment(path_value, cfrag):
+    for cfrag in CONFIG_FRAGMENTS:
+        if not path_contains_fragment(path_value, cfrag):
             continue
-        if _is_safe_bash_for_path(ctx):
+        if is_safe_bash_for_path(ctx):
             return []
-        if _is_modifying_tool(ctx):
-            return _infra_deny(path_value, cfrag, "config")
+        if is_modifying_tool(ctx):
+            return infra_deny(path_value, cfrag, "config")
     return None
 
 
-def _check_infra_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
+def check_infra_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | None:
     """Check infra fragments with a narrow slopgate worktree exception."""
-    for frag in _INFRA_FRAGMENTS:
-        if not _path_contains_fragment(path_value, frag):
+    for frag in INFRA_FRAGMENTS:
+        if not path_contains_fragment(path_value, frag):
             continue
         if (
-            _is_worktree(path_value, ctx.cwd)
-            and _is_slopgate_repo(path_value, ctx.cwd)
-            and _is_non_default_branch(path_value, ctx.cwd)
+            is_worktree(path_value, ctx.cwd)
+            and is_slopgate_repo(path_value, ctx.cwd)
+            and is_non_default_branch(path_value, ctx.cwd)
         ):
             return []
-        if _is_safe_bash_for_path(ctx):
+        if is_safe_bash_for_path(ctx):
             return []
-        if _is_modifying_tool(ctx):
-            return _infra_deny(path_value, frag, "infra")
+        if is_modifying_tool(ctx):
+            return infra_deny(path_value, frag, "infra")
     return None
 
 
@@ -125,34 +109,31 @@ class HookInfraExecProtectionRule(Rule):
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if ctx.tool_name and ctx.tool_name.lower() in _READ_TOOLS:
+        if ctx.tool_name and ctx.tool_name.lower() in READ_TOOLS:
             return []
         for path_value in ctx.candidate_paths:
-            cfg = _check_config_path(path_value, ctx)
+            cfg = check_config_path(path_value, ctx)
             if cfg is not None:
                 return cfg
-            infra = _check_infra_path(path_value, ctx)
+            infra = check_infra_path(path_value, ctx)
             if infra is not None:
                 return infra
         return []
 
 
-# ---------------------------------------------------------------------------
-# Rulebook security
-# ---------------------------------------------------------------------------
-
-_SECURITY_PATTERNS = tuple(
-    re.compile(p, re.IGNORECASE)
-    for p in (
-        "bypass_permissions",
-        "allowManagedHooksOnly",
-        r"disable.*guard",
-        r"disable.*rule",
-        r"skip.*validation",
+SECURITY_PATTERNS = tuple(
+    (
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            "bypass_permissions",
+            "allowManagedHooksOnly",
+            "disable.*guard",
+            "disable.*rule",
+            "skip.*validation",
+        )
     )
 )
-
-_SECURITY_EXCLUDED = (
+SECURITY_EXCLUDED = (
     "hook_layer/",
     "slopgate/",
     "hook-layer/",
@@ -162,7 +143,7 @@ _SECURITY_EXCLUDED = (
 )
 
 
-def _is_security_doc_or_example(path_value: str) -> bool:
+def is_security_doc_or_example(path_value: str) -> bool:
     lowered = path_value.lower().replace("\\", "/")
     if lowered.startswith("docs/") and lowered.endswith(".md"):
         return True
@@ -184,11 +165,11 @@ class RulebookSecurityRule(Rule):
             return []
         for target in ctx.content_targets:
             lowered = target.path.lower()
-            if _is_security_doc_or_example(lowered):
+            if is_security_doc_or_example(lowered):
                 continue
-            if any(f in lowered for f in _SECURITY_EXCLUDED):
+            if any((f in lowered for f in SECURITY_EXCLUDED)):
                 continue
-            for pat in _SECURITY_PATTERNS:
+            for pat in SECURITY_PATTERNS:
                 if pat.search(target.content):
                     return [
                         RuleFinding(
@@ -196,12 +177,7 @@ class RulebookSecurityRule(Rule):
                             title=self.title,
                             severity=Severity.HIGH,
                             decision=DENY,
-                            message=(
-                                "Modifying security guardrail "
-                                f"settings is blocked in {target.path}. "
-                                "Do not disable rules or "
-                                "bypass permissions."
-                            ),
+                            message=f"Modifying security guardrail settings is blocked in {target.path}. Do not disable rules or bypass permissions.",
                             metadata={
                                 METADATA_PATH: target.path,
                                 "pattern": pat.pattern,

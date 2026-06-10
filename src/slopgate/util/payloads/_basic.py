@@ -1,12 +1,12 @@
 from __future__ import annotations
-
 import fnmatch
 from collections.abc import Iterable
 from pathlib import Path
-
 from slopgate._types import ObjectMapping
 from slopgate.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
-from slopgate.util.platform import lower_path_for_match as lower_path
+from slopgate.util.platform import lower_path_for_match
+
+lower_path = lower_path_for_match
 
 
 def first_present(
@@ -58,7 +58,6 @@ def extract_content_from_mapping(mapping: ObjectMapping) -> str:
         ),
         strip=False,
     )
-
 
 
 def is_edit_like_tool(tool_name: str) -> bool:
@@ -113,15 +112,17 @@ def detect_language(path_value: str) -> str | None:
 
 
 def path_matches_glob(path_value: str, pattern: str) -> bool:
-    normalized_path = lower_path(path_value)
-    normalized_pattern = lower_path(pattern)
+    normalized_path = lower_path_for_match(path_value)
+    normalized_pattern = lower_path_for_match(pattern)
     basename = Path(normalized_path).name
     if normalized_pattern.endswith("/") and "*" not in normalized_pattern:
         directory_pattern = normalized_pattern.rstrip("/")
         relative_path = normalized_path.removeprefix("./").rstrip("/")
-        return relative_path == directory_pattern or relative_path.startswith(
-            f"{directory_pattern}/"
-        ) or f"/{directory_pattern}/" in f"/{normalized_path.rstrip('/')}/"
+        return (
+            relative_path == directory_pattern
+            or relative_path.startswith(f"{directory_pattern}/")
+            or f"/{directory_pattern}/" in f"/{normalized_path.rstrip('/')}/"
+        )
     if "/" not in normalized_pattern:
         return fnmatch.fnmatch(basename, normalized_pattern)
     return fnmatch.fnmatch(normalized_path, normalized_pattern)
@@ -130,4 +131,4 @@ def path_matches_glob(path_value: str, pattern: str) -> bool:
 def any_path_matches(path_value: str, patterns: list[str]) -> bool:
     if not patterns:
         return True
-    return any(path_matches_glob(path_value, pattern) for pattern in patterns)
+    return any((path_matches_glob(path_value, pattern) for pattern in patterns))

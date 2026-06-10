@@ -18,14 +18,19 @@ from slopgate.quality.constant_index import (
 )
 
 
-def test_iter_constant_candidate_paths_returns_sorted_known_files(tmp_path: Path) -> None:
+def test_iter_constant_candidate_paths_returns_sorted_known_files(
+    tmp_path: Path,
+) -> None:
     constants = tmp_path / "constants.py"
     constants.write_text('API_URL = "https://example.test"\n', encoding="utf-8")
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "paths.py").write_text('CACHE_DIR = "/tmp/cache"\n', encoding="utf-8")
 
-    assert iter_constant_candidate_paths(tmp_path) == [config_dir / "paths.py", constants]
+    assert iter_constant_candidate_paths(tmp_path) == [
+        config_dir / "paths.py",
+        constants,
+    ]
 
 
 def test_constant_index_discovers_string_constants_from_known_files(

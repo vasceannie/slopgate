@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 import ast
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
@@ -13,31 +12,30 @@ from slopgate.constants import (
     METADATA_FUNCTION,
     METADATA_PATH,
 )
-from slopgate.lint._helpers import class_body_lines as _class_body_lines
+from slopgate.lint._helpers import class_body_lines
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-)
+from .._helpers import decision_for_context, evaluate_common
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+from ._module_size_projection import python_structural_sources
+from ._source_parse import parsed_classes, parsed_functions, python_ast_rule_is_disabled
 
-from ._module_size_projection import _python_structural_sources as _python_structural_sources
-from ._source_parse import _parsed_classes as _parsed_classes, _parsed_functions as _parsed_functions, _python_ast_rule_is_disabled as _python_ast_rule_is_disabled
 
-
-def _thin_wrapper_extract_single_call(stmt: ast.stmt) -> ast.Call | None:
+def thin_wrapper_extract_single_call(stmt: ast.stmt) -> ast.Call | None:
     """Return the Call node if stmt is a single-statement Return/Expr call."""
     match stmt:
         case ast.Return(value=ast.Call() as call_node):
             return call_node
         case ast.Expr(value=ast.Call() as call_node):
             return call_node
+        case _:
+            pass
     return None
 
 
-def _thin_wrapper_attribute_name(node: ast.Attribute) -> str:
+def thin_wrapper_attribute_name(node: ast.Attribute) -> str:
     parts: list[str] = [node.attr]
     current: ast.expr = node.value
     while isinstance(current, ast.Attribute):
@@ -50,16 +48,16 @@ def _thin_wrapper_attribute_name(node: ast.Attribute) -> str:
     return ".".join(reversed(parts))
 
 
-def _thin_wrapper_call_target_name(call_node: ast.Call) -> str:
+def thin_wrapper_call_target_name(call_node: ast.Call) -> str:
     func = call_node.func
     if isinstance(func, ast.Name):
         return func.id
     if isinstance(func, ast.Attribute):
-        return _thin_wrapper_attribute_name(func)
+        return thin_wrapper_attribute_name(func)
     return "<unknown>"
 
 
-def _thin_wrapper_call_root_name(call_node: ast.Call) -> str | None:
+def thin_wrapper_call_root_name(call_node: ast.Call) -> str | None:
     match call_node.func:
         case ast.Name(id=name):
             return name
@@ -69,50 +67,47 @@ def _thin_wrapper_call_root_name(call_node: ast.Call) -> str | None:
                 current = current.value
             if isinstance(current, ast.Name):
                 return current.id
+        case _:
+            pass
     return None
 
 
-def _thin_wrapper_has_self_or_cls_receiver(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    call_node: ast.Call,
+def thin_wrapper_has_self_or_cls_receiver(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, call_node: ast.Call
 ) -> bool:
     if not node.args.args:
         return False
     receiver_name = node.args.args[0].arg
     if receiver_name not in {"self", "cls"}:
         return False
-    return _thin_wrapper_call_root_name(call_node) == receiver_name
+    return thin_wrapper_call_root_name(call_node) == receiver_name
 
 
-def _is_test_helper_path(path_value: str) -> bool:
+def is_test_helper_path(path_value: str) -> bool:
     normalized = path_value.replace("\\", "/").lower()
     return (
         normalized.startswith("tests/")
         or "/tests/" in normalized
         or normalized.endswith("/conftest.py")
-        or normalized == "conftest.py"
+        or (normalized == "conftest.py")
     )
 
 
-def _is_exempt_cast_wrapper(call_node: ast.Call) -> bool:
+def is_exempt_cast_wrapper(call_node: ast.Call) -> bool:
     return isinstance(call_node.func, ast.Name) and call_node.func.id == "cast"
 
 
-def _is_exempt_test_helper_wrapper(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    call_node: ast.Call,
-    path_value: str,
+def is_exempt_test_helper_wrapper(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, call_node: ast.Call, path_value: str
 ) -> bool:
-    if not _is_test_helper_path(path_value):
+    if not is_test_helper_path(path_value):
         return False
     if isinstance(call_node.func, ast.Name) and call_node.func.id in {"list", "cast"}:
         return True
-    return _thin_wrapper_has_self_or_cls_receiver(node, call_node)
+    return thin_wrapper_has_self_or_cls_receiver(node, call_node)
 
 
-def _is_wrapper_candidate(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> bool:
+def is_wrapper_candidate(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Return True when node is a non-dunder, undecorated single-statement function."""
     if node.name.startswith("__") and node.name.endswith("__"):
         return False
@@ -133,28 +128,31 @@ class PythonThinWrapperRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for node in _parsed_functions(source, ctx):
-            if not _is_wrapper_candidate(node):
+        for node in parsed_functions(source, ctx):
+            if not is_wrapper_candidate(node):
                 continue
-            call_node = _thin_wrapper_extract_single_call(node.body[0])
+            call_node = thin_wrapper_extract_single_call(node.body[0])
             if call_node is None:
                 continue
-            if _is_exempt_cast_wrapper(call_node):
+            if is_exempt_cast_wrapper(call_node):
                 continue
-            if _is_exempt_test_helper_wrapper(node, call_node, path_value):
+            if is_exempt_test_helper_wrapper(node, call_node, path_value):
                 continue
-            wrapped = _thin_wrapper_call_target_name(call_node)
-            findings.append(RuleFinding(
-                rule_id=self.rule_id,
-                title=self.title,
-                severity=Severity.MEDIUM,
-                decision=decision_for_context(ctx),
-                message=(
-                    f"Function `{node.name}` in `{path_value}` is a thin wrapper "
-                    f"around `{wrapped}`. Consider calling the wrapped function directly."
-                ),
-                metadata={METADATA_PATH: path_value, METADATA_FUNCTION: node.name, "wraps": wrapped},
-            ))
+            wrapped = thin_wrapper_call_target_name(call_node)
+            findings.append(
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.MEDIUM,
+                    decision=decision_for_context(ctx),
+                    message=f"Function `{node.name}` in `{path_value}` is a thin wrapper around `{wrapped}`. Consider calling the wrapped function directly.",
+                    metadata={
+                        METADATA_PATH: path_value,
+                        METADATA_FUNCTION: node.name,
+                        "wraps": wrapped,
+                    },
+                )
+            )
         return findings
 
     @override
@@ -188,9 +186,9 @@ class PythonGodClassRule(Rule):
         findings: list[RuleFinding] = []
         method_limit = ctx.config.python_max_god_class_methods
         line_limit = MAX_GOD_CLASS_LINES
-        for node in _parsed_classes(source, ctx):
+        for node in parsed_classes(source, ctx):
             method_count = self._non_dunder_method_count(node)
-            body_lines = _class_body_lines(node)
+            body_lines = class_body_lines(node)
             reasons: list[str] = []
             if method_count > method_limit:
                 reasons.append(f"methods={method_count} (limit={method_limit})")
@@ -198,32 +196,31 @@ class PythonGodClassRule(Rule):
                 reasons.append(f"lines={body_lines} (limit={line_limit})")
             if not reasons:
                 continue
-            findings.append(RuleFinding(
-                rule_id=self.rule_id,
-                title=self.title,
-                severity=Severity.HIGH,
-                decision=decision_for_context(ctx),
-                message=(
-                    f"Class `{node.name}` in `{path_value}` is a god-class: "
-                    f"{', '.join(reasons)}. Split responsibilities before writing it."
-                ),
-                metadata={
-                    METADATA_PATH: path_value,
-                    "class": node.name,
-                    "collector": "god-class",
-                    "method_count": method_count,
-                    "method_limit": method_limit,
-                    "body_lines": body_lines,
-                    "line_limit": line_limit,
-                },
-            ))
+            findings.append(
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.HIGH,
+                    decision=decision_for_context(ctx),
+                    message=f"Class `{node.name}` in `{path_value}` is a god-class: {', '.join(reasons)}. Split responsibilities before writing it.",
+                    metadata={
+                        METADATA_PATH: path_value,
+                        "class": node.name,
+                        "collector": "god-class",
+                        "method_count": method_count,
+                        "method_limit": method_limit,
+                        "body_lines": body_lines,
+                        "line_limit": line_limit,
+                    },
+                )
+            )
         return findings
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        if _python_ast_rule_is_disabled(ctx, self.rule_id):
+        if python_ast_rule_is_disabled(ctx, self.rule_id):
             return []
         findings: list[RuleFinding] = []
-        for path_value, source in _python_structural_sources(ctx):
+        for path_value, source in python_structural_sources(ctx):
             findings.extend(self._check_source(source, path_value, ctx))
         return findings

@@ -29,7 +29,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_first_present_returns_first_non_blank_string(first: str, second: str) -> None:
     mapping = {"empty": "   ", "first": first, "second": second}
 
-    assert first_present(mapping, ("missing", "empty", "first", "second")) == first.strip()
+    assert (
+        first_present(mapping, ("missing", "empty", "first", "second")) == first.strip()
+    )
 
 
 @given(
@@ -55,7 +57,9 @@ def test_path_glob_matching_is_case_insensitive_for_python_paths(path: str) -> N
     path=strategies.from_regex(r"src/[A-Za-z0-9_/-]+\.py", fullmatch=True),
     content=strategies.text(),
 )
-def test_mapping_extractors_prefer_known_path_and_content_keys(path: str, content: str) -> None:
+def test_mapping_extractors_prefer_known_path_and_content_keys(
+    path: str, content: str
+) -> None:
     payload = {"file_path": path, "new_string": content, "ignored": "nope"}
 
     assert {
@@ -82,7 +86,9 @@ def test_hook_payload_preserves_core_properties(tmp_path: Path) -> None:
                 "content": "print('hi')",
             },
         },
-        load_config(repo_root, repo_root=repo_root, ensure_enrollment=False, ensure_trace=False),
+        load_config(
+            repo_root, repo_root=repo_root, ensure_enrollment=False, ensure_trace=False
+        ),
     )
 
     assert {
@@ -113,7 +119,9 @@ def test_hook_payload_preserves_shell_and_target_properties(tmp_path: Path) -> N
                 "content": "print('hi')",
             },
         },
-        load_config(repo_root, repo_root=repo_root, ensure_enrollment=False, ensure_trace=False),
+        load_config(
+            repo_root, repo_root=repo_root, ensure_enrollment=False, ensure_trace=False
+        ),
     )
 
     assert {
@@ -121,7 +129,8 @@ def test_hook_payload_preserves_shell_and_target_properties(tmp_path: Path) -> N
         "shell_command": payload.shell_command,
         "languages": payload.languages,
         "content_targets": [
-            (target.path, target.content, target.source) for target in payload.content_targets
+            (target.path, target.content, target.source)
+            for target in payload.content_targets
         ],
     } == {
         "shell_kind": "bash",

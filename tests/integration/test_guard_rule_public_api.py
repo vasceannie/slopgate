@@ -8,7 +8,6 @@ import pytest
 from slopgate import rules
 from slopgate.config import load_config
 from slopgate.context import HookContext
-from slopgate.rules.common import _quality_lint
 from slopgate.rules.python_ast import PythonPytestAsyncioRule
 from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
@@ -37,7 +36,9 @@ def context_for_payload(
     )
 
 
-def write_payload(file_path: str, content: str, event: str = "PreToolUse") -> dict[str, object]:
+def write_payload(
+    file_path: str, content: str, event: str = "PreToolUse"
+) -> dict[str, object]:
     return {
         "session_id": "test-session",
         "hook_event_name": event,
@@ -86,10 +87,13 @@ def test_post_edit_quality_rule_blocks_collector_failures(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    def fake_run_quality_commands(commands: list[str], ctx: HookContext) -> list[str]:
+        _ = commands, ctx
+        return ["$ quality\n[exit 1]\nfailed"]
+
     monkeypatch.setattr(
-        _quality_lint,
-        "_run_quality_commands",
-        lambda commands, ctx: ["$ quality\n[exit 1]\nfailed"],
+        "slopgate.rules.common._quality_postedit.run_quality_commands",
+        fake_run_quality_commands,
     )
     ctx = context_for_payload(
         tmp_path,
@@ -110,18 +114,27 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        _quality_lint,
-        "_collect_touched_lint_failures",
-        lambda ctx: (
+    def fake_collect_touched_lint_failures(
+        ctx: HookContext,
+    ) -> tuple[list[str], list[str], list[str]]:
+        _ = ctx
+        return (
             ["long-test: 1"],
             ["[HOOK] long-test", "file: tests/test_sample.py"],
             ["tests/test_sample.py"],
-        ),
+        )
+
+    monkeypatch.setattr(
+        "slopgate.rules.common._quality_lint.collect_touched_lint_failures",
+        fake_collect_touched_lint_failures,
     )
     ctx = context_for_payload(
         tmp_path,
-        write_payload("tests/test_sample.py", "def test_x():\n    assert True\n", event="PostToolUse"),
+        write_payload(
+            "tests/test_sample.py",
+            "def test_x():\n    assert True\n",
+            event="PostToolUse",
+        ),
     )
 
     findings = rules.PostEditLintRule().evaluate(ctx)
@@ -133,7 +146,9 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
 
 def langgraph_context(tmp_path: Path, source: str) -> HookContext:
     (tmp_path / "graph.py").write_text(source, encoding="utf-8")
-    return context_for_payload(tmp_path, write_payload("graph.py", source, event="PostToolUse"))
+    return context_for_payload(
+        tmp_path, write_payload("graph.py", source, event="PostToolUse")
+    )
 
 
 def test_langgraph_state_reducer_rule_reports_bare_list_field(tmp_path: Path) -> None:
@@ -153,7 +168,9 @@ class State(TypedDict):
     ]
 
 
-def test_langgraph_state_mutation_rule_reports_direct_state_change(tmp_path: Path) -> None:
+def test_langgraph_state_mutation_rule_reports_direct_state_change(
+    tmp_path: Path,
+) -> None:
     mutation_line = 'state["messages"]' + '.append("hello")'
     source = f"""
 from langgraph.graph import StateGraph
@@ -171,7 +188,9 @@ def node(state):
     ]
 
 
-def test_langgraph_deprecated_api_rule_reports_old_entrypoint_api(tmp_path: Path) -> None:
+def test_langgraph_deprecated_api_rule_reports_old_entrypoint_api(
+    tmp_path: Path,
+) -> None:
     old_entrypoint = "set_" + "entry_point"
     source = f"""
 from langgraph.graph import StateGraph
@@ -190,7 +209,9 @@ graph.{old_entrypoint}("node")
 
 def test_pytest_asyncio_rule_reports_unmarked_async_test(tmp_path: Path) -> None:
     source = "async def test_async_case():\n    await run_case()\n"
-    ctx = context_for_payload(tmp_path, write_payload("tests/test_async_case.py", source))
+    ctx = context_for_payload(
+        tmp_path, write_payload("tests/test_async_case.py", source)
+    )
 
     findings = PythonPytestAsyncioRule().evaluate(ctx)
 
@@ -210,7 +231,9 @@ def test_repo_enrollment_rule_blocks_disable_sentinel_delete(tmp_path: Path) -> 
     assert [item.rule_id for item in findings] == ["REPO-ENROLL-001"]
 
 
-def test_ignore_preexisting_rule_blocks_dismissive_stop_response(tmp_path: Path) -> None:
+def test_ignore_preexisting_rule_blocks_dismissive_stop_response(
+    tmp_path: Path,
+) -> None:
     stop_ctx = context_for_payload(
         tmp_path,
         {
@@ -252,7 +275,9 @@ def test_warn_large_file_rule_reports_large_content(tmp_path: Path) -> None:
 
 
 def test_hook_infra_exec_rule_exposes_global_rule_identifier() -> None:
-    assert rules.HookInfraExecProtectionRule().rule_id == "GLOBAL-BUILTIN-HOOK-INFRA-EXEC"
+    assert (
+        rules.HookInfraExecProtectionRule().rule_id == "GLOBAL-BUILTIN-HOOK-INFRA-EXEC"
+    )
 
 
 def test_rulebook_security_rule_blocks_guardrail_disable(tmp_path: Path) -> None:
@@ -308,7 +333,9 @@ def test_system_protection_rule_blocks_configured_system_path(tmp_path: Path) ->
 
 
 def test_git_no_verify_rule_blocks_hook_bypass(tmp_path: Path) -> None:
-    git_ctx = context_for_payload(tmp_path, bash_payload("git commit --no-verify -m skip"))
+    git_ctx = context_for_payload(
+        tmp_path, bash_payload("git commit --no-verify -m skip")
+    )
 
     findings = rules.GitNoVerifyRule().evaluate(git_ctx)
 

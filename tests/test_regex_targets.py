@@ -133,7 +133,9 @@ class TestPythonShellEditCommandTarget:
         )
 
     def test_py_shell_dev_tee_edit_denied(self) -> None:
-        result = evaluate_payload(bash_payload("printf 'x = 1' | tee dev/scripts/tool.py"))
+        result = evaluate_payload(
+            bash_payload("printf 'x = 1' | tee dev/scripts/tool.py")
+        )
         assert "PY-SHELL-001" in finding_ids(result), (
             "tee to dev/*.py must trigger PY-SHELL-001"
         )
@@ -144,7 +146,9 @@ class TestPythonShellEditCommandTarget:
             "redirecting output to a root-level Python file must trigger PY-SHELL-001"
         )
 
-    def test_sed_expression_mentions_python_but_edits_non_python_not_py_shell(self) -> None:
+    def test_sed_expression_mentions_python_but_edits_non_python_not_py_shell(
+        self,
+    ) -> None:
         command = "sed -i 's#cloud/app/core.py#cloud/app/main.py#' README.md"
         result = evaluate_payload(bash_payload(command))
         assert "PY-SHELL-001" not in finding_ids(result), (
@@ -217,7 +221,9 @@ class TestGitCommandTarget:
         )
 
     def test_git_no_verify_denial_gives_safe_commit_command(self) -> None:
-        result = evaluate_payload(bash_payload("git commit --no-verify -m 'skip hooks'"))
+        result = evaluate_payload(
+            bash_payload("git commit --no-verify -m 'skip hooks'")
+        )
         assert "GIT-001" in finding_ids(result)
         support.assert_denied_by(result, "GIT-001")
         reason = support.required_string(
@@ -231,7 +237,7 @@ class TestPathTarget:
     """Regex rules with target=path match against candidate_paths."""
 
     @staticmethod
-    def _write_payload(file_path: str) -> dict[str, object]:
+    def write_payload(file_path: str) -> dict[str, object]:
         return {
             "session_id": "t",
             "cwd": str(BUNDLE_ROOT),
@@ -241,19 +247,19 @@ class TestPathTarget:
         }
 
     def test_linter_config_path_denied(self) -> None:
-        result = evaluate_payload(self._write_payload(".pylintrc"))
+        result = evaluate_payload(self.write_payload(".pylintrc"))
         assert "PY-LINTER-001" in finding_ids(result), (
             ".pylintrc must trigger PY-LINTER-001"
         )
 
     def test_quality_test_path_denied(self) -> None:
-        result = evaluate_payload(self._write_payload("tests/quality/test_new.py"))
+        result = evaluate_payload(self.write_payload("tests/quality/test_new.py"))
         ids = finding_ids(result)
         matched = "QA-PATH-003" in ids or "BUILTIN-PROTECTED-PATHS" in ids
         assert matched, "tests/quality/ path must be flagged"
 
     def test_quality_path_denial_names_baseline_escape_hatch(self) -> None:
-        result = evaluate_payload(self._write_payload("tests/quality/test_new.py"))
+        result = evaluate_payload(self.write_payload("tests/quality/test_new.py"))
         qa_finding = next(
             finding for finding in result.findings if finding.rule_id == "QA-PATH-003"
         )
@@ -266,13 +272,13 @@ class TestPathTarget:
         assert "python -m pytest -q tests/quality" in combined
 
     def test_fe_linter_config_denied(self) -> None:
-        result = evaluate_payload(self._write_payload(".eslintrc.json"))
+        result = evaluate_payload(self.write_payload(".eslintrc.json"))
         ids = finding_ids(result)
         matched = "FE-LINTER-001" in ids or "BUILTIN-PROTECTED-PATHS" in ids
         assert matched, ".eslintrc.json must be flagged"
 
     def test_normal_path_not_flagged(self) -> None:
-        result = evaluate_payload(self._write_payload("src/utils/helpers.py"))
+        result = evaluate_payload(self.write_payload("src/utils/helpers.py"))
         path_rules = {"PY-LINTER-001", "FE-LINTER-001", "QA-PATH-001", "QA-PATH-003"}
         assert not (finding_ids(result) & path_rules), (
             "normal path must not trigger path rules"

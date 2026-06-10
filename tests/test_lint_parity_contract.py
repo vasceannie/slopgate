@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from slopgate._types import is_object_dict, object_dict, object_list
 from slopgate.cli.lint import cmd_lint
 from slopgate.lint import _collectors
 from slopgate.lint import _parity
@@ -66,18 +67,25 @@ def _runtime_rule_ids() -> set[str]:
             ):
                 ids.add(value.value)
 
-    defaults = json.loads(
-        (ROOT / "src" / "slopgate" / "resources" / "defaults.json").read_text(
-            encoding="utf-8"
+    defaults = object_dict(
+        json.loads(
+            (ROOT / "src" / "slopgate" / "resources" / "defaults.json").read_text(
+                encoding="utf-8"
+            )
         )
     )
-    for rule in defaults.get("regex_rules", []):
-        if isinstance(rule, dict) and isinstance(rule.get("rule_id"), str):
-            ids.add(rule["rule_id"])
+    for rule in object_list(defaults.get("regex_rules", [])):
+        if not is_object_dict(rule):
+            continue
+        rule_id = rule.get("rule_id")
+        if isinstance(rule_id, str):
+            ids.add(rule_id)
     return ids
 
 
-def _assert_unique_category_membership(categories: Mapping[str, frozenset[str]]) -> None:
+def _assert_unique_category_membership(
+    categories: Mapping[str, frozenset[str]],
+) -> None:
     seen: dict[str, str] = {}
     duplicates: dict[str, tuple[str, str]] = {}
     for category, names in categories.items():
@@ -96,7 +104,9 @@ def _assert_python_parse_error_report(output: str, result: int) -> None:
         "invalid syntax",
     ]
     missing_lines = [line for line in expected_report_lines if line not in output]
-    assert missing_lines == [], "lint check should report parse-error location and reason"
+    assert missing_lines == [], (
+        "lint check should report parse-error location and reason"
+    )
 
 
 def _write_parse_error_project(root: Path) -> None:
@@ -129,18 +139,21 @@ def test_lint_collectors_are_baselined_or_classified() -> None:
             "_structure_src_collectors",
             "_ast_src_collectors",
             "_test_collectors",
-            "_test_integrity_collectors",
+            "test_integrity_collectors",
             "run_all_collectors",
         }
     )
     test_integrity_collectors = _collector_names(
-        {"_test_integrity_collectors", "run_test_integrity_collectors"}
+        {"test_integrity_collectors", "run_test_integrity_collectors"}
     )
     current_collectors = lint_check_collectors | test_integrity_collectors
     baseline = json.loads((ROOT / "baselines.json").read_text(encoding="utf-8"))
     baseline_keys = set(baseline.get("rules", {}))
 
-    assert current_collectors - baseline_keys - _parity.classified_collector_keys() == set()
+    assert (
+        current_collectors - baseline_keys - _parity.classified_collector_keys()
+        == set()
+    )
     assert lint_check_collectors <= _parity.COLLECTOR_CATEGORIES["baseline_lint"]
     assert test_integrity_collectors <= _parity.COLLECTOR_CATEGORIES["baseline_lint"]
 
@@ -150,7 +163,10 @@ def test_runtime_hook_rules_are_classified() -> None:
 
     assert runtime_rule_ids - _parity.classified_hook_rule_ids() == set()
     _assert_unique_category_membership(
-        {str(category): names for category, names in _parity.HOOK_RULE_CATEGORIES.items()}
+        {
+            str(category): names
+            for category, names in _parity.HOOK_RULE_CATEGORIES.items()
+        }
     )
 
 

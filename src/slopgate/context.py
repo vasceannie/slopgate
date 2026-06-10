@@ -77,7 +77,11 @@ class HookContext(_TargetContextProperties):
 
 def build_context(payload_dict: ObjectMapping) -> HookContext:
     payload_cwd = payload_dict.get("cwd")
-    repo_root = Path(payload_cwd).resolve() if isinstance(payload_cwd, str) and payload_cwd.strip() else None
+    repo_root = (
+        Path(payload_cwd).resolve()
+        if isinstance(payload_cwd, str) and payload_cwd.strip()
+        else None
+    )
     config = load_config(repo_root=repo_root)
     trace = TraceWriter(config.trace_dir)
     payload = HookPayload(payload_dict, config)

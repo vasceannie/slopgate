@@ -13,32 +13,18 @@ from typing import TYPE_CHECKING, TypeGuard, TypeVar, cast
 from typing_extensions import override
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
+from slopgate.lint._detectors.duplicates._semantic_builtins import BUILTINS, SKIP_DECORATORS
 from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
     find_source_files,
     function_body_lines,
 )
+
 if TYPE_CHECKING:
     pass
 
-
-_BUILTINS = frozenset(
-    {
-        "len", "range", "print", "str", "int", "float", "bool", "list",
-        "dict", "set", "tuple", "type", "isinstance", "issubclass",
-        "hasattr", "getattr", "setattr", "delattr", "super", "property",
-        "staticmethod", "classmethod", "enumerate", "zip", "map", "filter",
-        "sorted", "reversed", "min", "max", "sum", "any", "all", "abs",
-        "round", "repr", "hash", "id", "callable", "iter", "next", "open",
-        "ValueError", "TypeError", "KeyError", "AttributeError", "RuntimeError",
-        "NotImplementedError", "StopIteration", "Exception", "True", "False", "None",
-    }
-)
-
-_SKIP_DECORATORS = frozenset({"abstractmethod", "overload", "property"})
-
-_CONSTANT_TYPE_MAP: dict[type, str] = {
+CONSTANT_TYPE_MAP: dict[type, str] = {
     bool: "BOOL",
     int: "INT",
     float: "FLOAT",
@@ -47,10 +33,10 @@ _CONSTANT_TYPE_MAP: dict[type, str] = {
 }
 
 
-_ASTNodeT = TypeVar("_ASTNodeT", bound=ast.AST)
+ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
 
 
-class _Normalizer(ast.NodeTransformer):
+class Normalizer(ast.NodeTransformer):
     """Transform an AST subtree into a canonical form for structural comparison."""
 
     def __init__(self) -> None:
@@ -60,7 +46,7 @@ class _Normalizer(ast.NodeTransformer):
     def _renamed(self, name: str) -> str:
         return self._name_map.setdefault(name, f"v{len(self._name_map)}")
 
-    def _generic_visit_as(self, node: _ASTNodeT) -> _ASTNodeT:
+    def _generic_visit_as(self, node: ASTNodeT) -> ASTNodeT:
         visited = self.generic_visit(node)
         if not isinstance(visited, type(node)):
             raise TypeError(f"expected {type(node).__name__} from generic_visit")
@@ -76,14 +62,14 @@ class _Normalizer(ast.NodeTransformer):
 
     @override
     def visit_Name(self, node: ast.Name) -> ast.Name:
-        if id(node) not in self.call_func_ids and node.id not in _BUILTINS:
+        if id(node) not in self.call_func_ids and node.id not in BUILTINS:
             node.id = self._renamed(node.id)
         return node
 
     @override
     def visit_Constant(self, node: ast.Constant) -> ast.Constant:
         # bool must be checked before int (bool is a subclass of int)
-        for typ, token in _CONSTANT_TYPE_MAP.items():
+        for typ, token in CONSTANT_TYPE_MAP.items():
             if isinstance(node.value, typ):
                 node.value = token
                 return node
@@ -110,10 +96,10 @@ class _Normalizer(ast.NodeTransformer):
         return self._generic_visit_as(node)
 
 
-def _normalize_ast(node: ast.AST) -> str:
+def normalize_ast(node: ast.AST) -> str:
     """Produce a canonical string from an AST subtree."""
     tree = copy.deepcopy(node)
-    normalizer = _Normalizer()
+    normalizer = Normalizer()
     for child in ast.walk(tree):
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
             normalizer.call_func_ids.add(id(child.func))
@@ -122,24 +108,23 @@ def _normalize_ast(node: ast.AST) -> str:
     return ast.dump(tree)
 
 
-def _structure_hash(canonical: str) -> str:
+def structure_hash(canonical: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
-def _is_import_stmt(stmt: ast.stmt) -> TypeGuard[ast.Import | ast.ImportFrom]:
+def is_import_stmt(stmt: ast.stmt) -> TypeGuard[ast.Import | ast.ImportFrom]:
     """Return True when *stmt* is a plain or from-import statement."""
     return isinstance(stmt, (ast.Import, ast.ImportFrom))
 
 
-def _is_future_import(stmt: ast.stmt) -> bool:
+def is_future_import(stmt: ast.stmt) -> bool:
     """Return True when *stmt* is ``from __future__ import ...``."""
     return isinstance(stmt, ast.ImportFrom) and stmt.module == "__future__"
 
 
-
-def _import_section(stmt: ast.Import | ast.ImportFrom) -> tuple[int, str]:
+def import_section(stmt: ast.Import | ast.ImportFrom) -> tuple[int, str]:
     """Classify import into (section-order, section-name)."""
-    if _is_future_import(stmt):
+    if is_future_import(stmt):
         return 0, "future"
     if isinstance(stmt, ast.ImportFrom) and stmt.level > 0:
         return 3, "first-party"
@@ -158,31 +143,31 @@ def _import_section(stmt: ast.Import | ast.ImportFrom) -> tuple[int, str]:
     return 2, "third-party"
 
 
-def _canonical_alias(name: ast.alias) -> str:
+def canonical_alias(name: ast.alias) -> str:
     if name.asname:
         return f"{name.name} as {name.asname}"
     return name.name
 
 
-def _canonical_import_stmt(stmt: ast.Import | ast.ImportFrom) -> str:
-    sec_order, section = _import_section(stmt)
+def canonical_import_stmt(stmt: ast.Import | ast.ImportFrom) -> str:
+    sec_order, section = import_section(stmt)
     del sec_order
     if isinstance(stmt, ast.Import):
-        names = sorted((_canonical_alias(a) for a in stmt.names), key=str.casefold)
+        names = sorted((canonical_alias(a) for a in stmt.names), key=str.casefold)
         return f"{section}:import {', '.join(names)}"
 
-    names = sorted((_canonical_alias(a) for a in stmt.names), key=str.casefold)
+    names = sorted((canonical_alias(a) for a in stmt.names), key=str.casefold)
     dots = "." * stmt.level
     module = f"{dots}{stmt.module or ''}"
     return f"{section}:from {module} import {', '.join(names)}"
 
 
-def _canonicalize_import_block(body: list[ast.stmt]) -> tuple[str | None, set[int]]:
+def canonicalize_import_block(body: list[ast.stmt]) -> tuple[str | None, set[int]]:
     """Return canonical leading import block and its indices in *body*."""
     indices: set[int] = set()
     imports: list[ast.Import | ast.ImportFrom] = []
     for idx, stmt in enumerate(body):
-        if not _is_import_stmt(stmt):
+        if not is_import_stmt(stmt):
             break
         indices.add(idx)
         imports.append(stmt)
@@ -190,11 +175,13 @@ def _canonicalize_import_block(body: list[ast.stmt]) -> tuple[str | None, set[in
     if not imports:
         return None, indices
 
-    canonical = sorted((_canonical_import_stmt(stmt) for stmt in imports), key=str.casefold)
+    canonical = sorted(
+        (canonical_import_stmt(stmt) for stmt in imports), key=str.casefold
+    )
     return "\n".join(canonical), indices
 
 
-def _skip_docstring(body: list[ast.stmt]) -> list[ast.stmt]:
+def skip_docstring(body: list[ast.stmt]) -> list[ast.stmt]:
     """Return body with the leading docstring removed, if present."""
     if not body:
         return body
@@ -205,7 +192,7 @@ def _skip_docstring(body: list[ast.stmt]) -> list[ast.stmt]:
     return body[1:] if is_doc else body
 
 
-def _has_skip_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def has_skip_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     for dec in node.decorator_list:
         if isinstance(dec, ast.Name):
             name = dec.id
@@ -213,12 +200,12 @@ def _has_skip_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
             name = dec.attr
         else:
             name = ""
-        if name in _SKIP_DECORATORS:
+        if name in SKIP_DECORATORS:
             return True
     return False
 
 
-def _is_docstring_node(node: ast.Constant, parent_map: dict[int, ast.AST]) -> bool:
+def is_docstring_node(node: ast.Constant, parent_map: dict[int, ast.AST]) -> bool:
     if not isinstance(node.value, str):
         return False
     parent = parent_map.get(id(node))
@@ -232,35 +219,35 @@ def _is_docstring_node(node: ast.Constant, parent_map: dict[int, ast.AST]) -> bo
     return bool(gp.body) and gp.body[0] is parent
 
 
-_FUNC_TYPES = (ast.FunctionDef, ast.AsyncFunctionDef)
+FUNC_TYPES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
-def _is_clone_candidate(
+def is_clone_candidate(
     node: ast.AST,
     min_lines: int,
 ) -> TypeGuard[ast.FunctionDef | ast.AsyncFunctionDef]:
     """True if node is a function suitable for clone detection."""
-    if not isinstance(node, _FUNC_TYPES):
+    if not isinstance(node, FUNC_TYPES):
         return False
     if node.name.startswith("__") and node.name.endswith("__"):
         return False
-    if _has_skip_decorator(node):
+    if has_skip_decorator(node):
         return False
     return function_body_lines(node) >= min_lines
 
 
-def _end_lineno(node: ast.stmt, fallback: int) -> int:
+def end_lineno(node: ast.stmt, fallback: int) -> int:
     """Return end_lineno if available, else fallback."""
     return node.end_lineno if node.end_lineno is not None else fallback
 
 
-_K = TypeVar("_K", bound=Hashable)
+K = TypeVar("K", bound=Hashable)
 
 
-def _emit_group_violations(
+def emit_group_violations(
     rule: str,
-    groups: dict[_K, list[tuple[str, str, int]]],
-    detail_fn: Callable[[_K, list[str]], str],
+    groups: dict[K, list[tuple[str, str, int]]],
+    detail_fn: Callable[[K, list[str]], str],
 ) -> list[Violation]:
     """Emit one violation per member for each group with 2+ members."""
     violations: list[Violation] = []
@@ -291,16 +278,16 @@ def detect_semantic_clones(
     groups: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
     for pf in parsed:
         for node in ast.walk(pf.tree):
-            if not _is_clone_candidate(node, min_lines):
+            if not is_clone_candidate(node, min_lines):
                 continue
-            body = _skip_docstring(node.body)
+            body = skip_docstring(node.body)
             if not body:
                 continue
-            canonical = "|".join(_normalize_ast(stmt) for stmt in body)
-            h = _structure_hash(canonical)
+            canonical = "|".join(normalize_ast(stmt) for stmt in body)
+            h = structure_hash(canonical)
             groups[h].append((pf.rel, node.name, node.lineno))
 
-    return _emit_group_violations(
+    return emit_group_violations(
         "semantic-clone",
         groups,
         lambda h, others: f"hash={h}, clones: {', '.join(others[:3])}",

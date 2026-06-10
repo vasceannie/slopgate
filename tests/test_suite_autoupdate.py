@@ -1,66 +1,64 @@
 from __future__ import annotations
-
+import pytest
 import plistlib
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
-
-import slopgate.installer._suite as suite
+import slopgate.installer._suite
 from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
 from slopgate.cli.parsers import build_parser
 
 
-def _windows_owned_task_install_snapshot(
-    script: Path,
-    monkeypatch: Any,
-    *,
-    xml: str,
+def windows_owned_task_install_snapshot(
+    script: Path, monkeypatch: pytest.MonkeyPatch, *, xml: str
 ) -> dict[str, object]:
     run_commands: list[list[str]] = []
 
-    def fake_run(command: list[str], **kwargs: object) -> Any:
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         run_commands.append(command)
         if command[:2] == ["schtasks", "/Query"]:
-            return suite.subprocess.CompletedProcess(command, 0, stdout=xml)
+            return slopgate.installer._suite.subprocess.CompletedProcess(
+                command, 0, stdout=xml
+            )
         if command[:2] == ["schtasks", "/Create"]:
-            return suite.subprocess.CompletedProcess(command, 0)
+            return slopgate.installer._suite.subprocess.CompletedProcess(command, 0)
         raise AssertionError(f"unexpected command: {command}")
 
-    monkeypatch.setattr(suite.subprocess, "run", fake_run)
-    status = suite.install_autoupdate(dry_run=False)
-    task_backups = sorted(script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*"))
+    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
+    status = slopgate.installer._suite.install_autoupdate(dry_run=False)
+    task_backups = sorted(
+        script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*")
+    )
     return {
         "status": status,
         "backup_count": len(task_backups),
-        "backup_xml": task_backups[0].read_text(encoding="utf-8") if task_backups else "",
+        "backup_xml": task_backups[0].read_text(encoding="utf-8")
+        if task_backups
+        else "",
         "query_command": run_commands[0] if run_commands else [],
         "create_prefix": run_commands[1][:3] if len(run_commands) > 1 else [],
     }
 
 
-def _record_suite_subprocess_run(monkeypatch: Any) -> list[list[str]]:
+def record_suite_subprocess_run(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     run_commands: list[list[str]] = []
 
-    def fake_run(command: list[str], check: bool = False) -> subprocess.CompletedProcess[list[str]]:
+    def fake_run(
+        command: list[str], check: bool = False
+    ) -> subprocess.CompletedProcess[list[str]]:
         run_commands.append(command)
         return subprocess.CompletedProcess(command, 0)
 
-    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
     return run_commands
 
 
 def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
     args = build_parser().parse_args(
-        [
-            "setup",
-            "--dry-run",
-            "--include-missing",
-            "--interval-minutes",
-            "45",
-        ]
+        ["setup", "--dry-run", "--include-missing", "--interval-minutes", "45"]
     )
-
     assert (
         args.command,
         args.dry_run,
@@ -72,7 +70,6 @@ def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
 
 def test_install_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
     args = build_parser().parse_args(["setup", "--dry-run"])
-
     assert (args.command, args.func, args.dry_run, args.with_autoupdate) == (
         "setup",
         cmd_install_suite,
@@ -82,10 +79,7 @@ def test_install_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> 
 
 
 def test_native_install_all_parser_supports_autoupdate() -> None:
-    args = build_parser().parse_args(
-        ["install", "all", "--dry-run"]
-    )
-
+    args = build_parser().parse_args(["install", "all", "--dry-run"])
     assert (args.command, args.platform, args.with_autoupdate, args.dry_run) == (
         "install",
         "all",
@@ -95,22 +89,18 @@ def test_native_install_all_parser_supports_autoupdate() -> None:
 
 
 def test_native_uninstall_all_parser_supports_autoupdate() -> None:
-    args = build_parser().parse_args(
-        ["uninstall", "all", "--dry-run"]
-    )
-
-    assert (args.command, args.func, args.platform, args.with_autoupdate, args.dry_run) == (
-        "uninstall",
-        cmd_uninstall,
-        "all",
-        True,
-        True,
-    )
+    args = build_parser().parse_args(["uninstall", "all", "--dry-run"])
+    assert (
+        args.command,
+        args.func,
+        args.platform,
+        args.with_autoupdate,
+        args.dry_run,
+    ) == ("uninstall", cmd_uninstall, "all", True, True)
 
 
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
     args = build_parser().parse_args(["update", "--dry-run"])
-
     assert (args.command, args.func, args.dry_run, hasattr(args, "platform")) == (
         "update",
         cmd_update_suite,
@@ -120,18 +110,21 @@ def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> N
 
 
 def test_discover_install_sites_respects_current_device_home(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".config" / "opencode").mkdir(parents=True)
-
-    sites = suite.discover_install_sites()
-
+    sites = slopgate.installer._suite.discover_install_sites()
     assert (
         [(site.platform, site.present) for site in sites],
-        [site.platform for site in suite.discover_install_sites(include_missing=True)],
+        [
+            site.platform
+            for site in slopgate.installer._suite.discover_install_sites(
+                include_missing=True
+            )
+        ],
     ) == (
         [("claude", True), ("opencode", True)],
         ["claude", "codex", "opencode", "cursor"],
@@ -139,20 +132,20 @@ def test_discover_install_sites_respects_current_device_home(
 
 
 def test_linux_scheduler_plan_uses_systemd_user_timer(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "linux")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/tmp/slopgate bin")
-
-    plan = suite.build_scheduler_plan(
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "/tmp/slopgate bin"
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan(
         "git+https://github.com/example/slopgate.git@master",
         include_missing=True,
         interval_minutes=17,
     )
-
     assert (
         plan.kind,
         plan.target_path,
@@ -169,15 +162,15 @@ def test_linux_scheduler_plan_uses_systemd_user_timer(
 
 
 def test_macos_scheduler_plan_uses_launch_agent(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
-
-    plan = suite.build_scheduler_plan(interval_minutes=20)
-
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan(interval_minutes=20)
     assert (
         plan.kind,
         plan.target_path,
@@ -192,20 +185,20 @@ def test_macos_scheduler_plan_uses_launch_agent(
 
 
 def test_windows_scheduler_plan_uses_schtasks(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
-    monkeypatch.setattr(suite, "is_windows", lambda: True)
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: True)
 
     def fake_user_data_dir(app_name: str) -> Path:
         return tmp_path / "LocalAppData" / app_name
 
-    monkeypatch.setattr(suite, "user_data_dir", fake_user_data_dir)
-    monkeypatch.setattr(suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe")
-
-    plan = suite.build_scheduler_plan(interval_minutes=11)
-
+    monkeypatch.setattr(slopgate.installer._suite, "user_data_dir", fake_user_data_dir)
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe"
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan(interval_minutes=11)
     assert (
         plan.kind,
         plan.target_path,
@@ -222,30 +215,33 @@ def test_windows_scheduler_plan_uses_schtasks(
 
 
 def test_scheduler_plan_falls_back_to_python_module_invocation(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "linux")
-    monkeypatch.setattr(suite, "find_binary", lambda: sys.executable)
-
-    plan = suite.build_scheduler_plan()
-
-    exec_start = next(line for line in plan.content.splitlines() if line.startswith("ExecStart="))
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: sys.executable
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan()
+    exec_start = next(
+        (line for line in plan.content.splitlines() if line.startswith("ExecStart="))
+    )
     assert " -m slopgate update " in exec_start
 
 
 def test_scheduler_plan_rejects_newline_source_for_systemd_units(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "linux")
-
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
     try:
-        suite.build_scheduler_plan("git+https://example.invalid/vf.git@main\nExecStart=/bin/sh")
+        slopgate.installer._suite.build_scheduler_plan(
+            "git+https://example.invalid/vf.git@main\nExecStart=/bin/sh"
+        )
     except ValueError as exc:
         assert "source" in str(exc)
     else:
@@ -253,33 +249,41 @@ def test_scheduler_plan_rejects_newline_source_for_systemd_units(
 
 
 def test_macos_scheduler_plan_escapes_plist_arguments(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
-
-    plan = suite.build_scheduler_plan("git+https://example.invalid/vf.git?x=1&y=<two>")
-
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan(
+        "git+https://example.invalid/vf.git?x=1&y=<two>"
+    )
     parsed = plistlib.loads(plan.content.encode("utf-8"))
-    assert parsed["ProgramArguments"][-1] == "git+https://example.invalid/vf.git?x=1&y=<two>"
+    assert (
+        parsed["ProgramArguments"][-1]
+        == "git+https://example.invalid/vf.git?x=1&y=<two>"
+    )
 
 
-def _linux_autoupdate_units(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path]:
+def linux_autoupdate_units(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "linux")
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
     service = tmp_path / ".config/systemd/user/slopgate-auto-update.service"
     timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
     service.parent.mkdir(parents=True)
-    return service, timer
+    return (service, timer)
 
 
-def _macos_autoupdate_context(tmp_path: Path, monkeypatch: Any) -> None:
+def macos_autoupdate_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "is_windows", lambda: False)
-    monkeypatch.setattr(suite.sys, "platform", "darwin")
-    monkeypatch.setattr(suite, "find_binary", lambda: "/usr/local/bin/slopgate")
-
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
+    )

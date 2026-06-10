@@ -17,14 +17,14 @@ def should_skip_block_window(
     """Return True when a statement window is declarative noise, not duplication."""
     if any(index in canonical_import_indices for index in window_indices):
         return True
-    if all(_is_import_stmt(body[index]) for index in window_indices):
+    if all(is_import_stmt(body[index]) for index in window_indices):
         return True
     if scope != "<module>":
         return False
     return _is_declarative_module_window([body[index] for index in window_indices])
 
 
-def _is_import_stmt(stmt: ast.stmt) -> bool:
+def is_import_stmt(stmt: ast.stmt) -> bool:
     return isinstance(stmt, (ast.Import, ast.ImportFrom))
 
 
@@ -46,8 +46,7 @@ def is_declarative_constant_value(node: ast.AST | None) -> bool:
         return all(is_declarative_constant_value(elt) for elt in node.elts)
     if isinstance(node, ast.Dict):
         return all(
-            is_declarative_constant_value(key)
-            and is_declarative_constant_value(value)
+            is_declarative_constant_value(key) and is_declarative_constant_value(value)
             for key, value in zip(node.keys, node.values, strict=True)
         )
     if isinstance(node, ast.UnaryOp):
@@ -99,7 +98,9 @@ def _is_declarative_constructor_call(node: ast.Call) -> bool:
     return (
         _call_name(node) in _DECLARATIVE_CALL_NAMES
         and all(is_declarative_constant_value(arg) for arg in node.args)
-        and all(is_declarative_constant_value(keyword.value) for keyword in node.keywords)
+        and all(
+            is_declarative_constant_value(keyword.value) for keyword in node.keywords
+        )
     )
 
 
@@ -157,7 +158,11 @@ def _is_declarative_module_window(statements: list[ast.stmt]) -> bool:
 
 def _is_declarative_assign(stmt: ast.Assign) -> bool:
     targets = stmt.targets
-    return bool(targets) and all(
-        isinstance(target, ast.Name) and is_constant_name(target.id)
-        for target in targets
-    ) and is_declarative_constant_value(stmt.value)
+    return (
+        bool(targets)
+        and all(
+            isinstance(target, ast.Name) and is_constant_name(target.id)
+            for target in targets
+        )
+        and is_declarative_constant_value(stmt.value)
+    )

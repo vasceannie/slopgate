@@ -7,10 +7,11 @@ from pathlib import Path
 
 from slopgate.lint._baseline import Violation
 from slopgate.lint._details._metadata import (
-    _ASSERT_CALL_NAMES,
-    _TEST_INTEGRITY_RULES,
-    _line_number,
+    ASSERT_CALL_NAMES,
+    TEST_INTEGRITY_RULES,
+    line_number,
 )
+
 
 def _project_file(relative_path: str) -> Path:
     try:
@@ -81,7 +82,7 @@ def _assertion_context_lines(
             name = func.id
         elif isinstance(func, ast.Attribute):
             name = func.attr
-        if name in _ASSERT_CALL_NAMES:
+        if name in ASSERT_CALL_NAMES:
             assertions.append((child.lineno, _node_preview(child)))
     if not assertions:
         return []
@@ -111,7 +112,7 @@ def _assertion_previews(
             name = func.id
         elif isinstance(func, ast.Attribute):
             name = func.attr
-        if name in _ASSERT_CALL_NAMES:
+        if name in ASSERT_CALL_NAMES:
             previews.append((child.lineno, _node_preview(child)))
     return [f"line {line}: {preview}" for line, preview in sorted(previews)[:limit]]
 
@@ -241,14 +242,14 @@ def _test_repair_context(rule_name: str, violation: Violation) -> list[str]:
     return []
 
 
-def _test_context_lines(rule_name: str, violation: Violation) -> list[str]:
-    if rule_name not in _TEST_INTEGRITY_RULES:
+def test_context_lines(rule_name: str, violation: Violation) -> list[str]:
+    if rule_name not in TEST_INTEGRITY_RULES:
         return []
 
     path = _project_file(violation.relative_path)
-    line_number = _line_number(violation)
+    violation_line = line_number(violation)
     lines = ["    agent-context:"]
-    lines.extend(_source_snippet_lines(path, line_number))
+    lines.extend(_source_snippet_lines(path, violation_line))
 
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
@@ -259,7 +260,7 @@ def _test_context_lines(rule_name: str, violation: Violation) -> list[str]:
         test_node = _find_test_node(
             tree,
             _function_name_from_identifier(violation.identifier),
-            line_number,
+            violation_line,
         )
         if test_node is not None:
             lines.append(f"    test-under-review: {test_node.name}")

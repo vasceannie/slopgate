@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 import ast
 from typing import TYPE_CHECKING
 from typing_extensions import override
@@ -13,15 +12,17 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-    parse_module,
-)
+from .._helpers import decision_for_context, evaluate_common, parse_module
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-
-from ._import_helpers import _PrivateImportFinding as _PrivateImportFinding, _imported_modules as _imported_modules, _module_path_from_python_file as _module_path_from_python_file, _patch_added_source as _patch_added_source, _private_module_segments as _private_module_segments
+from ._import_helpers import (
+    PrivateImportFinding,
+    imported_modules,
+    module_path_from_python_file,
+    patch_added_source,
+    private_module_segments,
+)
 
 
 class PythonPrivateImportChainRule(Rule):
@@ -31,25 +32,15 @@ class PythonPrivateImportChainRule(Rule):
     title = "Block stacked private Python import chains"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
-    def _finding(self, ctx: HookContext, finding: _PrivateImportFinding) -> RuleFinding:
+    def finding(self, ctx: HookContext, finding: PrivateImportFinding) -> RuleFinding:
         location = f" on line {finding.line}" if finding.line is not None else ""
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
-            message=(
-                f"`{finding.path_value}` introduces a stacked private Python "
-                f"{finding.kind}{location}: `{finding.target}`. Avoid names that force "
-                "imports like `pkg._impl._core`; expose the API through a facade "
-                "or use descriptive public module names."
-            ),
-            additional_context=(
-                "Keep at most one private module segment in an import/path. If a split "
-                "needs multiple files, prefer `orchestrate/context.py`, "
-                "`orchestrate/platform_auth.py`, etc., and re-export stable names from "
-                "the package boundary instead of making callers import nested internals."
-            ),
+            message=f"`{finding.path_value}` introduces a stacked private Python {finding.kind}{location}: `{finding.target}`. Avoid names that force imports like `pkg._impl._core`; expose the API through a facade or use descriptive public module names.",
+            additional_context="Keep at most one private module segment in an import/path. If a split needs multiple files, prefer `orchestrate/context.py`, `orchestrate/platform_auth.py`, etc., and re-export stable names from the package boundary instead of making callers import nested internals.",
             metadata={
                 METADATA_PATH: finding.path_value,
                 "target": finding.target,
@@ -59,39 +50,36 @@ class PythonPrivateImportChainRule(Rule):
         )
 
     def _path_finding(self, ctx: HookContext, path_value: str) -> RuleFinding | None:
-        module_path = _module_path_from_python_file(path_value)
-        if len(_private_module_segments(module_path)) < 2:
+        module_path = module_path_from_python_file(path_value)
+        if len(private_module_segments(module_path)) < 2:
             return None
-        return self._finding(
+        return self.finding(
             ctx,
-            _PrivateImportFinding(
-                path_value=path_value,
-                target=module_path,
-                kind="module path",
+            PrivateImportFinding(
+                path_value=path_value, target=module_path, kind="module path"
             ),
         )
 
     def _import_findings(
-        self,
-        ctx: HookContext,
-        source: str,
-        path_value: str,
+        self, ctx: HookContext, source: str, path_value: str
     ) -> list[RuleFinding]:
         module = parse_module(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
-            added_source = _patch_added_source(source)
-            module = parse_module(added_source or "", ctx.config.python_ast_max_parse_chars)
+            added_source = patch_added_source(source)
+            module = parse_module(
+                added_source or "", ctx.config.python_ast_max_parse_chars
+            )
         if module is None:
             return []
         findings: list[RuleFinding] = []
         for node in ast.walk(module):
-            for line, module_name in _imported_modules(node):
-                if len(_private_module_segments(module_name)) < 2:
+            for line, module_name in imported_modules(node):
+                if len(private_module_segments(module_name)) < 2:
                     continue
                 findings.append(
-                    self._finding(
+                    self.finding(
                         ctx,
-                        _PrivateImportFinding(
+                        PrivateImportFinding(
                             path_value=path_value,
                             target=module_name,
                             kind="import chain",
@@ -102,10 +90,7 @@ class PythonPrivateImportChainRule(Rule):
         return findings
 
     def _check_source(
-        self,
-        source: str,
-        path_value: str,
-        ctx: HookContext,
+        self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
         path_finding = self._path_finding(ctx, path_value)

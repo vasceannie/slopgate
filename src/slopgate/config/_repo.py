@@ -5,13 +5,14 @@ from pathlib import Path
 
 from slopgate.util import warning
 
-from ._coerce import _bool_value, _object_dict
-from ._io import _load_toml, _slopgate_path, _slopgate_template, _write_slopgate
+from ._coerce import bool_value, object_dict
+from ._io import load_toml, slopgate_path, slopgate_template, write_slopgate
 
 # Sentinel filenames that disable the quality gate for a repo.
-_DISABLE_SENTINELS = (".noslopgate", ".no-slop-gate")
+DISABLE_SENTINELS = (".noslopgate", ".no-slop-gate")
 
-def _git_output(
+
+def git_output(
     args: list[str],
     *,
     cwd: Path | None = None,
@@ -36,7 +37,7 @@ def resolve_git_root(start: Path | None = None) -> Path | None:
     """Resolve the current git working tree root, if any."""
     path = (start or Path.cwd()).resolve()
     base = path if path.is_dir() else path.parent
-    root = _git_output(
+    root = git_output(
         ["git", "-C", str(base), "rev-parse", "--show-toplevel"],
         cwd=base,
         timeout=3,
@@ -49,7 +50,7 @@ def resolve_main_git_repo_root(start: Path | None = None) -> Path | None:
     git_root = resolve_git_root(start)
     if git_root is None:
         return None
-    common_dir = _git_output(
+    common_dir = git_output(
         ["git", "-C", str(git_root), "rev-parse", "--git-common-dir"],
         cwd=git_root,
         timeout=3,
@@ -63,10 +64,11 @@ def resolve_main_git_repo_root(start: Path | None = None) -> Path | None:
         common_path = common_path.resolve()
     return common_path.parent.resolve()
 
+
 def list_git_worktrees(repo_root: Path) -> list[Path]:
     """List all known worktree roots for *repo_root*."""
     main_repo_root = resolve_main_git_repo_root(repo_root) or repo_root.resolve()
-    output = _git_output(
+    output = git_output(
         ["git", "-C", str(main_repo_root), "worktree", "list", "--porcelain"],
         cwd=main_repo_root,
         timeout=5,
@@ -98,13 +100,13 @@ def ensure_worktree_enrollment(start: Path | None = None) -> Path | None:
     if main_repo_root is None or main_repo_root == worktree_root:
         return None
 
-    source_marker = _slopgate_path(main_repo_root)
+    source_marker = slopgate_path(main_repo_root)
     if not source_marker.exists():
         return None
 
     try:
         template = source_marker.read_text(encoding="utf-8")
-        _write_slopgate(worktree_root, template)
+        write_slopgate(worktree_root, template)
     except OSError as exc:
         warning(
             "worktree enrollment copy failed",
@@ -126,25 +128,24 @@ def enroll_repo(
     default_root = target if target.is_dir() else target.parent
     repo_root = resolve_main_git_repo_root(target) or default_root
 
-    template = _slopgate_template()
+    template = slopgate_template()
     written_roots: list[Path] = []
-    if _write_slopgate(repo_root, template):
+    if write_slopgate(repo_root, template):
         written_roots.append(repo_root)
     else:
         try:
-            template = _slopgate_path(repo_root).read_text(encoding="utf-8")
+            template = slopgate_path(repo_root).read_text(encoding="utf-8")
         except OSError:
-            template = _slopgate_template()
+            template = slopgate_template()
 
     if include_worktrees and resolve_main_git_repo_root(repo_root) is not None:
         for worktree_root in list_git_worktrees(repo_root):
             if worktree_root == repo_root:
                 continue
-            if _write_slopgate(worktree_root, template):
+            if write_slopgate(worktree_root, template):
                 written_roots.append(worktree_root)
 
     return repo_root, written_roots
-
 
 
 def resolve_repo_root(start: Path | None = None) -> Path | None:
@@ -168,13 +169,13 @@ def is_repo_disabled(repo_root: Path | None = None) -> bool:
     else:
         repo_root = repo_root.resolve()
 
-    for sentinel in _DISABLE_SENTINELS:
+    for sentinel in DISABLE_SENTINELS:
         if (repo_root / sentinel).exists():
             return True
 
-    toml_data = _load_toml(repo_root)
-    qg_section = _object_dict(toml_data.get("slopgate", {}))
-    if _bool_value(qg_section.get("enabled"), True) is False:
+    toml_data = load_toml(repo_root)
+    qg_section = object_dict(toml_data.get("slopgate", {}))
+    if bool_value(qg_section.get("enabled"), True) is False:
         return True
 
     return False

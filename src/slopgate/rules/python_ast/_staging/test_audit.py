@@ -19,16 +19,17 @@ from slopgate.models import RuleFinding
 from slopgate.rules.base import Rule
 
 from .test_audit_cases import (
-    _ALL_STAGING_RULES,
-    _DUPLICATE_RULE_CASES,
-    _STABILITY_SOURCES,
-    _TEST_SMELL_RULE_CASES,
+    ALL_STAGING_RULES,
+    DUPLICATE_RULE_CASES,
+    STABILITY_SOURCES,
+    TEST_SMELL_RULE_CASES,
 )
 
 
 # ---------------------------------------------------------------------------
 # Minimal stub context for unit-testing rules in isolation
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _FakeConfig:
@@ -68,7 +69,9 @@ def _evaluate_source(
 ) -> list[RuleFinding]:
     return _evaluate_rule(
         rule_type(),
-        _FakeContext(content_targets=[_FakeContentTarget(path, textwrap.dedent(source))]),
+        _FakeContext(
+            content_targets=[_FakeContentTarget(path, textwrap.dedent(source))]
+        ),
     )
 
 
@@ -90,10 +93,11 @@ def _assert_finding_state(
 # PY-DUP-001 through PY-DUP-004: duplicate-code rules
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("_case", "rule_type", "should_find", "raw_source"),
-    _DUPLICATE_RULE_CASES,
-    ids=[case[0] for case in _DUPLICATE_RULE_CASES],
+    DUPLICATE_RULE_CASES,
+    ids=[case[0] for case in DUPLICATE_RULE_CASES],
 )
 def test_duplicate_rule_cases(
     _case: str,
@@ -108,7 +112,10 @@ def test_duplicate_rule_cases(
 # PY-TEST-001 through PY-TEST-004: test-smell rules
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("case", _TEST_SMELL_RULE_CASES, ids=[case[0] for case in _TEST_SMELL_RULE_CASES])
+
+@pytest.mark.parametrize(
+    "case", TEST_SMELL_RULE_CASES, ids=[case[0] for case in TEST_SMELL_RULE_CASES]
+)
 def test_test_smell_rule_cases(case: tuple[str, RuleType, bool, str, str]) -> None:
     _case, rule_type, should_find, path, raw_source = case
     _assert_finding_state(
@@ -123,12 +130,13 @@ def test_test_smell_rule_cases(case: tuple[str, RuleType, bool, str, str]) -> No
 # Stability: ensure rules don't crash on edge-case inputs
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("_case", "source"),
-    _STABILITY_SOURCES,
-    ids=[case[0] for case in _STABILITY_SOURCES],
+    STABILITY_SOURCES,
+    ids=[case[0] for case in STABILITY_SOURCES],
 )
 def test_stability_edge_cases(_case: str, source: str) -> None:
-    for rule_type in _ALL_STAGING_RULES:
+    for rule_type in ALL_STAGING_RULES:
         findings = _evaluate_source(rule_type, source)
         assert isinstance(findings, list), f"{rule_type.rule_id} returned non-list"

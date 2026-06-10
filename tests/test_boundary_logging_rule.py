@@ -21,7 +21,7 @@ def _enrolled_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _write_payload(repo: Path, path: str, content: str) -> dict[str, object]:
+def write_payload(repo: Path, path: str, content: str) -> dict[str, object]:
     return {
         "session_id": "boundary-logging-test",
         "cwd": str(repo),
@@ -38,7 +38,7 @@ def _rule_ids(result: EngineResult) -> set[str]:
 def test_event_boundary_publish_requires_log(tmp_path: Path) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "src/orders/events.py",
             """
@@ -57,13 +57,17 @@ def publish_order_created(bus: EventBus, order_id: str, source: str | None = Non
     assert "PY-LOG-002" in rule_ids, f"Expected boundary log rule, got {rule_ids}"
     assert result.output is not None, "Expected PY-LOG-002 to emit hook output"
     assert "event boundary" in output, f"Expected event-boundary guidance in {output}"
-    assert "logger.info" in output, f"Expected logger.info recovery guidance in {output}"
+    assert "logger.info" in output, (
+        f"Expected logger.info recovery guidance in {output}"
+    )
 
 
-def test_textual_lifecycle_boundary_guidance_names_generic_project_logger(tmp_path: Path) -> None:
+def test_textual_lifecycle_boundary_guidance_names_generic_project_logger(
+    tmp_path: Path,
+) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "src/tui/views/dashboard.py",
             """
@@ -98,7 +102,7 @@ class DashboardView(Static):
 def test_package_boundary_client_call_requires_log(tmp_path: Path) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "src/orders/clients/billing.py",
             """
@@ -119,7 +123,7 @@ class BillingClient:
 def test_logged_event_boundary_is_allowed(tmp_path: Path) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "src/orders/events.py",
             """
@@ -137,10 +141,12 @@ def publish_order_created(bus: EventBus, order_id: str) -> None:
     assert "PY-LOG-002" not in _rule_ids(result)
 
 
-def test_internal_helper_without_boundary_signal_does_not_require_log(tmp_path: Path) -> None:
+def test_internal_helper_without_boundary_signal_does_not_require_log(
+    tmp_path: Path,
+) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "src/orders/calculations.py",
             """
@@ -161,7 +167,7 @@ def test_test_module_event_fixture_does_not_require_runtime_boundary_log(
 ) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(
-        _write_payload(
+        write_payload(
             repo,
             "tests/test_order_events.py",
             """

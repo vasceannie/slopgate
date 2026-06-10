@@ -4,13 +4,14 @@ from tests.test_ast_rules import (
     BUNDLE_ROOT,
     Path,
     TemporaryDirectory,
-    _assert_denied_by,
-    _assert_not_denied,
-    _permission_reason,
+    assert_denied_by,
+    assert_not_denied,
+    permission_reason,
     evaluate_payload,
     string_value,
     unittest,
 )
+
 
 class TestAstHealthRule(unittest.TestCase):
     def test_write_invalid_syntax_still_triggers_parse_failure(self) -> None:
@@ -24,7 +25,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-AST-001")
+        assert_denied_by(result, "PY-AST-001")
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" in rule_ids, "invalid write must emit parse failure"
 
@@ -39,8 +40,8 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-AST-001")
-        reason = _permission_reason(result)
+        assert_denied_by(result, "PY-AST-001")
+        reason = permission_reason(result)
 
         assert "python3 -m py_compile src/main.py" in reason
         assert "test -e src/main.py" not in reason
@@ -56,8 +57,8 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-AST-001")
-        reason = _permission_reason(result)
+        assert_denied_by(result, "PY-AST-001")
+        reason = permission_reason(result)
 
         assert "python3 -m py_compile 'src/broken file.py'" in reason
 
@@ -117,7 +118,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
@@ -137,7 +138,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
@@ -157,7 +158,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
@@ -173,11 +174,13 @@ class TestAstHealthRule(unittest.TestCase):
         }
         result = evaluate_payload(payload, platform="opencode")
         assert result.event_name == "PreToolUse"
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
-    def test_opencode_write_indented_fragment_does_not_trigger_parse_failure(self) -> None:
+    def test_opencode_write_indented_fragment_does_not_trigger_parse_failure(
+        self,
+    ) -> None:
         payload = {
             "hook_event_name": "tool.execute.before",
             "tool_name": "write",
@@ -188,7 +191,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload, platform="opencode")
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
@@ -208,7 +211,7 @@ class TestAstHealthRule(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload, platform="opencode")
-        _assert_not_denied(result)
+        assert_not_denied(result)
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" not in rule_ids
 
@@ -252,6 +255,7 @@ class TestAstHealthRule(unittest.TestCase):
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" in rule_ids
 
+
 class TestDeepNesting(unittest.TestCase):
     def test_deep_blocked(self) -> None:
         code = (
@@ -271,7 +275,7 @@ class TestDeepNesting(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_denied_by(result, "PY-CODE-011")
+        assert_denied_by(result, "PY-CODE-011")
         assert any(finding.rule_id == "PY-CODE-011" for finding in result.findings)
 
     def test_depth_4_ok(self) -> None:
@@ -291,5 +295,5 @@ class TestDeepNesting(unittest.TestCase):
             "cwd": str(BUNDLE_ROOT),
         }
         result = evaluate_payload(payload)
-        _assert_not_denied(result)
+        assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-011" for finding in result.findings)

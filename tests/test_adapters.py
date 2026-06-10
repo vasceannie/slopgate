@@ -11,18 +11,15 @@ Tests cover:
 """
 
 from __future__ import annotations
-
 from collections.abc import Callable
 import json
 from pathlib import Path
 from typing import cast
-
-from slopgate.engine import _render as engine_module
-
+import slopgate.engine
 import pytest
 
-from tests import support as test_support
-
+engine_module = slopgate.engine
+from tests import support
 from slopgate._types import ObjectDict, object_dict, string_value
 from slopgate.adapters import get_adapter, ADAPTERS
 from slopgate.adapters.base import PlatformAdapter
@@ -33,26 +30,25 @@ from slopgate.adapters.opencode import OpenCodeAdapter
 from slopgate.engine import evaluate_payload
 from slopgate.models import RuleFinding, Severity
 
-FIXTURES_DIR = test_support.BUNDLE_ROOT / "fixtures"
-_RESOURCES_DIR = test_support.BUNDLE_ROOT / "src" / "slopgate" / "resources"
+FIXTURES_DIR = support.BUNDLE_ROOT / "fixtures"
+_RESOURCES_DIR = support.BUNDLE_ROOT / "src" / "slopgate" / "resources"
 
 
-def _load_platform_fixture(platform: str, fixture_name: str) -> ObjectDict:
+def load_platform_fixture(platform: str, fixture_name: str) -> ObjectDict:
     fixture_path = FIXTURES_DIR / platform / fixture_name
     return object_dict(cast(object, json.loads(fixture_path.read_text())))
 
 
-def _repo_with_quality_gate(tmp_path: Path) -> Path:
+def repo_with_quality_gate(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir(parents=True)
     _ = (repo / "slopgate.toml").write_text(
-        "[slopgate]\nenabled = true\n",
-        encoding="utf-8",
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
     )
     return repo
 
 
-def _config_with_enabled_rules(
+def config_with_enabled_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *rule_ids: str
 ) -> None:
     raw = json.loads((_RESOURCES_DIR / "defaults.json").read_text(encoding="utf-8"))
@@ -88,49 +84,34 @@ def rendered_string(mapping: ObjectDict, key: str, default: str = "") -> str:
     return value if value is not None else default
 
 
-# ===========================================================================
-# Adapter registry
-# ===========================================================================
-
-
-# ===========================================================================
-# Claude adapter — backward compatibility
-# ===========================================================================
-
-
-# ===========================================================================
-# Codex adapter
-# ===========================================================================
-
-
-# ===========================================================================
-# OpenCode adapter
-# ===========================================================================
-
-
-# ===========================================================================
-# Base adapter helpers
-# ===========================================================================
-
-
-# ===========================================================================
-# Multi-finding edge cases (cross-adapter)
-# ===========================================================================
-
-
-# ===========================================================================
-# Fixture replay — full engine pipeline
-# ===========================================================================
-
-
-# ===========================================================================
-# Cross-platform: same findings, different output shapes
-# ===========================================================================
-
-
-# ===========================================================================
-# CLI --platform integration
-# ===========================================================================
-
-# Exported test support used by split test modules.
-__all__ = ('ADAPTERS', 'Callable', 'ClaudeAdapter', 'CodexAdapter', 'CursorAdapter', 'FIXTURES_DIR', 'ObjectDict', 'OpenCodeAdapter', 'Path', 'PlatformAdapter', 'RuleFinding', 'Severity', '_RESOURCES_DIR', '_config_with_enabled_rules', '_load_platform_fixture', '_repo_with_quality_gate', 'cast', 'engine_module', 'evaluate_payload', 'get_adapter', 'json', 'object_dict', 'pytest', 'rendered_string', 'require_nested', 'require_rendered', 'require_spec', 'string_value', 'test_support')
+__all__ = (
+    "ADAPTERS",
+    "Callable",
+    "ClaudeAdapter",
+    "CodexAdapter",
+    "CursorAdapter",
+    "FIXTURES_DIR",
+    "ObjectDict",
+    "OpenCodeAdapter",
+    "Path",
+    "PlatformAdapter",
+    "RuleFinding",
+    "Severity",
+    "_RESOURCES_DIR",
+    "config_with_enabled_rules",
+    "load_platform_fixture",
+    "repo_with_quality_gate",
+    "cast",
+    "engine_module",
+    "evaluate_payload",
+    "get_adapter",
+    "json",
+    "object_dict",
+    "pytest",
+    "rendered_string",
+    "require_nested",
+    "require_rendered",
+    "require_spec",
+    "string_value",
+    "support",
+)

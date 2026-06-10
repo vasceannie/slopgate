@@ -24,7 +24,9 @@ def _posttool_write(tmp_project: Path, rel_path: str) -> ObjectDict:
     }
 
 
-def _bash_payload(tmp_project: Path, command: str, event: str = "PreToolUse") -> ObjectDict:
+def bash_payload(
+    tmp_project: Path, command: str, event: str = "PreToolUse"
+) -> ObjectDict:
     return {
         "session_id": "t",
         "cwd": str(tmp_project),
@@ -83,7 +85,9 @@ def test_pretool_blocks_third_plain_prefix_sibling(
     )
 
     assert_denied_by(result, "PY-CODE-017", "sub-package")
-    findings = [finding for finding in result.findings if finding.rule_id == "PY-CODE-017"]
+    findings = [
+        finding for finding in result.findings if finding.rule_id == "PY-CODE-017"
+    ]
     assert len(findings) == 1, f"expected one PY-CODE-017 finding, got {findings!r}"
     assert "code-hygiene-refactor" in (findings[0].additional_context or ""), (
         "finding should route agents to the hygiene recovery skill"
@@ -124,7 +128,7 @@ def test_pretool_allows_mechanical_bash_move_into_package(tmp_project: Path) -> 
             "mv src/agents/result_reconciliation.py src/agents/result/reconciliation.py",
         ]
     )
-    result = evaluate_payload(_bash_payload(tmp_project, command))
+    result = evaluate_payload(bash_payload(tmp_project, command))
 
     assert "PY-CODE-017" not in finding_ids(result)
 
@@ -133,7 +137,7 @@ def test_posttool_allows_completed_bash_move_into_package(tmp_project: Path) -> 
     _write_completed_package_move(tmp_project)
 
     result = evaluate_payload(
-        _bash_payload(tmp_project, _bash_package_move_command(), event="PostToolUse")
+        bash_payload(tmp_project, _bash_package_move_command(), event="PostToolUse")
     )
 
     assert "PY-CODE-017" not in finding_ids(result)
@@ -204,14 +208,16 @@ def test_pretool_still_blocks_patch_that_leaves_flat_cluster(tmp_project: Path) 
     assert "PY-CODE-017" in finding_ids(result)
 
 
-def test_posttool_bash_still_blocks_cluster_left_after_command(tmp_project: Path) -> None:
+def test_posttool_bash_still_blocks_cluster_left_after_command(
+    tmp_project: Path,
+) -> None:
     pkg = tmp_project / "src" / "agents"
     pkg.mkdir(parents=True, exist_ok=True)
     for name in ("result_models.py", "result_runner.py", "result_reconciliation.py"):
         _ = (pkg / name).write_text("pass\n", encoding="utf-8")
 
     result = evaluate_payload(
-        _bash_payload(
+        bash_payload(
             tmp_project,
             "touch src/agents/result_reconciliation.py",
             event="PostToolUse",

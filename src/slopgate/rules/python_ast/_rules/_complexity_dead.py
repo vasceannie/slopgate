@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 import ast
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
@@ -14,17 +13,13 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-)
+from .._helpers import decision_for_context, evaluate_common
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+from ._source_parse import parsed_functions
 
-from ._source_parse import _parsed_functions as _parsed_functions
-
-
-_CC_BRANCH_TYPES = (
+CC_BRANCH_TYPES = (
     ast.If,
     ast.IfExp,
     ast.For,
@@ -51,7 +46,7 @@ class PythonCyclomaticComplexityRule(Rule):
         """Compute cyclomatic complexity for a function body."""
         complexity = 1
         for child in ast.walk(node):
-            if isinstance(child, _CC_BRANCH_TYPES):
+            if isinstance(child, CC_BRANCH_TYPES):
                 complexity += 1
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1
@@ -62,7 +57,7 @@ class PythonCyclomaticComplexityRule(Rule):
     ) -> list[RuleFinding]:
         worst_name = ""
         worst_cc = 0
-        for node in _parsed_functions(source, ctx):
+        for node in parsed_functions(source, ctx):
             cc = self._complexity(node)
             if cc > ctx.config.python_max_complexity and cc > worst_cc:
                 worst_name = node.name
@@ -70,17 +65,20 @@ class PythonCyclomaticComplexityRule(Rule):
         if not worst_name:
             return []
         limit = ctx.config.python_max_complexity
-        return [RuleFinding(
-            rule_id=self.rule_id,
-            title=self.title,
-            severity=Severity.HIGH,
-            decision=decision_for_context(ctx),
-            message=(
-                f"Function `{worst_name}` in `{path_value}` has cyclomatic complexity {worst_cc}. "
-                f"Keep complexity at or below {limit}."
-            ),
-            metadata={METADATA_PATH: path_value, METADATA_FUNCTION: worst_name, "complexity": worst_cc},
-        )]
+        return [
+            RuleFinding(
+                rule_id=self.rule_id,
+                title=self.title,
+                severity=Severity.HIGH,
+                decision=decision_for_context(ctx),
+                message=f"Function `{worst_name}` in `{path_value}` has cyclomatic complexity {worst_cc}. Keep complexity at or below {limit}.",
+                metadata={
+                    METADATA_PATH: path_value,
+                    METADATA_FUNCTION: worst_name,
+                    "complexity": worst_cc,
+                },
+            )
+        ]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -96,7 +94,6 @@ class PythonDeadCodeRule(Rule):
     rule_id = "PY-CODE-016"
     title = "Block dead code after return"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
-
     _TERMINAL = (ast.Return, ast.Raise, ast.Break, ast.Continue)
 
     def _scan_block(self, stmts: list[ast.stmt]) -> tuple[str | None, int]:
@@ -144,27 +141,26 @@ class PythonDeadCodeRule(Rule):
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
         findings: list[RuleFinding] = []
-        for node in _parsed_functions(source, ctx):
+        for node in parsed_functions(source, ctx):
             dead = self._find_dead_code(node)
             if not dead:
                 continue
             cause, lineno = dead[0]
-            findings.append(RuleFinding(
-                rule_id=self.rule_id,
-                title=self.title,
-                severity=Severity.HIGH,
-                decision=decision_for_context(ctx),
-                message=(
-                    f"Function `{node.name}` in `{path_value}` has unreachable code "
-                    f"after `{cause}` at line {lineno}."
-                ),
-                metadata={
-                    METADATA_PATH: path_value,
-                    METADATA_FUNCTION: node.name,
-                    "dead_line": lineno,
-                    "cause": cause,
-                },
-            ))
+            findings.append(
+                RuleFinding(
+                    rule_id=self.rule_id,
+                    title=self.title,
+                    severity=Severity.HIGH,
+                    decision=decision_for_context(ctx),
+                    message=f"Function `{node.name}` in `{path_value}` has unreachable code after `{cause}` at line {lineno}.",
+                    metadata={
+                        METADATA_PATH: path_value,
+                        METADATA_FUNCTION: node.name,
+                        "dead_line": lineno,
+                        "cause": cause,
+                    },
+                )
+            )
         return findings
 
     @override

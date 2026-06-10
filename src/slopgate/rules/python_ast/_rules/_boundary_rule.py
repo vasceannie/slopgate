@@ -1,7 +1,6 @@
 """Python AST runtime rules."""
 
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from typing_extensions import override
 from slopgate.constants import (
@@ -13,15 +12,17 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    decision_for_context,
-    evaluate_common,
-    parse_module,
-)
+from .._helpers import decision_for_context, evaluate_common, parse_module
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-
-from ._boundary_helpers import _BoundaryFunction as _BoundaryFunction, _boundary_kind_for_function as _boundary_kind_for_function, _has_boundary_log_call as _has_boundary_log_call, _is_test_module_path as _is_test_module_path, _iter_public_boundary_functions as _iter_public_boundary_functions
+from ._boundary_helpers import (
+    BoundaryFunction,
+    boundary_kind_for_function,
+    has_boundary_log_call,
+    is_test_module_path,
+    iter_public_boundary_functions,
+)
 
 
 class PythonBoundaryLoggingRule(Rule):
@@ -31,11 +32,8 @@ class PythonBoundaryLoggingRule(Rule):
     title = "Require boundary logging"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
-    def _finding(
-        self,
-        ctx: HookContext,
-        path_value: str,
-        boundary: _BoundaryFunction,
+    def finding(
+        self, ctx: HookContext, path_value: str, boundary: BoundaryFunction
     ) -> RuleFinding:
         owner = (
             f"{boundary.class_name}.{boundary.node.name}"
@@ -47,23 +45,8 @@ class PythonBoundaryLoggingRule(Rule):
             title=self.title,
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
-            message=(
-                f"Python {boundary.kind} `{owner}` in `{path_value}` crosses an observable "
-                "boundary without a logging/telemetry call. Add structured logging "
-                "before the event/package handoff."
-            ),
-            additional_context=(
-                "Boundary logging required: use the project logger/telemetry "
-                "abstraction, not stdlib logging. For TUI/Textual lifecycle methods "
-                "and package/event boundaries, import the logger factory or telemetry "
-                "client your project already provides; define a module logger such as "
-                "`logger = get_project_logger(__name__)` when that matches your "
-                "project abstraction; then call `logger.info(...)` with "
-                "operation/state/count/status fields before the handoff. Include "
-                "event name, target package/service, correlation/request id when "
-                "available, and enough stable fields to debug failures without logging "
-                "secrets or raw payloads."
-            ),
+            message=f"Python {boundary.kind} `{owner}` in `{path_value}` crosses an observable boundary without a logging/telemetry call. Add structured logging before the event/package handoff.",
+            additional_context="Boundary logging required: use the project logger/telemetry abstraction, not stdlib logging. For TUI/Textual lifecycle methods and package/event boundaries, import the logger factory or telemetry client your project already provides; define a module logger such as `logger = get_project_logger(__name__)` when that matches your project abstraction; then call `logger.info(...)` with operation/state/count/status fields before the handoff. Include event name, target package/service, correlation/request id when available, and enough stable fields to debug failures without logging secrets or raw payloads.",
             metadata={
                 METADATA_PATH: path_value,
                 METADATA_FUNCTION: owner,
@@ -75,20 +58,20 @@ class PythonBoundaryLoggingRule(Rule):
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        if _is_test_module_path(path_value):
+        if is_test_module_path(path_value):
             return []
         module = parse_module(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
             return []
         findings: list[RuleFinding] = []
-        for node, class_name in _iter_public_boundary_functions(module.body):
-            kind = _boundary_kind_for_function(path_value, node, class_name)
+        for node, class_name in iter_public_boundary_functions(module.body):
+            kind = boundary_kind_for_function(path_value, node, class_name)
             if kind is None:
                 continue
-            if _has_boundary_log_call(node):
+            if has_boundary_log_call(node):
                 continue
-            boundary = _BoundaryFunction(node=node, kind=kind, class_name=class_name)
-            findings.append(self._finding(ctx, path_value, boundary))
+            boundary = BoundaryFunction(node=node, kind=kind, class_name=class_name)
+            findings.append(self.finding(ctx, path_value, boundary))
         return findings
 
     @override

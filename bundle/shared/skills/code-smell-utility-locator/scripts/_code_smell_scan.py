@@ -359,5 +359,8 @@ def scan(root: Path, include_tests: bool = True) -> tuple[list[Item], list[Funct
     return items, funcs
 
 
-def records_to_json(records: Iterable[object]) -> str:
+ScanRecord = Item | FunctionRecord
+
+
+def records_to_json(records: Iterable[ScanRecord]) -> str:
     return json.dumps([asdict(record) for record in records], indent=2, sort_keys=True)

@@ -3,14 +3,14 @@ from __future__ import annotations
 from tests.test_hook_state_spec import (
     BUNDLE_ROOT,
     Path,
-    _InspectableHookStateStore,
-    _bash_payload,
-    _collect_process_failures,
-    _ensure_enrolled,
-    _grep_payload,
-    _missing_full_read_records,
-    _run_payload_in_subprocess,
-    _start_full_read_record_processes,
+    InspectableHookStateStore,
+    bash_payload,
+    collect_process_failures,
+    ensure_enrolled,
+    grep_payload,
+    missing_full_read_records,
+    run_payload_in_subprocess,
+    start_full_read_record_processes,
     assert_denied_by,
     assert_not_denied,
     evaluate_payload,
@@ -37,21 +37,22 @@ def _deny_key_for_test(
     )
 
 
-def _seed_deny_hits(store: _InspectableHookStateStore, hits: dict[str, int]) -> None:
+def _seed_deny_hits(store: InspectableHookStateStore, hits: dict[str, int]) -> None:
     store.save_state_for_test({"deny_hits": hits})
 
 
-def _loaded_deny_hits(store: _InspectableHookStateStore) -> dict[str, object]:
+def _loaded_deny_hits(store: InspectableHookStateStore) -> dict[str, object]:
     return object_dict(store.load_state_for_test().get("deny_hits"))
 
 
-class _DirectClearStore(_InspectableHookStateStore):
+class _DirectClearStore(InspectableHookStateStore):
     def _deny_key_matches(self, key: str, pattern: object) -> bool:
         raise AssertionError("exact deny-hit clear should not scan every key")
 
+
 class TestHookStateStore:
     def test_ttl_expiry_filters_stale_full_reads(self, tmp_path: Path) -> None:
-        store = _InspectableHookStateStore(tmp_path)
+        store = InspectableHookStateStore(tmp_path)
         key = store.full_read_key("session-a", str(tmp_path / "module.py"))
         store.save_state_for_test(
             {"full_reads": {key: int(time()) - store.ttl_seconds - 5}}
@@ -63,7 +64,7 @@ class TestHookStateStore:
         self, tmp_path: Path
     ) -> None:
         limit = 512
-        store = _InspectableHookStateStore(tmp_path)
+        store = InspectableHookStateStore(tmp_path)
         noisy_hits = {
             _deny_key_for_test(
                 "session-a",
@@ -106,58 +107,60 @@ class TestHookStateStore:
     def test_parallel_subprocess_writes_complete_without_losing_entries(
         self, tmp_path: Path
     ) -> None:
-        store = _InspectableHookStateStore(tmp_path)
-        targets, processes = _start_full_read_record_processes(tmp_path, 8)
+        store = InspectableHookStateStore(tmp_path)
+        targets, processes = start_full_read_record_processes(tmp_path, 8)
 
-        timed_out_processes, failed_processes = _collect_process_failures(processes)
+        timed_out_processes, failed_processes = collect_process_failures(processes)
 
         assert timed_out_processes == []
         assert failed_processes == []
 
         state = store.load_state_for_test()
-        missing_full_reads = _missing_full_read_records(store, targets)
+        missing_full_reads = missing_full_read_records(store, targets)
 
         assert len(object_dict(state.get("full_reads"))) == len(targets)
         assert missing_full_reads == []
 
+
 class TestSearchReminderCurrentGuards:
     def test_bash_grep_still_triggers_reminder(self, tmp_path: Path) -> None:
         result = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path))
+            bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path))
         )
         assert "REMIND-SEARCH-001" in finding_ids(result)
 
     def test_ripgrep_does_not_trigger_reminder(self, tmp_path: Path) -> None:
-        result = evaluate_payload(_bash_payload("rg 'TODO' src/", cwd=str(tmp_path)))
+        result = evaluate_payload(bash_payload("rg 'TODO' src/", cwd=str(tmp_path)))
         assert "REMIND-SEARCH-001" not in finding_ids(result)
 
-    def test_embedded_grep_token_does_not_trigger_reminder(self, tmp_path: Path) -> None:
-        result = evaluate_payload(
-            _bash_payload("egrep 'TODO' src/", cwd=str(tmp_path))
-        )
+    def test_embedded_grep_token_does_not_trigger_reminder(
+        self, tmp_path: Path
+    ) -> None:
+        result = evaluate_payload(bash_payload("egrep 'TODO' src/", cwd=str(tmp_path)))
         assert "REMIND-SEARCH-001" not in finding_ids(result)
 
     def test_new_session_still_gets_search_reminder(self, tmp_path: Path) -> None:
         _ = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
+            bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
         )
         result = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s2")
+            bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s2")
         )
 
         assert "REMIND-SEARCH-001" in finding_ids(result)
 
+
 class TestSearchReminderStatefulSpec:
     def test_native_grep_tool_does_not_self_remind(self, tmp_path: Path) -> None:
-        result = evaluate_payload(_grep_payload("TODO", cwd=str(tmp_path)))
+        result = evaluate_payload(grep_payload("TODO", cwd=str(tmp_path)))
         assert "REMIND-SEARCH-001" not in finding_ids(result)
 
     def test_second_shell_grep_same_session_is_deduped(self, tmp_path: Path) -> None:
         first = evaluate_payload(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
+            bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
         )
         second = evaluate_payload(
-            _bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
+            bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
         )
 
         assert "REMIND-SEARCH-001" in finding_ids(first)
@@ -166,15 +169,16 @@ class TestSearchReminderStatefulSpec:
     def test_same_session_dedupe_must_survive_subprocess_boundary(
         self, tmp_path: Path
     ) -> None:
-        first = _run_payload_in_subprocess(
-            _bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
+        first = run_payload_in_subprocess(
+            bash_payload("grep -rn 'TODO' src/", cwd=str(tmp_path), session_id="s1")
         )
-        second = _run_payload_in_subprocess(
-            _bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
+        second = run_payload_in_subprocess(
+            bash_payload("grep -rn 'FIXME' src/", cwd=str(tmp_path), session_id="s1")
         )
 
         assert "REMIND-SEARCH-001" in first["finding_ids"]
         assert "REMIND-SEARCH-001" not in second["finding_ids"]
+
 
 class TestCrossPlatformSessionIdentityCurrentGuards:
     def test_codex_adapter_preserves_session_id(self) -> None:
@@ -202,9 +206,10 @@ class TestCrossPlatformSessionIdentityCurrentGuards:
         assert normalized["hook_event_name"] == "Stop"
         assert normalized["tool_name"] == "Bash"
 
+
 class TestSecurityRuleCurrentGuards:
     def test_real_source_bypass_still_denied(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+        ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -224,7 +229,7 @@ class TestSecurityRuleCurrentGuards:
         assert_denied_by(result, "BUILTIN-RULEBOOK-SECURITY", "bypass")
 
     def test_fixture_like_paths_remain_allowed(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+        ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -242,9 +247,10 @@ class TestSecurityRuleCurrentGuards:
         ), "fixture examples should not trip source security bypass enforcement"
         assert_not_denied(result)
 
+
 class TestSecurityRuleBoundarySpec:
     def test_markdown_docs_can_describe_bypass_settings(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+        ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),
@@ -263,7 +269,7 @@ class TestSecurityRuleBoundarySpec:
         assert_not_denied(result)
 
     def test_json_examples_can_show_guardrail_settings(self, tmp_path: Path) -> None:
-        _ensure_enrolled(str(tmp_path))
+        ensure_enrolled(str(tmp_path))
         payload = {
             "session_id": "spec-session",
             "cwd": str(tmp_path),

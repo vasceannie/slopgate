@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import ast
 from typing import TYPE_CHECKING, NamedTuple
+
 if TYPE_CHECKING:
     pass
 
 
-_ALLOWED_IMPORT_ALIASES: dict[str, str] = {
+ALLOWED_IMPORT_ALIASES: dict[str, str] = {
     "altair": "alt",
     "geopandas": "gpd",
     "jax.numpy": "jnp",
@@ -37,7 +38,7 @@ _ALLOWED_IMPORT_ALIASES: dict[str, str] = {
 }
 
 
-def _import_alias_full_name(node: ast.Import | ast.ImportFrom, name: ast.alias) -> str:
+def import_alias_full_name(node: ast.Import | ast.ImportFrom, name: ast.alias) -> str:
     """Return the imported object path used for alias allowlist checks."""
     if isinstance(node, ast.Import):
         return name.name
@@ -47,17 +48,19 @@ def _import_alias_full_name(node: ast.Import | ast.ImportFrom, name: ast.alias) 
     return f"{module}.{name.name}"
 
 
-def _allowed_import_alias(node: ast.Import | ast.ImportFrom, name: ast.alias) -> bool:
+def allowed_import_alias(node: ast.Import | ast.ImportFrom, name: ast.alias) -> bool:
     """Return True when an import alias is a canonical library convention."""
     if name.asname is None:
         return True
     if name.name == "*":
         return False
-    full_name = _import_alias_full_name(node, name)
-    return _ALLOWED_IMPORT_ALIASES.get(full_name) == name.asname
+    full_name = import_alias_full_name(node, name)
+    return ALLOWED_IMPORT_ALIASES.get(full_name) == name.asname
 
 
-def _import_alias_replacement(node: ast.Import | ast.ImportFrom, name: ast.alias) -> tuple[str, str]:
+def import_alias_replacement(
+    node: ast.Import | ast.ImportFrom, name: ast.alias
+) -> tuple[str, str]:
     """Return exact replacement import text and usage hint for a blocked alias."""
     if isinstance(node, ast.Import):
         return f"import {name.name}", f"{name.name}.<name>(...)"
@@ -67,7 +70,7 @@ def _import_alias_replacement(node: ast.Import | ast.ImportFrom, name: ast.alias
     return f"import {name.name}", f"{name.name}.<name>(...)"
 
 
-def _patch_added_source(source: str) -> str | None:
+def patch_added_source(source: str) -> str | None:
     """Extract added Python lines from a patch-like content target."""
     added: list[str] = []
     for line in source.splitlines():
@@ -80,17 +83,21 @@ def _patch_added_source(source: str) -> str | None:
     return "\n".join(added)
 
 
-def _is_private_module_segment(segment: str) -> bool:
+def is_private_module_segment(segment: str) -> bool:
     """Return True for a single-underscore implementation module segment."""
     return segment.startswith("_") and not segment.startswith("__")
 
 
-def _private_module_segments(module_name: str) -> list[str]:
+def private_module_segments(module_name: str) -> list[str]:
     """Return private segments from a dotted module/import path."""
-    return [segment for segment in module_name.split(".") if _is_private_module_segment(segment)]
+    return [
+        segment
+        for segment in module_name.split(".")
+        if is_private_module_segment(segment)
+    ]
 
 
-def _module_path_from_python_file(path_value: str) -> str:
+def module_path_from_python_file(path_value: str) -> str:
     """Return a dotted module-ish path from a Python file path."""
     normalized = path_value.replace("\\", "/").strip("/")
     if not normalized.endswith((".py", ".pyi")):
@@ -101,7 +108,7 @@ def _module_path_from_python_file(path_value: str) -> str:
     return module_path
 
 
-def _imported_modules(node: ast.AST) -> list[tuple[int, str]]:
+def imported_modules(node: ast.AST) -> list[tuple[int, str]]:
     """Return imported module paths from an import node."""
     if isinstance(node, ast.ImportFrom) and node.module:
         return [(node.lineno, node.module)]
@@ -110,7 +117,7 @@ def _imported_modules(node: ast.AST) -> list[tuple[int, str]]:
     return []
 
 
-class _PrivateImportFinding(NamedTuple):
+class PrivateImportFinding(NamedTuple):
     path_value: str
     target: str
     kind: str

@@ -11,22 +11,23 @@ from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
 from slopgate.models import EngineResult
 
-from ._render import _serialize_findings, render_output
+from ._render import serialize_findings, render_output
 from ._retry import (
-    _apply_loop_aware_steering,
-    _capture_repair_plan_signal,
-    _dedupe_findings,
-    _enforce_retry_budget,
-    _filter_search_reminder_dedupe,
-    _inject_recent_failure_context,
+    apply_loop_aware_steering,
+    capture_repair_plan_signal,
+    dedupe_findings,
+    enforce_retry_budget,
+    filter_search_reminder_dedupe,
+    inject_recent_failure_context,
 )
 from ._runner import (
     EnforcementMode,
-    _EvalAccumulator,
-    _platform_capability,
-    _resolve_enforcement_mode,
-    _run_rules,
+    EvalAccumulator,
+    platform_capability,
+    resolve_enforcement_mode,
+    run_rules,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class _EvaluationMetadata:
@@ -42,10 +43,10 @@ class _EvaluationMetadata:
 
 
 def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata:
-    capability, degraded_reason = _platform_capability(platform)
+    capability, degraded_reason = platform_capability(platform)
     return _EvaluationMetadata(
         platform=platform,
-        enforcement_mode=_resolve_enforcement_mode(ctx),
+        enforcement_mode=resolve_enforcement_mode(ctx),
         resolved_repo_root=resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd()),
         platform_capability=capability,
         degraded_reason=degraded_reason,
@@ -72,7 +73,7 @@ def _trace_evaluation_start(ctx: HookContext, metadata: _EvaluationMetadata) -> 
 def _trace_evaluation_result(
     ctx: HookContext,
     metadata: _EvaluationMetadata,
-    acc: _EvalAccumulator,
+    acc: EvalAccumulator,
     output: ObjectDict | None,
 ) -> None:
     ctx.trace.result(
@@ -83,7 +84,7 @@ def _trace_evaluation_result(
             "event_name": ctx.event_name,
             SESSION_ID: ctx.session_id,
             "tool_name": ctx.tool_name,
-            "findings": _serialize_findings(acc.findings),
+            "findings": serialize_findings(acc.findings),
             "errors": acc.errors,
             "output": output,
             "enforcement_mode": metadata.enforcement_mode,
@@ -101,13 +102,13 @@ def evaluate_payload(
     metadata = _evaluation_metadata(ctx, platform)
     _trace_evaluation_start(ctx, metadata)
 
-    _capture_repair_plan_signal(ctx)
-    acc = _run_rules(ctx, platform, metadata.enforcement_mode)
-    _enforce_retry_budget(ctx, acc.findings)
-    _apply_loop_aware_steering(ctx, acc.findings)
-    _inject_recent_failure_context(ctx, acc.findings)
-    acc.findings = _filter_search_reminder_dedupe(ctx, acc.findings)
-    acc.findings = _dedupe_findings(acc.findings)
+    capture_repair_plan_signal(ctx)
+    acc = run_rules(ctx, platform, metadata.enforcement_mode)
+    enforce_retry_budget(ctx, acc.findings)
+    apply_loop_aware_steering(ctx, acc.findings)
+    inject_recent_failure_context(ctx, acc.findings)
+    acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
+    acc.findings = dedupe_findings(acc.findings)
     output = render_output(ctx, acc.findings, adapter=adapter)
 
     _trace_evaluation_result(ctx, metadata, acc, output)

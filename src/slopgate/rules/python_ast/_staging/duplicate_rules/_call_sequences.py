@@ -7,8 +7,13 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, final
 from typing_extensions import override
 
-from slopgate.constants import METADATA_PATH, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
-from slopgate.lint._detectors.duplicates import _extract_call_sequence
+from slopgate.constants import (
+    METADATA_PATH,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
+from slopgate.lint._detectors.duplicates import extract_call_sequence
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 
@@ -16,6 +21,7 @@ from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+
 
 def _function_call_sequence_groups(
     module: ast.Module,
@@ -26,7 +32,7 @@ def _function_call_sequence_groups(
     for node in ast.walk(module):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        seq = _extract_call_sequence(node)
+        seq = extract_call_sequence(node)
         if len(seq) >= min_calls:
             groups[seq].append((node.name, node.lineno))
     return groups

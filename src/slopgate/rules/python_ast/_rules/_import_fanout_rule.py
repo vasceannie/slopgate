@@ -20,6 +20,7 @@ from .._helpers import (
     evaluate_common,
     parse_module,
 )
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
@@ -54,7 +55,9 @@ class PythonImportFanoutRule(Rule):
         if len(names) <= limit:
             return None
         family_prefix = detect_family_prefix(names)
-        names_preview = ", ".join(names[:IMPORT_FANOUT_PREVIEW_LIMIT]) + (", ..." if len(names) > IMPORT_FANOUT_PREVIEW_LIMIT else "")
+        names_preview = ", ".join(names[:IMPORT_FANOUT_PREVIEW_LIMIT]) + (
+            ", ..." if len(names) > IMPORT_FANOUT_PREVIEW_LIMIT else ""
+        )
         if family_prefix is not None:
             severity = Severity.MEDIUM
             family_msg = (

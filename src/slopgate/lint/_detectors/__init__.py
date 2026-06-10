@@ -1,5 +1,34 @@
 """Quality gate detectors — each module scans for a specific category of issues."""
+
 from __future__ import annotations
+
+__all__ = [
+    "detect_any_usage",
+    "detect_duplicate_call_sequences",
+    "detect_repeated_blocks",
+    "detect_repeated_literals",
+    "detect_semantic_clones",
+    "detect_assertion_free_tests",
+    "detect_assertion_roulette",
+    "detect_broad_except_swallow",
+    "detect_conditional_assertions",
+    "detect_deep_nesting",
+    "detect_stale_patterns",
+    "detect_direct_get_logger",
+    "detect_eager_tests",
+    "detect_fixtures_outside_conftest",
+    "detect_god_classes",
+    "detect_high_complexity",
+    "detect_long_lines",
+    "detect_long_methods",
+    "detect_long_tests",
+    "detect_oversized_modules",
+    "detect_silent_fallback",
+    "detect_too_many_params",
+    "detect_type_suppressions",
+    "detect_unnecessary_wrappers",
+    "detect_wrong_logger_name",
+]
 
 from .duplicates import (
     detect_duplicate_call_sequences,

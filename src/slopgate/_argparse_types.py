@@ -10,5 +10,8 @@ class SubparserRegistry(Protocol):
     def add_parser(
         self,
         name: str,
-        **kwargs: object,
+        *,
+        help: str | None = None,
+        description: str | None = None,
+        formatter_class: type[argparse.HelpFormatter] = argparse.HelpFormatter,
     ) -> argparse.ArgumentParser: ...

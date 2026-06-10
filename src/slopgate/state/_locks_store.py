@@ -1,26 +1,19 @@
 """Persistent hook-state store."""
 
 from __future__ import annotations
-
 from pathlib import Path
-from slopgate._types import (
-    ObjectDict,
-    bool_value,
-    object_list,
-    string_value,
+from slopgate._types import ObjectDict, bool_value, object_list, string_value
+from ._keys import (
+    DenyHitStateMixin,
+    FullReadStateMixin,
+    SearchReminderStateMixin,
+    SessionStateMutationMixin,
 )
-
-from ._keys import _DenyHitStateMixin as _DenyHitStateMixin, _FullReadStateMixin as _FullReadStateMixin, _SearchReminderStateMixin as _SearchReminderStateMixin, _SessionStateMutationMixin as _SessionStateMutationMixin
-from ._models import RetryLockPayload as RetryLockPayload
+from ._models import RetryLockPayload
 
 
-class _RetryLockStateMixin(_SessionStateMutationMixin):
-    def set_retry_lock(
-        self,
-        session_id: str,
-        *,
-        payload: RetryLockPayload,
-    ) -> None:
+class RetryLockStateMixin(SessionStateMutationMixin):
+    def set_retry_lock(self, session_id: str, *, payload: RetryLockPayload) -> None:
         self._write_object_state_entry(
             "retry_locks",
             session_id,
@@ -40,12 +33,18 @@ class _RetryLockStateMixin(_SessionStateMutationMixin):
             return None
         result: ObjectDict = {}
         repeated_rule_ids = [
-            item for item in object_list(raw.get("repeated_rule_ids")) if isinstance(item, str)
+            item
+            for item in object_list(raw.get("repeated_rule_ids"))
+            if isinstance(item, str)
         ]
         current_rule_ids = [
-            item for item in object_list(raw.get("current_rule_ids")) if isinstance(item, str)
+            item
+            for item in object_list(raw.get("current_rule_ids"))
+            if isinstance(item, str)
         ]
-        paths = [item for item in object_list(raw.get("paths")) if isinstance(item, str)]
+        paths = [
+            item for item in object_list(raw.get("paths")) if isinstance(item, str)
+        ]
         attempt_fingerprint = string_value(raw.get("attempt_fingerprint"))
         count = raw.get("count")
         if repeated_rule_ids:
@@ -68,7 +67,7 @@ class _RetryLockStateMixin(_SessionStateMutationMixin):
             self._save_state(state)
 
 
-class _RepairPlanStateMixin(_SessionStateMutationMixin):
+class RepairPlanStateMixin(SessionStateMutationMixin):
     def mark_repair_plan(
         self, session_id: str, constraints_named: bool, reread_done: bool
     ) -> None:
@@ -90,13 +89,12 @@ class _RepairPlanStateMixin(_SessionStateMutationMixin):
 
 
 class HookStateStore(
-    _FullReadStateMixin,
-    _SearchReminderStateMixin,
-    _DenyHitStateMixin,
-    _RetryLockStateMixin,
-    _RepairPlanStateMixin,
+    FullReadStateMixin,
+    SearchReminderStateMixin,
+    DenyHitStateMixin,
+    RetryLockStateMixin,
+    RepairPlanStateMixin,
 ):
-
     """Persist small cross-hook state under the trace dir.
 
     Hooks run as separate subprocesses in production, so even the first
@@ -111,6 +109,6 @@ class HookStateStore(
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _failure_count(item: ObjectDict) -> int:
+def failure_count(item: ObjectDict) -> int:
     count = item.get("count")
     return count if isinstance(count, int) else 0

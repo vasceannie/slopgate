@@ -2,6 +2,7 @@
 
 Pre-parses files once so AST-based detectors share the same parse result.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,6 +40,7 @@ def _ast_src_collectors(
         detect_type_suppressions,
     )
     from slopgate.lint._detectors.wrappers import detect_unnecessary_wrappers
+
     return [
         ("unnecessary-wrapper", detect_unnecessary_wrappers(parsed_src)),
         ("deprecated-pattern", detect_stale_patterns(parsed_src)),
@@ -72,6 +74,7 @@ def _structure_src_collectors(
         detect_repeated_blocks,
         detect_semantic_clones,
     )
+
     return [
         ("high-complexity", detect_high_complexity(parsed_src)),
         ("long-method", detect_long_methods(parsed_src)),
@@ -79,10 +82,19 @@ def _structure_src_collectors(
         ("deep-nesting", detect_deep_nesting(parsed_src)),
         ("god-class", detect_god_classes(parsed_src)),
         ("oversized-module", [v for v in oversized if v.rule == "oversized-module"]),
-        ("oversized-module-soft", [v for v in oversized if v.rule == "oversized-module-soft"]),
+        (
+            "oversized-module-soft",
+            [v for v in oversized if v.rule == "oversized-module-soft"],
+        ),
         ("semantic-clone", detect_semantic_clones(parsed_src)),
-        ("repeated-magic-number", [v for v in literals if v.rule == "repeated-magic-number"]),
-        ("repeated-string-literal", [v for v in literals if v.rule == "repeated-string-literal"]),
+        (
+            "repeated-magic-number",
+            [v for v in literals if v.rule == "repeated-magic-number"],
+        ),
+        (
+            "repeated-string-literal",
+            [v for v in literals if v.rule == "repeated-string-literal"],
+        ),
         ("repeated-code-block", detect_repeated_blocks(parsed_src)),
         ("duplicate-call-sequence", detect_duplicate_call_sequences(parsed_src)),
     ]
@@ -101,6 +113,7 @@ def _test_collectors(
         detect_fixtures_outside_conftest,
         detect_long_tests,
     )
+
     return [
         ("long-test", detect_long_tests(parsed_tests)),
         ("eager-test", detect_eager_tests(parsed_tests)),
@@ -111,7 +124,7 @@ def _test_collectors(
     ]
 
 
-def _test_integrity_collectors(
+def test_integrity_collectors(
     parsed_src: list[ParsedFile],
     parsed_tests: list[ParsedFile],
     *,
@@ -178,7 +191,7 @@ def run_test_integrity_collectors(
     parsed_tests = parse_files(test_files)
     return [
         ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
-        *_test_integrity_collectors(parsed_src, parsed_tests),
+        *test_integrity_collectors(parsed_src, parsed_tests),
     ]
 
 
@@ -195,9 +208,13 @@ def run_touched_collectors(
     reference corpus. Otherwise every isolated production edit looks untested
     whenever the hook payload lacks the matching test files.
     """
-    parsed_src, parsed_tests, oversized, literals = _source_analysis(src_files, test_files)
+    parsed_src, parsed_tests, oversized, literals = _source_analysis(
+        src_files, test_files
+    )
     parsed_reference_tests = (
-        parsed_tests if reference_test_files is None else parse_files(reference_test_files)
+        parsed_tests
+        if reference_test_files is None
+        else parse_files(reference_test_files)
     )
 
     return [
@@ -205,7 +222,7 @@ def run_touched_collectors(
         *_structure_src_collectors(src_files, parsed_src, oversized, literals),
         *_ast_src_collectors(src_files, parsed_src),
         *_test_collectors(test_files, parsed_tests),
-        *_test_integrity_collectors(
+        *test_integrity_collectors(
             parsed_src,
             parsed_reference_tests,
             parsed_test_targets=parsed_tests,
@@ -218,12 +235,14 @@ def run_all_collectors(
     test_files: list[Path],
 ) -> list[tuple[str, list[Violation]]]:
     """Run all detectors and return (rule_name, violations) pairs."""
-    parsed_src, parsed_tests, oversized, literals = _source_analysis(src_files, test_files)
+    parsed_src, parsed_tests, oversized, literals = _source_analysis(
+        src_files, test_files
+    )
 
     return [
         ("python-parse-error", detect_python_parse_errors([*src_files, *test_files])),
         *_structure_src_collectors(src_files, parsed_src, oversized, literals),
         *_ast_src_collectors(src_files, parsed_src),
         *_test_collectors(test_files, parsed_tests),
-        *_test_integrity_collectors(parsed_src, parsed_tests),
+        *test_integrity_collectors(parsed_src, parsed_tests),
     ]

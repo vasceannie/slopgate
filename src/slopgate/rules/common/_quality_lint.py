@@ -1,7 +1,6 @@
 """Common Slopgate runtime rules."""
 
 from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
@@ -16,27 +15,17 @@ from slopgate.constants import (
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
-from slopgate.util.payloads import (
-    is_edit_like_tool,
-    is_shell_tool,
-    lower_path,
-)
+from slopgate.util.payloads import is_edit_like_tool, is_shell_tool, lower_path
+
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-
 from ._quality_lint_guidance import (
-    _has_oversized_module_failure,
-    _lint_check_instruction,
-    _lint_target_summary,
-    _post_lint_oversized_guidance,
+    has_oversized_module_failure,
+    lint_check_instruction,
+    lint_target_summary,
+    post_lint_oversized_guidance,
 )
-from ._quality_postedit import (
-    PostEditQualityRule,
-    _collect_quality_commands,
-    _run_quality_commands,
-)
-from ._shell_read import _is_safe_bash_read as _is_safe_bash_read
-from ._shell_read import command_has_word as command_has_word
+from ._shell_read import command_has_word
 
 
 class SearchReminderRule(Rule):
@@ -62,7 +51,7 @@ class SearchReminderRule(Rule):
         return []
 
 
-def _resolve_python_candidates(ctx: HookContext) -> tuple[list[Path], list[Path]]:
+def resolve_python_candidates(ctx: HookContext) -> tuple[list[Path], list[Path]]:
     src_files: list[Path] = []
     test_files: list[Path] = []
     for candidate in ctx.candidate_paths:
@@ -82,10 +71,12 @@ def _resolve_python_candidates(ctx: HookContext) -> tuple[list[Path], list[Path]
             test_files.append(full)
         else:
             src_files.append(full)
-    return src_files, test_files
+    return (src_files, test_files)
 
 
-def _touched_reference_test_files(src_files: list[Path], test_files: list[Path]) -> list[Path] | None:
+def _touched_reference_test_files(
+    src_files: list[Path], test_files: list[Path]
+) -> list[Path] | None:
     """Return suite test references when touched source files need coverage context."""
     if not src_files:
         return None
@@ -103,7 +94,9 @@ def _touched_reference_test_files(src_files: list[Path], test_files: list[Path])
     return sorted(by_resolved.values())
 
 
-def _touched_lint_relative_paths(src_files: list[Path], test_files: list[Path]) -> set[str]:
+def _touched_lint_relative_paths(
+    src_files: list[Path], test_files: list[Path]
+) -> set[str]:
     """Return relative lint paths allowed to report from a post-edit hook."""
     from slopgate.lint._helpers import relative_path
 
@@ -113,28 +106,26 @@ def _touched_lint_relative_paths(src_files: list[Path], test_files: list[Path]) 
     return touched
 
 
-def _collect_touched_lint_failures(
+def collect_touched_lint_failures(
     ctx: HookContext,
 ) -> tuple[list[str], list[str], list[str]]:
-    src_files, test_files = _resolve_python_candidates(ctx)
-    if not src_files and not test_files:
-        return [], [], []
+    src_files, test_files = resolve_python_candidates(ctx)
+    if not src_files and (not test_files):
+        return ([], [], [])
     from slopgate.lint._collectors import run_touched_collectors
-    from slopgate.lint._config import load_config as load_lint_config
-    from slopgate.lint._config import set_config as set_lint_config
+    from slopgate.lint._config import load_config
+    from slopgate.lint._config import set_config
     from slopgate.lint._details import format_violation_details
 
-    lint_cfg = load_lint_config(ctx.config.repo_root)
-    set_lint_config(lint_cfg)
+    lint_cfg = load_config(ctx.config.repo_root)
+    set_config(lint_cfg)
     reference_test_files = _touched_reference_test_files(src_files, test_files)
     touched_paths = _touched_lint_relative_paths(src_files, test_files)
-    lint_targets = sorted(path for path in touched_paths if path != "<project>")
+    lint_targets = sorted((path for path in touched_paths if path != "<project>"))
     failures: list[str] = []
     first_detail: list[str] = []
     for rule_name, violations in run_touched_collectors(
-        src_files,
-        test_files,
-        reference_test_files=reference_test_files,
+        src_files, test_files, reference_test_files=reference_test_files
     ):
         scoped_violations = [
             violation
@@ -146,19 +137,17 @@ def _collect_touched_lint_failures(
         failures.append(f"{rule_name}: {len(scoped_violations)}")
         if not first_detail:
             first_detail = format_violation_details(
-                rule_name,
-                scoped_violations[0],
-                status="HOOK",
+                rule_name, scoped_violations[0], status="HOOK"
             )
-    return failures, first_detail, lint_targets
+    return (failures, first_detail, lint_targets)
 
 
-def _python_lint_targets(ctx: HookContext) -> list[str]:
+def python_lint_targets(ctx: HookContext) -> list[str]:
     return [
         path
         for path in ctx.candidate_paths
         if path.lower().endswith(".py")
-        and not is_third_party_or_virtualenv_path(path)
+        and (not is_third_party_or_virtualenv_path(path))
     ]
 
 
@@ -173,26 +162,22 @@ class PostEditLintRule(Rule):
             return []
         if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
             return []
-        failures, first_detail, lint_targets = _collect_touched_lint_failures(ctx)
+        failures, first_detail, lint_targets = collect_touched_lint_failures(ctx)
         if not failures:
             return []
         summary = ", ".join(failures[:QUALITY_FAILURE_PREVIEW_LIMIT])
         if len(failures) > QUALITY_FAILURE_PREVIEW_LIMIT:
             summary += f", +{len(failures) - QUALITY_FAILURE_PREVIEW_LIMIT} more"
-        targets = lint_targets or _python_lint_targets(ctx)
-        target_summary = _lint_target_summary(targets)
-        instruction = _lint_check_instruction(targets)
-        details = (
-            f"Touched-file lint detectors found issues{target_summary}. "
-            f"{summary}. {instruction} Repair touched files before continuing."
-        )
+        targets = lint_targets or python_lint_targets(ctx)
+        target_summary = lint_target_summary(targets)
+        instruction = lint_check_instruction(targets)
+        details = f"Touched-file lint detectors found issues{target_summary}. {summary}. {instruction} Repair touched files before continuing."
         if first_detail:
-            details = (
-                f"{details} First lint violation detail:\n"
-                + "\n".join(first_detail[:12])
+            details = f"{details} First lint violation detail:\n" + "\n".join(
+                first_detail[:12]
             )
-        if _has_oversized_module_failure(failures):
-            details = f"{details} {_post_lint_oversized_guidance(targets)}"
+        if has_oversized_module_failure(failures):
+            details = f"{details} {post_lint_oversized_guidance(targets)}"
         metadata: dict[str, object] = {"failing_collectors": failures, "paths": targets}
         if targets:
             metadata[METADATA_PATH] = targets[0]
@@ -200,18 +185,18 @@ class PostEditLintRule(Rule):
             RuleFinding(
                 rule_id=self.rule_id,
                 title=self.title,
-                severity=(
-                    Severity.HIGH
-                    if ctx.config.post_edit_quality_block_on_failure
-                    else Severity.LOW
-                ),
-                decision=(
-                    BLOCK if ctx.config.post_edit_quality_block_on_failure else None
-                ),
-                message=details if ctx.config.post_edit_quality_block_on_failure else None,
-                additional_context=(
-                    None if ctx.config.post_edit_quality_block_on_failure else details
-                ),
+                severity=Severity.HIGH
+                if ctx.config.post_edit_quality_block_on_failure
+                else Severity.LOW,
+                decision=BLOCK
+                if ctx.config.post_edit_quality_block_on_failure
+                else None,
+                message=details
+                if ctx.config.post_edit_quality_block_on_failure
+                else None,
+                additional_context=None
+                if ctx.config.post_edit_quality_block_on_failure
+                else details,
                 metadata=metadata,
             )
         ]

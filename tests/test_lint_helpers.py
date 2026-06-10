@@ -12,7 +12,7 @@ def _module(source: str) -> ast.Module:
 def test_function_body_lines_skip_docstrings_and_include_multiline_body() -> None:
     tree = _module(
         "def target():\n"
-        "    \"\"\"doc\"\"\"\n"
+        '    """doc"""\n'
         "    value = (\n"
         "        1 +\n"
         "        2\n"

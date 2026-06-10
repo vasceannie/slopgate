@@ -1,7 +1,6 @@
 """Suite-wide install support."""
 
 from __future__ import annotations
-
 import os
 import platform
 import shutil
@@ -9,16 +8,17 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-
 from slopgate.cli.commands import VALID_PLATFORMS
 from slopgate.installer import _suite_autoupdate
 from slopgate.installer._suite_autoupdate import (
-    DEFAULT_UPDATE_INTERVAL_MINUTES as DEFAULT_UPDATE_INTERVAL_MINUTES,
-    DEFAULT_UPDATE_SOURCE as DEFAULT_UPDATE_SOURCE,
-    SchedulerPlan as SchedulerPlan,
-    _AUTOUPDATE_MARKER as _AUTOUPDATE_MARKER,
+    DEFAULT_UPDATE_INTERVAL_MINUTES,
+    DEFAULT_UPDATE_SOURCE,
+    SchedulerPlan,
 )
+from slopgate.installer._suite_autoupdate_types import AUTOUPDATE_MARKER
 from slopgate.installer._shared import find_binary, shell_command
+
+__all__ = ["AUTOUPDATE_MARKER"]
 from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
 _INSTALL_TARGETS = VALID_PLATFORMS
@@ -87,9 +87,7 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
             (home / ".claude").exists(),
         ),
         InstallSite(
-            CODEX_PLATFORM,
-            home / ".codex" / "hooks.json",
-            (home / ".codex").exists(),
+            CODEX_PLATFORM, home / ".codex" / "hooks.json", (home / ".codex").exists()
         ),
         InstallSite(
             OPENCODE_PLATFORM,
@@ -131,9 +129,7 @@ def build_scheduler_plan(
     """Build the native scheduler artifact for the current OS."""
     _sync_autoupdate_facade_dependencies()
     return _suite_autoupdate.build_scheduler_plan(
-        source,
-        include_missing=include_missing,
-        interval_minutes=interval_minutes,
+        source, include_missing=include_missing, interval_minutes=interval_minutes
     )
 
 
@@ -169,8 +165,7 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
     print(f"Device: {current_device_label()}")
     if not sites:
         print(
-            "No existing agent harness install sites detected; "
-            "use --include-missing to create all supported sites."
+            "No existing agent harness install sites detected; use --include-missing to create all supported sites."
         )
     status = 0
     for site in sites:
@@ -188,12 +183,15 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
             or status
         )
     if resolved_options.with_autoupdate and status == 0:
-        status = install_autoupdate(
-            dry_run=resolved_options.dry_run,
-            source=resolved_options.source,
-            include_missing=resolved_options.include_missing,
-            interval_minutes=resolved_options.interval_minutes,
-        ) or status
+        status = (
+            install_autoupdate(
+                dry_run=resolved_options.dry_run,
+                source=resolved_options.source,
+                include_missing=resolved_options.include_missing,
+                interval_minutes=resolved_options.interval_minutes,
+            )
+            or status
+        )
     return status
 
 
@@ -239,11 +237,9 @@ def update_suite(options: SuiteUpdateOptions) -> int:
         completed = subprocess.run(update_command, check=False, env=env)
         if completed.returncode != 0:
             return completed.returncode
-
     if not options.refresh_hooks:
         print("Hook refresh: skipped (use --refresh-hooks to rewrite harness hooks)")
         return 0
-
     status = 0
     for site in discover_install_sites(include_missing=options.include_missing):
         print(f"Refreshing {site.platform} hooks at {site.path}")

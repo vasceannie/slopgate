@@ -105,7 +105,7 @@
       "installed_source": {
         "load_method": "ast-literal",
         "path": "src/slopgate/installer/_claude.py",
-        "symbol": "_CLAUDE_EVENTS"
+        "symbol": "CLAUDE_EVENTS"
       },
       "intentionally_not_installed_events": [
         "Elicitation",

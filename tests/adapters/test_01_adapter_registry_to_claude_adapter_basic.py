@@ -12,8 +12,9 @@ from tests.test_adapters import (
     require_nested,
     require_rendered,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestAdapterRegistry:
     def test_all_platforms_registered(self) -> None:
@@ -35,6 +36,7 @@ class TestAdapterRegistry:
     def test_unknown_platform_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown platform"):
             _ = get_adapter("vim")
+
 
 class TestClaudeAdapterBasic:
     """Claude adapter — core event rendering (normalize, pretool, permission, stop)."""
@@ -66,7 +68,7 @@ class TestClaudeAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "PreToolUse deny must set permissionDecision=deny"
         )
-        assert "GIT-001" in test_support.required_string(
+        assert "GIT-001" in support.required_string(
             spec, "permissionDecisionReason"
         )
 
@@ -92,7 +94,7 @@ class TestClaudeAdapterBasic:
         assert inner["behavior"] == "deny", (
             "PermissionRequest deny must set behavior=deny"
         )
-        assert "TEST-001" in test_support.required_string(inner, "message")
+        assert "TEST-001" in support.required_string(inner, "message")
 
     def test_stop_block(self) -> None:
         adapter = ClaudeAdapter()
@@ -114,7 +116,7 @@ class TestClaudeAdapterBasic:
         )
         rendered = require_rendered(output)
         assert rendered["decision"] == "block", "Stop block must set decision=block"
-        assert "STOP-001" in test_support.required_string(rendered, "reason")
+        assert "STOP-001" in support.required_string(rendered, "reason")
 
     def test_session_start_context(self) -> None:
         adapter = ClaudeAdapter()
@@ -134,7 +136,7 @@ class TestClaudeAdapterBasic:
             updated_input={},
         )
         assert (
-            test_support.required_string(require_spec(output), "additionalContext")
+            support.required_string(require_spec(output), "additionalContext")
             == "load conventions"
         )
 
@@ -185,7 +187,7 @@ class TestClaudeAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "block must map to deny for PreToolUse"
         )
-        assert "SYS-001" in test_support.required_string(
+        assert "SYS-001" in support.required_string(
             spec, "permissionDecisionReason"
         )
 

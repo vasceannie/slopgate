@@ -6,17 +6,17 @@ from collections.abc import Callable
 
 import pytest
 
+from tests.support import pretool_delete_payload
 from tests.test_engine import (
     Path,
-    _pretool_delete_payload,
-    _pretool_write_payload,
+    pretool_write_payload,
     assert_denied_by,
     evaluate_payload,
     finding_ids,
 )
 
 
-def _repo_with_quality_gate(tmp_path: Path, name: str) -> Path:
+def repo_with_quality_gate(tmp_path: Path, name: str) -> Path:
     repo = tmp_path / name
     repo.mkdir(parents=True)
     _ = (repo / "slopgate.toml").write_text(
@@ -59,7 +59,7 @@ def _patch_delete_payload(repo: Path) -> dict[str, object]:
 
 
 def _direct_policy_marker_payload(repo: Path) -> dict[str, object]:
-    return _pretool_write_payload(
+    return pretool_write_payload(
         repo,
         "slopgate.toml",
         """
@@ -76,15 +76,15 @@ allowed = []
 _REPO_ENROLLMENT_CASES: list[tuple[str, Callable[[Path], dict[str, object]]]] = [
     (
         "repo_enrolled_sentinel",
-        lambda repo: _pretool_write_payload(repo, ".noslopgate", ""),
+        lambda repo: pretool_write_payload(repo, ".noslopgate", ""),
     ),
     (
         "repo_enrolled_delete",
-        lambda repo: _pretool_delete_payload(repo, "slopgate.toml"),
+        lambda repo: pretool_delete_payload(repo, "slopgate.toml"),
     ),
     (
         "repo_enrolled_disable_flag",
-        lambda repo: _pretool_write_payload(
+        lambda repo: pretool_write_payload(
             repo, "slopgate.toml", "[slopgate]\nenabled = false\n"
         ),
     ),
@@ -100,7 +100,7 @@ def test_repo_enrollment_rule_blocks_mutations(
     repo_name: str,
     payload_builder: Callable[[Path], dict[str, object]],
 ) -> None:
-    repo = _repo_with_quality_gate(tmp_path, repo_name)
+    repo = repo_with_quality_gate(tmp_path, repo_name)
     result = evaluate_payload(payload_builder(repo))
     assert_denied_by(result, "REPO-ENROLL-001")
     assert "REPO-ENROLL-001" in finding_ids(result)

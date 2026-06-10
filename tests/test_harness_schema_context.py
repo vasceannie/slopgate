@@ -12,18 +12,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
-
+from slopgate._types import (
+    ObjectDict,
+    is_object_dict,
+    object_dict,
+    object_list,
+)
 from tests.harness_schema_support import (
     assert_installed_sources_are_extractable,
     assert_official_source,
+    expected_contract_cross_check,
+    opencode_schema_summary_observed,
+    opencode_stop_output_summary,
+    permission_request_output_summary,
+    pretool_output_summary,
+    schema_event_map_contract_summary,
     strings,
 )
 from slopgate.adapters import ADAPTERS
-from slopgate.adapters.claude import ClaudeAdapter
-from slopgate.adapters.codex import CODEX_EVENTS, CodexAdapter
+from slopgate.adapters.codex import CODEX_EVENTS
 from slopgate.adapters.opencode import OPENCODE_EVENT_MAP, OpenCodeAdapter
-from slopgate.installer import _CLAUDE_EVENTS
+from slopgate.installer import CLAUDE_EVENTS
 from slopgate.models import RuleFinding, Severity
 
 EXPECTED_CLAUDE_OFFICIAL_EVENTS = set(
@@ -49,22 +58,45 @@ REQUIRED_SOURCES = {
 
 REQUIRED_SOURCE_KEYWORDS = {
     "claude_hooks": {"PreToolUse", "PermissionRequest", "hookSpecificOutput"},
-    "opencode_plugin_docs": {"tool.execute.before", "tool.execute.after", "permission.asked", "session.idle"},
+    "opencode_plugin_docs": {
+        "tool.execute.before",
+        "tool.execute.after",
+        "permission.asked",
+        "session.idle",
+    },
     "codex_hooks": {"codex_hooks", "PreToolUse", "PermissionRequest"},
 }
 
-EXPECTED_OPENCODE_SCHEMA_DEFS = {"Config", "PermissionActionConfig", "PermissionConfig", "PermissionRuleConfig"}
+EXPECTED_OPENCODE_SCHEMA_DEFS = {
+    "Config",
+    "PermissionActionConfig",
+    "PermissionConfig",
+    "PermissionRuleConfig",
+}
 
 LOCAL_PATH_FRAGMENTS = ("/home/", "/Users/", "\\Users\\")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _fixture() -> dict[str, Any]:
+def _fixture() -> ObjectDict:
     path = Path(__file__).with_name("fixtures") / "harness_schema_context.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    return object_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
-def _finding() -> RuleFinding:
+def _mapping(data: ObjectDict, key: str) -> ObjectDict:
+    return object_dict(data.get(key))
+
+
+def _string_set(value: object) -> set[str]:
+    items = object_list(value)
+    return {item for item in items if isinstance(item, str)}
+
+
+def _source(data: ObjectDict, source_id: str) -> ObjectDict:
+    return object_dict(_mapping(data, "sources").get(source_id))
+
+
+def finding() -> RuleFinding:
     return RuleFinding(
         rule_id="SCHEMA-001",
         title="schema contract",
@@ -74,25 +106,13 @@ def _finding() -> RuleFinding:
     )
 
 
-def _hook_specific(output: dict[str, Any]) -> dict[str, Any]:
-    specific = output.get("hookSpecificOutput")
-    assert isinstance(specific, dict), output
-    return specific
-
-
-def _render_denied_output(adapter: Any, event_name: str, finding: RuleFinding) -> dict[str, Any]:
-    output = adapter.render_output(event_name, [finding], decision="deny")
-    assert output is not None
-    return output
-
-
 def test_harness_schema_context_sources_are_official_available_and_parsable() -> None:
     data = _fixture()
     fixture_summary = {
         "schema_version": data["schema_version"],
         "source_snapshot_policy": data["source_snapshot_policy"],
         "errors": data["errors"],
-        "sources": set(data["sources"]),
+        "sources": set(_mapping(data, "sources").keys()),
     }
     assert fixture_summary == {
         "schema_version": 1,
@@ -102,33 +122,34 @@ def test_harness_schema_context_sources_are_official_available_and_parsable() ->
     }
 
     for source_id, (harness, kind) in REQUIRED_SOURCES.items():
-        source = data["sources"][source_id]
-        assert_official_source(source_id, source, harness, kind)
+        assert_official_source(source_id, _source(data, source_id), harness, kind)
 
 
 def test_checked_in_fixture_omits_machine_local_cache_paths() -> None:
     data = _fixture()
     assert "cache_dir" not in data
+    sources = _mapping(data, "sources")
     sources_with_cache_paths = [
-        source_id for source_id, source in data["sources"].items() if "cache_path" in source
+        source_id
+        for source_id, source in sources.items()
+        if isinstance(source, dict) and "cache_path" in source
     ]
     assert sources_with_cache_paths == []
 
     fixture_strings = strings(data)
-    leaked = [text for text in fixture_strings if any(part in text for part in LOCAL_PATH_FRAGMENTS)]
+    leaked = [
+        text
+        for text in fixture_strings
+        if any(part in text for part in LOCAL_PATH_FRAGMENTS)
+    ]
     assert leaked == []
 
 
 def test_opencode_schema_summary_contains_relevant_permission_contract_defs() -> None:
-    data = _fixture()
-    schema_summary = data["sources"]["opencode_config_schema"]["schema_summary"]
-    observed = {
-        "schema": schema_summary["schema"],
-        "ref": schema_summary["ref"],
-        "has_root_keys": {"$schema", "$ref", "$defs"} <= set(schema_summary["root_keys"]),
-        "has_permission_defs": EXPECTED_OPENCODE_SCHEMA_DEFS <= set(schema_summary["defs_keys"]),
-    }
-    assert observed == {
+    assert opencode_schema_summary_observed(
+        _fixture(),
+        expected_defs=EXPECTED_OPENCODE_SCHEMA_DEFS,
+    ) == {
         "schema": "https://json-schema.org/draft/2020-12/schema",
         "ref": "#/$defs/Config",
         "has_root_keys": True,
@@ -136,34 +157,45 @@ def test_opencode_schema_summary_contains_relevant_permission_contract_defs() ->
     }
 
 
-def test_expected_contract_is_human_authored_and_source_cross_checked() -> None:
-    data = _fixture()
-    basis = data["contract_basis"]
-    harness_basis = {harness: basis[harness] for harness in data["expected_contract"]}
-    authorities = {harness: contract_basis["authority"] for harness, contract_basis in harness_basis.items()}
-    source_ids = {harness: contract_basis["source_ids"] for harness, contract_basis in harness_basis.items()}
-    missing_source_ids = [harness for harness, ids in source_ids.items() if not ids]
-    unknown_source_ids = {
-        harness: [source_id for source_id in ids if source_id not in data["sources"]]
-        for harness, ids in source_ids.items()
+def _expected_contract_note_flags(cross_check: ObjectDict) -> dict[str, bool]:
+    notes = _mapping(cross_check, "notes")
+    return {
+        "claude_has_richest": "Richest direct hook surface" in str(notes.get("claude")),
+        "codex_has_partial": "Partial hooks" in str(notes.get("codex")),
+        "opencode_has_plugin": "Plugin-mediated" in str(notes.get("opencode")),
     }
 
-    assert authorities == {harness: "human-authored-source-cross-checked" for harness in data["expected_contract"]}
-    assert missing_source_ids == []
-    assert unknown_source_ids == {harness: [] for harness in data["expected_contract"]}
-    notes = {harness: contract["blocking_notes"] for harness, contract in data["expected_contract"].items()}
-    assert "Richest direct hook surface" in notes["claude"]
-    assert "Partial hooks" in notes["codex"]
-    assert "Plugin-mediated" in notes["opencode"]
+
+def test_expected_contract_is_human_authored_and_source_cross_checked() -> None:
+    cross_check = expected_contract_cross_check(_fixture())
+    expected_contract = _mapping(_fixture(), "expected_contract")
+    assert {
+        "authorities": cross_check["authorities"],
+        "missing_source_ids": cross_check["missing_source_ids"],
+        "unknown_source_ids": cross_check["unknown_source_ids"],
+        **_expected_contract_note_flags(cross_check),
+    } == {
+        "authorities": {
+            harness: "human-authored-source-cross-checked"
+            for harness in expected_contract
+        },
+        "missing_source_ids": [],
+        "unknown_source_ids": {harness: [] for harness in expected_contract},
+        "claude_has_richest": True,
+        "codex_has_partial": True,
+        "opencode_has_plugin": True,
+    }
 
 
 def test_fixture_installed_source_paths_exist_and_symbols_are_extractable() -> None:
     data = _fixture()
-    installed_sources = [
-        surface["installed_source"]
-        for surface in data["harness_event_surfaces"].values()
-        if "installed_source" in surface
-    ]
+    installed_sources: list[ObjectDict] = []
+    for surface in _mapping(data, "harness_event_surfaces").values():
+        if not is_object_dict(surface):
+            continue
+        installed_source = surface.get("installed_source")
+        if is_object_dict(installed_source):
+            installed_sources.append(installed_source)
     assert installed_sources, "fixture should record local installer provenance"
 
     assert_installed_sources_are_extractable(REPO_ROOT, installed_sources)
@@ -171,9 +203,11 @@ def test_fixture_installed_source_paths_exist_and_symbols_are_extractable() -> N
 
 def test_source_specific_doc_keywords_support_key_contract_claims() -> None:
     data = _fixture()
-    source_keyword_hits = data["source_keyword_hits"]
+    source_keyword_hits = _mapping(data, "source_keyword_hits")
     missing_keywords = {
-        source_id: sorted(required_keywords - set(source_keyword_hits[source_id]))
+        source_id: sorted(
+            required_keywords - _string_set(source_keyword_hits.get(source_id))
+        )
         for source_id, required_keywords in REQUIRED_SOURCE_KEYWORDS.items()
     }
 
@@ -182,50 +216,61 @@ def test_source_specific_doc_keywords_support_key_contract_claims() -> None:
 
 def test_schema_contract_harnesses_match_registered_adapters() -> None:
     data = _fixture()
-    assert set(data["expected_contract"]) <= set(ADAPTERS)
+    assert set(_mapping(data, "expected_contract").keys()) <= set(ADAPTERS)
 
 
-def _assert_claude_event_surface_matches_contract(data: dict[str, Any]) -> None:
-    claude_surface = data["harness_event_surfaces"]["claude"]
+def _assert_claude_event_surface_matches_contract(data: ObjectDict) -> None:
+    claude_surface = _mapping(_mapping(data, "harness_event_surfaces"), "claude")
+    expected_contract = _mapping(data, "expected_contract")
 
-    official_events = set(claude_surface["official_events"])
-    installed_events = set(claude_surface["slopgate_installed_events"])
-    intentionally_not_installed = set(claude_surface["intentionally_not_installed_events"])
+    official_events = _string_set(claude_surface.get("official_events"))
+    installed_events = _string_set(claude_surface.get("slopgate_installed_events"))
+    intentionally_not_installed = _string_set(
+        claude_surface.get("intentionally_not_installed_events")
+    )
 
     assert official_events == EXPECTED_CLAUDE_OFFICIAL_EVENTS
-    assert installed_events == set(_CLAUDE_EVENTS)
+    assert installed_events == set(CLAUDE_EVENTS)
     assert installed_events < official_events
     assert intentionally_not_installed == official_events - installed_events
-    assert set(data["expected_contract"]["claude"]["native_events"]) == installed_events
-    assert claude_surface["coverage_decision"] == "install-supported-subset-not-full-official-surface"
-    assert claude_surface["authority"] == "official-docs-plus-local-installer"
-    assert claude_surface["extraction_method"] == "claude-hooks-table"
-    assert claude_surface["unknown_official_events"] == []
-    assert claude_surface["installed_source"] == {
+    claude_contract = _mapping(expected_contract, "claude")
+    assert _string_set(claude_contract.get("native_events")) == installed_events
+    assert (
+        claude_surface.get("coverage_decision")
+        == "install-supported-subset-not-full-official-surface"
+    )
+    assert claude_surface.get("authority") == "official-docs-plus-local-installer"
+    assert claude_surface.get("extraction_method") == "claude-hooks-table"
+    assert claude_surface.get("unknown_official_events") == []
+    assert claude_surface.get("installed_source") == {
         "path": "src/slopgate/installer/_claude.py",
-        "symbol": "_CLAUDE_EVENTS",
+        "symbol": "CLAUDE_EVENTS",
         "load_method": "ast-literal",
     }
 
 
-def test_claude_official_event_surface_is_recorded_separately_from_installed_subset() -> None:
+def test_claude_official_event_surface_is_recorded_separately_from_installed_subset() -> (
+    None
+):
     data = _fixture()
     _assert_claude_event_surface_matches_contract(data)
-    assert "claude" in data["harness_event_surfaces"]
+    assert "claude" in _mapping(data, "harness_event_surfaces")
 
 
 def test_schema_contract_event_maps_match_adapter_normalization() -> None:
-    data = _fixture()
-    contracts = data["expected_contract"]
-
-    contract_summary = {
-        "opencode_native": set(contracts["opencode"]["native_events"]),
-        "opencode_canonical": set(contracts["opencode"]["canonical_events"]),
-        "codex_native": set(contracts["codex"]["native_events"]),
-        "opencode_differs_from_claude": contracts["opencode"]["native_events"]
-        != contracts["claude"]["native_events"],
-    }
-    assert contract_summary == {
+    contract_summary = schema_event_map_contract_summary(
+        _fixture(),
+        opencode_event_map=OPENCODE_EVENT_MAP,
+        codex_events=CODEX_EVENTS,
+    )
+    assert {
+        "opencode_native": contract_summary["opencode_native"],
+        "opencode_canonical": contract_summary["opencode_canonical"],
+        "codex_native": contract_summary["codex_native"],
+        "opencode_differs_from_claude": contract_summary[
+            "opencode_differs_from_claude"
+        ],
+    } == {
         "opencode_native": set(OPENCODE_EVENT_MAP),
         "opencode_canonical": set(OPENCODE_EVENT_MAP.values()),
         "codex_native": CODEX_EVENTS,
@@ -243,57 +288,22 @@ def test_schema_contract_event_maps_match_adapter_normalization() -> None:
     assert normalized_events == OPENCODE_EVENT_MAP
 
 
-def _pretool_output_summary(finding: RuleFinding) -> dict[str, dict[str, object]]:
-    claude_output = _render_denied_output(ClaudeAdapter(), "PreToolUse", finding)
-    codex_output = _render_denied_output(CodexAdapter(), "PreToolUse", finding)
-    opencode_output = _render_denied_output(OpenCodeAdapter(), "PreToolUse", finding)
-    return {
-        "claude": {
-            "event": _hook_specific(claude_output)["hookEventName"],
-            "decision": _hook_specific(claude_output)["permissionDecision"],
-            "has_action": "action" in claude_output,
-        },
-        "codex": {
-            "event": _hook_specific(codex_output)["hookEventName"],
-            "decision": _hook_specific(codex_output)["permissionDecision"],
-            "has_updated_input": "updatedInput" in _hook_specific(codex_output),
-        },
-        "opencode": {
-            "action": opencode_output["action"],
-            "has_hook_specific": "hookSpecificOutput" in opencode_output,
-        },
-    }
-
-
-def _permission_request_output_summary(finding: RuleFinding) -> dict[str, dict[str, object]]:
-    claude_output = _render_denied_output(ClaudeAdapter(), "PermissionRequest", finding)
-    codex_output = _render_denied_output(CodexAdapter(), "PermissionRequest", finding)
-    opencode_output = _render_denied_output(OpenCodeAdapter(), "PermissionRequest", finding)
-    return {
-        "claude": _permission_decision_summary(_hook_specific(claude_output)["decision"]),
-        "codex": _permission_decision_summary(_hook_specific(codex_output)["decision"])
-        | {"has_updated_input": "updatedInput" in _hook_specific(codex_output)["decision"]},
-        "opencode": {
-            "action": opencode_output["action"],
-            "has_hook_specific": "hookSpecificOutput" in opencode_output,
-        },
-    }
-
-
-def _permission_decision_summary(decision: dict[str, Any]) -> dict[str, object]:
-    return {"behavior": decision["behavior"], "has_message": "message" in decision}
-
-
 def test_schema_contract_pretool_output_shapes_are_harness_specific() -> None:
-    assert _pretool_output_summary(_finding()) == {
+    assert pretool_output_summary(finding()) == {
         "claude": {"event": "PreToolUse", "decision": "deny", "has_action": False},
-        "codex": {"event": "PreToolUse", "decision": "deny", "has_updated_input": False},
+        "codex": {
+            "event": "PreToolUse",
+            "decision": "deny",
+            "has_updated_input": False,
+        },
         "opencode": {"action": "block", "has_hook_specific": False},
     }
 
 
-def test_schema_contract_permission_request_output_shapes_are_harness_specific() -> None:
-    assert _permission_request_output_summary(_finding()) == {
+def test_schema_contract_permission_request_output_shapes_are_harness_specific() -> (
+    None
+):
+    assert permission_request_output_summary(finding()) == {
         "claude": {"behavior": "deny", "has_message": True},
         "codex": {"behavior": "deny", "has_message": True, "has_updated_input": False},
         "opencode": {"action": "block", "has_hook_specific": False},
@@ -301,18 +311,9 @@ def test_schema_contract_permission_request_output_shapes_are_harness_specific()
 
 
 def test_opencode_stop_output_is_degraded_advisory_not_claude_style_blocking() -> None:
-    adapter = OpenCodeAdapter()
-    payload = adapter.normalize_payload({"hook_event_name": "session.idle"})
-    assert payload["hook_event_name"] == "Stop"
-
-    output = adapter.render_output("Stop", [_finding()], decision="deny")
-    output_summary = {
-        "is_present": output is not None,
-        "action": output["action"] if output else None,
-        "has_reason": bool(output and "reason" in output),
-        "has_hook_specific": bool(output and "hookSpecificOutput" in output),
-    }
-    assert output_summary == {
+    summary = opencode_stop_output_summary(OpenCodeAdapter(), finding())
+    assert summary == {
+        "normalized_event": "Stop",
         "is_present": True,
         "action": "continue",
         "has_reason": True,

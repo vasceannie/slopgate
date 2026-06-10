@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "format_violation_details",
+]
+
 from slopgate.lint._details._formatter import format_violation_details
 
 __all__ = ["format_violation_details"]

@@ -20,7 +20,7 @@ async def test_fetches_client(client):
 """
 
 
-def _write_payload(path: str, code: str, cwd: Path | None = None) -> dict[str, object]:
+def write_payload(path: str, code: str, cwd: Path | None = None) -> dict[str, object]:
     return {
         "hook_event_name": "PreToolUse",
         "tool_name": "Write",
@@ -29,21 +29,27 @@ def _write_payload(path: str, code: str, cwd: Path | None = None) -> dict[str, o
     }
 
 
-def _repo_root(tmp_path: Path, pytest_config: str = "", *, config_name: str = "pytest.ini") -> Path:
+def repo_root(
+    tmp_path: Path, pytest_config: str = "", *, config_name: str = "pytest.ini"
+) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
     if pytest_config:
         _ = (repo / config_name).write_text(pytest_config, encoding="utf-8")
     return repo
 
 
-def _evaluate_test_client(repo: Path, code: str) -> EngineResult:
-    return evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+def evaluate_test_client(repo: Path, code: str) -> EngineResult:
+    return evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
 
-def _write_pytest_mode(repo: Path, mode: str) -> None:
-    _ = (repo / "pytest.ini").write_text(f"[pytest]\nasyncio_mode = {mode}\n", encoding="utf-8")
+def write_pytest_mode(repo: Path, mode: str) -> None:
+    _ = (repo / "pytest.ini").write_text(
+        f"[pytest]\nasyncio_mode = {mode}\n", encoding="utf-8"
+    )
 
 
 def _permission_decision(result: EngineResult) -> str | None:
@@ -56,7 +62,7 @@ def _permission_decision(result: EngineResult) -> str | None:
     return string_value(inner.get("behavior"))
 
 
-def _permission_reason(result: EngineResult) -> str:
+def permission_reason(result: EngineResult) -> str:
     assert result.output is not None, "expected hook output"
     specific = object_dict(result.output.get("hookSpecificOutput"))
     reason = string_value(specific.get("permissionDecisionReason"))
@@ -66,20 +72,42 @@ def _permission_reason(result: EngineResult) -> str:
     return string_value(inner.get("message")) or ""
 
 
-def _assert_denied_by_pytest_asyncio(result: EngineResult) -> str:
+def assert_denied_by_pytest_asyncio(result: EngineResult) -> str:
     assert _permission_decision(result) == "deny"
-    reason = _permission_reason(result)
+    reason = permission_reason(result)
     assert "PY-TEST-005" in reason
     assert "pytest-asyncio" in reason
     return reason
 
 
-def _pytest_asyncio_denials(result: EngineResult) -> list[object]:
+def pytest_asyncio_denials(result: EngineResult) -> list[object]:
     return [
         finding
         for finding in result.findings
         if finding.rule_id == "PY-TEST-005" and finding.decision in {"deny", "block"}
     ]
 
+
 # Exported test support used by split test modules.
-__all__ = ('BUNDLE_ROOT', 'EngineResult', 'PYTEST_ASYNCIO_TEMPLATE', 'Path', 'UNMARKED_CLIENT_TEST', '_assert_denied_by_pytest_asyncio', '_evaluate_test_client', '_permission_decision', '_permission_reason', '_pytest_asyncio_denials', '_repo_root', '_write_payload', '_write_pytest_mode', 'evaluate_payload', 'object_dict', 'pytest', 'string_value', 'subprocess', 'sys', 'textwrap')
+__all__ = (
+    "BUNDLE_ROOT",
+    "EngineResult",
+    "PYTEST_ASYNCIO_TEMPLATE",
+    "Path",
+    "UNMARKED_CLIENT_TEST",
+    "assert_denied_by_pytest_asyncio",
+    "evaluate_test_client",
+    "_permission_decision",
+    "permission_reason",
+    "pytest_asyncio_denials",
+    "repo_root",
+    "write_payload",
+    "write_pytest_mode",
+    "evaluate_payload",
+    "object_dict",
+    "pytest",
+    "string_value",
+    "subprocess",
+    "sys",
+    "textwrap",
+)

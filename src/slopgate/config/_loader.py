@@ -5,9 +5,10 @@ from pathlib import Path
 from slopgate.models import RuntimeConfig
 
 from ._discovery import detect_root, resolve_config_path
-from ._io import _load_json
+from ._io import load_json
 from ._repo import ensure_worktree_enrollment, resolve_repo_root
-from ._settings import _merge_config, ensure_trace_directories
+from ._settings import merge_config, ensure_trace_directories
+
 
 def load_config(
     root: Path | None = None,
@@ -23,12 +24,16 @@ def load_config(
     """
     actual_root = (root or detect_root()).resolve()
     config_path = resolve_config_path()
-    raw = _load_json(config_path)
-    enrollment_root = ensure_worktree_enrollment(repo_root) if ensure_enrollment else None
-    resolved_repo_root = enrollment_root or resolve_repo_root(repo_root) or (
-        repo_root.resolve() if repo_root is not None else Path.cwd().resolve()
+    raw = load_json(config_path)
+    enrollment_root = (
+        ensure_worktree_enrollment(repo_root) if ensure_enrollment else None
     )
-    config = _merge_config(actual_root, raw, resolved_repo_root)
+    resolved_repo_root = (
+        enrollment_root
+        or resolve_repo_root(repo_root)
+        or (repo_root.resolve() if repo_root is not None else Path.cwd().resolve())
+    )
+    config = merge_config(actual_root, raw, resolved_repo_root)
     if ensure_trace:
         ensure_trace_directories(config)
     return config

@@ -29,5 +29,7 @@ def claude_team_event_feedback(result: EngineResult) -> str | None:
 
 
 def _join_unique_context(findings: list[RuleFinding]) -> str:
-    parts = [finding.additional_context for finding in findings if finding.additional_context]
+    parts = [
+        finding.additional_context for finding in findings if finding.additional_context
+    ]
     return "\n\n".join(dict.fromkeys(parts))

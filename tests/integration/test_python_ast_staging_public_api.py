@@ -62,7 +62,9 @@ def two():
     ]
 
 
-def test_repeated_magic_number_rule_reports_worst_numeric_literal(tmp_path: Path) -> None:
+def test_repeated_magic_number_rule_reports_worst_numeric_literal(
+    tmp_path: Path,
+) -> None:
     ctx = context_with_limits(tmp_path, "def one():\n    return 42 + 42 + 42 + 42\n")
 
     findings = PythonRepeatedMagicNumberRule().evaluate(ctx)

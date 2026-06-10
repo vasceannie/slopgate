@@ -1,63 +1,32 @@
 from __future__ import annotations
 
+from slopgate._types import is_object_dict
+
+from tests.engine.enforcement_modes_support import (
+    _evaluate_post_edit_lint_for_touched_source,
+    _repo_with_touched_source_coverage,
+)
 from tests.test_engine import (
     MonkeyPatch,
     Path,
-    _assert_worktree_marker_copied,
-    _disable_default_post_edit_quality,
-    _enable_failing_post_edit_quality_command,
-    _evaluate_post_edit_bash,
-    _evaluate_pretool_bash,
-    _evaluate_pretool_write,
-    _init_git_worktree,
-    _post_edit_bash_payload,
-    _pretool_bash_payload,
-    _pretool_delete_payload,
-    _pretool_write_payload,
-    _strict_rule_id_sets,
-    _write_config_from_defaults,
-    _write_slopgate,
-    _write_skip_paths_config,
+    assert_worktree_marker_copied,
+    disable_default_post_edit_quality,
+    enable_failing_post_edit_quality_command,
+    evaluate_post_edit_bash,
+    evaluate_pretool_bash,
+    evaluate_pretool_write,
+    init_git_worktree,
+    post_edit_bash_payload,
+    pretool_bash_payload,
+    pretool_write_payload,
+    strict_rule_id_sets,
+    write_config_from_defaults,
+    write_slopgate,
+    write_skip_paths_config,
     assert_blocked,
-    assert_denied_by,
     evaluate_payload,
     finding_ids,
 )
-
-
-def _repo_with_touched_source_coverage(tmp_path: Path) -> Path:
-    repo = tmp_path / "repo_lint_static_refs"
-    src_dir = repo / "src" / "pkg"
-    tests_dir = repo / "tests"
-    src_dir.mkdir(parents=True)
-    tests_dir.mkdir(parents=True)
-    _ = (repo / "slopgate.toml").write_text(
-        "[slopgate]\nenabled = true\n", encoding="utf-8"
-    )
-    _ = (src_dir / "__init__.py").write_text("", encoding="utf-8")
-    _ = (src_dir / "config.py").write_text(
-        "class SessionConfig:\n    pass\n",
-        encoding="utf-8",
-    )
-    _ = (tests_dir / "test_config.py").write_text(
-        "from pkg.config import SessionConfig\n\n"
-        "def test_config_reference():\n"
-        "    assert SessionConfig() is not None\n",
-        encoding="utf-8",
-    )
-    return repo
-
-
-def _evaluate_post_edit_lint_for_touched_source(repo: Path) -> object:
-    payload = {
-        "session_id": "t",
-        "cwd": str(repo),
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Edit",
-        "tool_input": {"file_path": "src/pkg/config.py"},
-        "tool_response": {"filePath": "src/pkg/config.py", "success": True},
-    }
-    return evaluate_payload(payload)
 
 
 class TestEnforcementModes:
@@ -66,21 +35,25 @@ class TestEnforcementModes:
         outside.mkdir(parents=True)
 
         benign = evaluate_payload(
-            _pretool_write_payload(outside, "src/app.py", "print('ok')\n")
+            pretool_write_payload(outside, "src/app.py", "print('ok')\n")
         )
         assert "PY-CODE-001" not in finding_ids(benign)
 
-        protected = evaluate_payload(_pretool_write_payload(outside, "Makefile", "all:\n"))
+        protected = evaluate_payload(
+            pretool_write_payload(outside, "Makefile", "all:\n")
+        )
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(protected)
 
     def test_enrolled_repo_runs_full_strict_stack(self, tmp_path: Path) -> None:
-        repo = _write_slopgate(tmp_path / "repo_strict")
-        always_on_ids, strict_ids = _strict_rule_id_sets(repo)
+        repo = write_slopgate(tmp_path / "repo_strict")
+        always_on_ids, strict_ids = strict_rule_id_sets(repo)
 
         assert "BUILTIN-PROTECTED-PATHS" in always_on_ids, (
             "always-on rule set should retain protected path enforcement"
         )
-        assert "GIT-001" in strict_ids, "repo-strict rule set should include git bypass protection"
+        assert "GIT-001" in strict_ids, (
+            "repo-strict rule set should include git bypass protection"
+        )
         assert any(rule_id.startswith("PY-CODE-") for rule_id in strict_ids), (
             f"repo-strict rule set should include Python code rules, got {strict_ids}"
         )
@@ -97,81 +70,85 @@ class TestEnforcementModes:
         )
 
         candidate = evaluate_payload(
-            _pretool_bash_payload(subdir, 'git commit -n -m "skip checks"')
+            pretool_bash_payload(subdir, 'git commit -n -m "skip checks"')
         )
         assert "GIT-001" in finding_ids(candidate)
 
     def test_worktree_auto_enrolls_from_repo_marker(self, tmp_path: Path) -> None:
-        repo, worktree = _init_git_worktree(tmp_path)
+        repo, worktree = init_git_worktree(tmp_path)
         worktree_marker = worktree / "slopgate.toml"
         worktree_marker.unlink()
 
         result = evaluate_payload(
-            _pretool_bash_payload(worktree, 'git commit -n -m "skip checks"')
+            pretool_bash_payload(worktree, 'git commit -n -m "skip checks"')
         )
 
-        _assert_worktree_marker_copied(repo, worktree_marker)
+        assert_worktree_marker_copied(repo, worktree_marker)
         assert "GIT-001" in finding_ids(result)
 
     def test_enrolled_repo_with_noqualitygate_is_relaxed(self, tmp_path: Path) -> None:
-        repo = _write_slopgate(tmp_path / "repo_relaxed")
+        repo = write_slopgate(tmp_path / "repo_relaxed")
         _ = (repo / ".noslopgate").write_text("", encoding="utf-8")
 
-        strict_candidate = _evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
+        strict_candidate = evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
         assert "GIT-001" not in finding_ids(strict_candidate)
 
-        safety_candidate = _evaluate_pretool_write(repo, "/etc/passwd", "root:x:0:0\n")
+        safety_candidate = evaluate_pretool_write(repo, "/etc/passwd", "root:x:0:0\n")
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(safety_candidate)
 
     def test_skip_paths_suppresses_strict_not_safety(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        repo = _write_slopgate(tmp_path / "repo_skip")
-        _write_skip_paths_config(tmp_path, monkeypatch, repo)
+        repo = write_slopgate(tmp_path / "repo_skip")
+        write_skip_paths_config(tmp_path, monkeypatch, repo)
 
-        strict_candidate = _evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
+        strict_candidate = evaluate_pretool_bash(repo, 'git commit -n -m "skip checks"')
         assert "GIT-001" not in finding_ids(strict_candidate)
 
-        safety_candidate = _evaluate_pretool_write(repo, "Makefile", "all:\n")
+        safety_candidate = evaluate_pretool_write(repo, "Makefile", "all:\n")
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(safety_candidate)
 
-    def test_post_edit_quality_runs_from_repo_root(self, tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-        repo = _write_slopgate(tmp_path / "repo_quality_cwd")
+    def test_post_edit_quality_runs_from_repo_root(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        repo = write_slopgate(tmp_path / "repo_quality_cwd")
         subdir = repo / "nested"
         subdir.mkdir(parents=True)
-        _write_config_from_defaults(
+        write_config_from_defaults(
             tmp_path,
             monkeypatch,
-            _enable_failing_post_edit_quality_command,
+            enable_failing_post_edit_quality_command,
         )
 
-        result = _evaluate_post_edit_bash(subdir)
+        result = evaluate_post_edit_bash(subdir)
         assert "QUALITY-POST-001" in finding_ids(result)
-        finding = next(item for item in result.findings if item.rule_id == "QUALITY-POST-001")
+        finding = next(
+            item for item in result.findings if item.rule_id == "QUALITY-POST-001"
+        )
         assert finding.message is not None
         assert str(repo.resolve()) in finding.message
 
     def test_post_edit_quality_skips_readonly_shell_probe_outside_repo(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        repo = _write_slopgate(tmp_path / "repo_quality_readonly_shell")
+        repo = write_slopgate(tmp_path / "repo_quality_readonly_shell")
         asset = tmp_path / "canvas" / "forcedash" / "assets" / "index-rTQrJY9a.js"
         asset.parent.mkdir(parents=True)
         _ = asset.write_text("const TopRules = 'ComposedChart';\n", encoding="utf-8")
 
         def fail_js_quality(defaults: dict[str, object]) -> None:
             post_edit_quality = defaults["post_edit_quality"]
-            assert isinstance(post_edit_quality, dict)
+            assert is_object_dict(post_edit_quality)
             post_edit_quality["enabled"] = True
             post_edit_quality["block_on_failure"] = True
             post_edit_quality["commands_by_language"] = {"js_ts": ["false"]}
 
-        _write_config_from_defaults(tmp_path, monkeypatch, fail_js_quality)
+        write_config_from_defaults(tmp_path, monkeypatch, fail_js_quality)
 
-        result = _evaluate_post_edit_bash(
+        result = evaluate_post_edit_bash(
             repo,
-            f"if grep -c \"Top Pressure Rules\\|Pareto\\|TopRules\\|ComposedChart\" {asset} 2>&1; "
-            "then echo \"FOUND\"; else echo \"NOT FOUND\"; fi",
+            f'if grep -c "Top Pressure Rules\\|Pareto\\|TopRules\\|ComposedChart" {asset} 2>&1; '
+            'then echo "FOUND"; else echo "NOT FOUND"; fi',
         )
 
         assert "QUALITY-POST-001" not in finding_ids(result)
@@ -184,16 +161,16 @@ class TestEnforcementModes:
         repo root. This prevents the Bash wrapper from running
         ``npm run lint`` from ``/`` during read-only probes such as
         Playwright browser geometry checks."""
-        repo = _write_slopgate(tmp_path / "repo_no_package_json")
+        repo = write_slopgate(tmp_path / "repo_no_package_json")
 
         def enable_npm_quality(defaults: dict[str, object]) -> None:
             post_edit_quality = defaults["post_edit_quality"]
-            assert isinstance(post_edit_quality, dict)
+            assert is_object_dict(post_edit_quality)
             post_edit_quality["enabled"] = True
             post_edit_quality["block_on_failure"] = True
             post_edit_quality["commands_by_language"] = {"js_ts": ["npm run lint"]}
 
-        _write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
+        write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
 
         # A .js file outside the repo ensures languages includes js_ts
         # but no package.json exists in the path ancestry or repo root.
@@ -201,7 +178,7 @@ class TestEnforcementModes:
         asset.parent.mkdir(parents=True)
         _ = asset.write_text("const TopRules = 'ComposedChart';\n")
 
-        result = _evaluate_post_edit_bash(
+        result = evaluate_post_edit_bash(
             repo,
             f"npx playwright open {asset} 2>&1 || true",
         )
@@ -216,30 +193,25 @@ class TestEnforcementModes:
         """QUALITY-POST-001 must fire for mutating bash in an npm project
         that has a package.json."""
         repo = tmp_path / "repo_with_package_json"
-        _write_slopgate(repo)
-        _ = (repo / "package.json").write_text(
-            '{"scripts": {"lint": "exit 1"}}\n'
-        )
+        write_slopgate(repo)
+        _ = (repo / "package.json").write_text('{"scripts": {"lint": "exit 1"}}\n')
 
         def enable_npm_quality(defaults: dict[str, object]) -> None:
             post_edit_quality = defaults["post_edit_quality"]
-            assert isinstance(post_edit_quality, dict)
+            assert is_object_dict(post_edit_quality)
             post_edit_quality["enabled"] = True
             post_edit_quality["block_on_failure"] = True
             post_edit_quality["commands_by_language"] = {"js_ts": ["npm run lint"]}
 
-        _write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
+        write_config_from_defaults(tmp_path, monkeypatch, enable_npm_quality)
 
         result = evaluate_payload(
-            _post_edit_bash_payload(
+            post_edit_bash_payload(
                 repo,
                 "echo 'export const x = 1;' > app.js",
             )
         )
-        nm_findings = [
-            f for f in result.findings
-            if f.rule_id == "QUALITY-POST-001"
-        ]
+        nm_findings = [f for f in result.findings if f.rule_id == "QUALITY-POST-001"]
         assert nm_findings, (
             "Mutating bash in an npm project with package.json should "
             f"fire QUALITY-POST-001; got {finding_ids(result)}"
@@ -248,7 +220,7 @@ class TestEnforcementModes:
     def test_repo_toml_can_enable_post_edit_quality(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        repo = _write_slopgate(
+        repo = write_slopgate(
             tmp_path / "repo_quality_gate_runtime",
             (
                 "[slopgate]\n"
@@ -257,17 +229,19 @@ class TestEnforcementModes:
                 "enabled = true\n"
                 "block_on_failure = true\n\n"
                 "[post_edit_quality.commands_by_language]\n"
-                "python = [\"false\"]\n"
+                'python = ["false"]\n'
             ),
         )
-        _write_config_from_defaults(
-            tmp_path, monkeypatch, _disable_default_post_edit_quality
+        write_config_from_defaults(
+            tmp_path, monkeypatch, disable_default_post_edit_quality
         )
 
-        result = evaluate_payload(_post_edit_bash_payload(repo))
+        result = evaluate_payload(post_edit_bash_payload(repo))
         assert "QUALITY-POST-001" in finding_ids(result)
 
-    def test_post_edit_lint_rule_reports_touched_file_issues(self, tmp_path: Path) -> None:
+    def test_post_edit_lint_rule_reports_touched_file_issues(
+        self, tmp_path: Path
+    ) -> None:
         repo = tmp_path / "repo_lint_touched"
         tests_dir = repo / "tests"
         tests_dir.mkdir(parents=True)
@@ -314,7 +288,10 @@ class TestEnforcementModes:
             "cwd": str(nested),
             "hook_event_name": "PostToolUse",
             "tool_name": "Edit",
-            "tool_input": {"file_path": "bad.py", "content": "def broken(:\n    pass\n"},
+            "tool_input": {
+                "file_path": "bad.py",
+                "content": "def broken(:\n    pass\n",
+            },
             "tool_response": {"filePath": "bad.py", "success": True},
         }
         result = evaluate_payload(payload)
@@ -342,4 +319,3 @@ class TestEnforcementModes:
         result = evaluate_payload(payload)
         ast_findings = [f for f in result.findings if f.rule_id == "PY-AST-001"]
         assert not ast_findings
-

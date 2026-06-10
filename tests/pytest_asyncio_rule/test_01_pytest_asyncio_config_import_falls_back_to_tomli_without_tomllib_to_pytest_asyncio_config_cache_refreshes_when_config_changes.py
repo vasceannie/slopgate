@@ -5,12 +5,12 @@ from tests.test_pytest_asyncio_rule import (
     PYTEST_ASYNCIO_TEMPLATE,
     Path,
     UNMARKED_CLIENT_TEST,
-    _assert_denied_by_pytest_asyncio,
-    _evaluate_test_client,
-    _pytest_asyncio_denials,
-    _repo_root,
-    _write_payload,
-    _write_pytest_mode,
+    assert_denied_by_pytest_asyncio,
+    evaluate_test_client,
+    pytest_asyncio_denials,
+    repo_root,
+    write_payload,
+    write_pytest_mode,
     evaluate_payload,
     pytest,
     subprocess,
@@ -18,8 +18,9 @@ from tests.test_pytest_asyncio_rule import (
     textwrap,
 )
 
+
 def test_pytest_asyncio_config_import_falls_back_to_tomli_without_tomllib() -> None:
-    script = r'''
+    script = r"""
 import builtins
 import importlib
 import sys
@@ -36,7 +37,7 @@ sys.modules.pop("tomllib", None)
 sys.modules.pop("slopgate.rules.python_ast._pytest_asyncio_config", None)
 module = importlib.import_module("slopgate.rules.python_ast._pytest_asyncio_config")
 assert module.pytest_asyncio_mode
-'''
+"""
     result = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(script)],
         cwd=BUNDLE_ROOT,
@@ -47,10 +48,15 @@ assert module.pytest_asyncio_mode
 
     assert result.returncode == 0, result.stderr
 
+
 def test_guidance_template_includes_session_scoped_resource_pattern() -> None:
-    assert '@pytest_asyncio.fixture(scope="session", loop_scope="session")' in PYTEST_ASYNCIO_TEMPLATE
+    assert (
+        '@pytest_asyncio.fixture(scope="session", loop_scope="session")'
+        in PYTEST_ASYNCIO_TEMPLATE
+    )
     assert "async def shared_async_client" in PYTEST_ASYNCIO_TEMPLATE
     assert "not version-dependent" in PYTEST_ASYNCIO_TEMPLATE
+
 
 def test_async_test_requires_pytest_mark_asyncio() -> None:
     code = """
@@ -58,10 +64,11 @@ async def test_fetches_client():
     result = await client.fetch()
     assert result.ok, f"expected ok result, got {result!r}"
 """
-    result = evaluate_payload(_write_payload("tests/test_client.py", code))
+    result = evaluate_payload(write_payload("tests/test_client.py", code))
 
-    reason = _assert_denied_by_pytest_asyncio(result)
+    reason = assert_denied_by_pytest_asyncio(result)
     assert "@pytest.mark.asyncio" in reason
+
 
 @pytest.mark.parametrize(
     "code",
@@ -159,9 +166,10 @@ async def test_fetches_client():
     ],
 )
 def test_marked_async_test_variants_are_compliant(code: str) -> None:
-    result = evaluate_payload(_write_payload("tests/test_client.py", code))
+    result = evaluate_payload(write_payload("tests/test_client.py", code))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_helper_class_named_non_test_is_not_collected_as_pytest_class() -> None:
     code = """
@@ -169,9 +177,10 @@ class Helper:
     async def test_named_helper(self):
         return await load_value()
 """
-    result = evaluate_payload(_write_payload("tests/test_client.py", code))
+    result = evaluate_payload(write_payload("tests/test_client.py", code))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_async_fixture_named_test_prefix_is_not_treated_as_test_function() -> None:
     code = """
@@ -181,9 +190,10 @@ import pytest_asyncio
 async def test_client():
     return await make_client()
 """
-    result = evaluate_payload(_write_payload("tests/conftest.py", code))
+    result = evaluate_payload(write_payload("tests/conftest.py", code))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_async_fixture_uses_pytest_asyncio_fixture() -> None:
     code = """
@@ -193,15 +203,16 @@ import pytest
 async def client():
     return await make_client()
 """
-    result = evaluate_payload(_write_payload("tests/conftest.py", code))
+    result = evaluate_payload(write_payload("tests/conftest.py", code))
 
-    reason = _assert_denied_by_pytest_asyncio(result)
+    reason = assert_denied_by_pytest_asyncio(result)
     assert "@pytest_asyncio.fixture" in reason
+
 
 def test_pytest_asyncio_auto_mode_allows_plain_async_fixture_and_unmarked_test(
     tmp_path: Path,
 ) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
+    repo = repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
     test_code = UNMARKED_CLIENT_TEST
     fixture_code = """
 import pytest
@@ -210,29 +221,36 @@ import pytest
 async def client():
     return await make_client()
 """
-    test_result = evaluate_payload(_write_payload("tests/test_client.py", test_code, repo))
-    fixture_result = evaluate_payload(_write_payload("tests/conftest.py", fixture_code, repo))
+    test_result = evaluate_payload(
+        write_payload("tests/test_client.py", test_code, repo)
+    )
+    fixture_result = evaluate_payload(
+        write_payload("tests/conftest.py", fixture_code, repo)
+    )
 
-    assert _pytest_asyncio_denials(test_result) == []
-    assert _pytest_asyncio_denials(fixture_result) == []
+    assert pytest_asyncio_denials(test_result) == []
+    assert pytest_asyncio_denials(fixture_result) == []
+
 
 def test_pytest_asyncio_auto_mode_addopts_equals_allows_unmarked_test(
     tmp_path: Path,
 ) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\naddopts = --asyncio-mode=auto\n")
+    repo = repo_root(tmp_path, "[pytest]\naddopts = --asyncio-mode=auto\n")
     code = UNMARKED_CLIENT_TEST
-    result = evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+    result = evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_pytest_asyncio_auto_mode_addopts_separate_allows_unmarked_test(
     tmp_path: Path,
 ) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\naddopts = --asyncio-mode auto\n")
+    repo = repo_root(tmp_path, "[pytest]\naddopts = --asyncio-mode auto\n")
     code = UNMARKED_CLIENT_TEST
-    result = evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+    result = evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 @pytest.mark.parametrize(
     ("config_name", "pytest_config"),
@@ -247,43 +265,48 @@ def test_auto_mode_config_files_allow_unmarked_test(
     config_name: str,
     pytest_config: str,
 ) -> None:
-    repo = _repo_root(tmp_path, pytest_config, config_name=config_name)
+    repo = repo_root(tmp_path, pytest_config, config_name=config_name)
     code = UNMARKED_CLIENT_TEST
-    result = evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+    result = evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_pytest_ini_takes_precedence_over_pyproject_toml(tmp_path: Path) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
+    repo = repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
     _ = (repo / "pyproject.toml").write_text(
-        "[tool.pytest.ini_options]\nasyncio_mode = \"strict\"\n",
+        '[tool.pytest.ini_options]\nasyncio_mode = "strict"\n',
         encoding="utf-8",
     )
     code = UNMARKED_CLIENT_TEST
-    result = evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+    result = evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
-    assert _pytest_asyncio_denials(result) == []
+    assert pytest_asyncio_denials(result) == []
+
 
 def test_empty_pytest_ini_stops_pyproject_toml_fallback(tmp_path: Path) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\n")
+    repo = repo_root(tmp_path, "[pytest]\n")
     _ = (repo / "pyproject.toml").write_text(
-        "[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\n",
+        '[tool.pytest.ini_options]\nasyncio_mode = "auto"\n',
         encoding="utf-8",
     )
     code = UNMARKED_CLIENT_TEST
-    result = evaluate_payload(_write_payload("tests/test_client.py", code, repo))
+    result = evaluate_payload(write_payload("tests/test_client.py", code, repo))
 
-    reason = _assert_denied_by_pytest_asyncio(result)
+    reason = assert_denied_by_pytest_asyncio(result)
     assert "@pytest.mark.asyncio" in reason
 
-def test_pytest_asyncio_config_cache_refreshes_when_config_changes(tmp_path: Path) -> None:
-    repo = _repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
+
+def test_pytest_asyncio_config_cache_refreshes_when_config_changes(
+    tmp_path: Path,
+) -> None:
+    repo = repo_root(tmp_path, "[pytest]\nasyncio_mode = auto\n")
     code = UNMARKED_CLIENT_TEST
-    first_result = _evaluate_test_client(repo, code)
-    assert _pytest_asyncio_denials(first_result) == []
+    first_result = evaluate_test_client(repo, code)
+    assert pytest_asyncio_denials(first_result) == []
 
-    _write_pytest_mode(repo, "strict")
-    second_result = _evaluate_test_client(repo, code)
+    write_pytest_mode(repo, "strict")
+    second_result = evaluate_test_client(repo, code)
 
-    reason = _assert_denied_by_pytest_asyncio(second_result)
+    reason = assert_denied_by_pytest_asyncio(second_result)
     assert "@pytest.mark.asyncio" in reason

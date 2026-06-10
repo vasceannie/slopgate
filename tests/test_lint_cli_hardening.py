@@ -7,14 +7,22 @@ from pathlib import Path
 
 import pytest
 
-from slopgate.cli.lint import _LintRunTotals, _TallyInput, _print_lint_summary, _tally_rule, cmd_lint
+from slopgate.cli.lint import (
+    LintRunTotals,
+    TallyInput,
+    print_lint_summary,
+    tally_rule,
+    cmd_lint,
+)
 from slopgate.lint._baseline import Violation, assert_no_new_violations
 from slopgate.lint._config import reset_config
 from slopgate.lint._details import format_violation_details
 
 
 def _write_clean_project(root: Path) -> Path:
-    (root / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+    (root / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
     src_pkg = root / "src" / "pkg"
     src_pkg.mkdir(parents=True)
     (src_pkg / "clean.py").write_text(
@@ -40,7 +48,9 @@ def _assert_lint_check_forces_repo_root_scope(
         "✓ No violations",
     ]
     missing_lines = [line for line in expected_lines if line not in output]
-    assert missing_lines == [], "lint check should ignore changed scope and scan repo root"
+    assert missing_lines == [], (
+        "lint check should ignore changed scope and scan repo root"
+    )
 
 
 def _assert_prescriptive_details_for_oversized_module(output: str, result: int) -> None:
@@ -53,7 +63,9 @@ def _assert_prescriptive_details_for_oversized_module(output: str, result: int) 
         "prognosis: one module owns multiple responsibilities",
     ]
     missing_details = [detail for detail in expected_details if detail not in output]
-    assert missing_details == [], "--details should emit prescriptive oversized-module block"
+    assert missing_details == [], (
+        "--details should emit prescriptive oversized-module block"
+    )
 
 
 def _assert_oversized_module_scaffold(block: str) -> None:
@@ -66,7 +78,9 @@ def _assert_oversized_module_scaffold(block: str) -> None:
         "models.py, parsing.py, services.py",
     ]
     missing_scaffold = [entry for entry in expected_scaffold if entry not in block]
-    assert missing_scaffold == [], "oversized module detail block should name split scaffold"
+    assert missing_scaffold == [], (
+        "oversized module detail block should name split scaffold"
+    )
 
 
 def _assert_type_suppression_detail_block(block: str) -> None:
@@ -77,7 +91,9 @@ def _assert_type_suppression_detail_block(block: str) -> None:
         "Protocol, TypedDict, overload, local stub",
     ]
     missing_details = [detail for detail in expected_details if detail not in block]
-    assert missing_details == [], "type suppression detail block should include metadata and prognosis"
+    assert missing_details == [], (
+        "type suppression detail block should include metadata and prognosis"
+    )
 
 
 def _write_lint_project_with_file(root: Path, rel_path: str, content: str) -> None:
@@ -91,7 +107,7 @@ def _write_lint_project_with_file(root: Path, rel_path: str, content: str) -> No
     (root / "tests").mkdir(exist_ok=True)
 
 
-def _run_lint_check(
+def run_lint_check(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     cwd: Path,
@@ -115,7 +131,7 @@ def test_lint_check_discovers_project_root_and_forces_all_scope(
 ) -> None:
     nested_cwd = _write_clean_project(tmp_path)
     monkeypatch.setenv("QUALITY_SCOPE", "changed")
-    result, output = _run_lint_check(monkeypatch, capsys, nested_cwd, details=False)
+    result, output = run_lint_check(monkeypatch, capsys, nested_cwd, details=False)
 
     assert result == 0
     _assert_lint_check_forces_repo_root_scope(output, tmp_path, result)
@@ -131,7 +147,7 @@ def test_lint_check_details_outputs_prescriptive_blocks(
         "src/large.py",
         "from __future__ import annotations\n" + "# filler\n" * 370,
     )
-    result, output = _run_lint_check(monkeypatch, capsys, tmp_path, details=True)
+    result, output = run_lint_check(monkeypatch, capsys, tmp_path, details=True)
 
     assert result == 1
     _assert_prescriptive_details_for_oversized_module(output, result)
@@ -149,7 +165,7 @@ def test_lint_check_flags_ty_ignore_as_type_suppression(
         "def identity(value: object) -> object:\n"
         "    return value  # ty: ignore[possibly-unbound]\n",
     )
-    result, output = _run_lint_check(monkeypatch, capsys, tmp_path, details=True)
+    result, output = run_lint_check(monkeypatch, capsys, tmp_path, details=True)
 
     assert result == 1
     assert "[NEW] type-suppression" in output
@@ -214,7 +230,7 @@ def test_lint_details_formatter_reports_metadata_and_type_prognosis() -> None:
 def test_lint_summary_clean_repo_says_no_violations(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert _print_lint_summary(_LintRunTotals(0, 0, 0), color=False) == 0
+    assert print_lint_summary(LintRunTotals(0, 0, 0), color=False) == 0
     output = capsys.readouterr().out
     assert "✓ No violations" in output
     assert "baselines.json" not in output
@@ -234,8 +250,8 @@ def test_lint_summary_prints_existing_literal_locations(
         metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
     )
 
-    _ = _tally_rule(
-        _TallyInput(
+    _ = tally_rule(
+        TallyInput(
             rule_name="repeated-string-literal",
             violations=[violation],
             baseline={},
@@ -260,8 +276,8 @@ def test_lint_summary_falls_back_to_metadata_locations_without_detail_suffix(
         metadata={"existing_locations": ["src/a.py:5", "src/b.py:8"]},
     )
 
-    _ = _tally_rule(
-        _TallyInput(
+    _ = tally_rule(
+        TallyInput(
             rule_name="repeated-string-literal",
             violations=[violation],
             baseline={},

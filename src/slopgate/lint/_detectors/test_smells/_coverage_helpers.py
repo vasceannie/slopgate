@@ -1,27 +1,27 @@
 """Detectors for test-specific smells."""
 
 from __future__ import annotations
-
 import json
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
-from slopgate.constants import (
-    PRODUCTION_SYMBOL_PREVIEW_LIMIT,
-)
+from slopgate.constants import PRODUCTION_SYMBOL_PREVIEW_LIMIT
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
+from ._production_symbols import (
+    COVERAGE_JSON_NAMES,
+    COVERAGE_XML_NAMES,
+    ProductionSymbol,
+)
 
-from ._production_symbols import _COVERAGE_JSON_NAMES as _COVERAGE_JSON_NAMES, _COVERAGE_XML_NAMES as _COVERAGE_XML_NAMES, _ProductionSymbol as _ProductionSymbol
 
-
-def _metadata_int(violation: Violation, key: str) -> int:
+def metadata_int(violation: Violation, key: str) -> int:
     value = violation.metadata.get(key)
     return value if isinstance(value, int) else 0
 
 
-def _coverage_rel_path(path_text: str) -> str | None:
+def coverage_rel_path(path_text: str) -> str | None:
     if not path_text:
         return None
     root = get_config().project_root
@@ -38,7 +38,7 @@ def _coverage_rel_path(path_text: str) -> str | None:
         return normalized_text
 
 
-def _coverage_percent_from_summary(summary: dict[str, object]) -> int | None:
+def coverage_percent_from_summary(summary: dict[str, object]) -> int | None:
     percent_obj = summary.get("percent_covered")
     if isinstance(percent_obj, (int, float)):
         return int(round(percent_obj))
@@ -51,7 +51,7 @@ def _coverage_percent_from_summary(summary: dict[str, object]) -> int | None:
         return None
 
 
-def _coverage_percent_from_json_file(path: Path) -> dict[str, int]:
+def coverage_percent_from_json_file(path: Path) -> dict[str, int]:
     try:
         data_obj: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -71,14 +71,14 @@ def _coverage_percent_from_json_file(path: Path) -> dict[str, int]:
         summary_obj = raw_entry.get("summary")
         if not isinstance(summary_obj, dict):
             continue
-        percent = _coverage_percent_from_summary(cast(dict[str, object], summary_obj))
-        rel = _coverage_rel_path(raw_path) if percent is not None else None
+        percent = coverage_percent_from_summary(cast(dict[str, object], summary_obj))
+        rel = coverage_rel_path(raw_path) if percent is not None else None
         if rel is not None and percent is not None:
             coverage[rel] = percent
     return coverage
 
 
-def _xml_source_roots(root_node: ET.Element) -> list[Path]:
+def _xml_source_roots(root_node: xml.etree.ElementTree.Element) -> list[Path]:
     project_root = get_config().project_root
     roots: list[Path] = []
     for source_node in root_node.findall(".//source"):
@@ -94,22 +94,22 @@ def _xml_source_roots(root_node: ET.Element) -> list[Path]:
 
 def _coverage_xml_rel_paths(filename: str, source_roots: list[Path]) -> set[str]:
     rel_paths: set[str] = set()
-    rel = _coverage_rel_path(filename)
+    rel = coverage_rel_path(filename)
     if rel is not None:
         rel_paths.add(rel)
     if Path(filename).is_absolute():
         return rel_paths
     for source_root in source_roots:
-        source_rel = _coverage_rel_path((source_root / filename).as_posix())
+        source_rel = coverage_rel_path((source_root / filename).as_posix())
         if source_rel is not None:
             rel_paths.add(source_rel)
     return rel_paths
 
 
-def _coverage_percent_from_xml_file(path: Path) -> dict[str, int]:
+def coverage_percent_from_xml_file(path: Path) -> dict[str, int]:
     try:
-        root_node = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
+        root_node = xml.etree.ElementTree.parse(path).getroot()
+    except (OSError, xml.etree.ElementTree.ParseError):
         return {}
     source_roots = _xml_source_roots(root_node)
     coverage: dict[str, int] = {}
@@ -128,29 +128,29 @@ def _coverage_percent_from_xml_file(path: Path) -> dict[str, int]:
     return coverage
 
 
-def _runtime_coverage_by_rel() -> tuple[str, dict[str, int]]:
+def runtime_coverage_by_rel() -> tuple[str, dict[str, int]]:
     """Return existing runtime coverage report data if pytest-cov already wrote it.
 
     The linter intentionally does not run tests; it only consumes coverage.json or
     coverage.xml artifacts that are already present in the project root.
     """
     root = get_config().project_root
-    for name in _COVERAGE_JSON_NAMES:
-        coverage = _coverage_percent_from_json_file(root / name)
+    for name in COVERAGE_JSON_NAMES:
+        coverage = coverage_percent_from_json_file(root / name)
         if coverage:
-            return name, coverage
-    for name in _COVERAGE_XML_NAMES:
-        coverage = _coverage_percent_from_xml_file(root / name)
+            return (name, coverage)
+    for name in COVERAGE_XML_NAMES:
+        coverage = coverage_percent_from_xml_file(root / name)
         if coverage:
-            return name, coverage
-    return "static-reference", {}
+            return (name, coverage)
+    return ("static-reference", {})
 
 
 @dataclass(frozen=True, slots=True)
-class _CoverageInputs:
+class CoverageInputs:
     relative_path: str
-    symbols: list[_ProductionSymbol]
-    referenced: list[_ProductionSymbol]
+    symbols: list[ProductionSymbol]
+    referenced: list[ProductionSymbol]
     missing: list[str]
     coverage_source: str
     runtime_coverage: dict[str, int]
@@ -160,16 +160,11 @@ class _CoverageInputs:
         return int(round(100 * len(self.referenced) / len(self.symbols)))
 
 
-def _runtime_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
+def runtime_coverage_violation(inputs: CoverageInputs) -> Violation | None:
     coverage = inputs.runtime_coverage.get(inputs.relative_path, 0)
     if coverage >= 80:
         return None
-    detail = (
-        f"runtime_line_coverage={coverage}% from {inputs.coverage_source}; "
-        f"static_test_reference_coverage={inputs.static_coverage}% "
-        f"({len(inputs.referenced)}/{len(inputs.symbols)} public symbols referenced); "
-        f"unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]) or 'none'}"
-    )
+    detail = f"runtime_line_coverage={coverage}% from {inputs.coverage_source}; static_test_reference_coverage={inputs.static_coverage}% ({len(inputs.referenced)}/{len(inputs.symbols)} public symbols referenced); unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]) or 'none'}"
     metadata = dict[str, object]()
     metadata["coverage_kind"] = "runtime-line"
     metadata["coverage_source"] = inputs.coverage_source
@@ -185,7 +180,7 @@ def _runtime_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
     )
 
 
-def _static_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
+def static_coverage_violation(inputs: CoverageInputs) -> Violation | None:
     coverage = inputs.static_coverage
     if coverage >= 50:
         return None
@@ -194,11 +189,7 @@ def _static_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
         if inputs.coverage_source == "static-reference"
         else f"not present in {inputs.coverage_source}"
     )
-    detail = (
-        f"static_test_reference_coverage={coverage}% "
-        f"({len(inputs.referenced)}/{len(inputs.symbols)} public symbols referenced); "
-        f"unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])}; {coverage_note}"
-    )
+    detail = f"static_test_reference_coverage={coverage}% ({len(inputs.referenced)}/{len(inputs.symbols)} public symbols referenced); unreferenced={', '.join(inputs.missing[:PRODUCTION_SYMBOL_PREVIEW_LIMIT])}; {coverage_note}"
     metadata = dict[str, object]()
     metadata["coverage_kind"] = "static-reference"
     metadata["coverage_percent"] = coverage
@@ -212,9 +203,9 @@ def _static_coverage_violation(inputs: _CoverageInputs) -> Violation | None:
     )
 
 
-def _coverage_violation(inputs: _CoverageInputs) -> Violation | None:
+def coverage_violation(inputs: CoverageInputs) -> Violation | None:
     if inputs.runtime_coverage:
         if inputs.relative_path in inputs.runtime_coverage:
-            return _runtime_coverage_violation(inputs)
+            return runtime_coverage_violation(inputs)
         return None
-    return _static_coverage_violation(inputs)
+    return static_coverage_violation(inputs)

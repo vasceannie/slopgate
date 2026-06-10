@@ -3,6 +3,7 @@
 Ensures consistent use of a project-wide logger factory and variable name.
 Flags direct ``logging.getLogger()`` calls and disallowed logger variable names.
 """
+
 from __future__ import annotations
 
 import ast
@@ -110,7 +111,7 @@ def _wrong_logger_name_violation(
     name = target.id
     if name not in context.disallowed:
         return None
-    if not _is_logger_call(node.value):
+    if not is_logger_call(node.value):
         return None
     return Violation(
         rule="wrong-logger-name",
@@ -150,7 +151,7 @@ def _collect_wrong_logger_name_violations(
     return violations
 
 
-def _is_logger_call(node: ast.AST) -> bool:
+def is_logger_call(node: ast.AST) -> bool:
     """Heuristic: is *node* a call that returns a logger?"""
     if not isinstance(node, ast.Call):
         return False

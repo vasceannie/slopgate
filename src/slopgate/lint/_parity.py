@@ -4,6 +4,7 @@ This module is intentionally declarative: it does not decide enforcement by itse
 It exists so tests can fail loudly when a new lint collector or runtime hook rule is
 added without an explicit coverage classification.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -200,9 +201,7 @@ HOOK_RULE_BASELINE_COUNTERPARTS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _classified_names(
-    categories: dict[ParityCategory, frozenset[str]]
-) -> set[str]:
+def _classified_names(categories: dict[ParityCategory, frozenset[str]]) -> set[str]:
     names: set[str] = set()
     for category_names in categories.values():
         names.update(category_names)

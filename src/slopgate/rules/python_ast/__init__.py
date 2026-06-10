@@ -1,5 +1,27 @@
 from __future__ import annotations
 
+__all__ = [
+    "PythonCyclomaticComplexityRule",
+    "PythonAstHealthRule",
+    "PythonBoundaryLoggingRule",
+    "PythonBroadExceptLoggerRule",
+    "PythonDeadCodeRule",
+    "PythonDeepNestingRule",
+    "PythonFeatureEnvyRule",
+    "PythonFlatFileSiblingsRule",
+    "PythonGodClassRule",
+    "PythonImportAliasRule",
+    "PythonImportFanoutRule",
+    "PythonLongLineRule",
+    "PythonLongMethodRule",
+    "PythonLongParameterRule",
+    "PythonModuleSizeRule",
+    "PythonPrivateImportChainRule",
+    "PythonPytestAsyncioRule",
+    "PythonSilentExceptRule",
+    "PythonThinWrapperRule",
+]
+
 from ._pytest_asyncio import PythonPytestAsyncioRule
 from ._rules import (
     PythonAstHealthRule,

@@ -88,7 +88,11 @@ def _executable_is_legacy_slopgate(token: str) -> bool:
 
 def _executable_is_python(token: str) -> bool:
     basename = _command_basename(token)
-    return basename == "python" or basename == "python.exe" or basename.startswith("python3")
+    return (
+        basename == "python"
+        or basename == "python.exe"
+        or basename.startswith("python3")
+    )
 
 
 def _argv_invokes_slopgate_handle(argv: list[str]) -> bool:
@@ -139,7 +143,7 @@ def filter_owned_hook_commands(entry: object) -> dict[str, object] | None:
     hook_entries = object_list(entry_dict.get("hooks"))
     if not hook_entries:
         return dict(entry_dict)
-    kept_hooks = []
+    kept_hooks: list[dict[str, object]] = []
     for hook in hook_entries:
         hook_dict = object_dict(hook)
         if not hook_dict:
@@ -171,7 +175,7 @@ def merge_owned_hooks(
     for event, entries in object_dict(existing_hooks).items():
         merged[event] = coerce_hook_entries(entries)
     for event, entries in managed_hooks.items():
-        preserved = []
+        preserved: list[dict[str, object]] = []
         for entry in merged.get(event, []):
             filtered_entry = filter_owned_hook_commands(entry)
             if filtered_entry is not None:
@@ -186,7 +190,7 @@ def remove_owned_hooks(existing_hooks: object) -> dict[str, list[dict[str, objec
     if not hooks_dict:
         return remaining
     for event, entries in hooks_dict.items():
-        kept = []
+        kept: list[dict[str, object]] = []
         for entry in coerce_hook_entries(entries):
             filtered_entry = filter_owned_hook_commands(entry)
             if filtered_entry is not None:
@@ -196,7 +200,9 @@ def remove_owned_hooks(existing_hooks: object) -> dict[str, list[dict[str, objec
     return remaining
 
 
-def require_json_object(path: Path, label: str, *, action: str) -> dict[str, object] | None:
+def require_json_object(
+    path: Path, label: str, *, action: str
+) -> dict[str, object] | None:
     try:
         parsed = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except json.JSONDecodeError:

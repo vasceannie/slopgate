@@ -8,4 +8,10 @@ __all__ = [
     "save_config",
 ]
 
+__all__ = [
+    "IsxError",
+    "load_config",
+    "save_config",
+]
+
 from slopgate.search.config import IsxError, load_config, save_config

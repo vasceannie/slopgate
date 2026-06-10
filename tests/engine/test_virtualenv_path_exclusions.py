@@ -7,7 +7,7 @@ from slopgate.engine import evaluate_payload
 from tests.support import finding_ids
 
 
-def _write_slopgate(repo: Path) -> Path:
+def write_slopgate(repo: Path) -> Path:
     repo.mkdir(parents=True)
     _ = (repo / "slopgate.toml").write_text(
         "[slopgate]\nenabled = true\n", encoding="utf-8"
@@ -16,7 +16,7 @@ def _write_slopgate(repo: Path) -> Path:
 
 
 def test_post_edit_lint_rule_skips_virtualenv_lib_inspection(tmp_path: Path) -> None:
-    repo = _write_slopgate(tmp_path / "repo_lint_virtualenv")
+    repo = write_slopgate(tmp_path / "repo_lint_virtualenv")
     target = (
         tmp_path
         / ".venvs"
@@ -29,8 +29,7 @@ def test_post_edit_lint_rule_skips_virtualenv_lib_inspection(tmp_path: Path) -> 
     )
     target.parent.mkdir(parents=True)
     _ = target.write_text(
-        "def noisy(a, b, c, d, e, f, g):\n"
-        "    return a + b + c + d + e + f + g\n",
+        "def noisy(a, b, c, d, e, f, g):\n    return a + b + c + d + e + f + g\n",
         encoding="utf-8",
     )
     payload = {
@@ -47,7 +46,7 @@ def test_post_edit_lint_rule_skips_virtualenv_lib_inspection(tmp_path: Path) -> 
 
 
 def test_python_ast_parse_failure_skips_dot_venvs_paths(tmp_path: Path) -> None:
-    repo = _write_slopgate(tmp_path / "repo_ast_virtualenv")
+    repo = write_slopgate(tmp_path / "repo_ast_virtualenv")
     path_value = ".venvs/job-hunter/lib/python3.12/site-packages/pkg/bad.py"
     payload = {
         "session_id": "t",

@@ -5,17 +5,22 @@ from collections.abc import Iterable
 from slopgate._types import ObjectMapping, object_dict, object_list
 from slopgate.models import ContentTarget
 
-from ._basic import extract_content_from_mapping, extract_path_from_mapping, first_present
+from ._basic import (
+    extract_content_from_mapping,
+    extract_path_from_mapping,
+    first_present,
+)
 from ._patches import extract_added_patch_content, parse_patch_candidate_paths
 
-def _tool_input_path(tool_input: ObjectMapping, payload: ObjectMapping) -> str:
+
+def tool_input_path(tool_input: ObjectMapping, payload: ObjectMapping) -> str:
     merged = dict(tool_input)
     _ = merged.setdefault("resolved_file_path", payload.get("resolved_file_path"))
     _ = merged.setdefault("original_file_path", payload.get("original_file_path"))
     return extract_path_from_mapping(merged)
 
 
-def _tool_input_content_target(
+def tool_input_content_target(
     tool_input: ObjectMapping, path_value: str
 ) -> ContentTarget | None:
     content_value = extract_content_from_mapping(tool_input)
@@ -24,7 +29,7 @@ def _tool_input_content_target(
     return ContentTarget(path=path_value, content=content_value, source="tool_input")
 
 
-def _multi_edit_content_targets(
+def multi_edit_content_targets(
     tool_input: ObjectMapping, fallback_path: str
 ) -> list[ContentTarget]:
     targets: list[ContentTarget] = []
@@ -47,7 +52,7 @@ def _multi_edit_content_targets(
     return targets
 
 
-def _patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
+def patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
     patch_blob = first_present(tool_input, ("patch", "patchText", "patch_text"))
     if not patch_blob:
         return []
@@ -58,7 +63,7 @@ def _patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
     ]
 
 
-def _unique_content_targets(targets: list[ContentTarget]) -> list[ContentTarget]:
+def unique_content_targets(targets: list[ContentTarget]) -> list[ContentTarget]:
     unique_by_key: dict[tuple[str, str, str], ContentTarget] = {}
     for target in targets:
         key = (target.path, target.content, target.source)
@@ -71,7 +76,7 @@ def _append_candidate_path(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def _direct_candidate_paths(
+def direct_candidate_paths(
     payload: ObjectMapping, tool_input: ObjectMapping
 ) -> list[str]:
     values: list[str] = []
@@ -80,7 +85,7 @@ def _direct_candidate_paths(
     return values
 
 
-def _multi_edit_candidate_paths(tool_input: ObjectMapping) -> list[str]:
+def multi_edit_candidate_paths(tool_input: ObjectMapping) -> list[str]:
     values: list[str] = []
     for item in object_list(tool_input.get("edits")):
         path_item = extract_path_from_mapping(object_dict(item))
@@ -88,17 +93,17 @@ def _multi_edit_candidate_paths(tool_input: ObjectMapping) -> list[str]:
     return values
 
 
-def _patch_candidate_paths(tool_input: ObjectMapping) -> list[str]:
+def patch_candidate_paths(tool_input: ObjectMapping) -> list[str]:
     patch_blob = first_present(tool_input, ("patch", "patchText", "patch_text"))
     return parse_patch_candidate_paths(patch_blob) if patch_blob else []
 
 
-def _tool_response_candidate_paths(payload: ObjectMapping) -> list[str]:
+def tool_response_candidate_paths(payload: ObjectMapping) -> list[str]:
     path_value = extract_path_from_mapping(object_dict(payload.get("tool_response")))
     return [path_value] if path_value else []
 
 
-def _unique_paths(values: Iterable[str]) -> list[str]:
+def unique_paths(values: Iterable[str]) -> list[str]:
     result: list[str] = []
     for item in values:
         _append_candidate_path(result, item)

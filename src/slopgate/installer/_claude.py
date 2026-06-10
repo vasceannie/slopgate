@@ -1,21 +1,19 @@
 """Claude Code installer support."""
 
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import cast
-
 from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
-    _json_has_owned_slopgate_hooks,
+    json_has_owned_slopgate_hooks,
     normalize_install_scope,
     resolve_project_root,
     scope_paths,
     warn_residual_install_scope,
 )
-import slopgate.installer._shared as installer_shared
+import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
     hook_command,
@@ -25,7 +23,8 @@ from slopgate.installer._shared import (
     write_json_with_backup,
 )
 
-_CLAUDE_EVENTS = (
+__all__ = ["install_claude", "uninstall_claude"]
+CLAUDE_EVENTS = (
     "SessionStart",
     "CwdChanged",
     "UserPromptSubmit",
@@ -41,7 +40,6 @@ _CLAUDE_EVENTS = (
     "InstructionsLoaded",
     "ConfigChange",
 )
-
 _ClaudeHookCommand = dict[str, str]
 _ClaudeHookEntry = dict[str, str | list[_ClaudeHookCommand]]
 _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
@@ -55,11 +53,11 @@ def _claude_project_settings_path(project_root: Path) -> Path:
     return project_root / ".claude" / "settings.json"
 
 
-def _claude_hooks_block(binary: str) -> _ClaudeHooks:
+def claude_hooks_block(binary: str) -> _ClaudeHooks:
     """Build the hooks block for Claude Code settings.json."""
     hooks: _ClaudeHooks = {}
     command = hook_command(binary, "handle")
-    for event in _CLAUDE_EVENTS:
+    for event in CLAUDE_EVENTS:
         command_entry: _ClaudeHookCommand = {
             "type": HOOK_TYPE_COMMAND,
             METADATA_COMMAND: command,
@@ -79,44 +77,43 @@ def _write_claude_settings(
     return 0
 
 
-def _install_claude_at(settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool) -> int:
+def _install_claude_at(
+    settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool
+) -> int:
     if dry_run:
         print(f"Would patch: {settings_path}")
         print(json.dumps({"hooks": hooks}, indent=2))
         return 0
-
     if not settings_path.exists():
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings = {}
-    elif (settings := require_json_object(settings_path, "Claude settings", action="overwrite")) is None:
+    elif (
+        settings := require_json_object(
+            settings_path, "Claude settings", action="overwrite"
+        )
+    ) is None:
         return 1
-
     merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
     return _write_claude_settings(
         settings_path, settings, f"Installed slopgate hooks into {settings_path}"
     )
 
 
-def _install_claude(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
+def install_claude(
+    dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
     install_scope = normalize_install_scope(scope)
-    binary = installer_shared.find_binary()
-    hooks = _claude_hooks_block(binary)
+    binary = slopgate.installer._shared.find_binary()
+    hooks = claude_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(
         install_scope,
         user_path=_claude_user_settings_path(),
         project_path=_claude_project_settings_path(root),
     )
-
     if dry_run:
         print(f"Binary: {binary}")
-        print(f"Events: {len(_CLAUDE_EVENTS)}")
-
+        print(f"Events: {len(CLAUDE_EVENTS)}")
     completed: list[Path] = []
     last_status = 0
     for settings_path in paths:
@@ -130,24 +127,21 @@ def _install_claude(
         last_status = status
     if not dry_run and last_status == 0:
         print(f"Binary: {binary}")
-        print(f"Events: {len(_CLAUDE_EVENTS)}")
+        print(f"Events: {len(CLAUDE_EVENTS)}")
     return last_status
 
 
 def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
     if not settings_path.exists():
         return 0
-
     settings = require_json_object(settings_path, "Claude settings", action="modify")
     if settings is None:
         return 1
     if "hooks" not in settings:
         return 0
-
     if dry_run:
         print(f"Would remove slopgate hook entries from {settings_path}")
         return 0
-
     remaining_hooks = remove_owned_hooks(settings.get("hooks"))
     if remaining_hooks:
         settings["hooks"] = remaining_hooks
@@ -158,11 +152,8 @@ def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
     )
 
 
-def _uninstall_claude(
-    dry_run: bool = False,
-    *,
-    scope: str = "user",
-    project_root: Path | None = None,
+def uninstall_claude(
+    dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
     install_scope = normalize_install_scope(scope)
     root = resolve_project_root(project_root)
@@ -171,7 +162,6 @@ def _uninstall_claude(
         user_path=_claude_user_settings_path(),
         project_path=_claude_project_settings_path(root),
     )
-
     any_found = False
     last_status = 0
     for settings_path in paths:
@@ -181,7 +171,6 @@ def _uninstall_claude(
         if status != 0:
             return status
         last_status = status
-
     if not any_found and install_scope == "user":
         print("No Claude settings found.")
     if not dry_run:
@@ -192,7 +181,7 @@ def _uninstall_claude(
                 user_path=_claude_user_settings_path(),
                 project_path=_claude_project_settings_path(root),
                 project_root=project_root,
-                has_owned=_json_has_owned_slopgate_hooks,
+                has_owned=json_has_owned_slopgate_hooks,
             )
         )
     return last_status

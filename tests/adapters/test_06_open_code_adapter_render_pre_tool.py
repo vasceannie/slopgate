@@ -5,8 +5,9 @@ from tests.test_adapters import (
     RuleFinding,
     Severity,
     require_rendered,
-    test_support,
+    support,
 )
+
 
 class TestOpenCodeAdapterRenderPreTool:
     """render_output for PreToolUse and PermissionRequest events."""
@@ -31,7 +32,7 @@ class TestOpenCodeAdapterRenderPreTool:
         )
         assert output is not None, "deny finding should produce output"
         assert output["action"] == "block", "deny should map to block action"
-        assert "GIT-001" in test_support.required_string(output, "reason"), (
+        assert "GIT-001" in support.required_string(output, "reason"), (
             "rule id should appear in reason"
         )
 
@@ -105,7 +106,7 @@ class TestOpenCodeAdapterRenderPreTool:
         assert rendered["context"] == "hint for the agent", (
             "context not included in deny output"
         )
-        assert "R-001" in test_support.required_string(rendered, "reason"), (
+        assert "R-001" in support.required_string(rendered, "reason"), (
             "rule id should appear in reason"
         )
 
@@ -183,7 +184,7 @@ class TestOpenCodeAdapterRenderPreTool:
         )
         assert output is not None, "block on PermissionRequest should produce output"
         assert output["action"] == "block"
-        assert "PERM-BLOCK" in test_support.required_string(output, "reason")
+        assert "PERM-BLOCK" in support.required_string(output, "reason")
 
     def test_permission_allow_with_updated_input(self) -> None:
         adapter = OpenCodeAdapter()

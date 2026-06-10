@@ -27,9 +27,7 @@ DEFAULT_INDEXES_PATH = user_data_dir("islands") / "indexes"
 
 DEFAULT_CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
 DEFAULT_OPENCODE_SKILLS_DIR = user_config_dir("opencode") / "skills"
-DEFAULT_OPENCODE_PLUGIN_PATH = (
-    user_config_dir("opencode") / "plugins" / "isx-tools.ts"
-)
+DEFAULT_OPENCODE_PLUGIN_PATH = user_config_dir("opencode") / "plugins" / "isx-tools.ts"
 DEFAULT_OPENCODE_CONFIG = user_config_dir("opencode") / "opencode.json"
 DEFAULT_SKILL_NAME = "isx-cli"
 

@@ -50,11 +50,12 @@ def test_choose_litellm_model_prefers_discovered_embedding_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LITELLM_API_KEY", "secret")
-    monkeypatch.setattr(
-        runtime,
-        "fetch_models",
-        lambda base_url, api_key: ["chat", "text-embedding-3-small"],
-    )
+
+    def fake_fetch_models(base_url: str, api_key: str) -> list[str]:
+        _ = base_url, api_key
+        return ["chat", "text-embedding-3-small"]
+
+    monkeypatch.setattr(runtime, "fetch_models", fake_fetch_models)
 
     choice = runtime.choose_litellm_model(
         "https://llm.example",
@@ -62,7 +63,11 @@ def test_choose_litellm_model_prefers_discovered_embedding_route(
         explicit_model=None,
     )
 
-    assert choice == ("text-embedding-3-small", ["chat", "text-embedding-3-small"], None)
+    assert choice == (
+        "text-embedding-3-small",
+        ["chat", "text-embedding-3-small"],
+        None,
+    )
 
 
 def test_choose_litellm_model_uses_explicit_and_default_paths(
@@ -146,7 +151,10 @@ def test_islands_binary_and_config_path_resolve_config_values(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(runtime.shutil, "which", lambda binary: f"/bin/{binary}")
+    def fake_which(binary: str) -> str:
+        return f"/bin/{binary}"
+
+    monkeypatch.setattr(runtime.shutil, "which", fake_which)
     cfg = SearchConfig(binary="islands", islands_config=str(tmp_path / "islands.yml"))
 
     resolved = {
@@ -164,9 +172,13 @@ def test_save_runtime_model_persists_config_and_islands_yaml(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    saved: dict[str, object] = {}
+    saved: dict[str, SearchConfig] = {}
     cfg = SearchConfig(islands_config=str(tmp_path / "islands.yml"))
-    monkeypatch.setattr(config, "save_config", lambda value: saved.setdefault("cfg", dict(value)))
+
+    def fake_save_config(value: SearchConfig) -> None:
+        saved["cfg"] = dict(value)
+
+    monkeypatch.setattr(config, "save_config", fake_save_config)
 
     runtime.save_runtime_model(cfg, "text-embedding-3-small")
 
@@ -186,7 +198,11 @@ def test_fetch_runtime_models_uses_runtime_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("RUNTIME_API_KEY", "secret")
-    monkeypatch.setattr(runtime, "fetch_models", lambda base_url, api_key: [f"{base_url}:{api_key}"])
+
+    def fake_fetch_models(base_url: str, api_key: str) -> list[str]:
+        return [f"{base_url}:{api_key}"]
+
+    monkeypatch.setattr(runtime, "fetch_models", fake_fetch_models)
     cfg = SearchConfig(base_url="https://llm.example", api_key_env="RUNTIME_API_KEY")
 
     models = runtime.fetch_runtime_models(cfg)
@@ -198,7 +214,7 @@ def test_run_islands_executes_resolved_binary_and_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: dict[str, object] = {}
+    calls: dict[str, list[str] | dict[str, str]] = {}
 
     class Completed:
         returncode = 7
@@ -208,18 +224,28 @@ def test_run_islands_executes_resolved_binary_and_config(
         calls["env"] = env
         return Completed()
 
-    monkeypatch.setattr(runtime.shutil, "which", lambda binary: f"/bin/{binary}")
+    def fake_which(binary: str) -> str:
+        return f"/bin/{binary}"
+
+    monkeypatch.setattr(runtime.shutil, "which", fake_which)
     monkeypatch.setattr(runtime.subprocess, "run", fake_run)
     cfg = SearchConfig(binary="islands", islands_config=str(tmp_path / "islands.yml"))
 
     returncode = runtime.run_islands(cfg, ["doctor"], extra_env={"EXTRA": "value"})
 
+    env = calls["env"]
+    assert isinstance(env, dict)
     assert {
         "returncode": returncode,
         "command": calls["command"],
-        "extra": calls["env"]["EXTRA"],
+        "extra": env["EXTRA"],
     } == {
         "returncode": 7,
-        "command": ["/bin/islands", "--config", str(tmp_path / "islands.yml"), "doctor"],
+        "command": [
+            "/bin/islands",
+            "--config",
+            str(tmp_path / "islands.yml"),
+            "doctor",
+        ],
         "extra": "value",
     }

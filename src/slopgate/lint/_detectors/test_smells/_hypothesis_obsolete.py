@@ -1,37 +1,55 @@
 """Detectors for test-specific smells."""
 
 from __future__ import annotations
-
 import ast
 from pathlib import Path
-from slopgate.constants import (
-    MISSING_IMPORT_PREVIEW_LIMIT,
-    METADATA_FUNCTION,
-)
+from slopgate.constants import MISSING_IMPORT_PREVIEW_LIMIT, METADATA_FUNCTION
 from slopgate._types import ObjectDict
 from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import ParsedFile, project_root
+from ._coverage_helpers import metadata_int
+from ._integrity_index import IntegrityIndex, build_test_integrity_index
+from ._production_symbols import (
+    HYPOTHESIS_NAME_TOKENS,
+    ProductionSymbol,
+    module_names,
+    package_roots,
+    production_symbols,
+    production_test_inputs,
+    reference_tokens_for_tree,
+    symbol_is_referenced,
+)
 
-from ._coverage_helpers import _metadata_int as _metadata_int
-from ._integrity_index import TestIntegrityIndex as TestIntegrityIndex, build_test_integrity_index as build_test_integrity_index
-from ._production_symbols import _HYPOTHESIS_NAME_TOKENS as _HYPOTHESIS_NAME_TOKENS, _ProductionSymbol as _ProductionSymbol, _module_names as _module_names, _package_roots as _package_roots, _production_symbols as _production_symbols, _production_test_inputs as _production_test_inputs, _reference_tokens_for_tree as _reference_tokens_for_tree, _symbol_is_referenced as _symbol_is_referenced
+__all__ = [
+    "detect_hypothesis_candidates",
+    "detect_stale_test_references",
+    "production_symbols",
+    "production_test_inputs",
+    "module_names",
+    "reference_tokens_for_tree",
+]
 
-
-_HYPOTHESIS_PROPERTY_RULES = (
-    (("parse", "serialize", "deserialize", "encode", "decode"), "round-trip / malformed-input contracts"),
+HYPOTHESIS_PROPERTY_RULES = (
+    (
+        ("parse", "serialize", "deserialize", "encode", "decode"),
+        "round-trip / malformed-input contracts",
+    ),
     (("normalize", "canonical", "clean", "coerce"), "idempotence / canonicalization"),
     (("sort", "rank", "score", "order"), "ordering / monotonicity"),
     (("dedupe", "unique", "merge", "filter"), "dedup/filter/merge invariants"),
-    (("bound", "limit", "clamp", "range", "validate"), "bounds / invalid-input rejection"),
+    (
+        ("bound", "limit", "clamp", "range", "validate"),
+        "bounds / invalid-input rejection",
+    ),
 )
 
 
-def _hypothesis_properties(symbol: _ProductionSymbol) -> list[str]:
+def hypothesis_properties(symbol: ProductionSymbol) -> list[str]:
     text = f"{symbol.module}.{symbol.name}".lower()
     properties = [
         label
-        for tokens, label in _HYPOTHESIS_PROPERTY_RULES
-        if any(token in text for token in tokens)
+        for tokens, label in HYPOTHESIS_PROPERTY_RULES
+        if any((token in text for token in tokens))
     ]
     if properties:
         return properties
@@ -42,11 +60,11 @@ def _hypothesis_properties(symbol: _ProductionSymbol) -> list[str]:
     return []
 
 
-def _hypothesis_score(symbol: _ProductionSymbol) -> tuple[int, list[str], list[str]]:
+def hypothesis_score(symbol: ProductionSymbol) -> tuple[int, list[str], list[str]]:
     score = 0
     reasons: list[str] = []
     lowered = symbol.name.lower()
-    name_hits = [token for token in _HYPOTHESIS_NAME_TOKENS if token in lowered]
+    name_hits = [token for token in HYPOTHESIS_NAME_TOKENS if token in lowered]
     if name_hits:
         score += 2
         reasons.append(f"name suggests invariant work ({', '.join(name_hits[:3])})")
@@ -68,31 +86,30 @@ def _hypothesis_score(symbol: _ProductionSymbol) -> tuple[int, list[str], list[s
     elif symbol.transform_score:
         score += 1
         reasons.append("data transformation")
-    properties = _hypothesis_properties(symbol)
+    properties = hypothesis_properties(symbol)
     if properties:
         reasons.append(f"candidate properties={'; '.join(properties[:2])}")
-    return score, reasons, properties
+    return (score, reasons, properties)
 
 
 def detect_hypothesis_candidates(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
     *,
-    index: TestIntegrityIndex | None = None,
+    index: IntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find tested production functions likely to benefit from property-based tests."""
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
     refs = index.test_reference_tokens
     hypothesis_refs = index.hypothesis_reference_tokens
-
     violations: list[Violation] = []
     for symbol in index.production_symbols:
-        if symbol.kind != METADATA_FUNCTION or not _symbol_is_referenced(symbol, refs):
+        if symbol.kind != METADATA_FUNCTION or not symbol_is_referenced(symbol, refs):
             continue
-        if _symbol_is_referenced(symbol, hypothesis_refs):
+        if symbol_is_referenced(symbol, hypothesis_refs):
             continue
-        score, reasons, properties = _hypothesis_score(symbol)
+        score, reasons, properties = hypothesis_score(symbol)
         if score < 4:
             continue
         violations.append(
@@ -100,26 +117,34 @@ def detect_hypothesis_candidates(
                 rule="hypothesis-candidate",
                 relative_path=symbol.relative_path,
                 identifier=symbol.qualname,
-                detail=(
-                    f"line {symbol.lineno}: property_test_score={score}; "
-                    f"reasons={'; '.join(reasons)}; no Hypothesis/given test reference"
-                ),
-                metadata={"property_test_score": score, "reasons": reasons, "candidate_properties": properties},
+                detail=f"line {symbol.lineno}: property_test_score={score}; reasons={'; '.join(reasons)}; no Hypothesis/given test reference",
+                metadata={
+                    "property_test_score": score,
+                    "reasons": reasons,
+                    "candidate_properties": properties,
+                },
             )
         )
-    return sorted(violations, key=lambda v: (-_metadata_int(v, "property_test_score"), v.relative_path, v.identifier))
+    return sorted(
+        violations,
+        key=lambda v: (
+            -metadata_int(v, "property_test_score"),
+            v.relative_path,
+            v.identifier,
+        ),
+    )
 
 
 def _project_module_path_exists(module: str) -> bool:
     module_path = project_root().joinpath(*module.split("."))
-    return module_path.with_suffix(".py").is_file() or (module_path / "__init__.py").is_file()
+    return (
+        module_path.with_suffix(".py").is_file()
+        or (module_path / "__init__.py").is_file()
+    )
 
 
-def _missing_import_from_violation(
-    node: ast.ImportFrom,
-    pf: ParsedFile,
-    roots: set[str],
-    modules: set[str],
+def missing_import_from_violation(
+    node: ast.ImportFrom, pf: ParsedFile, roots: set[str], modules: set[str]
 ) -> Violation | None:
     if not node.module:
         return None
@@ -132,33 +157,31 @@ def _missing_import_from_violation(
         rule="obsolete-or-deprecated-test",
         relative_path=pf.rel,
         identifier=f"line-{node.lineno}",
-        detail=(
-            f"imports missing production module `{module}`; "
-            f"imported={', '.join(imported_names[:MISSING_IMPORT_PREVIEW_LIMIT])}"
-        ),
-        metadata={"module": module, "line": node.lineno, "imported_names": imported_names},
+        detail=f"imports missing production module `{module}`; imported={', '.join(imported_names[:MISSING_IMPORT_PREVIEW_LIMIT])}",
+        metadata={
+            "module": module,
+            "line": node.lineno,
+            "imported_names": imported_names,
+        },
     )
 
 
-def _module_or_package_exists(module: str, modules: set[str]) -> bool:
+def module_or_package_exists(module: str, modules: set[str]) -> bool:
     return (
         module in modules
-        or any(existing.startswith(f"{module}.") for existing in modules)
+        or any((existing.startswith(f"{module}.") for existing in modules))
         or _project_module_path_exists(module)
     )
 
 
-def _missing_import_violations(
-    node: ast.Import,
-    pf: ParsedFile,
-    roots: set[str],
-    modules: set[str],
+def missing_import_violations(
+    node: ast.Import, pf: ParsedFile, roots: set[str], modules: set[str]
 ) -> list[Violation]:
     violations: list[Violation] = []
     for alias in node.names:
         module = alias.name
         root = module.split(".", maxsplit=1)[0]
-        if root not in roots or _module_or_package_exists(module, modules):
+        if root not in roots or module_or_package_exists(module, modules):
             continue
         violations.append(
             Violation(
@@ -166,23 +189,29 @@ def _missing_import_violations(
                 relative_path=pf.rel,
                 identifier=f"line-{node.lineno}",
                 detail=f"imports missing production module `{module}`",
-                metadata={"module": module, "line": node.lineno, "imported_names": [module]},
+                metadata={
+                    "module": module,
+                    "line": node.lineno,
+                    "imported_names": [module],
+                },
             )
         )
     return violations
 
 
-def _missing_production_imports(parsed_tests: list[ParsedFile], modules: set[str]) -> list[Violation]:
-    roots = _package_roots(modules)
+def missing_production_imports(
+    parsed_tests: list[ParsedFile], modules: set[str]
+) -> list[Violation]:
+    roots = package_roots(modules)
     violations: list[Violation] = []
     for pf in parsed_tests:
         for child in ast.walk(pf.tree):
             if isinstance(child, ast.ImportFrom):
-                violation = _missing_import_from_violation(child, pf, roots, modules)
+                violation = missing_import_from_violation(child, pf, roots, modules)
                 if violation is not None:
                     violations.append(violation)
             elif isinstance(child, ast.Import):
-                violations.extend(_missing_import_violations(child, pf, roots, modules))
+                violations.extend(missing_import_violations(child, pf, roots, modules))
     return violations
 
 
@@ -190,24 +219,28 @@ def detect_stale_test_references(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
     *,
-    index: TestIntegrityIndex | None = None,
+    index: IntegrityIndex | None = None,
 ) -> list[Violation]:
     """Find tests tied to missing modules or stale production APIs."""
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
     modules = index.module_names
-    violations = _missing_production_imports(index.parsed_tests, modules)
+    violations = missing_production_imports(index.parsed_tests, modules)
     deprecated_symbols = index.deprecated_symbols
     if not deprecated_symbols:
         return sorted(violations, key=lambda v: (v.relative_path, v.identifier))
-
     for pf in index.parsed_tests:
         refs = index.test_reference_tokens_by_rel.get(pf.rel, set())
         for symbol in deprecated_symbols:
-            if not _symbol_is_referenced(symbol, refs):
+            if not symbol_is_referenced(symbol, refs):
                 continue
-            replacement = f"; replacement={symbol.replacement}" if symbol.replacement else ""
-            metadata: ObjectDict = {"symbol": symbol.qualname, "production_path": symbol.relative_path}
+            replacement = (
+                f"; replacement={symbol.replacement}" if symbol.replacement else ""
+            )
+            metadata: ObjectDict = {
+                "symbol": symbol.qualname,
+                "production_path": symbol.relative_path,
+            }
             if symbol.replacement:
                 metadata["replacement"] = symbol.replacement
             violations.append(

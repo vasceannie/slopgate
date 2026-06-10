@@ -1,15 +1,14 @@
 """Base adapter protocol for platform-specific input/output translation."""
 
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-
+from typing import cast
 from slopgate._types import ObjectDict, ObjectMapping, object_dict
 from slopgate.constants import BLOCK, DENY
 from slopgate.models import RuleFinding
-from slopgate.rules.base import join_messages as _join_messages
+from slopgate.rules.base import join_messages
 
 _PERMISSION_REQUEST_DECISIONS = frozenset({DENY, "allow", BLOCK, "ask"})
 
@@ -24,8 +23,7 @@ class RenderRequest:
 
 
 def render_request_from_call(
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
+    args: tuple[object, ...], kwargs: dict[str, object]
 ) -> RenderRequest:
     if len(args) != 2:
         raise TypeError("render_output expects event_name and findings")
@@ -42,7 +40,11 @@ def render_request_from_call(
         raise TypeError(f"unexpected render_output keyword(s): {unexpected}")
     return RenderRequest(
         event_name=event_name,
-        findings=[finding for finding in findings if isinstance(finding, RuleFinding)],
+        findings=[
+            finding
+            for finding in cast("list[object]", findings)
+            if isinstance(finding, RuleFinding)
+        ],
         context=context_value if isinstance(context_value, str) else None,
         updated_input=object_dict(updated_input_value),
         decision=decision_value if isinstance(decision_value, str) else None,
@@ -74,12 +76,7 @@ def render_permission_request_output(
         inner["updatedInput"] = updated_input
     if behavior == DENY:
         inner["message"] = reason
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "decision": inner,
-        }
-    }
+    return {"hookSpecificOutput": {"hookEventName": event_name, "decision": inner}}
 
 
 class PlatformAdapter(ABC):
@@ -90,14 +87,10 @@ class PlatformAdapter(ABC):
         """Convert a raw platform payload into canonical form."""
 
     @abstractmethod
-    def render_output(
-        self,
-        *args: object,
-        **kwargs: object,
-    ) -> ObjectDict | None:
+    def render_output(self, *args: object, **kwargs: object) -> ObjectDict | None:
         """Render findings into platform-native JSON for stdout."""
 
-    join_messages: Callable[[list[RuleFinding]], str] = staticmethod(_join_messages)
+    join_messages: Callable[[list[RuleFinding]], str] = staticmethod(join_messages)
 
     @staticmethod
     def decision_findings(

@@ -39,7 +39,9 @@ def test_enrich_fixture_outside_conftest_is_callable_property(_: None) -> None:
 
 
 @given(strategies.just(None))
-def test_enroll_repo_returns_root_and_written_list_in_temp_dir_property(_: None) -> None:
+def test_enroll_repo_returns_root_and_written_list_in_temp_dir_property(
+    _: None,
+) -> None:
     with TemporaryDirectory() as raw_path:
         root, written = enroll_repo(Path(raw_path), include_worktrees=False)
     assert isinstance(root, Path), "root must be a Path"
@@ -53,7 +55,9 @@ def test_embedding_like_returns_bool_property(model: str) -> None:
 
 
 @given(strategies.just(None))
-def test_choose_litellm_model_explicit_model_bypasses_discovery_property(_: None) -> None:
+def test_choose_litellm_model_explicit_model_bypasses_discovery_property(
+    _: None,
+) -> None:
     model, models, _error = choose_litellm_model(
         "https://llm.example", None, "custom/model"
     )
@@ -71,12 +75,14 @@ def test_fetch_runtime_models_uses_configured_api_key_property(_: None) -> None:
     from slopgate.search.config import SearchConfig
 
     with patch.dict(os.environ, {"RUNTIME_TEST_KEY": "test-secret"}):
-        with patch.object(
-            runtime,
-            "fetch_models",
-            lambda base_url, api_key: [f"{base_url}:{api_key}"],
-        ):
-            cfg = SearchConfig(base_url="https://llm.example", api_key_env="RUNTIME_TEST_KEY")
+
+        def fake_fetch_models(base_url: str, api_key: str) -> list[str]:
+            return [f"{base_url}:{api_key}"]
+
+        with patch.object(runtime, "fetch_models", fake_fetch_models):
+            cfg = SearchConfig(
+                base_url="https://llm.example", api_key_env="RUNTIME_TEST_KEY"
+            )
             models = fetch_runtime_models(cfg)
 
     assert models == ["https://llm.example:test-secret"]
@@ -137,7 +143,9 @@ def test_discover_fixtures_returns_list_for_minimal_tree_property(_: None) -> No
 
 
 @given(strategies.just(None))
-def test_find_parametrize_examples_returns_list_for_minimal_tree_property(_: None) -> None:
+def test_find_parametrize_examples_returns_list_for_minimal_tree_property(
+    _: None,
+) -> None:
     with TemporaryDirectory() as raw_path:
         root = Path(raw_path)
         tests_dir = root / "tests"

@@ -1,33 +1,28 @@
 """Suite update semantics: package update is safe unless hook refresh is explicit."""
 
 from __future__ import annotations
-
+import pytest
 from pathlib import Path
-from typing import Any
-
-import slopgate.installer as installer_module
-import slopgate.installer._suite as suite
+import slopgate.installer
+import slopgate.installer._suite
 
 
 def test_update_suite_dry_run_uses_uv_without_refreshing_hooks(
-    tmp_path: Path, monkeypatch: Any, capsys: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "find_binary", lambda: "slopgate")
+    monkeypatch.setattr(slopgate.installer._suite, "find_binary", lambda: "slopgate")
 
     def uv_only(name: str) -> str | None:
         return "/usr/bin/uv" if name == "uv" else None
 
-    monkeypatch.setattr(suite.shutil, "which", uv_only)
+    monkeypatch.setattr(slopgate.installer._suite.shutil, "which", uv_only)
     (tmp_path / ".claude").mkdir()
-
-    status = installer_module.update_suite(
-        installer_module.SuiteUpdateOptions(
-            dry_run=True,
-            source="git+https://example.invalid/vf.git@main",
+    status = slopgate.installer.update_suite(
+        slopgate.installer.SuiteUpdateOptions(
+            dry_run=True, source="git+https://example.invalid/vf.git@main"
         )
     )
-
     output = capsys.readouterr().out
     assert (
         status,
@@ -39,21 +34,23 @@ def test_update_suite_dry_run_uses_uv_without_refreshing_hooks(
 
 
 def test_update_suite_refresh_hooks_is_explicit(
-    tmp_path: Path, monkeypatch: Any, capsys: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "find_binary", lambda: "slopgate")
-    monkeypatch.setattr(suite.shutil, "which", lambda _name: "/usr/bin/uv")
-    (tmp_path / ".claude").mkdir()
+    monkeypatch.setattr(slopgate.installer._suite, "find_binary", lambda: "slopgate")
 
-    status = installer_module.update_suite(
-        installer_module.SuiteUpdateOptions(
+    def fake_which(_name: str) -> str:
+        return "/usr/bin/uv"
+
+    monkeypatch.setattr(slopgate.installer._suite.shutil, "which", fake_which)
+    (tmp_path / ".claude").mkdir()
+    status = slopgate.installer.update_suite(
+        slopgate.installer.SuiteUpdateOptions(
             dry_run=True,
             source="git+https://example.invalid/vf.git@main",
             refresh_hooks=True,
         )
     )
-
     output = capsys.readouterr().out
     assert (
         status,
@@ -65,24 +62,21 @@ def test_update_suite_refresh_hooks_is_explicit(
 
 
 def test_update_suite_dry_run_falls_back_to_pip_without_refreshing_hooks(
-    tmp_path: Path, monkeypatch: Any, capsys: Any
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(suite, "find_binary", lambda: "slopgate")
+    monkeypatch.setattr(slopgate.installer._suite, "find_binary", lambda: "slopgate")
 
     def no_binary(_name: str) -> str | None:
         return None
 
-    monkeypatch.setattr(suite.shutil, "which", no_binary)
+    monkeypatch.setattr(slopgate.installer._suite.shutil, "which", no_binary)
     (tmp_path / ".claude").mkdir()
-
-    status = installer_module.update_suite(
-        installer_module.SuiteUpdateOptions(
-            dry_run=True,
-            source="git+https://example.invalid/vf.git@main",
+    status = slopgate.installer.update_suite(
+        slopgate.installer.SuiteUpdateOptions(
+            dry_run=True, source="git+https://example.invalid/vf.git@main"
         )
     )
-
     output = capsys.readouterr().out
     assert (
         status,

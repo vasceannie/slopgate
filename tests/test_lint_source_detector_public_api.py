@@ -20,7 +20,9 @@ from slopgate.lint._helpers import ParsedFile, parse_files
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z_]{0,12}", fullmatch=True)
 
 
-def parsed_file(tmp_path: Path, source: str, name: str = "sample.py") -> list[ParsedFile]:
+def parsed_file(
+    tmp_path: Path, source: str, name: str = "sample.py"
+) -> list[ParsedFile]:
     path = tmp_path / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")

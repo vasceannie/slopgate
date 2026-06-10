@@ -12,7 +12,7 @@ from slopgate.rules.python_ast._staging.test_smell_rules import (
 
 RuleType = type[Rule]
 
-_TEST_SMELL_RULE_CASES: tuple[tuple[str, RuleType, bool, str, str], ...] = (
+TEST_SMELL_RULE_CASES: tuple[tuple[str, RuleType, bool, str, str], ...] = (
     (
         "eager_detects_many_sut_calls",
         PythonEagerTestRule,

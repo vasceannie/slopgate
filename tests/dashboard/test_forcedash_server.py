@@ -33,7 +33,9 @@ PayloadParser = Callable[[str], tuple[dict[str, object], str | None]]
     ],
 )
 def test_snapshot_lookback_hours_clamps_query_values(path: str, expected: int) -> None:
-    assert snapshot_lookback_hours(path) == expected, f"Expected {path} to resolve to {expected} hours"
+    assert snapshot_lookback_hours(path) == expected, (
+        f"Expected {path} to resolve to {expected} hours"
+    )
 
 
 def test_apply_config_patch_preserves_unmentioned_config_fields() -> None:
@@ -54,16 +56,24 @@ def test_apply_config_patch_preserves_unmentioned_config_fields() -> None:
         "PY-LOG-002": True,
         "SHELL-001": True,
     }, "Expected boolean rule patching to merge valid booleans only"
-    assert result["regex_rules"] == [{"id": "keep"}], "Expected omitted regex rules to remain unchanged"
-    assert result["skip_paths"] == ["new"], "Expected skip path patching to keep string paths only"
-    assert result["unrelated"] == {"kept": True}, "Expected unrelated config fields to be preserved"
+    assert result["regex_rules"] == [{"id": "keep"}], (
+        "Expected omitted regex rules to remain unchanged"
+    )
+    assert result["skip_paths"] == ["new"], (
+        "Expected skip path patching to keep string paths only"
+    )
+    assert result["unrelated"] == {"kept": True}, (
+        "Expected unrelated config fields to be preserved"
+    )
 
 
 def test_parse_config_payload_rejects_non_object_json() -> None:
     config, error = parse_config_payload("[]")
 
     assert config == {}, "Expected invalid config payload to return an empty config"
-    assert error == "Config payload must be a JSON object", "Expected a semantic error for non-object config"
+    assert error == "Config payload must be a JSON object", (
+        "Expected a semantic error for non-object config"
+    )
 
 
 @pytest.mark.parametrize(
@@ -73,7 +83,9 @@ def test_parse_config_payload_rejects_non_object_json() -> None:
         (parse_snapshot_payload, "Snapshot payload must be a JSON object"),
     ],
 )
-def test_remote_payload_parsers_reject_non_object_json(parser: PayloadParser, error_text: str) -> None:
+def test_remote_payload_parsers_reject_non_object_json(
+    parser: PayloadParser, error_text: str
+) -> None:
     payload, error = parser("[]")
 
     assert payload == {}, "Expected invalid remote payload to return an empty object"

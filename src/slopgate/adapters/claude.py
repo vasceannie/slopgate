@@ -20,7 +20,13 @@ from slopgate.adapters.base import (
     render_request_from_call,
     render_permission_request_output,
 )
-from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    BLOCK,
+    DENY,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.models import RuleFinding
 
 _CLAUDE_EVENT_ALIASES: dict[str, str] = {
@@ -37,7 +43,9 @@ _CLAUDE_EVENT_ALIASES: dict[str, str] = {
 
 
 def _canonical_event_name(raw: ObjectMapping) -> str:
-    event = string_value(raw.get("hook_event_name")) or string_value(raw.get("hookEventName"))
+    event = string_value(raw.get("hook_event_name")) or string_value(
+        raw.get("hookEventName")
+    )
     if not event:
         return ""
     if event in _CLAUDE_EVENT_ALIASES.values():
@@ -101,13 +109,17 @@ class ClaudeAdapter(PlatformAdapter):
             request.updated_input,
         )
 
-    def _render_prompt_or_posttool(self, request: _ClaudeRenderRequest) -> ObjectDict | None:
+    def _render_prompt_or_posttool(
+        self, request: _ClaudeRenderRequest
+    ) -> ObjectDict | None:
         payload: ObjectDict = {}
         if request.decision in {BLOCK, DENY, "ask"}:
             payload["decision"] = BLOCK
             payload["reason"] = self._decision_reason(request)
         if request.context:
-            payload.update(hook_specific_context_output(request.event_name, request.context))
+            payload.update(
+                hook_specific_context_output(request.event_name, request.context)
+            )
         return payload or None
 
     def _render_stop_like(self, request: _ClaudeRenderRequest) -> ObjectDict | None:

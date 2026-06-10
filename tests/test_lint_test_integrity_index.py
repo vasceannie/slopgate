@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import ast
+import importlib
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from slopgate.lint._detectors.test_smells import (
-    _hypothesis_obsolete,
-    _production_detectors,
+    detect_hypothesis_candidates,
+    detect_missing_integration_tests,
+    detect_stale_test_references,
+    detect_untested_production_code,
 )
 from slopgate.lint._detectors.test_smells._integrity_index import (
+    IntegrityIndex,
     build_test_integrity_index,
 )
 from slopgate.lint._helpers import (
@@ -75,18 +79,18 @@ def _block_index_rebuild_helpers(
         (
             production_detectors,
             (
-                "_production_symbols",
-                "_production_test_inputs",
-                "_integration_test_reference_tokens",
+                "production_symbols",
+                "production_test_inputs",
+                "integration_test_reference_tokens",
             ),
         ),
         (
             hypothesis_obsolete,
             (
-                "_production_symbols",
-                "_production_test_inputs",
-                "_module_names",
-                "_reference_tokens_for_tree",
+                "production_symbols",
+                "production_test_inputs",
+                "module_names",
+                "reference_tokens_for_tree",
             ),
         ),
     ):
@@ -94,12 +98,19 @@ def _block_index_rebuild_helpers(
             monkeypatch.setattr(module, name, fail_rebuild)
 
 
-def _indexed_detector_results(index: object) -> tuple[object, bool, bool, bool]:
-    untested = _production_detectors.detect_untested_production_code(index=index)
-    missing_integration = _production_detectors.detect_missing_integration_tests(index=index)
-    hypothesis_candidates = _hypothesis_obsolete.detect_hypothesis_candidates(index=index)
-    deprecated_tests = _hypothesis_obsolete.detect_stale_test_references(index=index)
-    return untested, bool(missing_integration), bool(hypothesis_candidates), bool(deprecated_tests)
+def _indexed_detector_results(
+    index: IntegrityIndex,
+) -> tuple[object, bool, bool, bool]:
+    untested = detect_untested_production_code(index=index)
+    missing_integration = detect_missing_integration_tests(index=index)
+    hypothesis_candidates = detect_hypothesis_candidates(index=index)
+    deprecated_tests = detect_stale_test_references(index=index)
+    return (
+        untested,
+        bool(missing_integration),
+        bool(hypothesis_candidates),
+        bool(deprecated_tests),
+    )
 
 
 def test_build_test_integrity_index_caches_shared_symbols_and_references() -> None:
@@ -108,7 +119,9 @@ def test_build_test_integrity_index_caches_shared_symbols_and_references() -> No
 
     index_contract = (
         [symbol.name for symbol in index.production_symbols],
-        {"parse_payload", "pkg.core.parse_payload"}.issubset(index.test_reference_tokens),
+        {"parse_payload", "pkg.core.parse_payload"}.issubset(
+            index.test_reference_tokens
+        ),
         "tests/test_core.py" in index.test_reference_tokens_by_rel,
         index.module_names,
         [symbol.name for symbol in index.deprecated_symbols],
@@ -131,13 +144,19 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
     index = build_test_integrity_index(parsed_src, parsed_tests)
 
     def fail_rebuild(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("detector rebuilt facts already present in TestIntegrityIndex")
+        raise AssertionError(
+            "detector rebuilt facts already present in IntegrityIndex"
+        )
 
     _block_index_rebuild_helpers(
         monkeypatch,
         fail_rebuild,
-        _production_detectors,
-        _hypothesis_obsolete,
+        importlib.import_module(
+            "slopgate.lint._detectors.test_smells._production_detectors"
+        ),
+        importlib.import_module(
+            "slopgate.lint._detectors.test_smells._hypothesis_obsolete"
+        ),
     )
 
     assert _indexed_detector_results(index) == ([], True, True, True)
@@ -159,6 +178,6 @@ def test_test_integrity_collectors_build_one_shared_index(
 
     monkeypatch.setattr(test_smells, "build_test_integrity_index", counted_build)
 
-    _collectors._test_integrity_collectors(parsed_src, parsed_tests)
+    _collectors.test_integrity_collectors(parsed_src, parsed_tests)
 
     assert calls == 1

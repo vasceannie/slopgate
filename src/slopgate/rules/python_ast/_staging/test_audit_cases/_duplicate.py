@@ -12,7 +12,7 @@ from slopgate.rules.python_ast._staging.duplicate_rules import (
 
 RuleType = type[Rule]
 
-_DUPLICATE_RULE_CASES: tuple[tuple[str, RuleType, bool, str], ...] = (
+DUPLICATE_RULE_CASES: tuple[tuple[str, RuleType, bool, str], ...] = (
     (
         "repeated_blocks_clean_single_block",
         PythonRepeatedBlocksRule,
@@ -223,7 +223,12 @@ _DUPLICATE_RULE_CASES: tuple[tuple[str, RuleType, bool, str], ...] = (
         w = 42
         """,
     ),
-    ("magic_numbers_at_threshold", PythonRepeatedMagicNumberRule, False, "x = 42\ny = 42\nz = 42"),
+    (
+        "magic_numbers_at_threshold",
+        PythonRepeatedMagicNumberRule,
+        False,
+        "x = 42\ny = 42\nz = 42",
+    ),
     (
         "magic_numbers_ignores_docstrings",
         PythonRepeatedMagicNumberRule,

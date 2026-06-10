@@ -1,7 +1,6 @@
 """Persistent hook-state store."""
 
 from __future__ import annotations
-
 import json
 import os
 import tempfile
@@ -10,17 +9,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from time import time
 from typing import TextIO
-from slopgate._types import (
-    ObjectDict,
-    ObjectMapping,
-    object_dict,
-)
+from slopgate._types import ObjectDict, ObjectMapping, object_dict
 from slopgate.util.logger import warning
+from ._models import HookStateSnapshot, fcntl, msvcrt
 
-from ._models import _HookStateSnapshot as _HookStateSnapshot, fcntl as fcntl, msvcrt as msvcrt
 
-
-class _StateFileMixin:
+class StateFileMixin:
     _path: Path
     _lock_path: Path
 
@@ -38,9 +32,9 @@ class _StateFileMixin:
         if fcntl is not None:
             fcntl.flock(fileno, fcntl.LOCK_EX)
             return
-        if msvcrt is not None:  # pragma: no cover - Windows only
+        if msvcrt is not None:
             handle.seek(0)
-            handle.write("\0")
+            handle.write("\x00")
             handle.flush()
             handle.seek(0)
             msvcrt.locking(fileno, msvcrt.LK_LOCK, 1)
@@ -50,7 +44,7 @@ class _StateFileMixin:
         if fcntl is not None:
             fcntl.flock(fileno, fcntl.LOCK_UN)
             return
-        if msvcrt is not None:  # pragma: no cover - Windows only
+        if msvcrt is not None:
             handle.seek(0)
             msvcrt.locking(fileno, msvcrt.LK_UNLCK, 1)
 
@@ -79,15 +73,20 @@ class _StateFileMixin:
                 warning("hook state temp cleanup failed", path=tmp_name, error=str(exc))
 
 
-class _StateSnapshotMixin(_StateFileMixin):
+__all__ = ["StateSnapshotMixin"]
+
+
+class StateSnapshotMixin(StateFileMixin):
     _TTL_SECONDS: int
     _MAX_DENY_HITS = 512
 
-    def _load_state(self) -> _HookStateSnapshot:
+    def _load_state(self) -> HookStateSnapshot:
         cutoff = int(time()) - self._TTL_SECONDS
         state = self._read_state_file()
         full_reads = self._coerce_recent_int_map(state.get("full_reads"), cutoff)
-        search_reminders = self._coerce_recent_int_map(state.get("search_reminders"), cutoff)
+        search_reminders = self._coerce_recent_int_map(
+            state.get("search_reminders"), cutoff
+        )
         deny_hits = self._coerce_counter_map(state.get("deny_hits"))
         retry_locks = self._coerce_object_map(state.get("retry_locks"), cutoff)
         repair_plans = self._coerce_object_map(state.get("repair_plans"), cutoff)
@@ -103,11 +102,13 @@ class _StateSnapshotMixin(_StateFileMixin):
     def _iter_int_items(raw: object) -> Iterator[tuple[str, int]]:
         for key, value in object_dict(raw).items():
             if isinstance(value, int):
-                yield key, value
+                yield (key, value)
 
     @classmethod
     def _coerce_recent_int_map(cls, raw: object, cutoff: int) -> dict[str, int]:
-        return {key: value for key, value in cls._iter_int_items(raw) if value >= cutoff}
+        return {
+            key: value for key, value in cls._iter_int_items(raw) if value >= cutoff
+        }
 
     @classmethod
     def _coerce_counter_map(cls, raw: object) -> dict[str, int]:
@@ -127,11 +128,7 @@ class _StateSnapshotMixin(_StateFileMixin):
         }
         slots = max(cls._MAX_DENY_HITS - len(protected), 0)
         ranked = sorted(
-            (
-                (key, value)
-                for key, value in counters.items()
-                if key not in protected
-            ),
+            ((key, value) for key, value in counters.items() if key not in protected),
             key=lambda item: (item[1], item[0]),
             reverse=True,
         )

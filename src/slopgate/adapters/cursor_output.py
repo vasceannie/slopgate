@@ -6,7 +6,13 @@ from dataclasses import dataclass
 
 from slopgate._types import ObjectDict
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
-from slopgate.constants import BLOCK, DENY, PERMISSION_REQUEST, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    BLOCK,
+    DENY,
+    PERMISSION_REQUEST,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.models import RuleFinding
 
 _PERMISSION_EVENTS = frozenset(
@@ -148,9 +154,13 @@ def _render_with_findings(
             return _output_for_message(message, "followup_message")
         return None
     if request.event_name == "PreCompact":
-        return _output_for_message(_contextual_message(adapter, request), "user_message")
+        return _output_for_message(
+            _contextual_message(adapter, request), "user_message"
+        )
     if request.event_name == "SessionStart" and request.context:
-        return _output_for_message(_contextual_message(adapter, request), "additional_context")
+        return _output_for_message(
+            _contextual_message(adapter, request), "additional_context"
+        )
     if request.context:
         return {"agent_message": request.context}
     return None

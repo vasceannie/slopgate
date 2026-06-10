@@ -10,7 +10,7 @@ from pathlib import Path
 from slopgate._types import object_dict, object_list
 
 from ._analysis import analyze
-from ._load import _default_log_path, load_entries
+from ._load import default_log_path, load_entries
 
 _PairList = list[tuple[str, int]]
 
@@ -162,7 +162,7 @@ def run_stats(
     days: int | None = None,
     as_json: bool = False,
 ) -> int:
-    path = Path(log_path) if log_path else _default_log_path()
+    path = Path(log_path) if log_path else default_log_path()
     if not path.exists():
         print(f"Log not found: {path}", file=sys.stderr)
         return 1

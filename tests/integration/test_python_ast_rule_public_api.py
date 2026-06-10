@@ -173,9 +173,9 @@ def extract_profile() -> tuple[str, str, str, str, str, str]:
 
     findings = PythonFeatureEnvyRule().evaluate(ctx)
 
-    assert [(item.rule_id, item.metadata.get("envied_object")) for item in findings] == [
-        ("PY-CODE-012", "account")
-    ]
+    assert [
+        (item.rule_id, item.metadata.get("envied_object")) for item in findings
+    ] == [("PY-CODE-012", "account")]
 
 
 def test_wrapper_and_god_class_rules_report_structural_smells(tmp_path: Path) -> None:
@@ -257,7 +257,9 @@ def test_ast_health_rule_reports_invalid_python_content(tmp_path: Path) -> None:
 def test_flat_sibling_rule_reports_projected_package_sprawl(tmp_path: Path) -> None:
     (tmp_path / "profile_alpha.py").write_text("ALPHA = 1\n", encoding="utf-8")
     (tmp_path / "profile_beta.py").write_text("BETA = 1\n", encoding="utf-8")
-    ctx = context_with_limits(tmp_path, "GAMMA = 1\n", path=str(tmp_path / "profile_gamma.py"))
+    ctx = context_with_limits(
+        tmp_path, "GAMMA = 1\n", path=str(tmp_path / "profile_gamma.py")
+    )
 
     findings = PythonFlatFileSiblingsRule().evaluate(ctx)
 

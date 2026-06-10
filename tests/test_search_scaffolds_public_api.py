@@ -31,7 +31,9 @@ def test_write_text_file_respects_force_flag(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "second"
 
 
-def test_append_unique_json_list_creates_and_deduplicates_values(tmp_path: Path) -> None:
+def test_append_unique_json_list_creates_and_deduplicates_values(
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "opencode.json"
 
     append_unique_json_list(config, "plugin", "/tmp/isx-tools.ts")
@@ -108,7 +110,9 @@ def test_scaffold_skill_writes_requested_targets(
 
 
 @given(SKILL_NAMES)
-def test_render_isx_skill_includes_requested_skill_name_property(skill_name: str) -> None:
+def test_render_isx_skill_includes_requested_skill_name_property(
+    skill_name: str,
+) -> None:
     rendered = render_isx_skill(skill_name)
 
     assert f"name: {skill_name}" in rendered

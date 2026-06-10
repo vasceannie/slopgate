@@ -5,9 +5,9 @@ from tests.test_engine import (
     EvaluateFn,
     Path,
     WriteBuilder,
-    _assert_bash_negative_case,
-    _assert_write_negative_case,
-    _repo_with_moved_parse_error,
+    assert_bash_negative_case,
+    assert_write_negative_case,
+    repo_with_moved_parse_error,
     assert_not_denied,
     evaluate_payload,
     finding_ids,
@@ -55,7 +55,10 @@ EXC_002_BOUNDARY_CASES = [
     ),
 ]
 
-def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Path) -> None:
+
+def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     _ = (repo / "slopgate.toml").write_text(
@@ -68,7 +71,7 @@ def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Pat
         "tool_input": {
             "command": (
                 'bd close job-hunter-6vc1 --reason="Centralized parsing in '
-                'src/sse_parsing.py and cloud agent_stream/sse.py; moved '
+                "src/sse_parsing.py and cloud agent_stream/sse.py; moved "
                 'runtime_lifecycle.py."'
             )
         },
@@ -78,10 +81,11 @@ def test_posttool_bash_reason_paths_do_not_trigger_ast_read_errors(tmp_path: Pat
     result = evaluate_payload(payload)
     assert "PY-AST-001" not in finding_ids(result)
 
+
 def test_posttool_bash_move_skips_old_missing_path_but_checks_new_path(
     tmp_path: Path,
 ) -> None:
-    repo = _repo_with_moved_parse_error(tmp_path)
+    repo = repo_with_moved_parse_error(tmp_path)
     payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
@@ -97,12 +101,14 @@ def test_posttool_bash_move_skips_old_missing_path_but_checks_new_path(
         ("src/pkg/moved/worker.py", "parse_error")
     ]
 
+
 def test_morph_tool_is_edit_like() -> None:
     from slopgate.util.payloads import is_edit_like_tool
 
     assert is_edit_like_tool("morph")
     assert is_edit_like_tool("morph_edit_file")
     assert is_edit_like_tool("str_replace_editor")
+
 
 @pytest.mark.parametrize(
     "file_path, content, forbidden_rule",
@@ -139,10 +145,11 @@ def test_write_not_denied(
     content: str,
     forbidden_rule: str | None,
 ) -> None:
-    passed, detail = _assert_write_negative_case(
+    passed, detail = assert_write_negative_case(
         pretool_write, file_path, content, forbidden_rule
     )
     assert passed, detail
+
 
 @pytest.mark.parametrize(
     "command, forbidden_rule",
@@ -163,10 +170,11 @@ def test_bash_not_denied(
     command: str,
     forbidden_rule: str | None,
 ) -> None:
-    passed, detail = _assert_bash_negative_case(
+    passed, detail = assert_bash_negative_case(
         pretool_bash, evaluate, command, forbidden_rule
     )
     assert passed, detail
+
 
 def test_read_hook_file_allowed(bundle_root: Path) -> None:
     payload = {
@@ -182,6 +190,7 @@ def test_read_hook_file_allowed(bundle_root: Path) -> None:
         "read-only access to hook files should not trigger edit protections"
     )
 
+
 def test_two_asserts_below_threshold(pretool_write: WriteBuilder) -> None:
     result = evaluate_payload(
         pretool_write(
@@ -190,6 +199,7 @@ def test_two_asserts_below_threshold(pretool_write: WriteBuilder) -> None:
         )
     )
     assert "PY-TEST-001" not in finding_ids(result), "2 asserts below threshold"
+
 
 class TestEdgeCases:
     """Verify rules don't over-match on similar-looking but valid code."""

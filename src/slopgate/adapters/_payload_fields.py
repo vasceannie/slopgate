@@ -49,7 +49,9 @@ def merge_standard_session_fields(
     merge_cwd(raw, canonical, extra_keys=cwd_extra_keys)
 
 
-def sync_tool_result_fields(canonical: ObjectDict, raw: ObjectMapping | None = None) -> None:
+def sync_tool_result_fields(
+    canonical: ObjectDict, raw: ObjectMapping | None = None
+) -> None:
     """Align tool_result and tool_response keys on a canonical payload."""
     if raw is not None:
         tool_output = raw.get("tool_output")

@@ -20,19 +20,21 @@ def _finding_sort_key(item: RuleFinding) -> tuple[int, int]:
     return (DECISION_ORDER.get(item.decision, 0), int(item.severity))
 
 
-def _merge_updated_input(findings: list[RuleFinding]) -> dict[str, object]:
+def merge_updated_input(findings: list[RuleFinding]) -> dict[str, object]:
     merged: dict[str, object] = {}
     for finding in findings:
         merged.update(finding.updated_input)
     return merged
 
 
-def _collect_context(findings: list[RuleFinding]) -> str | None:
+def collect_context(findings: list[RuleFinding]) -> str | None:
     contextual = [item for item in findings if item.additional_context]
     if not contextual:
         return None
     if not any(item.decision in {DENY, "block", "ask"} for item in contextual):
-        parts = [item.additional_context for item in contextual if item.additional_context]
+        parts = [
+            item.additional_context for item in contextual if item.additional_context
+        ]
         return "\n\n".join(dict.fromkeys(parts))
     immediate_parts = [
         item.additional_context
@@ -53,12 +55,13 @@ def _collect_context(findings: list[RuleFinding]) -> str | None:
     return "\n\n".join(parts) if parts else None
 
 
-def _top_decision(findings: list[RuleFinding]) -> str | None:
+def top_decision(findings: list[RuleFinding]) -> str | None:
     if not findings:
         return None
     return max(findings, key=_finding_sort_key).decision
 
-def _serialize_findings(findings: list[RuleFinding]) -> list[dict[str, object]]:
+
+def serialize_findings(findings: list[RuleFinding]) -> list[dict[str, object]]:
     return [
         {
             "rule_id": item.rule_id,
@@ -70,6 +73,7 @@ def _serialize_findings(findings: list[RuleFinding]) -> list[dict[str, object]]:
         }
         for item in findings
     ]
+
 
 def render_output(
     ctx: HookContext,
@@ -89,7 +93,7 @@ def render_output(
     return adapter.render_output(
         ctx.event_name,
         findings,
-        context=_collect_context(findings),
-        updated_input=_merge_updated_input(findings),
-        decision=_top_decision(findings),
+        context=collect_context(findings),
+        updated_input=merge_updated_input(findings),
+        decision=top_decision(findings),
     )

@@ -2,18 +2,206 @@
 
 from __future__ import annotations
 
-from ._source_parse import _first_significant_line as _first_significant_line, _is_full_module_candidate as _is_full_module_candidate, _line_count as _line_count, _looks_like_indented_fragment as _looks_like_indented_fragment, _parse_health_failure as _parse_health_failure, _parse_strict as _parse_strict, _parsed_classes as _parsed_classes, _parsed_functions as _parsed_functions, _parsed_nodes as _parsed_nodes, _python_ast_rule_is_disabled as _python_ast_rule_is_disabled, _resolve_python_path as _resolve_python_path
-from ._module_size_projection import PythonModuleSizeRule as PythonModuleSizeRule, _ModuleSizeFinding as _ModuleSizeFinding, _OVERSIZED_SPLIT_PLANS as _OVERSIZED_SPLIT_PLANS, _dedupe_sources as _dedupe_sources, _is_authored_python_path as _is_authored_python_path, _module_split_scenario as _module_split_scenario, _oversized_module_split_guidance as _oversized_module_split_guidance, _post_python_structural_sources as _post_python_structural_sources, _pre_python_structural_sources as _pre_python_structural_sources, _project_multiedit_sources as _project_multiedit_sources, _project_replacement as _project_replacement, _project_top_level_edit as _project_top_level_edit, _python_structural_sources as _python_structural_sources, _read_python_source as _read_python_source
-from ._ast_health import PythonAstHealthRule as PythonAstHealthRule
-from ._broad_silent import PythonBroadExceptLoggerRule as PythonBroadExceptLoggerRule, PythonSilentExceptRule as PythonSilentExceptRule, _is_broad_exception as _is_broad_exception, _is_empty_default_return as _is_empty_default_return, _is_logger_call as _is_logger_call
-from ._boundary_helpers import _BOUNDARY_LOG_METHODS as _BOUNDARY_LOG_METHODS, _BOUNDARY_LOG_NAMES as _BOUNDARY_LOG_NAMES, _BoundaryFunction as _BoundaryFunction, _EVENT_CALL_NAMES as _EVENT_CALL_NAMES, _EVENT_NAME_MARKERS as _EVENT_NAME_MARKERS, _EVENT_PATH_PARTS as _EVENT_PATH_PARTS, _HTTP_BOUNDARY_METHODS as _HTTP_BOUNDARY_METHODS, _PACKAGE_BOUNDARY_CLASS_SUFFIXES as _PACKAGE_BOUNDARY_CLASS_SUFFIXES, _PACKAGE_BOUNDARY_NAME_PARTS as _PACKAGE_BOUNDARY_NAME_PARTS, _PACKAGE_BOUNDARY_PATH_PARTS as _PACKAGE_BOUNDARY_PATH_PARTS, _attribute_chain_parts as _attribute_chain_parts, _boundary_kind_for_function as _boundary_kind_for_function, _called_name as _called_name, _class_name_has_package_boundary_signal as _class_name_has_package_boundary_signal, _contains_event_boundary_call as _contains_event_boundary_call, _contains_package_boundary_call as _contains_package_boundary_call, _function_name_has_event_signal as _function_name_has_event_signal, _has_boundary_log_call as _has_boundary_log_call, _is_test_module_path as _is_test_module_path, _iter_public_boundary_functions as _iter_public_boundary_functions, _path_parts as _path_parts
-from ._boundary_rule import PythonBoundaryLoggingRule as PythonBoundaryLoggingRule
-from ._method_style import PythonDeepNestingRule as PythonDeepNestingRule, PythonLongLineRule as PythonLongLineRule, PythonLongMethodRule as PythonLongMethodRule, PythonLongParameterRule as PythonLongParameterRule
-from ._feature_envy import PythonFeatureEnvyRule as PythonFeatureEnvyRule
-from ._wrapper_god import PythonGodClassRule as PythonGodClassRule, PythonThinWrapperRule as PythonThinWrapperRule, _is_exempt_cast_wrapper as _is_exempt_cast_wrapper, _is_exempt_test_helper_wrapper as _is_exempt_test_helper_wrapper, _is_test_helper_path as _is_test_helper_path, _is_wrapper_candidate as _is_wrapper_candidate, _thin_wrapper_attribute_name as _thin_wrapper_attribute_name, _thin_wrapper_call_root_name as _thin_wrapper_call_root_name, _thin_wrapper_call_target_name as _thin_wrapper_call_target_name, _thin_wrapper_extract_single_call as _thin_wrapper_extract_single_call, _thin_wrapper_has_self_or_cls_receiver as _thin_wrapper_has_self_or_cls_receiver
-from ._complexity_dead import PythonCyclomaticComplexityRule as PythonCyclomaticComplexityRule, PythonDeadCodeRule as PythonDeadCodeRule, _CC_BRANCH_TYPES as _CC_BRANCH_TYPES
-from ._flat_siblings import PythonFlatFileSiblingsRule as PythonFlatFileSiblingsRule, _FlatSiblingFindingInput as _FlatSiblingFindingInput, _flat_sibling_patch_added_and_removed_paths as _flat_sibling_patch_added_and_removed_paths, _flat_sibling_patch_blob as _flat_sibling_patch_blob, _flat_sibling_projected_removed_files as _flat_sibling_projected_removed_files, _flat_sibling_resolve_candidate_path as _flat_sibling_resolve_candidate_path
-from ._import_helpers import _ALLOWED_IMPORT_ALIASES as _ALLOWED_IMPORT_ALIASES, _PrivateImportFinding as _PrivateImportFinding, _allowed_import_alias as _allowed_import_alias, _import_alias_full_name as _import_alias_full_name, _import_alias_replacement as _import_alias_replacement, _imported_modules as _imported_modules, _is_private_module_segment as _is_private_module_segment, _module_path_from_python_file as _module_path_from_python_file, _patch_added_source as _patch_added_source, _private_module_segments as _private_module_segments
-from ._private_imports import PythonPrivateImportChainRule as PythonPrivateImportChainRule
-from ._import_alias_rule import PythonImportAliasRule as PythonImportAliasRule
-from ._import_fanout_rule import PythonImportFanoutRule as PythonImportFanoutRule
+__all__ = [
+    "first_significant_line",
+    "is_full_module_candidate",
+    "line_count",
+    "looks_like_indented_fragment",
+    "parse_health_failure",
+    "parse_strict",
+    "parsed_classes",
+    "parsed_functions",
+    "parsed_nodes",
+    "python_ast_rule_is_disabled",
+    "resolve_python_path",
+    "PythonModuleSizeRule",
+    "ModuleSizeFinding",
+    "OVERSIZED_SPLIT_PLANS",
+    "dedupe_sources",
+    "is_authored_python_path",
+    "module_split_scenario",
+    "oversized_module_split_guidance",
+    "post_python_structural_sources",
+    "pre_python_structural_sources",
+    "project_multiedit_sources",
+    "project_replacement",
+    "project_top_level_edit",
+    "python_structural_sources",
+    "read_python_source",
+    "PythonAstHealthRule",
+    "PythonBroadExceptLoggerRule",
+    "PythonSilentExceptRule",
+    "is_broad_exception",
+    "is_empty_default_return",
+    "is_logger_call",
+    "BOUNDARY_LOG_METHODS",
+    "BOUNDARY_LOG_NAMES",
+    "BoundaryFunction",
+    "EVENT_CALL_NAMES",
+    "EVENT_NAME_MARKERS",
+    "EVENT_PATH_PARTS",
+    "HTTP_BOUNDARY_METHODS",
+    "PACKAGE_BOUNDARY_CLASS_SUFFIXES",
+    "PACKAGE_BOUNDARY_NAME_PARTS",
+    "PACKAGE_BOUNDARY_PATH_PARTS",
+    "attribute_chain_parts",
+    "boundary_kind_for_function",
+    "called_name",
+    "class_name_has_package_boundary_signal",
+    "contains_event_boundary_call",
+    "contains_package_boundary_call",
+    "function_name_has_event_signal",
+    "has_boundary_log_call",
+    "is_test_module_path",
+    "iter_public_boundary_functions",
+    "path_parts",
+    "PythonBoundaryLoggingRule",
+    "PythonDeepNestingRule",
+    "PythonLongLineRule",
+    "PythonLongMethodRule",
+    "PythonLongParameterRule",
+    "PythonFeatureEnvyRule",
+    "PythonGodClassRule",
+    "PythonThinWrapperRule",
+    "is_exempt_cast_wrapper",
+    "is_exempt_test_helper_wrapper",
+    "is_test_helper_path",
+    "is_wrapper_candidate",
+    "thin_wrapper_attribute_name",
+    "thin_wrapper_call_root_name",
+    "thin_wrapper_call_target_name",
+    "thin_wrapper_extract_single_call",
+    "thin_wrapper_has_self_or_cls_receiver",
+    "PythonCyclomaticComplexityRule",
+    "PythonDeadCodeRule",
+    "CC_BRANCH_TYPES",
+    "PythonFlatFileSiblingsRule",
+    "FlatSiblingFindingInput",
+    "flat_sibling_patch_added_and_removed_paths",
+    "flat_sibling_patch_blob",
+    "flat_sibling_projected_removed_files",
+    "flat_sibling_resolve_candidate_path",
+    "ALLOWED_IMPORT_ALIASES",
+    "PrivateImportFinding",
+    "allowed_import_alias",
+    "import_alias_full_name",
+    "import_alias_replacement",
+    "imported_modules",
+    "is_private_module_segment",
+    "module_path_from_python_file",
+    "patch_added_source",
+    "private_module_segments",
+    "PythonPrivateImportChainRule",
+    "PythonImportAliasRule",
+    "PythonImportFanoutRule",
+]
+from ._source_parse import (
+    first_significant_line,
+    is_full_module_candidate,
+    line_count,
+    looks_like_indented_fragment,
+    parse_health_failure,
+    parse_strict,
+    parsed_classes,
+    parsed_functions,
+    parsed_nodes,
+    python_ast_rule_is_disabled,
+    resolve_python_path,
+)
+from ._module_size_projection import PythonModuleSizeRule, ModuleSizeFinding
+from ._module_size_guidance import (
+    OVERSIZED_SPLIT_PLANS,
+    module_split_scenario,
+    oversized_module_split_guidance,
+)
+from ._module_size_sources import (
+    dedupe_sources,
+    is_authored_python_path,
+    post_python_structural_sources,
+    pre_python_structural_sources,
+    project_multiedit_sources,
+    project_replacement,
+    project_top_level_edit,
+    python_structural_sources,
+    read_python_source,
+)
+from ._ast_health import PythonAstHealthRule
+from ._broad_silent import (
+    PythonBroadExceptLoggerRule,
+    PythonSilentExceptRule,
+    is_broad_exception,
+    is_empty_default_return,
+    is_logger_call,
+)
+from ._boundary_helpers import (
+    BOUNDARY_LOG_METHODS,
+    BOUNDARY_LOG_NAMES,
+    BoundaryFunction,
+    EVENT_CALL_NAMES,
+    EVENT_NAME_MARKERS,
+    EVENT_PATH_PARTS,
+    HTTP_BOUNDARY_METHODS,
+    PACKAGE_BOUNDARY_CLASS_SUFFIXES,
+    PACKAGE_BOUNDARY_NAME_PARTS,
+    PACKAGE_BOUNDARY_PATH_PARTS,
+    attribute_chain_parts,
+    boundary_kind_for_function,
+    called_name,
+    class_name_has_package_boundary_signal,
+    contains_event_boundary_call,
+    contains_package_boundary_call,
+    function_name_has_event_signal,
+    has_boundary_log_call,
+    is_test_module_path,
+    iter_public_boundary_functions,
+    path_parts,
+)
+from ._boundary_rule import PythonBoundaryLoggingRule
+from ._method_style import (
+    PythonDeepNestingRule,
+    PythonLongLineRule,
+    PythonLongMethodRule,
+    PythonLongParameterRule,
+)
+from ._feature_envy import PythonFeatureEnvyRule
+from ._wrapper_god import (
+    PythonGodClassRule,
+    PythonThinWrapperRule,
+    is_exempt_cast_wrapper,
+    is_exempt_test_helper_wrapper,
+    is_test_helper_path,
+    is_wrapper_candidate,
+    thin_wrapper_attribute_name,
+    thin_wrapper_call_root_name,
+    thin_wrapper_call_target_name,
+    thin_wrapper_extract_single_call,
+    thin_wrapper_has_self_or_cls_receiver,
+)
+from ._complexity_dead import (
+    PythonCyclomaticComplexityRule,
+    PythonDeadCodeRule,
+    CC_BRANCH_TYPES,
+)
+from ._flat_siblings import (
+    PythonFlatFileSiblingsRule,
+    FlatSiblingFindingInput,
+    flat_sibling_patch_added_and_removed_paths,
+    flat_sibling_patch_blob,
+    flat_sibling_projected_removed_files,
+    flat_sibling_resolve_candidate_path,
+)
+from ._import_helpers import (
+    ALLOWED_IMPORT_ALIASES,
+    PrivateImportFinding,
+    allowed_import_alias,
+    import_alias_full_name,
+    import_alias_replacement,
+    imported_modules,
+    is_private_module_segment,
+    module_path_from_python_file,
+    patch_added_source,
+    private_module_segments,
+)
+from ._private_imports import PythonPrivateImportChainRule
+from ._import_alias_rule import PythonImportAliasRule
+from ._import_fanout_rule import PythonImportFanoutRule

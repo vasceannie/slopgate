@@ -1,15 +1,11 @@
 """Tests for repeated-block import canonicalization behavior."""
-# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import cast
-
-from slopgate.lint._detectors.duplicates import _collect_block_windows
+from slopgate.lint._detectors.duplicates import collect_block_windows
 from slopgate.lint._detectors.duplicates import detect_repeated_blocks
-from slopgate.lint._detectors.duplicates import detect_repeated_literals
-from slopgate.lint._config import load_config, set_config
 from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
@@ -33,7 +29,7 @@ class TestCollectBlockWindowsImportExclusion:
     def test_pure_import_window_not_hashed(self):
         """A module-level body of 3 import statements produces no block windows."""
         source = "import os\nimport sys\nimport json\n"
-        groups = _collect_block_windows([_make_parsed(source)])
+        groups = collect_block_windows([_make_parsed(source)])
         assert len(groups) == 0
 
     def test_same_import_block_in_two_files_no_violation(self):
@@ -41,34 +37,25 @@ class TestCollectBlockWindowsImportExclusion:
         source = "import os\nimport sys\nimport json\n"
         pf1 = _make_parsed(source, rel="a.py")
         pf2 = _make_parsed(source, rel="b.py")
-        groups = _collect_block_windows([pf1, pf2])
+        groups = collect_block_windows([pf1, pf2])
         assert len(groups) == 0
 
     def test_windows_overlapping_leading_import_block_are_excluded(self):
         """Boundary windows that include the leading import block are excluded."""
         source = "import os\nimport sys\nx = 1\n"
-        groups = _collect_block_windows([_make_parsed(source)])
+        groups = collect_block_windows([_make_parsed(source)])
         assert len(groups) == 0
 
     def test_from_import_window_excluded(self):
         """from-import statements are also excluded when all-import."""
-        source = (
-            "from os import path\n"
-            "from sys import argv\n"
-            "from json import dumps\n"
-        )
-        groups = _collect_block_windows([_make_parsed(source)])
+        source = "from os import path\nfrom sys import argv\nfrom json import dumps\n"
+        groups = collect_block_windows([_make_parsed(source)])
         assert len(groups) == 0
 
     def test_all_import_body_in_function_excluded(self):
         """Import statements inside a function body are also excluded."""
-        source = (
-            "def setup():\n"
-            "    import os\n"
-            "    import sys\n"
-            "    import json\n"
-        )
-        groups = _collect_block_windows([_make_parsed(source)])
+        source = "def setup():\n    import os\n    import sys\n    import json\n"
+        groups = collect_block_windows([_make_parsed(source)])
         assert len(groups) == 0
 
 
@@ -81,7 +68,7 @@ class TestCollectBlockWindowsDeclarativeConstants:
             '_TAILORING_SIGNALS_KEY = "tailoring_signals"\n'
         )
 
-        groups = _collect_block_windows([_make_parsed(source)])
+        groups = collect_block_windows([_make_parsed(source)])
 
         assert groups == {}
 
@@ -121,7 +108,10 @@ class TestCollectBlockWindowsDeclarativeConstants:
         )
 
         violations = detect_repeated_blocks(
-            [_make_parsed(extraction, rel="extraction.py"), _make_parsed(tailor_node, rel="_node.py")]
+            [
+                _make_parsed(extraction, rel="extraction.py"),
+                _make_parsed(tailor_node, rel="_node.py"),
+            ]
         )
 
         assert [v for v in violations if v.rule == "repeated-code-block"] == []
@@ -140,23 +130,18 @@ class TestCollectBlockWindowsDeclarativeConstants:
         )
 
         violations = detect_repeated_blocks(
-            [_make_parsed(extraction, rel="extraction.py"), _make_parsed(tailor_node, rel="_node.py")]
+            [
+                _make_parsed(extraction, rel="extraction.py"),
+                _make_parsed(tailor_node, rel="_node.py"),
+            ]
         )
 
         assert [v for v in violations if v.rule == "repeated-code-block"] == []
 
     def test_side_effectful_module_duplicate_still_fires(self) -> None:
         """Only declarative constants are skipped; module behavior remains guarded."""
-        source_a = (
-            'register("resume")\n'
-            "configure(client)\n"
-            "connect(client)\n"
-        )
-        source_b = (
-            'register("cover")\n'
-            "configure(adapter)\n"
-            "connect(adapter)\n"
-        )
+        source_a = 'register("resume")\nconfigure(client)\nconnect(client)\n'
+        source_b = 'register("cover")\nconfigure(adapter)\nconnect(adapter)\n'
 
         violations = detect_repeated_blocks(
             [_make_parsed(source_a, rel="a.py"), _make_parsed(source_b, rel="b.py")]
@@ -204,7 +189,7 @@ class TestCollectBlockWindowsImportCanonicalization:
             "return y\n"
         )
 
-        groups = _collect_block_windows(
+        groups = collect_block_windows(
             [_make_parsed(source_a, rel="a.py"), _make_parsed(source_b, rel="b.py")]
         )
 
@@ -212,5 +197,3 @@ class TestCollectBlockWindowsImportCanonicalization:
         members = [member for group in groups.values() for member in group]
         assert any(rel == "a.py" and start == 4 for rel, _, start, _ in members)
         assert any(rel == "b.py" and start == 4 for rel, _, start, _ in members)
-
-

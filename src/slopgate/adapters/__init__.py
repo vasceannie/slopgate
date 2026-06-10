@@ -12,6 +12,14 @@ Supported platforms:
 
 from __future__ import annotations
 
+__all__ = [
+    "PlatformAdapter",
+    "ClaudeAdapter",
+    "CodexAdapter",
+    "CursorAdapter",
+    "OpenCodeAdapter",
+]
+
 from slopgate.adapters.base import PlatformAdapter
 from slopgate.adapters.claude import ClaudeAdapter
 from slopgate.adapters.codex import CodexAdapter

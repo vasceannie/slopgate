@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Literal, TypedDict
@@ -10,21 +11,15 @@ from slopgate._types import (
 )
 
 
-fcntl: ModuleType | None
-try:
-    import fcntl as _fcntl
-except ImportError:  # pragma: no cover - Windows only
-    fcntl = None
-else:
-    fcntl = _fcntl
+def _optional_module(name: str) -> ModuleType | None:
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError:
+        return None
 
-msvcrt: ModuleType | None
-try:
-    import msvcrt as _msvcrt
-except ImportError:  # pragma: no cover - POSIX only
-    msvcrt = None
-else:
-    msvcrt = _msvcrt
+
+fcntl = _optional_module("fcntl")
+msvcrt = _optional_module("msvcrt")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,14 +32,14 @@ class RetryLockPayload:
 
 
 @dataclass(frozen=True, slots=True)
-class _DenyKeyPattern:
+class DenyKeyPattern:
     session_id: str
     rule_id: str
     path: str | None
     attempt_fingerprint: str | None
 
 
-class _HookStateSnapshot(TypedDict):
+class HookStateSnapshot(TypedDict):
     full_reads: dict[str, int]
     search_reminders: dict[str, int]
     deny_hits: dict[str, int]
@@ -52,5 +47,5 @@ class _HookStateSnapshot(TypedDict):
     repair_plans: dict[str, ObjectDict]
 
 
-_ObjectStateSection = Literal["retry_locks", "repair_plans"]
-_IntStateSection = Literal["search_reminders"]
+ObjectStateSection = Literal["retry_locks", "repair_plans"]
+IntStateSection = Literal["search_reminders"]

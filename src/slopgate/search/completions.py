@@ -1,9 +1,10 @@
 """Shell completion scripts for isx / slopgate search."""
+
 from __future__ import annotations
 
 from slopgate.search.config import IsxError
 
-BASH_COMPLETION = r'''_isx() {
+BASH_COMPLETION = r"""_isx() {
   local cur prev words cword
   _init_completion || return
 
@@ -47,9 +48,9 @@ BASH_COMPLETION = r'''_isx() {
 }
 complete -F _isx isx
 complete -F _isx vfc
-'''
+"""
 
-ZSH_COMPLETION = r'''#compdef isx vfc
+ZSH_COMPLETION = r"""#compdef isx vfc
 
 _isx() {
   local -a commands
@@ -121,7 +122,7 @@ _isx() {
 }
 
 _isx "$@"
-'''
+"""
 
 
 def print_completion(shell: str) -> int:

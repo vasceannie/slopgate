@@ -161,7 +161,8 @@ def find_similar(
                 continue
 
             # Skip if already seen this pair
-            pair_key = tuple(sorted([f1.location, f2.location]))
+            loc_a, loc_b = sorted((f1.location, f2.location))
+            pair_key = (loc_a, loc_b)
             if pair_key in seen_pairs:
                 continue
             seen_pairs.add(pair_key)

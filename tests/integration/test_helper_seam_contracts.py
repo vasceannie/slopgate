@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.test_enrichment_public_api import context_for_source
+from slopgate._types import object_dict
 from slopgate.adapters.base import (
     hook_specific_context_output,
     render_permission_request_output,
@@ -10,6 +11,25 @@ from slopgate.adapters.base import (
 from slopgate.enrichment._helpers import first_target_content, safe_read
 from slopgate.lint._updater import render_slopgate_toml
 from slopgate.util.payloads._patches import parse_patch_candidate_paths
+
+
+def _adapter_permission_pipeline_summary() -> dict[str, object]:
+    context_output = hook_specific_context_output("PreToolUse", "read files first")
+    decision_output = render_permission_request_output(
+        "PermissionRequest",
+        "deny",
+        "blocked by rule",
+    )
+    if decision_output is None:
+        raise AssertionError("expected permission decision output")
+    context_specific = object_dict(context_output.get("hookSpecificOutput"))
+    decision_specific = object_dict(decision_output.get("hookSpecificOutput"))
+    decision = object_dict(decision_specific.get("decision"))
+    return {
+        "context": context_specific.get("additionalContext"),
+        "decision": decision.get("behavior"),
+        "message": decision.get("message"),
+    }
 
 
 def test_enrichment_helper_pipeline_reads_context_and_files(tmp_path: Path) -> None:
@@ -31,18 +51,9 @@ def test_enrichment_helper_pipeline_reads_context_and_files(tmp_path: Path) -> N
 
 
 def test_adapter_permission_pipeline_renders_context_and_decisions() -> None:
-    context_output = hook_specific_context_output("PreToolUse", "read files first")
-    decision_output = render_permission_request_output(
-        "PermissionRequest",
-        "deny",
-        "blocked by rule",
-    )
-
-    assert {
-        "context": context_output["hookSpecificOutput"]["additionalContext"],
-        "decision": decision_output["hookSpecificOutput"]["decision"]["behavior"],
-        "message": decision_output["hookSpecificOutput"]["decision"]["message"],
-    } == {
+    assert callable(hook_specific_context_output)
+    assert callable(render_permission_request_output)
+    assert _adapter_permission_pipeline_summary() == {
         "context": "read files first",
         "decision": "deny",
         "message": "blocked by rule",

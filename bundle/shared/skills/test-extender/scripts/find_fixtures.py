@@ -234,7 +234,7 @@ def main() -> None:
                 usage_map[name].used_in_tests.extend(tests)
 
     if args.json:
-        output = {
+        output: dict[str, object] = {
             "fixtures": [
                 {
                     "name": f.name,

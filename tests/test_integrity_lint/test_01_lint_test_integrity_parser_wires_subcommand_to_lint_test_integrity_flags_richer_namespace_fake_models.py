@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from pytest import MonkeyPatch, CaptureFixture
+
 from tests.test_test_integrity_lint import (
     Path,
-    _assert_mock_theater_guidance,
-    _assert_mocked_integration_report,
-    _assert_schema_bypass_and_weak_assertion_report,
-    _run_lint_check,
-    _run_test_integrity,
-    _write_project,
+    assert_mock_theater_guidance,
+    assert_mocked_integration_report,
+    assert_schema_bypass_and_weak_assertion_report,
+    run_lint_check,
+    run_test_integrity,
+    write_project,
     build_parser,
-    pytest,
 )
+
 
 def test_lint_test_integrity_parser_wires_subcommand() -> None:
     parser = build_parser()
@@ -23,12 +25,13 @@ def test_lint_test_integrity_parser_wires_subcommand() -> None:
         True,
     )
 
+
 def test_lint_test_integrity_flags_mock_theater_with_guidance(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import MagicMock
@@ -47,20 +50,20 @@ def test_sends_notice_payload_contract():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "[NEW] mock-theater" in captured.out
-    _assert_mock_theater_guidance(captured.out, result)
+    assert_mock_theater_guidance(captured.out, result)
 
 
 def test_main_lint_check_includes_test_integrity_findings(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import MagicMock
@@ -79,21 +82,21 @@ def test_sends_notice_payload_contract():
 """.lstrip(),
     )
 
-    result = _run_lint_check(tmp_path, monkeypatch, details=True)
+    result = run_lint_check(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "slopgate lint " in captured.out
     assert "slopgate lint test-integrity" not in captured.out
-    _assert_mock_theater_guidance(captured.out, result)
+    assert_mock_theater_guidance(captured.out, result)
 
 
 def test_lint_test_integrity_flags_weak_assertions_and_schema_bypasses(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from typing import cast
@@ -113,19 +116,20 @@ def test_projection_payload_survives():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "[NEW] schema-bypass-test-data" in captured.out
-    _assert_schema_bypass_and_weak_assertion_report(captured.out, result)
+    assert_schema_bypass_and_weak_assertion_report(captured.out, result)
+
 
 def test_lint_test_integrity_allows_semantic_mock_payload_assertion(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import MagicMock
@@ -138,18 +142,19 @@ def test_publishes_company_payload():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_flags_mocked_integration_tests(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import MagicMock
@@ -163,19 +168,20 @@ def test_e2e_projection_pipeline_renders_company():
         test_name="test_tui_integration.py",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "[NEW] mocked-integration-test" in captured.out
-    _assert_mocked_integration_report(captured.out, result)
+    assert_mocked_integration_report(captured.out, result)
+
 
 def test_lint_test_integrity_allows_type_guard_before_semantic_assertions(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 def test_error_context_is_preserved():
@@ -187,18 +193,19 @@ def test_error_context_is_preserved():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_allows_negative_side_effect_mock_contract(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import MagicMock
@@ -212,18 +219,19 @@ def test_noop_does_not_log_without_start_time():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_ignores_low_risk_wire_payload_contracts(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from typing import cast
@@ -240,18 +248,19 @@ def test_deserialize_ignores_unknown_fields():
         test_name="test_deserialize_contract.py",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_allows_outer_boundary_stubs_in_integration_tests(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from unittest.mock import patch
@@ -265,18 +274,19 @@ def test_integration_bootstrap_uses_env_boundary():
         test_name="test_bootstrap_integration.py",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_allows_one_field_protocol_namespace_stub(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from types import SimpleNamespace
@@ -288,18 +298,19 @@ def test_soft_verify_widget_kind_protocol_stub():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 0
     assert "✓ No violations" in captured.out
 
+
 def test_lint_test_integrity_flags_richer_namespace_fake_models(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from types import SimpleNamespace
@@ -311,7 +322,7 @@ def test_fake_field_model_drift():
 """.lstrip(),
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch)
+    result = run_test_integrity(tmp_path, monkeypatch)
 
     captured = capsys.readouterr()
     assert result == 1

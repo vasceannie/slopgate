@@ -26,8 +26,15 @@ from slopgate.search.git_utils import normalize_clone_url, resolve_add_repo, url
 
 
 def test_enrichment_metadata_models_preserve_discovered_fields(tmp_path: Path) -> None:
-    fixture: FixtureInfo = {"name": "client", "conftest": "tests/conftest.py", "has_params": True}
-    example: ParametrizeExample = {"file": "tests/test_app.py", "snippet": "@pytest.mark.parametrize(...)"}
+    fixture: FixtureInfo = {
+        "name": "client",
+        "conftest": "tests/conftest.py",
+        "has_params": True,
+    }
+    example: ParametrizeExample = {
+        "file": "tests/test_app.py",
+        "snippet": "@pytest.mark.parametrize(...)",
+    }
     importable = ImportableConstant("MAX_RETRIES", 3, tmp_path / "constants.py", 12)
     hint = MagicNumberHint("src/service.py", 44, 3)
 
@@ -37,9 +44,18 @@ def test_enrichment_metadata_models_preserve_discovered_fields(tmp_path: Path) -
         "importable": importable,
         "hint": hint,
     } == {
-        "fixture": {"name": "client", "conftest": "tests/conftest.py", "has_params": True},
-        "example": {"file": "tests/test_app.py", "snippet": "@pytest.mark.parametrize(...)"},
-        "importable": ImportableConstant("MAX_RETRIES", 3, tmp_path / "constants.py", 12),
+        "fixture": {
+            "name": "client",
+            "conftest": "tests/conftest.py",
+            "has_params": True,
+        },
+        "example": {
+            "file": "tests/test_app.py",
+            "snippet": "@pytest.mark.parametrize(...)",
+        },
+        "importable": ImportableConstant(
+            "MAX_RETRIES", 3, tmp_path / "constants.py", 12
+        ),
         "hint": MagicNumberHint("src/service.py", 44, 3),
     }
 
@@ -83,7 +99,9 @@ def test_config_dir_prefers_explicit_environment_path(
     assert config_dir() == explicit_config_dir
 
 
-@given(strategies.from_regex(r"[A-Za-z0-9_.-]{1,12}/[A-Za-z0-9_.-]{1,12}", fullmatch=True))
+@given(
+    strategies.from_regex(r"[A-Za-z0-9_.-]{1,12}/[A-Za-z0-9_.-]{1,12}", fullmatch=True)
+)
 def test_git_url_normalization_equates_https_and_ssh_forms(repo_path: str) -> None:
     ssh_url = f"git@github.com:{repo_path}.git"
     https_url = f"https://github.com/{repo_path}"
@@ -106,7 +124,9 @@ def test_git_url_helpers_normalize_and_pass_through_non_local_repo() -> None:
 def test_resolve_repo_root_finds_quality_gate_ancestor(tmp_path: Path) -> None:
     repo = tmp_path / "myrepo"
     repo.mkdir()
-    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+    _ = (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
     nested = repo / "src" / "pkg"
     nested.mkdir(parents=True)
 
@@ -121,7 +141,9 @@ def test_resolve_repo_root_returns_none_outside_enrolled_repo(tmp_path: Path) ->
 
 
 def test_is_repo_enrolled_true_when_quality_gate_present(tmp_path: Path) -> None:
-    _ = (tmp_path / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+    _ = (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
 
     assert is_repo_enrolled(tmp_path)
 
@@ -130,7 +152,9 @@ def test_is_repo_enrolled_false_when_quality_gate_absent(tmp_path: Path) -> None
     assert is_repo_enrolled(tmp_path) is False
 
 
-def test_is_repo_disabled_true_when_noqualitygate_sentinel_present(tmp_path: Path) -> None:
+def test_is_repo_disabled_true_when_noqualitygate_sentinel_present(
+    tmp_path: Path,
+) -> None:
     _ = (tmp_path / ".noslopgate").write_text("", encoding="utf-8")
 
     assert is_repo_disabled(tmp_path)

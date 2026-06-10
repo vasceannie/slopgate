@@ -9,7 +9,7 @@ from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
 
 
-def _permission_reason(result: EngineResult) -> str:
+def permission_reason(result: EngineResult) -> str:
     assert result.output is not None, "expected hook output"
     spec = object_dict(result.output.get("hookSpecificOutput"))
     decision = string_value(spec.get("permissionDecision"))
@@ -19,8 +19,8 @@ def _permission_reason(result: EngineResult) -> str:
     return string_value(spec.get("permissionDecisionReason")) or ""
 
 
-def _assert_denied_by(result: EngineResult, rule_id: str) -> None:
-    reason = _permission_reason(result)
+def assert_denied_by(result: EngineResult, rule_id: str) -> None:
+    reason = permission_reason(result)
     assert rule_id in reason, f"expected {rule_id!r} in reason: {reason!r}"
 
 
@@ -45,7 +45,7 @@ class TestPrivateImportChainRule(unittest.TestCase):
             )
         )
 
-        _assert_denied_by(result, "PY-IMPORT-003")
+        assert_denied_by(result, "PY-IMPORT-003")
         assert "PY-IMPORT-003" in _rule_ids(result), (
             "stacked private import chains should be denied"
         )
@@ -55,7 +55,7 @@ class TestPrivateImportChainRule(unittest.TestCase):
             self._payload("src/cli/auth/_orchestrate/_core.py", "VALUE = 1\n")
         )
 
-        _assert_denied_by(result, "PY-IMPORT-003")
+        assert_denied_by(result, "PY-IMPORT-003")
         assert "PY-IMPORT-003" in _rule_ids(result), (
             "stacked private package paths should be denied"
         )

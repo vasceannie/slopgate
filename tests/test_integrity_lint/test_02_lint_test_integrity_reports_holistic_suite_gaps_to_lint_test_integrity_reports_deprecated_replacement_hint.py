@@ -1,51 +1,54 @@
 from __future__ import annotations
 
+from pytest import MonkeyPatch, CaptureFixture
+
 from tests.test_test_integrity_lint import (
     Path,
-    _assert_high_fan_in_style_helper_discount,
-    _assert_holistic_suite_gap_report,
-    _assert_runtime_coverage_report,
-    _run_test_integrity,
-    _write_holistic_suite_gap_project,
-    _write_project,
-    _write_runtime_coverage_project,
-    pytest,
+    assert_high_fan_in_style_helper_discount,
+    assert_holistic_suite_gap_report,
+    assert_runtime_coverage_report,
+    run_test_integrity,
+    write_holistic_suite_gap_project,
+    write_project,
+    write_runtime_coverage_project,
 )
+
 
 def test_lint_test_integrity_reports_holistic_suite_gaps(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_holistic_suite_gap_project(tmp_path)
+    write_holistic_suite_gap_project(tmp_path)
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
-    _assert_holistic_suite_gap_report(captured.out)
+    assert_holistic_suite_gap_report(captured.out)
+
 
 def test_lint_test_integrity_uses_runtime_coverage_json_when_present(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_runtime_coverage_project(tmp_path)
+    write_runtime_coverage_project(tmp_path)
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "coverage.json" in captured.out
-    _assert_runtime_coverage_report(captured.out, result)
+    assert_runtime_coverage_report(captured.out, result)
 
 
 def test_lint_test_integrity_normalizes_backslash_runtime_coverage_json_paths(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_runtime_coverage_project(tmp_path)
+    write_runtime_coverage_project(tmp_path)
     (tmp_path / "coverage.json").write_text(
         """{
   "files": {
@@ -56,7 +59,7 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_json_paths(
         encoding="utf-8",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
@@ -65,10 +68,10 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_json_paths(
 
 def test_lint_test_integrity_normalizes_backslash_runtime_coverage_xml_paths(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_runtime_coverage_project(tmp_path)
+    write_runtime_coverage_project(tmp_path)
     (tmp_path / "coverage.json").unlink()
     (tmp_path / "coverage.xml").write_text(
         """<?xml version="1.0" ?>
@@ -85,7 +88,7 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_xml_paths(
         encoding="utf-8",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
@@ -93,7 +96,7 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_xml_paths(
 
 
 def _write_cobertura_xml_source_project(tmp_path: Path) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from pkg.core import covered, runtime_low
@@ -130,12 +133,12 @@ def runtime_low() -> str:
 
 def test_lint_test_integrity_uses_cobertura_xml_sources_for_src_relative_paths(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
     _write_cobertura_xml_source_project(tmp_path)
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 0
@@ -143,7 +146,7 @@ def test_lint_test_integrity_uses_cobertura_xml_sources_for_src_relative_paths(
 
 
 def _write_partial_runtime_coverage_project(tmp_path: Path) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from pkg.core import covered
@@ -182,25 +185,28 @@ def other_behavior() -> str:
 
 def test_lint_test_integrity_treats_absent_partial_runtime_coverage_as_unknown(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
     _write_partial_runtime_coverage_project(tmp_path)
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
-    forbidden = ["src/pkg/other.py:coverage-000", "runtime_line_coverage=0% from coverage.xml"]
+    forbidden = [
+        "src/pkg/other.py:coverage-000",
+        "runtime_line_coverage=0% from coverage.xml",
+    ]
     assert result == 0
     assert all(item not in captured.out for item in forbidden)
 
 
 def test_lint_test_integrity_discounts_high_fan_in_style_helpers(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 def test_smoke():
@@ -227,19 +233,20 @@ def caller_c() -> str:
         encoding="utf-8",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1
     assert "pkg.styles.markup" not in captured.out
-    _assert_high_fan_in_style_helper_discount(captured.out, result)
+    assert_high_fan_in_style_helper_discount(captured.out, result)
+
 
 def test_lint_test_integrity_reports_deprecated_replacement_hint(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
 ) -> None:
-    _write_project(
+    write_project(
         tmp_path,
         """
 from pkg.core import old_api
@@ -262,7 +269,7 @@ def new_api() -> str:
         encoding="utf-8",
     )
 
-    result = _run_test_integrity(tmp_path, monkeypatch, details=True)
+    result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
     assert result == 1

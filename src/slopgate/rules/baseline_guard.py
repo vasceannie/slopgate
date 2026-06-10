@@ -61,7 +61,9 @@ def _find_increases(
 def _looks_like_env_assignment(token: str) -> bool:
     """Return True for shell VAR=value assignment tokens."""
     name, sep, _value = token.partition("=")
-    return bool(sep and name and name.replace("_", "").isalnum() and not name[0].isdigit())
+    return bool(
+        sep and name and name.replace("_", "").isalnum() and not name[0].isdigit()
+    )
 
 
 def _command_name(token: str) -> str:

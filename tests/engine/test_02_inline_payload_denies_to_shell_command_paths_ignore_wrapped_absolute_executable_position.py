@@ -14,6 +14,7 @@ from tests.test_engine import (
     shell_command_paths,
 )
 
+
 class TestInlinePayloadDenies:
     @pytest.mark.parametrize(
         "command",
@@ -71,7 +72,10 @@ class TestInlinePayloadDenies:
                 "cwd": str(BUNDLE_ROOT),
                 "hook_event_name": "PreToolUse",
                 "tool_name": tool_name,
-                "tool_input": {"file_path": "ruff.toml", "content": "line-length = 120\n"},
+                "tool_input": {
+                    "file_path": "ruff.toml",
+                    "content": "line-length = 120\n",
+                },
             }
         )
 
@@ -137,12 +141,12 @@ class TestInlinePayloadDenies:
     def test_absolute_find_executable_after_shell_separator_is_not_system_path_target(
         self, pretool_bash: BashBuilder
     ) -> None:
-        result = evaluate_payload(pretool_bash("cd src && /usr/bin/find . -name '*.py'"))
+        result = evaluate_payload(
+            pretool_bash("cd src && /usr/bin/find . -name '*.py'")
+        )
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
 
-    def test_system_path_argument_still_denied(
-        self, pretool_bash: BashBuilder
-    ) -> None:
+    def test_system_path_argument_still_denied(self, pretool_bash: BashBuilder) -> None:
         result = evaluate_payload(pretool_bash("cat /usr/bin/rg"))
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result), (
@@ -188,7 +192,9 @@ class TestInlinePayloadDenies:
             "direct writes to hook-layer config should remain protected"
         )
 
-    def test_exec_protection_bash_write_staging_rule(self, pretool_bash: BashBuilder) -> None:
+    def test_exec_protection_bash_write_staging_rule(
+        self, pretool_bash: BashBuilder
+    ) -> None:
         result = evaluate_payload(
             pretool_bash(
                 "echo '# temp' > src/slopgate/rules/python_ast/_staging/test_smell_rules.py"
@@ -243,6 +249,7 @@ class TestInlinePayloadDenies:
             "MultiEdit payloads should inspect later edits for Any imports"
         )
 
+
 def test_shell_command_paths_captures_redirect_targets() -> None:
     paths = shell_command_paths(
         "grep foo src/app.py>pyproject.toml && echo hi > Makefile && touch Makefile"
@@ -250,32 +257,39 @@ def test_shell_command_paths_captures_redirect_targets() -> None:
     assert "pyproject.toml" in paths
     assert "Makefile" in paths
 
+
 def test_shell_command_paths_ignores_glob_patterns() -> None:
     paths = shell_command_paths("python -m py_compile *.py src/*.py")
     assert "*.py" not in paths
     assert "src/*.py" not in paths
 
+
 def test_shell_command_paths_ignores_paths_inside_quoted_option_text() -> None:
     paths = shell_command_paths(
         'bd close job-hunter-6vc1 --reason="Centralized parsing in '
-        'src/sse_parsing.py and cloud agent_stream/sse.py; moved '
+        "src/sse_parsing.py and cloud agent_stream/sse.py; moved "
         'runtime_lifecycle.py."'
     )
     assert "src/sse_parsing.py" not in paths
     assert "agent_stream/sse.py" not in paths
     assert "runtime_lifecycle.py" not in paths
 
+
 def test_shell_command_paths_still_captures_path_option_values() -> None:
     paths = shell_command_paths("tool --config=pyproject.toml --file src/app.py")
     assert "pyproject.toml" in paths
     assert "src/app.py" in paths
+
 
 def test_shell_command_paths_ignore_absolute_executable_position() -> None:
     paths = shell_command_paths('/usr/bin/rg -n "needle" src/app.py')
     assert "/usr/bin/rg" not in paths
     assert "src/app.py" in paths
 
+
 def test_shell_command_paths_ignore_wrapped_absolute_executable_position() -> None:
-    paths = shell_command_paths("env FOO=bar /usr/bin/python -m pytest tests/test_app.py")
+    paths = shell_command_paths(
+        "env FOO=bar /usr/bin/python -m pytest tests/test_app.py"
+    )
     assert "/usr/bin/python" not in paths
     assert "tests/test_app.py" in paths

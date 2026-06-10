@@ -7,8 +7,9 @@ from tests.test_adapters import (
     pytest,
     require_rendered,
     require_spec,
-    test_support,
+    support,
 )
+
 
 class TestCodexAdapterEdgeCases:
     """Codex adapter — PostToolUse severity semantics, context merging, unsupported events."""
@@ -35,7 +36,7 @@ class TestCodexAdapterEdgeCases:
         )
         rendered = require_rendered(output)
         assert rendered["continue"] is False, "CRITICAL must set continue=False"
-        assert "CRIT-001" in test_support.required_string(rendered, "stopReason")
+        assert "CRIT-001" in support.required_string(rendered, "stopReason")
         assert "decision" not in rendered, (
             "continue:false and decision must not coexist"
         )
@@ -89,7 +90,7 @@ class TestCodexAdapterEdgeCases:
             "decision must not coexist with continue:false"
         )
         assert (
-            test_support.required_string(require_spec(output), "additionalContext")
+            support.required_string(require_spec(output), "additionalContext")
             == "also check this"
         )
 
@@ -121,7 +122,7 @@ class TestCodexAdapterEdgeCases:
         )
         rendered = require_rendered(output)
         assert rendered["continue"] is False, "CRITICAL wins: continue must be False"
-        assert "CRIT-001" in test_support.required_string(rendered, "stopReason")
+        assert "CRIT-001" in support.required_string(rendered, "stopReason")
         assert "decision" not in rendered, "CRITICAL must suppress decision key"
 
     def test_pretool_deny_with_context(self) -> None:
@@ -169,7 +170,7 @@ class TestCodexAdapterEdgeCases:
             updated_input={},
         )
         assert (
-            test_support.required_string(require_spec(output), "additionalContext")
+            support.required_string(require_spec(output), "additionalContext")
             == "check search results"
         )
 
@@ -195,7 +196,7 @@ class TestCodexAdapterEdgeCases:
         )
         rendered = require_rendered(output)
         assert rendered["decision"] == "block", "Stop block must set decision=block"
-        reason = test_support.required_string(rendered, "reason")
+        reason = support.required_string(rendered, "reason")
         assert "STOP-001" in reason, "rule id must appear in reason"
         assert "run tests" in reason, "context must be appended to reason"
 
@@ -224,7 +225,7 @@ class TestCodexAdapterEdgeCases:
             "UserPromptSubmit must set decision=block"
         )
         assert (
-            test_support.required_string(require_spec(output), "additionalContext")
+            support.required_string(require_spec(output), "additionalContext")
             == "redact first"
         )
 

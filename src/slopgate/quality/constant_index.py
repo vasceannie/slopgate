@@ -203,7 +203,9 @@ def build_project_constant_index(
     return ConstantIndex(root=root, string_constants=collected, files=tuple(files))
 
 
-def find_string_constant(value: str, *, root: Path | None = None) -> StringConstantMatch | None:
+def find_string_constant(
+    value: str, *, root: Path | None = None
+) -> StringConstantMatch | None:
     """Find a string constant by value from the active/session index."""
 
     index = get_session_constant_index()

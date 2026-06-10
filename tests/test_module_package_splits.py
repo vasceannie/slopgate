@@ -61,13 +61,17 @@ PUBLIC_IMPORT_CASES = (
 
 
 @pytest.mark.parametrize("legacy_module", SPLIT_MODULES)
-def test_large_core_module_is_package_with_no_legacy_module_file(legacy_module: str) -> None:
+def test_large_core_module_is_package_with_no_legacy_module_file(
+    legacy_module: str,
+) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     module_path = repo_root / legacy_module
     package_path = module_path.with_suffix("")
 
     assert not module_path.exists(), f"legacy oversized module remains: {legacy_module}"
-    assert (package_path / "__init__.py").is_file(), f"missing package facade: {package_path}"
+    assert (package_path / "__init__.py").is_file(), (
+        f"missing package facade: {package_path}"
+    )
 
 
 @pytest.mark.parametrize("module_name", [*SOFT_OVERSIZED_SPLIT_TARGETS])
@@ -81,7 +85,9 @@ def test_split_target_is_not_soft_oversized(module_name: str) -> None:
 
 
 @pytest.mark.parametrize(("module_name", "public_name"), PUBLIC_IMPORT_CASES)
-def test_split_module_public_import_remains_available(module_name: str, public_name: str) -> None:
+def test_split_module_public_import_remains_available(
+    module_name: str, public_name: str
+) -> None:
     module = import_module(module_name)
 
     assert getattr(module, public_name).__name__ == public_name

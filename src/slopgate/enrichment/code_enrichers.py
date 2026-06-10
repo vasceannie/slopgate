@@ -8,11 +8,14 @@ from typing import TYPE_CHECKING
 from slopgate.constants import METADATA_PATH, PRODUCTION_SYMBOL_PREVIEW_LIMIT
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
-    resolve_path,
+    loaded_source_at_path,
+    metadata_str,
+    path_source_from_metadata,
     safe_parse,
-    safe_read,
 )
-from slopgate.enrichment.local_context import find_local_call_sites
+from slopgate.enrichment import _thin_wrapper_enricher
+
+enrich_thin_wrapper = _thin_wrapper_enricher.enrich_thin_wrapper
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -39,17 +42,6 @@ class _ComplexityBreakdown:
     boolops: int
 
 
-@dataclass(frozen=True)
-class _PathSource:
-    path: Path
-    source: str
-
-
-def _metadata_str(metadata: dict[str, object], key: str) -> str | None:
-    value = metadata.get(key)
-    return value if isinstance(value, str) and value else None
-
-
 def _find_function_node(tree: ast.Module, func_name: str) -> FunctionNode | None:
     for node in ast.walk(tree):
         if (
@@ -64,14 +56,14 @@ def _load_target_function(
     finding: RuleFinding,
     ctx: HookContext,
 ) -> _TargetFunction | None:
-    path_str = _metadata_str(finding.metadata, METADATA_PATH)
-    func_name = _metadata_str(finding.metadata, "function")
+    path_str = metadata_str(finding.metadata, METADATA_PATH)
+    func_name = metadata_str(finding.metadata, "function")
     if path_str is None or func_name is None:
         return None
-    full_path = resolve_path(path_str, ctx.config.root)
-    source = safe_read(full_path)
-    if not source:
+    loaded = loaded_source_at_path(path_str, ctx.config.root)
+    if loaded is None:
         return None
+    full_path, source = loaded
     tree = safe_parse(source)
     if tree is None:
         return None
@@ -79,18 +71,6 @@ def _load_target_function(
     if node is None:
         return None
     return _TargetFunction(path=full_path, tree=tree, node=node)
-
-
-def _path_source_from_metadata(
-    finding: RuleFinding,
-    ctx: HookContext,
-) -> _PathSource | None:
-    path_str = _metadata_str(finding.metadata, METADATA_PATH)
-    if path_str is None:
-        return None
-    full_path = resolve_path(path_str, ctx.config.root)
-    source = safe_read(full_path)
-    return _PathSource(path=full_path, source=source) if source else None
 
 
 def _block_description(node: ast.stmt) -> str | None:
@@ -289,11 +269,11 @@ def enrich_cyclomatic_complexity(finding: RuleFinding, ctx: HookContext) -> None
 
 def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich feature-envy findings with local class/import clues."""
-    envied = _metadata_str(finding.metadata, "envied_object")
-    path_source = _path_source_from_metadata(finding, ctx)
-    if envied is None or path_source is None:
+    envied = metadata_str(finding.metadata, "envied_object")
+    loaded = path_source_from_metadata(finding, ctx)
+    if envied is None or loaded is None:
         return
-    source = path_source.source
+    _, source = loaded
     extras: list[str] = []
     tree = safe_parse(source)
     if tree is not None:
@@ -318,33 +298,3 @@ def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
     append_enrichment_message(finding, extras)
 
 
-def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
-    """Enrich thin-wrapper findings with inlining guidance."""
-    func_name = _metadata_str(finding.metadata, "function")
-    wrapped = _metadata_str(finding.metadata, "wraps")
-    loaded_source = _path_source_from_metadata(finding, ctx)
-    if loaded_source is None:
-        return
-    if func_name is None:
-        return
-    call_count = loaded_source.source.count(f"{func_name}(")
-    extras: list[str] = []
-    if call_count > 1:
-        extras.append(
-            f"\n`{func_name}` is called ~{call_count - 1} time(s) in this file."
-        )
-        replacement = f"`{wrapped}(...)`" if wrapped is not None else "the wrapped function"
-        extras.append(
-            f"Replace each `{func_name}(...)` call with {replacement}, then remove "
-            "the wrapper."
-        )
-    else:
-        call_sites = find_local_call_sites(func_name, ctx, loaded_source.path)
-        if call_sites:
-            extras.append("\nLocal call sites to update before removing this wrapper:")
-            extras.extend(f"- {site}" for site in call_sites)
-        else:
-            extras.append(
-                f"\n`{func_name}` appears to be called from other files. Search for all usages before inlining."
-            )
-    append_enrichment_message(finding, extras)

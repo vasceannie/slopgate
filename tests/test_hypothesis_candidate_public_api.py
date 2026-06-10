@@ -80,17 +80,23 @@ def test_enrich_findings_preserves_unknown_rule_property(rule: str, text: str) -
 
 
 @given(stable_id=IDENTIFIERS)
-def test_assert_no_new_violations_accepts_baselined_ids_property(stable_id: str) -> None:
+def test_assert_no_new_violations_accepts_baselined_ids_property(
+    stable_id: str,
+) -> None:
     original = _baseline.load_baseline
     violation = Violation("manual-rule", "src/example.py", stable_id)
-    _baseline.load_baseline = lambda: {"manual-rule": {violation.stable_id}}
+
+    def fake_load_baseline() -> dict[str, set[str]]:
+        return {"manual-rule": {violation.stable_id}}
+
+    setattr(_baseline, "load_baseline", fake_load_baseline)
     try:
         result = assert_no_new_violations(
             "manual-rule",
             [violation],
         )
     finally:
-        _baseline.load_baseline = original
+        setattr(_baseline, "load_baseline", original)
 
     assert {
         "new": result.new_violations,

@@ -48,7 +48,9 @@ def test_local_indexes_reads_sorted_metadata_files(
 ) -> None:
     write_index(
         tmp_path,
-        IndexCase(repo="beta", name="zeta", clone_url="https://github.com/acme/beta.git"),
+        IndexCase(
+            repo="beta", name="zeta", clone_url="https://github.com/acme/beta.git"
+        ),
     )
     write_index(tmp_path, IndexCase(name="alpha"))
     monkeypatch.setattr(index_ops, "DEFAULT_INDEXES_PATH", tmp_path)

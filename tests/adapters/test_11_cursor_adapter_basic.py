@@ -9,9 +9,24 @@ from tests.test_adapters import (
     get_adapter,
     require_rendered,
 )
-from slopgate._types import ObjectDict
+from slopgate._types import ObjectDict, object_dict
 from slopgate.constants import BLOCK, DENY, POST_TOOL_USE, PRE_TOOL_USE
 from slopgate.engine import evaluate_payload
+
+
+def _normalized_field_map(normalized: object) -> dict[str, object]:
+    normalized_map = object_dict(normalized)
+    tool_input = object_dict(normalized_map.get("tool_input"))
+    fields: dict[str, object] = {
+        "hook_event_name": normalized_map.get("hook_event_name"),
+        "tool_name": normalized_map.get("tool_name"),
+    }
+    for key in ("command", "file_path"):
+        if key in tool_input:
+            fields[key] = tool_input.get(key)
+    if "cwd" in normalized_map:
+        fields["cwd"] = normalized_map.get("cwd")
+    return fields
 
 
 def test_cursor_adapter_registry_name() -> None:
@@ -20,20 +35,14 @@ def test_cursor_adapter_registry_name() -> None:
 
 
 def test_cursor_adapter_normalizes_shell_event() -> None:
-    adapter = CursorAdapter()
-    normalized = adapter.normalize_payload(
+    normalized = CursorAdapter().normalize_payload(
         {
             "hook_event_name": "beforeShellExecution",
             "command": "echo hi",
             "cwd": "/tmp/project",
         }
     )
-    assert {
-        "hook_event_name": normalized["hook_event_name"],
-        "tool_name": normalized["tool_name"],
-        "command": normalized["tool_input"]["command"],
-        "cwd": normalized["cwd"],
-    } == {
+    assert _normalized_field_map(normalized) == {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "command": "echo hi",
@@ -147,7 +156,9 @@ def test_cursor_adapter_renders_stop_block_as_followup() -> None:
     output = require_rendered(
         get_adapter("cursor").render_output("Stop", [finding], decision=BLOCK),
     )
-    assert output == {"followup_message": "[STOP-001 | HIGH] Quality gate still failing."}
+    assert output == {
+        "followup_message": "[STOP-001 | HIGH] Quality gate still failing."
+    }
 
 
 def test_cursor_adapter_renders_before_submit_prompt_block() -> None:
@@ -159,7 +170,9 @@ def test_cursor_adapter_renders_before_submit_prompt_block() -> None:
         message="Prompt blocked.",
     )
     output = require_rendered(
-        get_adapter("cursor").render_output("UserPromptSubmit", [finding], decision=DENY),
+        get_adapter("cursor").render_output(
+            "UserPromptSubmit", [finding], decision=DENY
+        ),
     )
     assert output == {
         "continue": False,
@@ -237,11 +250,7 @@ def test_cursor_adapter_normalizes_tab_file_read() -> None:
             "content": "secret = 1",
         }
     )
-    assert {
-        "hook_event_name": normalized["hook_event_name"],
-        "tool_name": normalized["tool_name"],
-        "file_path": normalized["tool_input"]["file_path"],
-    } == {
+    assert _normalized_field_map(normalized) == {
         "hook_event_name": PRE_TOOL_USE,
         "tool_name": "Read",
         "file_path": "/repo/tab.py",
