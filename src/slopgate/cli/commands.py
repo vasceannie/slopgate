@@ -298,6 +298,7 @@ def cmd_update_suite(args: argparse.Namespace) -> int:
             dry_run=_bool_arg(args, "dry_run"),
             source=_string_arg(args, "source"),
             include_missing=_bool_arg(args, "include_missing"),
+            refresh_hooks=_bool_arg(args, "refresh_hooks"),
             install_scope=_string_arg(args, "install_scope", "user"),
             project_root=_project_root_arg(args),
         )

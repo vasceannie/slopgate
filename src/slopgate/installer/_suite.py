@@ -51,11 +51,12 @@ class SuiteUninstallOptions:
 
 @dataclass(frozen=True)
 class SuiteUpdateOptions:
-    """Options for updating Slopgate and refreshing hook install sites."""
+    """Options for updating Slopgate and optionally refreshing hook install sites."""
 
     dry_run: bool = False
     source: str = DEFAULT_UPDATE_SOURCE
     include_missing: bool = False
+    refresh_hooks: bool = False
     install_scope: str = "user"
     project_root: Path | None = None
 
@@ -224,7 +225,7 @@ def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
 
 
 def update_suite(options: SuiteUpdateOptions) -> int:
-    """Update Slopgate from GitHub, then refresh detected local hook sites."""
+    """Update Slopgate from GitHub and optionally refresh local hook sites."""
     from slopgate.installer import install_platform
 
     print(f"Device: {current_device_label()}")
@@ -238,6 +239,10 @@ def update_suite(options: SuiteUpdateOptions) -> int:
         completed = subprocess.run(update_command, check=False, env=env)
         if completed.returncode != 0:
             return completed.returncode
+
+    if not options.refresh_hooks:
+        print("Hook refresh: skipped (use --refresh-hooks to rewrite harness hooks)")
+        return 0
 
     status = 0
     for site in discover_install_sites(include_missing=options.include_missing):

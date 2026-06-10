@@ -148,7 +148,10 @@ def _add_platform_install_parser(
 
 
 def _add_suite_update_arguments(
-    parser: argparse.ArgumentParser, *, include_dry_run: bool = True
+    parser: argparse.ArgumentParser,
+    *,
+    include_dry_run: bool = True,
+    include_refresh_hooks: bool = False,
 ) -> None:
     if include_dry_run:
         _add_dry_run_argument(parser)
@@ -162,6 +165,12 @@ def _add_suite_update_arguments(
         action="store_true",
         help="Create hook install sites even when that harness has not been configured yet",
     )
+    if include_refresh_hooks:
+        _ = parser.add_argument(
+            "--refresh-hooks",
+            action="store_true",
+            help="After updating the package, rewrite detected harness hooks/plugins",
+        )
 
 
 def _add_suite_command_parser(
@@ -197,11 +206,16 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
         help="Auto-update polling interval for the native scheduler",
     )
 
-    _ = _add_suite_command_parser(
+    update = _add_suite_command_parser(
         sub,
         "update",
-        help_text="Update Slopgate from GitHub and refresh detected hook sites",
+        help_text="Update Slopgate from GitHub without rewriting hooks by default",
         func=cmd_update_suite,
+    )
+    _ = update.add_argument(
+        "--refresh-hooks",
+        action="store_true",
+        help="After updating the package, rewrite detected harness hooks/plugins",
     )
 
 

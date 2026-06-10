@@ -40,6 +40,8 @@ def _validate_update_source(source: str) -> None:
 
 def _update_suite_args(source: str, *, include_missing: bool) -> list[str]:
     args = [*base_invocation(find_binary()), "update", "--source", source]
+    # Scheduled auto-update is package-only by default. Hook rewrites are an
+    # explicit interactive maintenance action via `slopgate update --refresh-hooks`.
     if include_missing:
         args.append("--include-missing")
     return args
@@ -56,7 +58,7 @@ def _linux_systemd_plan(
         [
             f"# {_AUTOUPDATE_MARKER}",
             "[Unit]",
-            "Description=Update Slopgate from GitHub and refresh local hook install sites",
+            "Description=Update Slopgate package without rewriting harness hooks",
             "Documentation=https://github.com/vasceannie/slopgate",
             "",
             "[Service]",
