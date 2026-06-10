@@ -33,7 +33,8 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-const SLOPGATE_BIN = Bun.env.SLOPGATE_BIN || "__SLOPGATE_BIN__"
+const SLOPGATE_ARGV = Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
+const SLOPGATE_BIN = SLOPGATE_ARGV.join(" ")
 
 // Generate a unique session ID per plugin load (= per OpenCode session).
 const SESSION_ID = `opencode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -134,7 +135,7 @@ async function callEnforcer(
   try {
     const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
     const proc = Bun.spawn(
-      [SLOPGATE_BIN, "handle", "--platform", "opencode"],
+      [...SLOPGATE_ARGV, "handle", "--platform", "opencode"],
       {
         env: Bun.env,
         cwd: payloadCwd,

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 from pytest import CaptureFixture, MonkeyPatch
 
 import slopgate.installer as installer_module
+import slopgate.installer._opencode as opencode_installer
 import slopgate.installer._shared as installer_shared
 import slopgate.util.platform as platform_utils
 
@@ -304,8 +306,26 @@ def test_opencode_install_bakes_windows_binary_into_plugin(
     plugin_path = tmp_path / "Roaming" / "opencode" / "plugins" / "slopgate-plugin.ts"
     plugin = plugin_path.read_text(encoding="utf-8")
     assert "__SLOPGATE_BIN__" not in plugin
-    assert json.dumps(binary) in plugin
-    assert "Bun.env.SLOPGATE_BIN ||" in plugin
+    assert json.dumps([binary]) in plugin
+    assert "Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] :" in plugin
+
+
+def test_opencode_plugin_falls_back_to_python_module_invocation() -> None:
+    from slopgate.resources import resource_path
+
+    template = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
+    plugin = opencode_installer._render_opencode_plugin(template, sys.executable)
+
+    assert "__SLOPGATE_BIN__" not in plugin, "placeholder should be fully rendered"
+    assert json.dumps([sys.executable, "-m", "slopgate"]) in plugin, (
+        "python fallback must invoke slopgate as a module"
+    )
+    assert '[...SLOPGATE_ARGV, "handle", "--platform", "opencode"]' in plugin, (
+        "OpenCode plugin must spawn the rendered argv prefix"
+    )
+    assert f'{json.dumps(sys.executable)}, "handle"' not in plugin, (
+        "python fallback must not execute `python handle`"
+    )
 
 
 def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:

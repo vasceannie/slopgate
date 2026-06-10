@@ -16,13 +16,14 @@ from slopgate.installer._install_scope import (
 import slopgate.installer._shared as installer_shared
 from slopgate.installer._shared import (
     backup_existing_file_and_report,
+    base_invocation,
     print_binary_install_summary,
     remove_file_with_backup,
 )
 from slopgate.util.platform import user_config_dir
 
 _PLUGIN_NAME = "slopgate-plugin.ts"
-_PLUGIN_PLACEHOLDER_LITERAL = '"__SLOPGATE_BIN__"'
+_PLUGIN_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 _PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Slopgate Plugin",
     "Slopgate plugin loaded",
@@ -45,12 +46,20 @@ def _opencode_project_plugin_path(project_root: Path) -> Path:
 
 
 def _render_opencode_plugin(template_text: str, binary: str) -> str:
-    """Render the OpenCode plugin with a safely quoted binary fallback."""
-    if _PLUGIN_PLACEHOLDER_LITERAL not in template_text:
+    """Render the OpenCode plugin with a safely quoted argv fallback.
+
+    OpenCode's Bun plugin spawns an argv array directly. When Slopgate is
+    launched from a Python interpreter fallback, that argv must be
+    ``python -m slopgate handle ...`` rather than ``python handle ...``.
+    """
+    if _PLUGIN_ARGV_PLACEHOLDER_LITERAL not in template_text:
         raise ValueError(
             "OpenCode plugin template is missing the slopgate binary placeholder"
         )
-    return template_text.replace(_PLUGIN_PLACEHOLDER_LITERAL, json.dumps(binary))
+    return template_text.replace(
+        _PLUGIN_ARGV_PLACEHOLDER_LITERAL,
+        json.dumps(base_invocation(binary)),
+    )
 
 
 def _is_owned_opencode_plugin(content: str) -> bool:
