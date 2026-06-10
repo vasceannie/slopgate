@@ -85,36 +85,54 @@ def test_patch_helpers_extract_unique_paths_and_added_content() -> None:
     assert extract_added_patch_content(patch_blob) == "added line\nassert True"
 
 
-def test_adapter_base_renders_context_and_permission_decisions() -> None:
-    context_output = hook_specific_context_output("PreToolUse", "read files first")
-    deny_output = render_permission_request_output(
-        "PermissionRequest",
-        "deny",
-        "blocked by policy",
-    )
-    allow_output = render_permission_request_output(
-        "PermissionRequest",
-        "allow",
-        "approved",
-        updated_input={"tool": "Read"},
-    )
-
-    assert context_output == {
+def test_hook_specific_context_output_renders_event_and_context() -> None:
+    assert hook_specific_context_output("PreToolUse", "read files first") == {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "additionalContext": "read files first",
         }
     }
-    assert deny_output == {
+
+
+@pytest.mark.parametrize(
+    ("decision", "reason", "updated_input", "expected_decision"),
+    [
+        (
+            "deny",
+            "blocked by policy",
+            None,
+            {"behavior": "deny", "message": "blocked by policy"},
+        ),
+        (
+            "ask",
+            "needs explicit approval",
+            None,
+            {"behavior": "ask", "message": "needs explicit approval"},
+        ),
+        (
+            "allow",
+            "approved",
+            {"tool": "Read"},
+            {"behavior": "allow", "updatedInput": {"tool": "Read"}},
+        ),
+    ],
+)
+def test_render_permission_request_output_shapes(
+    decision: str,
+    reason: str,
+    updated_input: dict[str, str] | None,
+    expected_decision: dict[str, object],
+) -> None:
+    rendered = render_permission_request_output(
+        "PermissionRequest",
+        decision,
+        reason,
+        updated_input=object_dict(updated_input) if updated_input else None,
+    )
+    assert rendered == {
         "hookSpecificOutput": {
             "hookEventName": "PermissionRequest",
-            "decision": {"behavior": "deny", "message": "blocked by policy"},
-        }
-    }
-    assert allow_output == {
-        "hookSpecificOutput": {
-            "hookEventName": "PermissionRequest",
-            "decision": {"behavior": "allow", "updatedInput": {"tool": "Read"}},
+            "decision": expected_decision,
         }
     }
 

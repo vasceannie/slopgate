@@ -60,6 +60,34 @@ class TestInlinePayloadDenies:
         assert_not_denied(result)
         assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
 
+    def test_protected_path_makefile_read_allowed(self, bundle_root: Path) -> None:
+        result = evaluate_payload(
+            {
+                "session_id": "t",
+                "cwd": str(bundle_root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "Makefile"},
+            }
+        )
+        assert_not_denied(result)
+        assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
+
+    def test_protected_path_makefile_permission_request_read_allowed(
+        self, bundle_root: Path
+    ) -> None:
+        result = evaluate_payload(
+            {
+                "session_id": "t",
+                "cwd": str(bundle_root),
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "Makefile"},
+            }
+        )
+        assert_not_denied(result)
+        assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
+
     @pytest.mark.parametrize(
         "tool_name",
         [

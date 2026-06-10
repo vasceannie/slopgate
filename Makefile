@@ -1,4 +1,4 @@
-.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod
+.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish
 
 DASHBOARD_SSH_HOST ?= little
 DASHBOARD_LOGS_DIR ?= $(HOME)/.config/slopgate/logs
@@ -16,3 +16,7 @@ dashboard-build-ssh:
 	python3 dashboard/scripts/build-standalone.py --ssh $(DASHBOARD_SSH_HOST)
 
 dashboard-prod: dashboard-build-ssh dashboard-api
+
+publish:
+	uv build
+	uv publish

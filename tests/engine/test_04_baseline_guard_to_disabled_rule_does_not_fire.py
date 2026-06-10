@@ -19,7 +19,7 @@ from tests.test_engine import (
 )
 
 
-def test_permission_request_denies_makefile(bundle_root: Path) -> None:
+def test_permission_request_asks_for_makefile(bundle_root: Path) -> None:
     payload = {
         "session_id": "t",
         "cwd": str(bundle_root),
@@ -29,7 +29,7 @@ def test_permission_request_denies_makefile(bundle_root: Path) -> None:
     }
     result = evaluate_payload(payload)
     inner = nested_output(hook_output(result), "decision")
-    assert inner["behavior"] == "deny"
+    assert inner["behavior"] == "ask"
     assert "BUILTIN-PROTECTED-PATHS" in output_string(inner, "message")
 
 

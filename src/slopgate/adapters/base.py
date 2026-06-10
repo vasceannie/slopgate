@@ -70,11 +70,16 @@ def render_permission_request_output(
     """Render shared Claude/Codex PermissionRequest decision output."""
     if decision not in _PERMISSION_REQUEST_DECISIONS:
         return None
-    behavior = "allow" if decision == "allow" else DENY
+    if decision == "allow":
+        behavior = "allow"
+    elif decision == "ask":
+        behavior = "ask"
+    else:
+        behavior = DENY
     inner: ObjectDict = {"behavior": behavior}
     if updated_input and decision == "allow":
         inner["updatedInput"] = updated_input
-    if behavior == DENY:
+    if behavior in {DENY, "ask"}:
         inner["message"] = reason
     return {"hookSpecificOutput": {"hookEventName": event_name, "decision": inner}}
 
