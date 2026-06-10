@@ -6,7 +6,7 @@ import { FlagButton } from "./FlagButton";
 import { FlaggedItemsPanel } from "./FlaggedItemsPanel";
 
 type PathTab = "tree" | "heatmap" | "flagged";
-type SortKey = "findings" | "events" | "blocks" | "name";
+type SortKey = "findings" | "events" | "blocks" | "name" | "alpha";
 
 interface Props {
   events: HookEvent[];
@@ -25,6 +25,56 @@ interface PathNode {
   severities: Partial<Record<Severity, number>>;
   rules: Record<string, number>;
   children: Map<string, PathNode>;
+}
+
+const COMMON_EXTENSIONS = new Set([
+  "py", "pyi", "js", "jsx", "ts", "tsx", "json", "md", "sh", "yml", "yaml", "toml", "rs", "go", "java", "c", "h", "cpp", "css", "html", "txt", "diff", "patch", "lock"
+]);
+
+const ALLOWED_SINGLE_WORDS = new Set(["makefile", "license", "readme", "dockerfile"]);
+
+function isValidPath(p: string): boolean {
+  if (!p) return false;
+  
+  if (!/^[A-Za-z0-9_./\-@]+$/.test(p)) return false;
+  
+  const segments = p.split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  
+  const filename = segments[segments.length - 1];
+  
+  if (segments.length === 1 && !filename.includes(".")) {
+    if (/^\d+$/.test(filename)) return false;
+    
+    const lower = filename.toLowerCase();
+    if (ALLOWED_SINGLE_WORDS.has(lower)) return true;
+    
+    if (filename !== lower) return false;
+  }
+  
+  const parts = filename.split(".");
+  if (parts.length > 1) {
+    const ext = parts[parts.length - 1].toLowerCase();
+    if (!COMMON_EXTENSIONS.has(ext)) return false;
+  }
+  return true;
+}
+
+function normalizePath(p: string, repoRoot?: string | null): string {
+  let rel = p;
+  if (repoRoot && p.startsWith(repoRoot)) {
+    rel = p.slice(repoRoot.length);
+  }
+  return rel.split("/").filter(part => part && part !== ".").join("/");
+}
+
+function sortAlpha(children: PathNode[]): PathNode[] {
+  return [...children].sort((a, b) => {
+    const aIsDir = a.children.size > 0;
+    const bIsDir = b.children.size > 0;
+    if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
 }
 
 /** Build a session→events index (shared by tree and heatmap builders) */
@@ -49,19 +99,17 @@ function buildTree(
   };
 
   const resolvePath = (p: string) => {
-    if (repoRoot && p.startsWith(repoRoot)) {
-      let rel = p.slice(repoRoot.length);
-      if (rel.startsWith("/")) rel = rel.slice(1);
-      return rel || "/";
-    }
-    return p;
+    return normalizePath(p, repoRoot);
   };
 
   const sessionPaths = new Map<string, string[]>();
   const neededSessions = new Set(rules.map(r => r.session_id));
   for (const sessionId of neededSessions) {
     const sessionEvs = sessionIndex.get(sessionId) || [];
-    const paths = sessionEvs.flatMap(e => e.candidate_paths ?? []).map(resolvePath);
+    const paths = sessionEvs
+      .flatMap(e => e.candidate_paths ?? [])
+      .map(resolvePath)
+      .filter(isValidPath);
     sessionPaths.set(sessionId, [...new Set(paths)]);
   }
 
@@ -76,7 +124,7 @@ function buildTree(
 
   const pathEvents = new Map<string, number>();
   for (const e of events) {
-    for (const p of (e.candidate_paths ?? []).map(resolvePath)) {
+    for (const p of (e.candidate_paths ?? []).map(resolvePath).filter(isValidPath)) {
       pathEvents.set(p, (pathEvents.get(p) || 0) + 1);
     }
   }
@@ -148,7 +196,14 @@ function buildHeatmapData(events: HookEvent[], rules: RuleFinding[], sessionInde
   const neededSessions = new Set(rules.map(r => r.session_id));
   for (const sessionId of neededSessions) {
     const sessionEvents = sessionIndex.get(sessionId) || [];
-    sessionPaths.set(sessionId, new Set(sessionEvents.flatMap(e => e.candidate_paths ?? [])));
+    sessionPaths.set(
+      sessionId,
+      new Set(
+        sessionEvents
+          .flatMap(e => e.candidate_paths ?? [])
+          .filter(isValidPath)
+      )
+    );
   }
 
   for (const r of rules) {
@@ -193,6 +248,7 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
       case "events": return children.sort((a, b) => b.eventCount - a.eventCount);
       case "blocks": return children.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
       case "name": return children.sort((a, b) => a.name.localeCompare(b.name));
+      case "alpha": return sortAlpha(children);
       case "findings":
       default: return children.sort((a, b) => b.findingCount - a.findingCount);
     }
@@ -415,7 +471,7 @@ const HeatmapView = memo(function HeatmapView({ events, rules, onPathFilter, ses
 export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFilter, activePathFilter }: Props) {
   const [tab, setTab] = useState<PathTab>("tree");
   const [expandOverride, setExpandOverride] = useState<boolean | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("findings");
+  const [sortKey, setSortKey] = useState<SortKey>("alpha");
   const [nonSlopgateExpanded, setNonSlopgateExpanded] = useState(false);
 
   // Single shared session index — prevents duplicate map building
@@ -504,6 +560,7 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
           case "events": return childrenList.sort((a, b) => b.eventCount - a.eventCount);
           case "blocks": return childrenList.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
           case "name": return childrenList.sort((a, b) => a.name.localeCompare(b.name));
+          case "alpha": return sortAlpha(childrenList);
           case "findings":
           default: return childrenList.sort((a, b) => b.findingCount - a.findingCount);
         }
@@ -525,6 +582,7 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
         case "events": return childrenList.sort((a, b) => b.eventCount - a.eventCount);
         case "blocks": return childrenList.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
         case "name": return childrenList.sort((a, b) => a.name.localeCompare(b.name));
+        case "alpha": return sortAlpha(childrenList);
         case "findings":
         default: return childrenList.sort((a, b) => b.findingCount - a.findingCount);
       }
@@ -649,7 +707,7 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
             )}
             <div className="ml-auto flex items-center gap-1">
               <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
-              {(["findings", "blocks", "events", "name"] as SortKey[]).map(k => (
+              {(["alpha", "findings", "blocks", "events", "name"] as SortKey[]).map(k => (
                 <button
                   key={k}
                   onClick={() => setSortKey(k)}
@@ -678,10 +736,54 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-                      <th className="px-2 py-2 text-left">Path</th>
-                      <th className="px-2 py-2 text-right w-20">Events</th>
-                      <th className="px-2 py-2 text-right w-20">Findings</th>
-                      <th className="px-2 py-2 text-right w-20">Blocks</th>
+                      <th
+                        className={cn(
+                          "px-2 py-2 text-left cursor-pointer hover:text-foreground select-none",
+                          sortKey === "name" && "text-primary font-bold"
+                        )}
+                        onClick={() => setSortKey("name")}
+                      >
+                        <span className="flex items-center gap-1">
+                          Path
+                          {sortKey === "name" && <ArrowUpDown className="w-3 h-3" />}
+                        </span>
+                      </th>
+                      <th
+                        className={cn(
+                          "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                          sortKey === "events" && "text-primary font-bold"
+                        )}
+                        onClick={() => setSortKey("events")}
+                      >
+                        <span className="flex items-center justify-end gap-1">
+                          Events
+                          {sortKey === "events" && <ArrowUpDown className="w-3 h-3" />}
+                        </span>
+                      </th>
+                      <th
+                        className={cn(
+                          "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                          sortKey === "findings" && "text-primary font-bold"
+                        )}
+                        onClick={() => setSortKey("findings")}
+                      >
+                        <span className="flex items-center justify-end gap-1">
+                          Findings
+                          {sortKey === "findings" && <ArrowUpDown className="w-3 h-3" />}
+                        </span>
+                      </th>
+                      <th
+                        className={cn(
+                          "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                          sortKey === "blocks" && "text-primary font-bold"
+                        )}
+                        onClick={() => setSortKey("blocks")}
+                      >
+                        <span className="flex items-center justify-end gap-1">
+                          Blocks
+                          {sortKey === "blocks" && <ArrowUpDown className="w-3 h-3" />}
+                        </span>
+                      </th>
                       <th className="px-2 py-2 text-left">Top Rules</th>
                     </tr>
                   </thead>
@@ -728,10 +830,54 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-                          <th className="px-2 py-2 text-left">Path</th>
-                          <th className="px-2 py-2 text-right w-20">Events</th>
-                          <th className="px-2 py-2 text-right w-20">Findings</th>
-                          <th className="px-2 py-2 text-right w-20">Blocks</th>
+                          <th
+                            className={cn(
+                              "px-2 py-2 text-left cursor-pointer hover:text-foreground select-none",
+                              sortKey === "name" && "text-primary font-bold"
+                            )}
+                            onClick={() => setSortKey("name")}
+                          >
+                            <span className="flex items-center gap-1">
+                              Path
+                              {sortKey === "name" && <ArrowUpDown className="w-3 h-3" />}
+                            </span>
+                          </th>
+                          <th
+                            className={cn(
+                              "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                              sortKey === "events" && "text-primary font-bold"
+                            )}
+                            onClick={() => setSortKey("events")}
+                          >
+                            <span className="flex items-center justify-end gap-1">
+                              Events
+                              {sortKey === "events" && <ArrowUpDown className="w-3 h-3" />}
+                            </span>
+                          </th>
+                          <th
+                            className={cn(
+                              "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                              sortKey === "findings" && "text-primary font-bold"
+                            )}
+                            onClick={() => setSortKey("findings")}
+                          >
+                            <span className="flex items-center justify-end gap-1">
+                              Findings
+                              {sortKey === "findings" && <ArrowUpDown className="w-3 h-3" />}
+                            </span>
+                          </th>
+                          <th
+                            className={cn(
+                              "px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
+                              sortKey === "blocks" && "text-primary font-bold"
+                            )}
+                            onClick={() => setSortKey("blocks")}
+                          >
+                            <span className="flex items-center justify-end gap-1">
+                              Blocks
+                              {sortKey === "blocks" && <ArrowUpDown className="w-3 h-3" />}
+                            </span>
+                          </th>
                           <th className="px-2 py-2 text-left">Top Rules</th>
                         </tr>
                       </thead>
