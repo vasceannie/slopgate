@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from slopgate.search import _cli_doctor, _cli_init
+from slopgate.search import _cli_doctor, _cli_init, cli
 from slopgate.search._cli_parser import build_search_parser
 from slopgate.search.cli import (
     cmd_add,
@@ -23,9 +23,9 @@ def test_build_search_parser_registers_query_command() -> None:
     parser = build_search_parser()
     args = parser.parse_args(["query", "needle"])
 
-    assert args.search_command == "query"
-    assert args.query == ["needle"]
-    assert callable(args.func)
+    assert args.search_command == "query", f"Expected query, got {args.search_command}"
+    assert args.query == ["needle"], f"Expected ['needle'], got {args.query}"
+    assert callable(args.func), "Expected args.func to be callable"
 
 
 def _stub_doctor_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,24 +71,6 @@ def test_cmd_doctor_reports_config_and_runtime_status(
     assert all(marker in output for marker in expected_markers)
 
 
-def _init_args(islands_config: Path) -> argparse.Namespace:
-    return argparse.Namespace(
-        provider="ollama",
-        base_url="http://localhost:11434",
-        model="nomic-embed-text",
-        api_key_env=None,
-        api_key_value=None,
-        binary="islands-ollama",
-        islands_config=str(islands_config),
-        integration="none",
-        skill_name="isx-search",
-        skill_target="both",
-        opencode_plugin_path=None,
-        opencode_config=None,
-        force=False,
-    )
-
-
 def _capture_init_writes(
     monkeypatch: pytest.MonkeyPatch,
     app_config: Path,
@@ -112,7 +94,21 @@ def test_cmd_init_writes_config_and_islands_scaffold_without_prompt(
 ) -> None:
     islands_config = tmp_path / "islands.yaml"
     saved, islands_paths = _capture_init_writes(monkeypatch, tmp_path / "isx/config.json")
-    result = _cli_init.cmd_init(_init_args(islands_config))
+    result = _cli_init.cmd_init(argparse.Namespace(
+        provider="ollama",
+        base_url="http://localhost:11434",
+        model="nomic-embed-text",
+        api_key_env=None,
+        api_key_value=None,
+        binary="islands-ollama",
+        islands_config=str(islands_config),
+        integration="none",
+        skill_name="isx-search",
+        skill_target="both",
+        opencode_plugin_path=None,
+        opencode_config=None,
+        force=False,
+    ))
     output = capsys.readouterr().out
 
     assert {
@@ -131,28 +127,24 @@ def test_cmd_init_writes_config_and_islands_scaffold_without_prompt(
 
 
 def _stub_load_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
-    from slopgate.search import cli as search_cli
-
     config: dict[str, object] = {
         "binary": "islands-ollama",
         "provider": "ollama",
         "base_url": "http://localhost:11434",
         "model": "nomic-embed-text",
     }
-    monkeypatch.setattr(search_cli, "load_config", lambda: config)
+    monkeypatch.setattr(cli, "load_config", lambda: config)
     return config
 
 
 def _stub_run_islands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    from slopgate.search import cli as search_cli
-
     calls: list[list[str]] = []
 
     def fake_run(cfg: object, args: list[str], extra_env: dict[str, str] | None = None) -> int:
         calls.append(args)
         return 0
 
-    monkeypatch.setattr(search_cli, "run_islands", fake_run)
+    monkeypatch.setattr(cli, "run_islands", fake_run)
     return calls
 
 
@@ -160,15 +152,13 @@ def test_cmd_models_lists_embedding_models(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from slopgate.search import cli as search_cli
-
     _stub_load_config(monkeypatch)
     monkeypatch.setattr(
-        search_cli,
+        cli,
         "fetch_runtime_models",
         lambda _cfg: ["nomic-embed-text", "gpt-4"],
     )
-    monkeypatch.setattr(search_cli, "embedding_like", lambda m: "embed" in m or "nomic" in m)
+    monkeypatch.setattr(cli, "embedding_like", lambda m: "embed" in m or "nomic" in m)
 
     result = cmd_models(argparse.Namespace(all=False, json=False))
     output = capsys.readouterr().out
@@ -181,13 +171,11 @@ def test_cmd_use_updates_model(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from slopgate.search import cli as search_cli
-
     _stub_load_config(monkeypatch)
-    monkeypatch.setattr(search_cli, "fetch_runtime_models", lambda _cfg: ["nomic-embed-text"])
+    monkeypatch.setattr(cli, "fetch_runtime_models", lambda _cfg: ["nomic-embed-text"])
     saved: list[tuple[object, str]] = []
-    monkeypatch.setattr(search_cli, "save_runtime_model", lambda cfg, m: saved.append((cfg, m)))
-    monkeypatch.setattr(search_cli, "current_islands_config_path", lambda _cfg: Path("/tmp/islands.yaml"))
+    monkeypatch.setattr(cli, "save_runtime_model", lambda cfg, m: saved.append((cfg, m)))
+    monkeypatch.setattr(cli, "current_islands_config_path", lambda _cfg: Path("/tmp/islands.yaml"))
 
     result = cmd_use(argparse.Namespace(model="nomic-embed-text", force=False))
 
@@ -199,10 +187,8 @@ def test_cmd_list_prints_no_indexes_message(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from slopgate.search import cli as search_cli
-
     _stub_load_config(monkeypatch)
-    monkeypatch.setattr(search_cli, "local_indexes", lambda _cfg: [])
+    monkeypatch.setattr(cli, "local_indexes", lambda _cfg: [])
 
     result = cmd_list(argparse.Namespace(json=False))
     output = capsys.readouterr().out
@@ -214,12 +200,10 @@ def test_cmd_list_prints_no_indexes_message(
 def test_cmd_add_invokes_run_islands_with_add_args(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from slopgate.search import cli as search_cli
-
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
-    monkeypatch.setattr(search_cli, "resolve_add_repo", lambda repo, cwd=None: repo)
-    monkeypatch.setattr(search_cli, "_resolve_token", lambda args, repo_url=None: (None, {}))
+    monkeypatch.setattr(cli, "resolve_add_repo", lambda repo, cwd=None: repo)
+    monkeypatch.setattr(cli, "_resolve_token", lambda args, repo_url=None: (None, {}))
 
     result = cmd_add(argparse.Namespace(
         repo="https://github.com/example/repo.git",
@@ -234,7 +218,6 @@ def test_cmd_add_invokes_run_islands_with_add_args(
 def test_cmd_search_invokes_run_islands_with_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
@@ -248,11 +231,10 @@ def test_cmd_search_invokes_run_islands_with_query(
 def test_cmd_remove_raises_when_index_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from slopgate.search import cli as search_cli
     from slopgate.search.config import IsxError
 
     _stub_load_config(monkeypatch)
-    monkeypatch.setattr(search_cli, "find_local_index", lambda _cfg, _name: None)
+    monkeypatch.setattr(cli, "find_local_index", lambda _cfg, _name: None)
 
     with pytest.raises(IsxError, match="could not resolve"):
         cmd_remove(argparse.Namespace(target="nonexistent", force=False))
@@ -261,7 +243,6 @@ def test_cmd_remove_raises_when_index_not_found(
 def test_cmd_sync_delegates_to_run_islands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from slopgate.search import cli as search_cli
 
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
@@ -276,16 +257,14 @@ def test_cmd_reindex_adds_fresh_when_no_existing_index(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from slopgate.search import cli as search_cli
-
     _stub_load_config(monkeypatch)
-    calls = _stub_run_islands(monkeypatch)
+    _stub_run_islands(monkeypatch)
     monkeypatch.setattr(
-        search_cli,
+        cli,
         "resolve_reindex_target",
         lambda cfg, target, cwd=None: (None, "https://github.com/example/repo.git"),
     )
-    monkeypatch.setattr(search_cli, "_resolve_token", lambda args, repo_url=None: (None, {}))
+    monkeypatch.setattr(cli, "_resolve_token", lambda args, repo_url=None: (None, {}))
 
     result = cmd_reindex(argparse.Namespace(
         target="https://github.com/example/repo.git",
