@@ -37,17 +37,38 @@ function buildSessionIndex(events: HookEvent[]): Map<string, HookEvent[]> {
   return map;
 }
 
-function buildTree(events: HookEvent[], rules: RuleFinding[], sessionIndex: Map<string, HookEvent[]>): PathNode {
+function buildTree(
+  events: HookEvent[],
+  rules: RuleFinding[],
+  sessionIndex: Map<string, HookEvent[]>,
+  repoRoot?: string | null
+): PathNode {
   const root: PathNode = {
     name: "/", fullPath: "", eventCount: 0, findingCount: 0, blockCount: 0,
     decisions: {}, severities: {}, rules: {}, children: new Map(),
   };
 
+  const resolvePath = (p: string) => {
+    if (repoRoot && p.startsWith(repoRoot)) {
+      let rel = p.slice(repoRoot.length);
+      if (rel.startsWith("/")) rel = rel.slice(1);
+      return rel || "/";
+    }
+    return p;
+  };
+
+  const sessionPaths = new Map<string, string[]>();
+  const neededSessions = new Set(rules.map(r => r.session_id));
+  for (const sessionId of neededSessions) {
+    const sessionEvs = sessionIndex.get(sessionId) || [];
+    const paths = sessionEvs.flatMap(e => e.candidate_paths ?? []).map(resolvePath);
+    sessionPaths.set(sessionId, [...new Set(paths)]);
+  }
+
   const pathFindings = new Map<string, RuleFinding[]>();
   for (const r of rules) {
-    const sessionEvents = sessionIndex.get(r.session_id) || [];
-    const paths = sessionEvents.flatMap(e => e.candidate_paths ?? []);
-    for (const p of new Set(paths)) {
+    const paths = sessionPaths.get(r.session_id) || [];
+    for (const p of paths) {
       if (!pathFindings.has(p)) pathFindings.set(p, []);
       pathFindings.get(p)!.push(r);
     }
@@ -55,7 +76,7 @@ function buildTree(events: HookEvent[], rules: RuleFinding[], sessionIndex: Map<
 
   const pathEvents = new Map<string, number>();
   for (const e of events) {
-    for (const p of (e.candidate_paths ?? [])) {
+    for (const p of (e.candidate_paths ?? []).map(resolvePath)) {
       pathEvents.set(p, (pathEvents.get(p) || 0) + 1);
     }
   }
@@ -123,9 +144,15 @@ function buildHeatmapData(events: HookEvent[], rules: RuleFinding[], sessionInde
   const cellMap = new Map<string, { findings: number; blocks: number }>();
   const fileSet = new Set<string>();
 
+  const sessionPaths = new Map<string, Set<string>>();
+  const neededSessions = new Set(rules.map(r => r.session_id));
+  for (const sessionId of neededSessions) {
+    const sessionEvents = sessionIndex.get(sessionId) || [];
+    sessionPaths.set(sessionId, new Set(sessionEvents.flatMap(e => e.candidate_paths ?? [])));
+  }
+
   for (const r of rules) {
-    const sessionEvents = sessionIndex.get(r.session_id) || [];
-    const paths = new Set(sessionEvents.flatMap(e => e.candidate_paths ?? []));
+    const paths = sessionPaths.get(r.session_id) || new Set<string>();
     const t = new Date(r.timestamp).getTime();
     const bucketIdx = Math.min(bucketCount - 1, Math.floor((t - minT) / bucketSize));
 
@@ -152,9 +179,9 @@ function buildHeatmapData(events: HookEvent[], rules: RuleFinding[], sessionInde
   return { files, buckets: bucketLabels, cellMap };
 }
 
-const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFilter, expandOverride, sortKey }: {
+const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFilter, expandOverride, sortKey, repoRoot }: {
   node: PathNode; depth: number; onPathFilter: (path: string | null) => void; activePathFilter: string | null;
-  expandOverride?: boolean | null; sortKey: SortKey;
+  expandOverride?: boolean | null; sortKey: SortKey; repoRoot?: string | null;
 }) {
   const [open, setOpen] = useState(depth < 1);
   const isOpen = expandOverride !== null && expandOverride !== undefined ? expandOverride : open;
@@ -170,7 +197,8 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
       default: return children.sort((a, b) => b.findingCount - a.findingCount);
     }
   }, [node.children, sortKey]);
-  const isActive = activePathFilter === node.fullPath;
+  const absolutePath = repoRoot ? `${repoRoot}/${node.fullPath}` : node.fullPath;
+  const isActive = activePathFilter === absolutePath;
 
   const handleClick = useCallback(() => {
     if (hasChildren) setOpen(o => !o);
@@ -178,8 +206,8 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
 
   const handleFilter = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onPathFilter(isActive ? null : node.fullPath);
-  }, [onPathFilter, isActive, node.fullPath]);
+    onPathFilter(isActive ? null : absolutePath);
+  }, [onPathFilter, isActive, absolutePath]);
 
   return (
     <>
@@ -202,11 +230,11 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
               className={cn("ml-1 p-0.5 rounded transition-colors",
                 isActive ? "text-primary bg-primary/10" : "text-muted-foreground/0 hover:text-primary group-hover:text-muted-foreground/50"
               )}
-              title={isActive ? "Clear filter" : `Filter dashboard to ${node.fullPath}`}
+              title={isActive ? "Clear filter" : `Filter dashboard to ${absolutePath}`}
             >
               {isActive ? <X className="w-3 h-3" /> : <Filter className="w-3 h-3 opacity-0 group-hover:opacity-100" />}
             </button>
-            <FlagButton itemType="path" itemId={node.fullPath} label={`Path: ${node.fullPath}`} compact />
+            <FlagButton itemType="path" itemId={absolutePath} label={`Path: ${absolutePath}`} compact />
           </div>
         </td>
         <td className="px-2 py-1.5 text-right text-xs">{node.eventCount}</td>
@@ -228,9 +256,65 @@ const TreeRow = memo(function TreeRow({ node, depth, onPathFilter, activePathFil
           )}
         </td>
       </tr>
-      {isOpen && sorted.map(child => (
-        <TreeRow key={child.fullPath} node={child} depth={depth + 1} onPathFilter={onPathFilter} activePathFilter={activePathFilter} expandOverride={expandOverride} sortKey={sortKey} />
+      {isOpen && (
+        <TreeRowsList
+          sorted={sorted}
+          depth={depth + 1}
+          onPathFilter={onPathFilter}
+          activePathFilter={activePathFilter}
+          expandOverride={expandOverride}
+          sortKey={sortKey}
+          repoRoot={repoRoot}
+        />
+      )}
+    </>
+  );
+});
+
+const TreeRowsList = memo(function TreeRowsList({
+  sorted, depth, onPathFilter, activePathFilter, expandOverride, sortKey, repoRoot
+}: {
+  sorted: PathNode[]; depth: number; onPathFilter: (path: string | null) => void; activePathFilter: string | null;
+  expandOverride?: boolean | null; sortKey: SortKey; repoRoot?: string | null;
+}) {
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [sorted, sortKey]);
+
+  return (
+    <>
+      {sorted.slice(0, visibleCount).map(child => (
+        <TreeRow
+          key={child.fullPath}
+          node={child}
+          depth={depth}
+          onPathFilter={onPathFilter}
+          activePathFilter={activePathFilter}
+          expandOverride={expandOverride}
+          sortKey={sortKey}
+          repoRoot={repoRoot}
+        />
       ))}
+      {sorted.length > visibleCount && (
+        <tr>
+          <td
+            colSpan={5}
+            className="px-2 py-1.5 hover:bg-muted/10 text-xs text-muted-foreground transition-colors cursor-pointer select-none"
+            style={{ paddingLeft: `${depth * 16 + 8}px` }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setVisibleCount(c => c + 100);
+            }}
+          >
+            <div className="flex items-center gap-1.5">
+              <ChevronsUpDown className="w-3.5 h-3.5" />
+              <span>Showing {visibleCount} of {sorted.length} items. Click to load 100 more...</span>
+            </div>
+          </td>
+        </tr>
+      )}
     </>
   );
 });
@@ -332,33 +416,143 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
   const [tab, setTab] = useState<PathTab>("tree");
   const [expandOverride, setExpandOverride] = useState<boolean | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("findings");
+  const [nonSlopgateExpanded, setNonSlopgateExpanded] = useState(false);
 
   // Single shared session index — prevents duplicate map building
   const sessionIndex = useMemo(() => buildSessionIndex(events), [events]);
 
-  const tree = useMemo(() => buildTree(events, rules, sessionIndex), [events, rules, sessionIndex]);
-  const sorted = useMemo(() => {
-    const children = [...tree.children.values()];
-    switch (sortKey) {
-      case "events": return children.sort((a, b) => b.eventCount - a.eventCount);
-      case "blocks": return children.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
-      case "name": return children.sort((a, b) => a.name.localeCompare(b.name));
-      case "findings":
-      default: return children.sort((a, b) => b.findingCount - a.findingCount);
+  const sessionMeta = useMemo(() => {
+    const meta = new Map<string, { resolved_repo_root?: string | null; enforcement_mode?: string | null }>();
+    for (const e of events) {
+      if (!meta.has(e.session_id)) meta.set(e.session_id, {});
+      const existing = meta.get(e.session_id)!;
+      if (e.resolved_repo_root && !existing.resolved_repo_root) {
+        existing.resolved_repo_root = e.resolved_repo_root;
+      }
+      if (e.enforcement_mode && !existing.enforcement_mode) {
+        existing.enforcement_mode = e.enforcement_mode;
+      }
     }
-  }, [tree, sortKey]);
+    for (const r of rules) {
+      if (!meta.has(r.session_id)) meta.set(r.session_id, {});
+      const existing = meta.get(r.session_id)!;
+      if (r.resolved_repo_root && !existing.resolved_repo_root) {
+        existing.resolved_repo_root = r.resolved_repo_root;
+      }
+      if (r.enforcement_mode && !existing.enforcement_mode) {
+        existing.enforcement_mode = r.enforcement_mode;
+      }
+    }
+    return meta;
+  }, [events, rules]);
+
+  const getProjectInfo = useCallback((sid: string) => {
+    const meta = sessionMeta.get(sid);
+    if (!meta || !meta.resolved_repo_root) return { isSlopgate: false, repoRoot: null, projectName: null };
+    const isSlopgate = meta.enforcement_mode !== "outside_repo";
+    const repoRoot = meta.resolved_repo_root;
+    const segments = repoRoot.split("/").filter(Boolean);
+    const projectName = segments.length > 0 ? segments[segments.length - 1] : "unknown-project";
+    return { isSlopgate, repoRoot, projectName };
+  }, [sessionMeta]);
+
+  const { projectGroups, nonSlopgateGroup } = useMemo(() => {
+    const projectMap = new Map<string, {
+      repoRoot: string;
+      projectName: string;
+      events: HookEvent[];
+      rules: RuleFinding[];
+    }>();
+    const nonSlop: { events: HookEvent[]; rules: RuleFinding[] } = { events: [], rules: [] };
+
+    for (const e of events) {
+      const { isSlopgate, repoRoot, projectName } = getProjectInfo(e.session_id);
+      if (isSlopgate && repoRoot && projectName) {
+        if (!projectMap.has(repoRoot)) {
+          projectMap.set(repoRoot, { repoRoot, projectName, events: [], rules: [] });
+        }
+        projectMap.get(repoRoot)!.events.push(e);
+      } else {
+        nonSlop.events.push(e);
+      }
+    }
+
+    for (const r of rules) {
+      const { isSlopgate, repoRoot } = getProjectInfo(r.session_id);
+      if (isSlopgate && repoRoot) {
+        const proj = projectMap.get(repoRoot);
+        if (proj) {
+          proj.rules.push(r);
+        }
+      } else {
+        nonSlop.rules.push(r);
+      }
+    }
+
+    return {
+      projectGroups: Array.from(projectMap.values()),
+      nonSlopgateGroup: nonSlop,
+    };
+  }, [events, rules, getProjectInfo]);
+
+  const projectTrees = useMemo(() => {
+    return projectGroups.map(proj => {
+      const tree = buildTree(proj.events, proj.rules, sessionIndex, proj.repoRoot);
+      const children = [...tree.children.values()];
+      const getSorted = (childrenList: PathNode[]) => {
+        switch (sortKey) {
+          case "events": return childrenList.sort((a, b) => b.eventCount - a.eventCount);
+          case "blocks": return childrenList.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
+          case "name": return childrenList.sort((a, b) => a.name.localeCompare(b.name));
+          case "findings":
+          default: return childrenList.sort((a, b) => b.findingCount - a.findingCount);
+        }
+      };
+      return {
+        ...proj,
+        tree,
+        sorted: getSorted(children),
+      };
+    });
+  }, [projectGroups, sessionIndex, sortKey]);
+
+  const nonSlopgateTree = useMemo(() => {
+    if (nonSlopgateGroup.events.length === 0 && nonSlopgateGroup.rules.length === 0) return null;
+    const tree = buildTree(nonSlopgateGroup.events, nonSlopgateGroup.rules, sessionIndex, null);
+    const children = [...tree.children.values()];
+    const getSorted = (childrenList: PathNode[]) => {
+      switch (sortKey) {
+        case "events": return childrenList.sort((a, b) => b.eventCount - a.eventCount);
+        case "blocks": return childrenList.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
+        case "name": return childrenList.sort((a, b) => a.name.localeCompare(b.name));
+        case "findings":
+        default: return childrenList.sort((a, b) => b.findingCount - a.findingCount);
+      }
+    };
+    return {
+      tree,
+      sorted: getSorted(children),
+    };
+  }, [nonSlopgateGroup, sessionIndex, sortKey]);
 
   const allFiles = useMemo(() => {
-    const files: PathNode[] = [];
-    function collect(node: PathNode) {
-      if (node.children.size === 0 && node.findingCount > 0) files.push(node);
-      for (const c of node.children.values()) collect(c);
+    const files: { node: PathNode; repoRoot: string | null }[] = [];
+    function collect(node: PathNode, repoRoot: string | null) {
+      if (node.children.size === 0 && node.findingCount > 0) {
+        files.push({ node, repoRoot });
+      }
+      for (const c of node.children.values()) collect(c, repoRoot);
     }
-    collect(tree);
-    return files.sort((a, b) => b.blockCount - a.blockCount || b.findingCount - a.findingCount);
-  }, [tree]);
+    for (const proj of projectTrees) {
+      collect(proj.tree, proj.repoRoot);
+    }
+    if (nonSlopgateTree) {
+      collect(nonSlopgateTree.tree, null);
+    }
+    return files.sort((a, b) => b.node.blockCount - a.node.blockCount || b.node.findingCount - a.node.findingCount);
+  }, [projectTrees, nonSlopgateTree]);
 
-  const blockedFileCount = useMemo(() => allFiles.filter(f => f.blockCount > 0).length, [allFiles]);
+  const blockedFileCount = useMemo(() => allFiles.filter(f => f.node.blockCount > 0).length, [allFiles]);
 
   return (
     <div className="space-y-4">
@@ -409,31 +603,34 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
       {/* Hottest files strip - only on tree tab */}
       {tab === "tree" && allFiles.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {allFiles.slice(0, 8).map(f => (
-            <div
-              key={f.fullPath}
-              onClick={() => onPathFilter(f.fullPath)}
-              className={cn(
-                "px-2.5 py-1.5 rounded-md border text-[10px] font-mono cursor-pointer transition-all hover:scale-[1.02]",
-                activePathFilter === f.fullPath
-                  ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
-                  : f.blockCount > 0
-                  ? "border-signal-block/30 bg-signal-block/5 text-signal-block hover:border-signal-block/50"
-                  : "border-border bg-card text-foreground hover:border-muted-foreground"
-              )}
-            >
-              <div className="font-medium">{f.fullPath}</div>
-              <div className="text-muted-foreground mt-0.5">
-                {f.eventCount} events · {f.findingCount} findings · {f.blockCount} blocks
+          {allFiles.slice(0, 8).map(({ node: f, repoRoot }) => {
+            const absolutePath = repoRoot ? `${repoRoot}/${f.fullPath}` : f.fullPath;
+            return (
+              <div
+                key={absolutePath}
+                onClick={() => onPathFilter(absolutePath)}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-md border text-[10px] font-mono cursor-pointer transition-all hover:scale-[1.02]",
+                  activePathFilter === absolutePath
+                    ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                    : f.blockCount > 0
+                    ? "border-signal-block/30 bg-signal-block/5 text-signal-block hover:border-signal-block/50"
+                    : "border-border bg-card text-foreground hover:border-muted-foreground"
+                )}
+              >
+                <div className="font-medium">{f.fullPath}</div>
+                <div className="text-muted-foreground mt-0.5">
+                  {f.eventCount} events · {f.findingCount} findings · {f.blockCount} blocks
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* Tab content */}
       {tab === "tree" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setExpandOverride(prev => prev === true ? false : true)}
@@ -466,24 +663,95 @@ export const PathExplorer = memo(function PathExplorer({ events, rules, onPathFi
               ))}
             </div>
           </div>
-          <div className="border border-border rounded-md bg-card/30 overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-                  <th className="px-2 py-2 text-left">Path</th>
-                  <th className="px-2 py-2 text-right w-20">Events</th>
-                  <th className="px-2 py-2 text-right w-20">Findings</th>
-                  <th className="px-2 py-2 text-right w-20">Blocks</th>
-                  <th className="px-2 py-2 text-left">Top Rules</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(node => (
-                  <TreeRow key={node.fullPath} node={node} depth={0} onPathFilter={onPathFilter} activePathFilter={activePathFilter} expandOverride={expandOverride} sortKey={sortKey} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          {projectTrees.map(proj => (
+            <div key={proj.repoRoot} className="space-y-2">
+              <div className="flex items-center gap-2 mt-4 px-1">
+                <Folder className="w-4 h-4 text-signal-ask" />
+                <span className="font-semibold text-xs text-foreground uppercase tracking-wider">{proj.projectName}</span>
+                <span className="text-[10px] text-muted-foreground font-mono">({proj.repoRoot})</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-auto">
+                  {proj.events.length} events · {proj.rules.length} findings
+                </span>
+              </div>
+              <div className="border border-border rounded-md bg-card/30 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
+                      <th className="px-2 py-2 text-left">Path</th>
+                      <th className="px-2 py-2 text-right w-20">Events</th>
+                      <th className="px-2 py-2 text-right w-20">Findings</th>
+                      <th className="px-2 py-2 text-right w-20">Blocks</th>
+                      <th className="px-2 py-2 text-left">Top Rules</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <TreeRowsList
+                      sorted={proj.sorted}
+                      depth={0}
+                      onPathFilter={onPathFilter}
+                      activePathFilter={activePathFilter}
+                      expandOverride={expandOverride}
+                      sortKey={sortKey}
+                      repoRoot={proj.repoRoot}
+                    />
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {projectTrees.length === 0 && (
+            <div className="flex items-center justify-center h-24 border border-dashed border-border rounded-md text-xs text-muted-foreground">
+              No slopgate project roots found
+            </div>
+          )}
+
+          {nonSlopgateTree && nonSlopgateTree.tree.children.size > 0 && (
+            <div className="border border-border rounded-md bg-card/10 p-3 mt-4">
+              <button
+                onClick={() => setNonSlopgateExpanded(!nonSlopgateExpanded)}
+                className="w-full flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", !nonSlopgateExpanded && "-rotate-90")} />
+                  <span>Other / Non-Slopgate Triggers</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground normal-case font-normal ml-2">
+                    {nonSlopgateGroup.events.length} events · {nonSlopgateGroup.rules.length} findings
+                  </span>
+                </div>
+              </button>
+
+              {nonSlopgateExpanded && (
+                <div className="mt-3">
+                  <div className="border border-border rounded-md bg-card/30 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
+                          <th className="px-2 py-2 text-left">Path</th>
+                          <th className="px-2 py-2 text-right w-20">Events</th>
+                          <th className="px-2 py-2 text-right w-20">Findings</th>
+                          <th className="px-2 py-2 text-right w-20">Blocks</th>
+                          <th className="px-2 py-2 text-left">Top Rules</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <TreeRowsList
+                          sorted={nonSlopgateTree.sorted}
+                          depth={0}
+                          onPathFilter={onPathFilter}
+                          activePathFilter={activePathFilter}
+                          expandOverride={expandOverride}
+                          sortKey={sortKey}
+                          repoRoot={null}
+                        />
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -95,7 +95,17 @@ export function generateMockData() {
     const sessionStart = randomDate(start, now);
     const eventCount = 2 + Math.floor(rand() * 8);
     const sessionLangs = pickN(LANGUAGES, 1 + Math.floor(rand() * 3));
-    const sessionPaths = pickN(PATHS, 1 + Math.floor(rand() * 4));
+    
+    const isSlopgateRepo = rand() < 0.75;
+    const enforcementMode = isSlopgateRepo ? (rand() < 0.8 ? "repo_strict" : "repo_relaxed") : "outside_repo";
+    const resolvedRepoRoot = isSlopgateRepo 
+      ? (rand() < 0.6 ? "/home/trav/.openclaw/workspace-hooker/slopgate" : "/home/trav/projects/website")
+      : (rand() < 0.5 ? "/home/trav/scratchpad" : null);
+
+    const rawPaths = pickN(PATHS, 1 + Math.floor(rand() * 4));
+    const sessionPaths = rawPaths.map(p => {
+      return resolvedRepoRoot ? `${resolvedRepoRoot}/${p}` : `/home/trav/${p}`;
+    });
 
     // Session lifecycle
     const sessionEvents: EventName[] = ["SessionStart"];
@@ -117,6 +127,8 @@ export function generateMockData() {
         session_id: sid, tool_name: tool,
         candidate_paths: evName === "SessionStart" ? [] : pickN(sessionPaths, 1 + Math.floor(rand() * 2)),
         languages: sessionLangs,
+        enforcement_mode: enforcementMode,
+        resolved_repo_root: resolvedRepoRoot,
       });
 
       // Generate rule findings for tool events
@@ -142,6 +154,8 @@ export function generateMockData() {
             message: `${ruleId}: Found violation in ${pick(sessionPaths)}`,
             additional_context: `Rule ${ruleId} triggered by ${tool} on ${platform}`,
             metadata: { category: DUPLICATION_RULES.includes(ruleId) ? "duplication" : "general" },
+            enforcement_mode: enforcementMode,
+            resolved_repo_root: resolvedRepoRoot,
           };
           sessionFindings.push(finding);
           rules.push(finding);
@@ -165,6 +179,8 @@ export function generateMockData() {
           output: worstDecision === "allow" ? "" : `Decision: ${worstDecision} — ${sessionFindings.length} finding(s)`,
           skipped,
           reason: skipped ? "Path in skip_paths" : undefined,
+          enforcement_mode: enforcementMode,
+          resolved_repo_root: resolvedRepoRoot,
         });
       }
 

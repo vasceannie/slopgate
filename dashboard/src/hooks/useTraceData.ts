@@ -487,8 +487,6 @@ export function useTraceData(filters: FilterState) {
 
     if (sourceMeta.snapshotError) {
       warning = `Live snapshot failed: ${sourceMeta.snapshotError}`;
-    } else if (sourceMeta.isSnapshotLoading && sourceMode === "mock") {
-      warning = "Loading live trace snapshot; charts are held empty to avoid showing mock data.";
     } else if (Object.keys(sourceMeta.snapshotTruncated).length > 0) {
       warning = `Live snapshot was truncated for browser safety: ${Object.entries(sourceMeta.snapshotTruncated).map(([key, count]) => `${key} +${count}`).join(", ")}.`;
     } else if (windowRecordCount === 0 && sourceMeta.latestDataAt && sourceMeta.latestDataAt < windowStartAt) {
