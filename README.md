@@ -12,8 +12,8 @@ Install [uv](https://docs.astral.sh/uv/) first, then either install the global C
 # Global CLI on PATH (recommended)
 uv tool install .
 
-# From PyPI (when published)
-# uv tool install slopgate
+# From PyPI — published as `ai-slopgate` (the `slopgate` name was already taken)
+# uv tool install ai-slopgate
 
 # Development: project venv + dev tools
 uv sync

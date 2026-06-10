@@ -21,5 +21,6 @@ dashboard-build-ssh:
 dashboard-prod: dashboard-build-ssh dashboard-api
 
 publish:
+	rm -rf dist
 	uv build
 	uv publish --token $(UV_PUBLISH_TOKEN)
