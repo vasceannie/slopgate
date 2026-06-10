@@ -144,6 +144,7 @@ hook-install-verify:
         - slopgate install opencode --install-scope user --disable-autoupdate
         - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
         - rm -rf "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
+        - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
         - echo '{}' > "${HOME}/.claude/settings.json"
         - echo '{}' > "${HOME}/.codex/hooks.json"
         - echo '{}' > "${HOME}/.cursor/hooks.json"
