@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slopgate"
-version = ["version"]
+dynamic = ["version"]
 description = "Global CLI guardrails engine for AI coding agents — Claude Code, Codex, OpenCode"
 requires-python = ">=3.10"
 readme = "README.md"
