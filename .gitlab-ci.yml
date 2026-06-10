@@ -8,7 +8,7 @@ image: python:3.12-slim
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PYTHONUNBUFFERED: "1"
-  UV_VERSION: "0.6"
+  UV_VERSION: "latest"
   SLOPGATE_TEST_HOME: /tmp/slopgate-ci-home
   CI_SCRIPTS: .gitlab-ci/scripts
 
@@ -108,9 +108,9 @@ hook-install-verify:
     - export HOME="${SLOPGATE_TEST_HOME}"
     - rm -rf "${HOME}" && mkdir -p "${HOME}"
     - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor" "${HOME}/.config/opencode/plugins"
-    - echo '{}' > "${HOME}/.claude/settings.json"
-    - echo '{}' > "${HOME}/.codex/hooks.json"
-    - echo '{}' > "${HOME}/.cursor/hooks.json"
+    - echo {} > "${HOME}/.claude/settings.json"
+    - echo {} > "${HOME}/.codex/hooks.json"
+    - echo {} > "${HOME}/.cursor/hooks.json"
     - slopgate install claude --install-scope user --disable-autoupdate
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
     - slopgate install codex --install-scope user --disable-autoupdate
@@ -121,9 +121,9 @@ hook-install-verify:
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
     - rm -rf "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
     - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
-    - echo '{}' > "${HOME}/.claude/settings.json"
-    - echo '{}' > "${HOME}/.codex/hooks.json"
-    - echo '{}' > "${HOME}/.cursor/hooks.json"
+    - echo {} > "${HOME}/.claude/settings.json"
+    - echo {} > "${HOME}/.codex/hooks.json"
+    - echo {} > "${HOME}/.cursor/hooks.json"
     - slopgate install all --install-scope user --disable-autoupdate
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" claude
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-hook-install.sh" codex
