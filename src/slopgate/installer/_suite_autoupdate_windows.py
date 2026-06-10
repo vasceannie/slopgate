@@ -32,8 +32,11 @@ def path_appears_in_task_xml(path: Path, xml: str) -> bool:
         raw_path.replace("/", "\\"),
         raw_path.replace("\\", "/"),
     }
-    folded_xml = xml.casefold()
-    return any(candidate.casefold() in folded_xml for candidate in candidates)
+    normalized_xml = xml.replace("\\", "/").casefold()
+    return any(
+        candidate.replace("\\", "/").casefold() in normalized_xml
+        for candidate in candidates
+    )
 
 
 def scheduler_file_is_owned(path: Path) -> bool:
