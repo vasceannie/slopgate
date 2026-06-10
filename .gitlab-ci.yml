@@ -27,6 +27,7 @@ stages:
   - install-verify
   - hook-install-verify
   - hook-uninstall-verify
+  - windows-install
 
 # ===================================================================
 # TEST — pytest unit tests
@@ -98,6 +99,29 @@ install-verify:
   needs: []
 
 # ===================================================================
+# WINDOWS-INSTALL — Windows-specific install & schtasks verification
+# Requires a GitLab runner with the `windows` tag.
+# ===================================================================
+windows-install:
+  stage: windows-install
+  tags:
+    - windows
+  script:
+    - pip install --upgrade pip
+    - pip install --editable "${env:CI_PROJECT_DIR}"
+    - slopgate version
+    - slopgate config path
+    - slopgate config show | Select-Object -First 30
+    - slopgate install claude --dry-run
+    - slopgate install codex --dry-run
+    - slopgate install opencode --dry-run
+    - slopgate uninstall all --dry-run
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_MERGE_REQUEST_ID'  # optional: run on MRs with Windows runner
+
+# ===================================================================
 # HOOK-INSTALL-VERIFY — install hooks into disposable harness configs
 # ===================================================================
 hook-install-verify:
@@ -120,7 +144,6 @@ hook-install-verify:
     - slopgate install opencode --install-scope user --disable-autoupdate
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-opencode-plugin.sh"
     - rm -rf "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
-    - mkdir -p "${HOME}/.claude" "${HOME}/.codex" "${HOME}/.cursor"
     - echo '{}' > "${HOME}/.claude/settings.json"
     - echo '{}' > "${HOME}/.codex/hooks.json"
     - echo '{}' > "${HOME}/.cursor/hooks.json"
@@ -144,3 +167,25 @@ hook-uninstall-verify:
     - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/verify-non-destructive-uninstall.sh" "${SLOPGATE_TEST_HOME}"
   needs:
     - hook-install-verify
+
+# ===================================================================
+# WINDOWS-INSTALL — install test on Windows runner (manual gate)
+# ===================================================================
+windows-install:
+  stage: windows-install
+  tags:
+    - windows
+  before_script:
+    - pip install --upgrade pip
+    - pip install --editable "${CI_PROJECT_DIR}"
+  script:
+    - slopgate version
+    - python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
+    - slopgate install claude --dry-run
+    - slopgate install codex --dry-run
+  needs:
+    - hook-install-verify
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - when: manual

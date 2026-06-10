@@ -1,7 +1,7 @@
 """Hook-layer tests — pytest + conftest fixtures + parametrize.
 All shared fixtures (evaluate, load_fixture, pretool_write, pretool_bash,
 bundle_root, tmp_project) live in conftest.py. Shared non-fixture helpers
-live in tests.support and tests.engine_support.
+live in tests.support and tests.engine.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from slopgate._types import ObjectDict, object_dict
 from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
 from slopgate.util.payloads import shell_command_paths
-from tests import engine_support
+from tests import engine
 from tests.support import (
     BUNDLE_ROOT,
     BashBuilder,
@@ -62,34 +62,34 @@ EVENTS_NO_HOOK_SPECIFIC = (
     "TeammateIdle",
 )
 
-VIRTUALENV_PARSE_SKIP_PATHS = engine_support.VIRTUALENV_PARSE_SKIP_PATHS
-disabled_rule_findings = engine_support.disabled_rule_findings
-rule_build_context = engine_support.rule_build_context
-write_slopgate = engine_support.write_slopgate
-assert_worktree_marker_copied = engine_support.assert_worktree_marker_copied
-write_config_from_defaults = engine_support.write_config_from_defaults
+VIRTUALENV_PARSE_SKIP_PATHS = engine.VIRTUALENV_PARSE_SKIP_PATHS
+disabled_rule_findings = engine.disabled_rule_findings
+rule_build_context = engine.rule_build_context
+write_slopgate = engine.write_slopgate
+assert_worktree_marker_copied = engine.assert_worktree_marker_copied
+write_config_from_defaults = engine.write_config_from_defaults
 enable_failing_post_edit_quality_command = (
-    engine_support.enable_failing_post_edit_quality_command
+    engine.enable_failing_post_edit_quality_command
 )
-disable_default_post_edit_quality = engine_support.disable_default_post_edit_quality
-keep_default_config = engine_support.keep_default_config
-latest_trace_event = engine_support.latest_trace_event
-_set_skip_paths = engine_support._set_skip_paths
-write_skip_paths_config = engine_support.write_skip_paths_config
-post_edit_bash_payload = engine_support.post_edit_bash_payload
-evaluate_post_edit_bash = engine_support.evaluate_post_edit_bash
-strict_rule_id_sets = engine_support.strict_rule_id_sets
-repo_with_moved_parse_error = engine_support.repo_with_moved_parse_error
-_is_not_denied = engine_support._is_not_denied
-assert_write_negative_case = engine_support.assert_write_negative_case
-assert_bash_negative_case = engine_support.assert_bash_negative_case
-init_git_worktree = engine_support.init_git_worktree
-_fake_non_default_slopgate_git_output = engine_support._fake_non_default_slopgate_git_output
-fake_slopgate_worktree_git_output = engine_support.fake_slopgate_worktree_git_output
-pretool_write_payload = engine_support.pretool_write_payload
-pretool_bash_payload = engine_support.pretool_bash_payload
-evaluate_pretool_write = engine_support.evaluate_pretool_write
-evaluate_pretool_bash = engine_support.evaluate_pretool_bash
+disable_default_post_edit_quality = engine.disable_default_post_edit_quality
+keep_default_config = engine.keep_default_config
+latest_trace_event = engine.latest_trace_event
+_set_skip_paths = engine._set_skip_paths
+write_skip_paths_config = engine.write_skip_paths_config
+post_edit_bash_payload = engine.post_edit_bash_payload
+evaluate_post_edit_bash = engine.evaluate_post_edit_bash
+strict_rule_id_sets = engine.strict_rule_id_sets
+repo_with_moved_parse_error = engine.repo_with_moved_parse_error
+_is_not_denied = engine._is_not_denied
+assert_write_negative_case = engine.assert_write_negative_case
+assert_bash_negative_case = engine.assert_bash_negative_case
+init_git_worktree = engine.init_git_worktree
+_fake_non_default_slopgate_git_output = engine._fake_non_default_slopgate_git_output
+fake_slopgate_worktree_git_output = engine.fake_slopgate_worktree_git_output
+pretool_write_payload = engine.pretool_write_payload
+pretool_bash_payload = engine.pretool_bash_payload
+evaluate_pretool_write = engine.evaluate_pretool_write
+evaluate_pretool_bash = engine.evaluate_pretool_bash
 
 
 def fixture_output(

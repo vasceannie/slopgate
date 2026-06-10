@@ -296,3 +296,38 @@ def test_uninstall_suite_dry_run_reports_detected_sites_without_writing(
     )
     output = capsys.readouterr().out
     assert (status, called, "Would uninstall: claude" in output) == (0, [], True)
+
+
+class TestPathAppearsInTaskXml:
+    """Test suite_autoupdate_windows.path_appears_in_task_xml with edge cases."""
+
+    def test_returns_false_for_empty_xml(self) -> None:
+        from slopgate.installer._suite_autoupdate_windows import (
+            path_appears_in_task_xml,
+        )
+        from pathlib import Path
+
+        result = path_appears_in_task_xml(Path("C:\\slopgate.exe"), "")
+        assert result is False, "Empty XML should return False"
+
+    def test_returns_false_for_malformed_xml(self) -> None:
+        from slopgate.installer._suite_autoupdate_windows import (
+            path_appears_in_task_xml,
+        )
+        from pathlib import Path
+
+        result = path_appears_in_task_xml(
+            Path("C:\\slopgate.exe"), "<Malformed>no closing tag"
+        )
+        assert result is False, "Malformed XML should return False"
+
+    def test_returns_false_for_xml_without_path(self) -> None:
+        from slopgate.installer._suite_autoupdate_windows import (
+            path_appears_in_task_xml,
+        )
+        from pathlib import Path
+
+        result = path_appears_in_task_xml(
+            Path("C:\\slopgate.exe"), "<Task><Actions></Actions></Task>"
+        )
+        assert result is False, "XML without matching path should return False"
