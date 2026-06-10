@@ -14,6 +14,7 @@ from slopgate.installer import cursor_hooks_block, install_cursor, uninstall_cur
 from slopgate.installer._cursor import cursor_user_hooks_path
 import slopgate.installer._shared
 from slopgate.installer._shared import HOOK_TIMEOUT_STANDARD
+from tests.test_installer import command_includes_slopgate_handle
 
 
 def _cursor_hooks_block_snapshot(binary: str) -> dict[str, object]:
@@ -33,8 +34,11 @@ def _cursor_hooks_block_snapshot(binary: str) -> dict[str, object]:
 
 
 def test_cursor_hooks_block_uses_native_events_and_cursor_platform() -> None:
-    assert _cursor_hooks_block_snapshot("/tmp/Slopgate Bin/slopgate") == {
-        "command": "'/tmp/Slopgate Bin/slopgate' handle --platform cursor",
+    binary = "/tmp/Slopgate Bin/slopgate"
+    assert _cursor_hooks_block_snapshot(binary) == {
+        "command": slopgate.installer._shared.hook_command(
+            binary, "handle", "--platform", "cursor"
+        ),
         "has_after_file_edit": True,
         "has_tab_hooks": True,
         "shell_fail_closed": True,
@@ -103,7 +107,8 @@ def test_cursor_install_merges_owned_hooks_without_clobbering_existing(
         "install_status": snapshot["install_status"],
         "keeps_existing": "./existing.sh" in commands,
         "installs_cursor": any(
-            ("handle --platform cursor" in command for command in commands)
+            command_includes_slopgate_handle(command, "--platform", "cursor")
+            for command in commands
         ),
         "backup_count": snapshot["backup_count"],
         "uninstall_status": snapshot["uninstall_status"],
@@ -134,4 +139,4 @@ def test_cursor_install_project_scope_writes_repo_hooks(
     command = parsed["hooks"]["preToolUse"][0]["command"]
     assert status == 0
     assert "beforeTabFileRead" in parsed["hooks"]
-    assert command.endswith("handle --platform cursor")
+    assert command_includes_slopgate_handle(command, "--platform", "cursor")

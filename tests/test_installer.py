@@ -78,6 +78,26 @@ def hook_commands(hooks: ObjectDict, event_name: str = "PreToolUse") -> list[str
     return commands
 
 
+def count_slopgate_hook_commands(commands: list[str], *fragments: str) -> int:
+    return sum(
+        1
+        for command in commands
+        if slopgate.installer._shared.command_is_slopgate_hook(command)
+        and (not fragments or all(fragment in command for fragment in fragments))
+    )
+
+
+def expected_hook_command(binary: str, *args: str) -> str:
+    return slopgate.installer._shared.hook_command(binary, *args)
+
+
+def command_includes_slopgate_handle(command: str, *fragments: str) -> bool:
+    return (
+        slopgate.installer._shared.command_is_slopgate_hook(command)
+        and all(fragment in command for fragment in fragments)
+    )
+
+
 def _hook_block_entry(hooks: ObjectDict, event_name: str) -> ObjectDict:
     entries = object_list(hooks.get(event_name))
     assert entries and is_object_dict(entries[0])

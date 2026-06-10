@@ -12,6 +12,7 @@ import slopgate.installer._shared
 import slopgate.util.platform
 from tests.test_installer import (
     all_hook_commands,
+    count_slopgate_hook_commands,
     dry_run_install_json,
     existing_claude_settings,
     existing_codex_hooks,
@@ -32,7 +33,7 @@ def test_claude_install_preserves_unrelated_hooks_and_replaces_only_slopgate(
     commands = installed_hook_commands(settings_path)
     assert "other-gate" in commands
     assert "/old/bin/slopgate handle" not in commands
-    assert commands.count("slopgate handle") == 1
+    assert count_slopgate_hook_commands(commands) == 1
 
 
 def test_claude_install_preserves_unrelated_hook_inside_mixed_entry(
@@ -60,7 +61,7 @@ def test_claude_install_preserves_unrelated_hook_inside_mixed_entry(
     assert slopgate.installer.install_claude(dry_run=False) == 0
     commands = installed_hook_commands(settings_path)
     assert "other-gate" in commands
-    assert commands.count("slopgate handle") == 1
+    assert count_slopgate_hook_commands(commands) == 1
 
 
 def test_claude_uninstall_removes_only_slopgate_hooks(
@@ -166,7 +167,7 @@ def test_codex_install_preserves_unrelated_hooks_and_replaces_only_slopgate(
     commands = installed_hook_commands(hooks_path)
     assert "other-gate" in commands
     assert "/old/bin/slopgate handle --platform codex" not in commands
-    assert commands.count("slopgate handle --platform codex") == 1
+    assert count_slopgate_hook_commands(commands, "--platform", "codex") == 1
 
 
 def test_codex_uninstall_preserves_non_hook_user_settings_when_only_owned_hooks_remain(

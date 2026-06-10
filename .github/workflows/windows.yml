@@ -9,11 +9,16 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install Python
         run: uv python install 3.12
@@ -23,10 +28,17 @@ jobs:
           uv run pytest
           tests/test_installer.py
           tests/test_windows_compat.py
+          tests/test_installer_claude_hooks.py
+          tests/test_installer_cursor_hooks.py
+          tests/test_installer_ownership.py
+          tests/test_windows_shell_command.py
+          tests/test_powershell_argv_parsing.py
           tests/test_engine_inline_deny_tests.py::test_powershell_git_no_verify_denied
           tests/test_engine_inline_deny_tests.py::test_powershell_windows_system_path_denied
           tests/test_engine_inline_deny_tests.py::test_powershell_path_commands_are_evaluated_through_rules
           tests/engine/test_02_inline_payload_denies_to_shell_command_paths_ignore_wrapped_absolute_executable_position.py::TestInlinePayloadDenies::test_linter_config_edit_like_aliases_are_denied
+          tests/test_suite_autoupdate.py::test_windows_scheduler_plan_uses_schtasks
+          tests/test_suite_autoupdate.py::test_discover_install_sites_respects_windows_appdata
           -q
 
       - name: Run full test suite

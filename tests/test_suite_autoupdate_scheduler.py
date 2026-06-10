@@ -6,17 +6,19 @@ import pytest
 from pathlib import Path
 import slopgate.installer
 import slopgate.installer._suite
-import slopgate.installer._suite_autoupdate
 from slopgate.cli.commands import cmd_install
 from slopgate.cli.parsers import build_parser
 from tests.test_suite_autoupdate import (
+    _patch_linux_installer_config_dirs,
     linux_autoupdate_units,
     macos_autoupdate_context,
     record_suite_subprocess_run,
     windows_owned_task_install_snapshot,
 )
+from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
 
+@SKIP_LINUX_ONLY
 def test_linux_autoupdate_install_refuses_unowned_existing_units(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -31,16 +33,13 @@ def test_linux_autoupdate_install_refuses_unowned_existing_units(
     ) == (1, "custom service\n", "custom timer\n", [])
 
 
+@SKIP_LINUX_ONLY
 def test_autoupdate_uninstall_refuses_incidental_scheduler_marker_text(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "linux")
-    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
+    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    timer = config_home / "systemd/user/slopgate-auto-update.timer"
     timer.parent.mkdir(parents=True)
     timer.write_text(
         "# custom comment mentions slopgate-auto-update\n[Timer]\n", encoding="utf-8"
@@ -112,6 +111,7 @@ def _linux_owned_unit_backup_snapshot(
     }
 
 
+@SKIP_LINUX_ONLY
 def test_linux_autoupdate_install_backs_up_existing_units(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -160,6 +160,7 @@ def _windows_autoupdate_context(
     return tmp_path / "LocalAppData/slopgate/slopgate-auto-update.ps1"
 
 
+@SKIP_WINDOWS_ONLY
 def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -171,6 +172,7 @@ def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
     assert not sorted(script.parent.glob("*.slopgate-bak-*"))
 
 
+@SKIP_WINDOWS_ONLY
 def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -197,6 +199,7 @@ def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_c
     assert not script.exists()
 
 
+@SKIP_WINDOWS_ONLY
 def test_windows_autoupdate_install_exports_owned_existing_task_before_force_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -238,6 +241,7 @@ def _macos_uninstall_backup_snapshot(
     }
 
 
+@SKIP_DARWIN_ONLY
 def test_macos_autoupdate_uninstall_backs_up_owned_launch_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

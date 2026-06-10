@@ -96,7 +96,10 @@ def test_claude_reinstall_replaces_powershell_owned_hook_and_preserves_user_hook
     result = slopgate.installer.install_claude(dry_run=False)
     assert {"result": result, "commands": hook_commands(settings_path)} == {
         "result": 0,
-        "commands": ["my-slopgate-helper handle", "slopgate handle"],
+        "commands": [
+            "my-slopgate-helper handle",
+            slopgate.installer._shared.hook_command("slopgate", "handle"),
+        ],
     }
 
 

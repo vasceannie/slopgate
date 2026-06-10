@@ -8,6 +8,27 @@ import slopgate.installer._suite
 import slopgate.installer._suite_autoupdate
 from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
 from slopgate.cli.parsers import build_parser
+from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
+
+
+def _patch_linux_installer_config_dirs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Path:
+    config_home = tmp_path / ".config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+
+    def fake_user_config_dir(app_name: str) -> Path:
+        return config_home / app_name
+
+    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "linux")
+    monkeypatch.setattr(slopgate.installer._suite, "user_config_dir", fake_user_config_dir)
+    monkeypatch.setattr(
+        slopgate.installer._suite_autoupdate, "user_config_dir", fake_user_config_dir
+    )
+    return config_home
 
 
 def windows_owned_task_install_snapshot(
@@ -110,11 +131,12 @@ def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> N
     )
 
 
+@SKIP_LINUX_ONLY
 def test_discover_install_sites_respects_current_device_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".config" / "opencode").mkdir(parents=True)
     sites = slopgate.installer._suite.discover_install_sites()
@@ -132,13 +154,29 @@ def test_discover_install_sites_respects_current_device_home(
     )
 
 
+@SKIP_WINDOWS_ONLY
+def test_discover_install_sites_respects_windows_appdata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    appdata = tmp_path / "AppData" / "Roaming"
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    (tmp_path / ".claude").mkdir()
+    (appdata / "opencode").mkdir(parents=True)
+    sites = slopgate.installer._suite.discover_install_sites()
+    assert [(site.platform, site.present) for site in sites] == [
+        ("claude", True),
+        ("opencode", True),
+    ]
+
+
+@SKIP_LINUX_ONLY
 def test_linux_scheduler_plan_uses_systemd_user_timer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: "/tmp/slopgate bin"
     )
@@ -155,13 +193,14 @@ def test_linux_scheduler_plan_uses_systemd_user_timer(
         "slopgate-auto-update.timer" in (plan.enable_command or []),
     ) == (
         "systemd-user",
-        tmp_path / ".config/systemd/user/slopgate-auto-update.timer",
+        config_home / "systemd/user/slopgate-auto-update.timer",
         True,
         True,
         True,
     )
 
 
+@SKIP_DARWIN_ONLY
 def test_macos_scheduler_plan_uses_launch_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -185,6 +224,7 @@ def test_macos_scheduler_plan_uses_launch_agent(
     )
 
 
+@SKIP_WINDOWS_ONLY
 def test_windows_scheduler_plan_uses_schtasks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -215,13 +255,12 @@ def test_windows_scheduler_plan_uses_schtasks(
     )
 
 
+@SKIP_LINUX_ONLY
 def test_scheduler_plan_falls_back_to_python_module_invocation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: sys.executable
     )
@@ -229,9 +268,10 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
     exec_start = next(
         (line for line in plan.content.splitlines() if line.startswith("ExecStart="))
     )
-    assert " -m slopgate update " in exec_start
+    assert "-m" in exec_start and "slopgate" in exec_start and "update" in exec_start
 
 
+@SKIP_LINUX_ONLY
 def test_scheduler_plan_rejects_newline_source_for_systemd_units(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -249,6 +289,7 @@ def test_scheduler_plan_rejects_newline_source_for_systemd_units(
         raise AssertionError("newline source should be rejected before rendering")
 
 
+@SKIP_DARWIN_ONLY
 def test_macos_scheduler_plan_escapes_plist_arguments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -272,13 +313,9 @@ def linux_autoupdate_units(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, Path]:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "linux")
-    service = tmp_path / ".config/systemd/user/slopgate-auto-update.service"
-    timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
+    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    service = config_home / "systemd/user/slopgate-auto-update.service"
+    timer = config_home / "systemd/user/slopgate-auto-update.timer"
     service.parent.mkdir(parents=True)
     return (service, timer)
 

@@ -25,6 +25,7 @@ from slopgate.util.payloads._patches import (
     parse_patch_candidate_paths,
 )
 from slopgate.util.subprocesses import CommandResult, run_shell
+from tests.support import SKIP_UNIX_ONLY
 
 
 def test_retry_lock_payload_keeps_retry_state_fields() -> None:
@@ -45,6 +46,7 @@ def test_retry_lock_payload_keeps_retry_state_fields() -> None:
     )
 
 
+@SKIP_UNIX_ONLY
 def test_run_shell_returns_command_result_for_real_subprocess(tmp_path: Path) -> None:
     result = run_shell(
         "printf 'hello' && printf 'oops' >&2",

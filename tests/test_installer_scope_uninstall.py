@@ -219,7 +219,7 @@ def test_uninstall_user_scope_warns_when_project_hooks_remain(
     assert slopgate.installer._cursor.uninstall_cursor(dry_run=False, scope="user") == 0
     captured = capsys.readouterr()
     assert "remain at" in captured.out
-    assert ".cursor/hooks.json" in captured.out
+    assert ".cursor/hooks.json" in captured.out.replace("\\", "/")
 
 
 def _user_scope_uninstall_leaves_project_hooks(

@@ -19,6 +19,21 @@ SKIP_UNIX_ONLY = pytest.mark.skipif(
     reason="Requires Unix path or shell semantics",
 )
 
+SKIP_LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Requires Linux scheduler semantics",
+)
+
+SKIP_DARWIN_ONLY = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="Requires macOS scheduler semantics",
+)
+
+SKIP_WINDOWS_ONLY = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="Requires Windows scheduler semantics",
+)
+
 # ---------------------------------------------------------------------------
 # Fixture type aliases — import in test files to annotate fixture params.
 # ---------------------------------------------------------------------------
