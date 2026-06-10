@@ -45,6 +45,9 @@ slopgate = ["resources/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "unix_only: requires Unix path or shell semantics (auto-skipped on win32 via tests.support.SKIP_UNIX_ONLY)",
+]
 
 [tool.basedpyright]
 pythonVersion = "3.12"

@@ -77,9 +77,9 @@ def resolve_path(path_str: str, root: Path) -> Path:
 def relative_path(path: Path, root: Path) -> str:
     """Return a path relative to root when possible."""
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def metadata_str(metadata: dict[str, object], key: str) -> str | None:

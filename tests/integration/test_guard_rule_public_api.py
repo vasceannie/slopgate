@@ -13,6 +13,8 @@ from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
 from slopgate.util.payloads import HookPayload
 
+from tests.support import SKIP_UNIX_ONLY
+
 
 def context_for_payload(
     tmp_path: Path,
@@ -320,6 +322,7 @@ def test_config_change_guard_rule_blocks_disable_all_hooks(tmp_path: Path) -> No
     ]
 
 
+@SKIP_UNIX_ONLY
 def test_system_protection_rule_blocks_configured_system_path(tmp_path: Path) -> None:
     system_ctx = context_for_payload(
         tmp_path,

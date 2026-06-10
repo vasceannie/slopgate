@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from tests.support import SKIP_UNIX_ONLY
 from tests.test_engine import (
     BUNDLE_ROOT,
     BashBuilder,
@@ -114,6 +115,7 @@ class TestInlinePayloadDenies:
             "protected staging rule files should remain blocked"
         )
 
+    @SKIP_UNIX_ONLY
     def test_system_path(self, pretool_write: WriteBuilder) -> None:
         result = evaluate_payload(pretool_write("/etc/passwd", "x"))
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
@@ -121,6 +123,7 @@ class TestInlinePayloadDenies:
             "direct writes to protected system paths should remain blocked"
         )
 
+    @SKIP_UNIX_ONLY
     def test_system_path_relative_escape(
         self, pretool_bash: BashBuilder, tmp_path: Path
     ) -> None:

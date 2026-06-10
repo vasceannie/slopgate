@@ -75,7 +75,7 @@ def constant_location(
         path = constant_match.path.relative_to(project_root)
     except ValueError:
         pass
-    return (str(path), constant_match.lineno)
+    return (path.as_posix(), constant_match.lineno)
 
 
 def string_literal_metadata(

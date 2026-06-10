@@ -102,7 +102,7 @@ def test_enrichment_pipeline_appends_messages_and_resolves_paths(
 
 def test_installer_command_pipeline_quotes_posix_and_powershell_commands() -> None:
     assert {
-        "posix": shell_command(["/tmp/Slopgate Bin/slopgate", "handle"]),
+        "posix": shell_command(["/tmp/Slopgate Bin/slopgate", "handle"], windows=False),
         "windows": "powershell.exe"
         in shell_command(["C:/Program Files/vf.exe", "handle"], windows=True),
     } == {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from slopgate._types import is_object_dict
 
+from tests.support import SKIP_UNIX_ONLY
 from tests.engine.enforcement_modes_support import (
     _evaluate_post_edit_lint_for_touched_source,
     _repo_with_touched_source_coverage,
@@ -86,6 +87,7 @@ class TestEnforcementModes:
         assert_worktree_marker_copied(repo, worktree_marker)
         assert "GIT-001" in finding_ids(result)
 
+    @SKIP_UNIX_ONLY
     def test_enrolled_repo_with_noqualitygate_is_relaxed(self, tmp_path: Path) -> None:
         repo = write_slopgate(tmp_path / "repo_relaxed")
         _ = (repo / ".noslopgate").write_text("", encoding="utf-8")

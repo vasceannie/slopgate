@@ -6,6 +6,7 @@ import pytest
 from pathlib import Path
 import slopgate.installer
 import slopgate.installer._suite
+import slopgate.installer._suite_autoupdate
 from slopgate.cli.commands import cmd_install
 from slopgate.cli.parsers import build_parser
 from tests.test_suite_autoupdate import (
@@ -37,6 +38,8 @@ def test_autoupdate_uninstall_refuses_incidental_scheduler_marker_text(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
     monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
+    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "linux")
     timer = tmp_path / ".config/systemd/user/slopgate-auto-update.timer"
     timer.parent.mkdir(parents=True)
     timer.write_text(

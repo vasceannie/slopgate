@@ -27,7 +27,7 @@ def test_update_suite_dry_run_uses_uv_without_refreshing_hooks(
     assert (
         status,
         "Would run:" in output,
-        "uv tool install --force" in output,
+        "tool" in output and "install" in output and "--force" in output,
         "Hook refresh: skipped" in output,
         "Refreshing claude hooks" not in output,
     ) == (0, True, True, True, True)

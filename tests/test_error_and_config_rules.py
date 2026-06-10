@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from slopgate.engine import evaluate_payload
 from slopgate.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
-from tests.support import BUNDLE_ROOT, finding_ids, hook_output, required_string
+from tests.support import BUNDLE_ROOT, SKIP_UNIX_ONLY, finding_ids, hook_output, required_string
 
 
 class TestBashOutputError:
@@ -250,6 +250,7 @@ class TestDevNullSystemProtection:
         result = evaluate_payload(self._pre_write("/dev/null"))
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" not in finding_ids(result)
 
+    @SKIP_UNIX_ONLY
     def test_other_dev_tool_paths_still_blocked(self) -> None:
         result = evaluate_payload(self._pre_write("/dev/sda"))
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result)

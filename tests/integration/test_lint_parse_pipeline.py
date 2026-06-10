@@ -45,7 +45,7 @@ def test_lint_parse_pipeline_reports_parse_error_locations(tmp_path: Path) -> No
     invalid.write_text("def broken(:\n", encoding="utf-8")
     violations = detect_python_parse_errors([valid, invalid])
     assert [(item.rule, item.relative_path, item.metadata) for item in violations] == [
-        ("python-parse-error", str(invalid), {"line": 1, "offset": 12})
+        ("python-parse-error", invalid.as_posix(), {"line": 1, "offset": 12})
     ]
 
 

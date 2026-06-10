@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
+
+import pytest
 
 from slopgate._types import ObjectDict, object_dict, string_value
 from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
+
+SKIP_UNIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Requires Unix path or shell semantics",
+)
 
 # ---------------------------------------------------------------------------
 # Fixture type aliases — import in test files to annotate fixture params.

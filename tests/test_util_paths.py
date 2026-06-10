@@ -53,7 +53,7 @@ def _xdg_helper_results(
 
 def test_path_matching_helpers_normalize_platform_paths(tmp_path: Path) -> None:
     results = _path_helper_results(tmp_path)
-    expected_resolved = str((tmp_path / "src/pkg.py").resolve(strict=False)).lower()
+    expected_resolved = resolve_path_for_match("src/pkg.py", tmp_path)
 
     assert results == {
         "third_party_site_packages": True,

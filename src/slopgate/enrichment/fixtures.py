@@ -12,7 +12,7 @@ from slopgate.constants import (
     ENRICHMENT_MAX_PARAMETRIZE_EXAMPLES,
     ENRICHMENT_MAX_PARAMETRIZE_SNIPPET,
 )
-from slopgate.enrichment._helpers import safe_parse, safe_read
+from slopgate.enrichment._helpers import relative_path, safe_parse, safe_read
 from slopgate.enrichment._types import FixtureInfo, ParametrizeExample
 
 
@@ -70,13 +70,6 @@ def _iter_conftest_paths(start_dir: Path, root: Path) -> list[Path]:
     return paths
 
 
-def _relative_name(path: Path, root: Path) -> str:
-    try:
-        return str(path.relative_to(root))
-    except ValueError:
-        return path.name
-
-
 def discover_fixtures(test_path: Path, root: Path) -> list[FixtureInfo]:
     fixtures: list[FixtureInfo] = []
     seen_names: set[str] = set()
@@ -102,7 +95,7 @@ def discover_fixtures(test_path: Path, root: Path) -> list[FixtureInfo]:
             fixtures.append(
                 {
                     "name": node.name,
-                    "conftest": _relative_name(conftest, root),
+                    "conftest": relative_path(conftest, root),
                     "has_params": _fixture_has_params(node),
                 }
             )

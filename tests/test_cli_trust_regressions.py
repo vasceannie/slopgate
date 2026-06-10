@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from slopgate._types import ObjectDict, object_dict, object_list
 import slopgate.installer
+import slopgate.installer._shared
 import slopgate.search.cli
 from slopgate.cli.commands import (
     cmd_check,
@@ -71,8 +72,9 @@ def test_config_init_force_backs_up_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _clear_slopgate_env(monkeypatch)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    config_path = tmp_path / "xdg" / "slopgate" / "config.json"
+    config_dir = tmp_path / "xdg" / "slopgate"
+    monkeypatch.setenv("SLOPGATE_CONFIG_DIR", str(config_dir))
+    config_path = config_dir / "config.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text('{"custom": true}\n', encoding="utf-8")
     backups, updated = _run_force_config_init(config_path)
@@ -192,7 +194,10 @@ def _first_command(hooks: ObjectDict, event_name: str) -> str:
     return command
 
 
-def test_installer_hook_commands_quote_binary_paths_with_spaces() -> None:
+def test_installer_hook_commands_quote_binary_paths_with_spaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: False)
     binary = "/tmp/Slopgate Bin/slopgate"
     assert (
         _first_command(

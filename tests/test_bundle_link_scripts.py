@@ -4,6 +4,10 @@ import os
 import subprocess
 from pathlib import Path
 
+from tests.support import SKIP_UNIX_ONLY
+
+pytestmark = SKIP_UNIX_ONLY
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ROOT = REPO_ROOT / "bundle"
