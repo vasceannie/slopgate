@@ -2,6 +2,9 @@
 
 DASHBOARD_SSH_HOST ?= little
 DASHBOARD_LOGS_DIR ?= $(HOME)/.config/slopgate/logs
+-include .env
+
+UV_PUBLISH_TOKEN ?= $(PYPI_TOKEN)
 
 dashboard-api:
 	python3 dashboard/scripts/serve.py
@@ -19,4 +22,4 @@ dashboard-prod: dashboard-build-ssh dashboard-api
 
 publish:
 	uv build
-	uv publish
+	uv publish --token $(UV_PUBLISH_TOKEN)
