@@ -12,7 +12,8 @@ from slopgate.installer._shared import (
     merge_owned_hooks,
     remove_owned_hooks,
 )
-from slopgate.rules.common._shell_read import is_safe_read_shell_command
+from slopgate.rules import build_always_on_rules
+from slopgate.rules.common._shell_safe_read import is_safe_read_shell_command
 from slopgate.rules.python_ast._helpers import parse_module
 from slopgate.engine._retry import apply_loop_aware_steering
 from slopgate.lint._detectors.duplicates._blocks import collect_block_windows
@@ -86,6 +87,15 @@ def test_remove_owned_hooks_returns_empty_for_empty_input_property(_: None) -> N
 def test_is_safe_read_shell_command_returns_bool_property(command: str) -> None:
     result = is_safe_read_shell_command(command)
     assert isinstance(result, bool)
+
+
+@given(strategies.just(None))
+def test_build_always_on_rules_returns_rule_list_property(_: None) -> None:
+    from unittest.mock import MagicMock
+
+    rules = build_always_on_rules(MagicMock())
+    assert isinstance(rules, list)
+    assert all(hasattr(rule, "rule_id") for rule in rules)
 
 
 @given(_SHORT_SRC)
