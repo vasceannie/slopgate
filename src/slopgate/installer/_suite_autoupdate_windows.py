@@ -66,16 +66,38 @@ def backup_existing_windows_task_xml(plan: SchedulerPlan, xml: str) -> None:
     print(f"Backed up existing auto-update task XML to {backup_path}")
 
 
+def remove_windows_task_by_name(dry_run: bool = False) -> bool:
+    """Delete the Slopgate auto-update scheduled task by name if it exists.
+    Returns True if the task was found and removed, False otherwise."""
+    query = subprocess.run(
+        ["schtasks", "/Query", "/TN", WINDOWS_TASK_NAME],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if query.returncode != 0:
+        return False
+    if dry_run:
+        print(f"Would delete scheduled task: {WINDOWS_TASK_NAME}")
+        return True
+    delete = subprocess.run(
+        ["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK_NAME],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if delete.returncode != 0:
+        print(
+            f"Warning: could not delete scheduled task {WINDOWS_TASK_NAME}: "
+            f"{delete.stderr.strip()}"
+        )
+    else:
+        print(f"Removed scheduled task: {WINDOWS_TASK_NAME}")
+    return delete.returncode == 0
+
+
 def prepare_windows_task_replacement(plan: SchedulerPlan) -> int:
     if plan.kind != "windows-schtasks":
         return 0
-    xml = query_windows_task_xml()
-    if xml is None:
-        return 0
-    if not windows_task_is_owned(plan, xml):
-        print(
-            f"Refusing to overwrite unrecognized scheduled task: {WINDOWS_TASK_NAME}"
-        )
-        return 1
-    backup_existing_windows_task_xml(plan, xml)
+    remove_windows_task_by_name()
     return 0

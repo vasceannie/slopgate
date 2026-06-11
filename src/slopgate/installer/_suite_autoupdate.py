@@ -20,6 +20,7 @@ from slopgate.installer._suite_autoupdate_types import (
 )
 from slopgate.installer._suite_autoupdate_windows import (
     prepare_windows_task_replacement,
+    remove_windows_task_by_name,
     scheduler_file_is_owned,
 )
 from slopgate.util import platform
@@ -126,25 +127,11 @@ def _macos_launchd_plan(
 def _windows_task_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
-    args = _update_suite_args(source, include_missing=include_missing)
-    task_command = subprocess.list2cmdline(args)
     return SchedulerPlan(
         "windows-schtasks",
         Path.home() / ".slopgate" / "auto-update.task",
         f"# {AUTOUPDATE_MARKER}\n# Windows auto-updater removed; use `slopgate update` manually.\n",
-        [
-            "schtasks",
-            "/Create",
-            "/F",
-            "/SC",
-            "MINUTE",
-            "/MO",
-            str(max(1, interval_minutes)),
-            "/TN",
-            WINDOWS_TASK_NAME,
-            "/TR",
-            task_command,
-        ],
+        None,
     )
 
 
@@ -251,6 +238,11 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
         target_path for target_path, _content in entries if target_path.exists()
     ]
     print(f"Auto-update scheduler: {plan.kind}")
+
+    # Windows: delete orphan task by name when no marker file exists
+    if plan.kind == "windows-schtasks" and not existing_paths:
+        remove_windows_task_by_name(dry_run=dry_run)
+
     if not existing_paths:
         print("No Slopgate auto-update scheduler files found.")
         return 0
