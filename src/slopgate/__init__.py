@@ -1,5 +1,5 @@
 """slopgate — global CLI guardrails engine for AI coding agents."""
 
-__version__ = "1.2.3"
+from ._version import __version__
 
 __all__ = ["__version__"]
