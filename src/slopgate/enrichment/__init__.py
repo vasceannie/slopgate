@@ -20,6 +20,7 @@ __all__ = [
     "enrich_long_method",
     "enrich_long_params",
     "enrich_thin_wrapper",
+    "enrich_boundary_logger",
     "enrich_stdlib_logger",
     "enrich_assertion_roulette",
     "enrich_fixture_outside_conftest",
@@ -50,7 +51,10 @@ from slopgate.enrichment.fixtures import (
     discover_fixtures,
     find_parametrize_examples,
 )
-from slopgate.enrichment.logger_enrichers import enrich_stdlib_logger
+from slopgate.enrichment.logger_enrichers import (
+    enrich_boundary_logger,
+    enrich_stdlib_logger,
+)
 from slopgate.enrichment.pytest_enrichers import (
     enrich_assertion_roulette,
     enrich_fixture_outside_conftest,
@@ -90,6 +94,7 @@ _ENRICHERS: dict[str, Enricher] = {
     "PY-CODE-015": enrich_cyclomatic_complexity,
     "PY-EXC-002": enrich_silent_except,
     "PY-LOG-001": enrich_stdlib_logger,
+    "PY-LOG-002": enrich_boundary_logger,
     "PY-QUALITY-009": enrich_hardcoded_paths,
     "PY-QUALITY-010": enrich_magic_numbers,
 }

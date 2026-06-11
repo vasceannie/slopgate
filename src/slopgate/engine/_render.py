@@ -3,7 +3,7 @@ from __future__ import annotations
 from slopgate._types import ObjectDict
 from slopgate.adapters import get_adapter
 from slopgate.adapters.base import PlatformAdapter
-from slopgate.constants import DENY
+from slopgate.constants import DENY, PLATFORM_CLAUDE
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 
@@ -80,7 +80,7 @@ def render_output(
     findings: list[RuleFinding],
     adapter: PlatformAdapter | None = None,
 ) -> ObjectDict | None:
-    adapter = adapter or get_adapter("claude")
+    adapter = adapter or get_adapter(PLATFORM_CLAUDE)
     if not findings:
         return adapter.render_output(
             ctx.event_name,

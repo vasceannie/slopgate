@@ -48,4 +48,9 @@ def enrich_thin_wrapper(finding: RuleFinding, ctx: HookContext) -> None:
             extras.append(
                 f"\n`{func_name}` appears to be called from other files. Search for all usages before inlining."
             )
+    extras.append(
+        "Boundary check before keeping the wrapper: it must validate/normalize, "
+        "name a domain boundary, centralize policy/caching/permission/logging, "
+        "adapt interfaces, or shield unstable third-party APIs."
+    )
     append_enrichment_message(finding, extras)

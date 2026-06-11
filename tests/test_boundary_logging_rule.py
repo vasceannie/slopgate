@@ -4,7 +4,7 @@ from pathlib import Path
 
 from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
-from slopgate.rules.python_ast._rules._boundary_rule import PythonBoundaryLoggingRule
+from slopgate.rules.python_ast._rules import PythonBoundaryLoggingRule
 
 
 def test_boundary_logging_rule_keeps_stable_rule_id() -> None:
@@ -97,6 +97,42 @@ class DashboardView(Static):
     assert "PY-LOG-002" in _rule_ids(result)
     assert not missing, f"missing boundary logging guidance fragments: {missing}"
     assert "from src.logging import get_logger" not in output
+
+
+def test_boundary_logging_guidance_cites_sibling_logger_pattern(
+    tmp_path: Path,
+) -> None:
+    repo = _enrolled_repo(tmp_path)
+    _ = (repo / "src" / "orders" / "observability.py").write_text(
+        "from slopgate.util import info as logger\n",
+        encoding="utf-8",
+    )
+
+    result = evaluate_payload(
+        write_payload(
+            repo,
+            "src/orders/events.py",
+            """
+from orders.bus import EventBus
+
+
+def publish_order_created(bus: EventBus, order_id: str) -> None:
+    event = {"order_id": order_id}
+    bus.publish("order.created", event)
+""".lstrip(),
+        )
+    )
+
+    output = str(result.output)
+    assert "PY-LOG-002" in _rule_ids(result), (
+        "boundary without logging should still be reported"
+    )
+    assert "Nearby project logger patterns" in output, (
+        "boundary guidance should cite local logger examples"
+    )
+    assert "src/orders/observability.py:1" in output, (
+        "boundary guidance should cite the sibling logger file"
+    )
 
 
 def test_package_boundary_client_call_requires_log(tmp_path: Path) -> None:

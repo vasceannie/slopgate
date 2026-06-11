@@ -7,13 +7,11 @@ import slopgate.installer._shared
 from slopgate.resources import resource_path
 from slopgate.util import platform
 
-
-def _opencode_plugin_source() -> str:
-    return resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
+OPENCODE_PLUGIN_RESOURCE = "opencode_plugin.ts"
 
 
 def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
-    plugin = _opencode_plugin_source()
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     assert "empty enforcer response" not in plugin
     assert "if (!trimmed) return null" in plugin
     assert "exits 0 with no stdout" in plugin
@@ -33,7 +31,7 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
 
 def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
     binary = 'C:\\Users\\Trav App\\bin\\slopgate "quoted".exe'
-    template = _opencode_plugin_source()
+    template = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     rendered = _opencode.render_opencode_plugin(template, binary)
     assert (
         f'Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : {json.dumps([binary])}'
@@ -96,7 +94,7 @@ def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
 
 
 def test_opencode_plugin_logs_posttool_context_actions() -> None:
-    plugin = _opencode_plugin_source()
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     assert 'result.action === "warn" || result.action === "context"' in plugin
     assert "const message = result.reason || result.context" in plugin
     assert 'level: "warn"' in plugin
@@ -106,11 +104,14 @@ def _assert_posttool_arg_cache_contract(plugin: str) -> None:
     expected_cache_contract = [
         "const postToolArgCache: ToolArgsCacheEntry[] = []",
         "function rememberToolArgs(",
+        "function inputToolArgs(",
+        "function outputToolArgs(",
         "function takeRememberedToolArgs(",
+        "const preToolArgs = mergeToolArgs(inputToolArgs(input), outputToolArgs(output))",
         "tool_input: preToolArgs",
         "rememberToolArgs(input.tool, currentDirectory, preToolArgs)",
         "const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)",
-        "const postToolArgs = { ...rememberedArgs, ...cloneArgs(output.args) }",
+        "const postToolArgs = mergeToolArgs(",
         "tool_input: postToolArgs",
     ]
     missing_contract = [line for line in expected_cache_contract if line not in plugin]
@@ -133,12 +134,29 @@ def _assert_posttool_arg_cache_policy(plugin: str) -> None:
 
 
 def test_opencode_plugin_caches_pretool_args_for_posttool_backstops() -> None:
-    plugin = _opencode_plugin_source()
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     assert "tool_input: preToolArgs" in plugin
     _assert_posttool_arg_cache_contract(plugin)
 
 
+def test_opencode_plugin_preserves_input_side_tool_arguments_for_traces() -> None:
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    expected_sources = [
+        "input.args",
+        "input.arguments",
+        "input.input",
+        "input.tool_input",
+        "input.toolInput",
+        "cloneArgs(input.call).args",
+        "output.args",
+        "output.arguments",
+        "output.input",
+    ]
+    missing_sources = [source for source in expected_sources if source not in plugin]
+    assert missing_sources == [], "OpenCode plugin must preserve tool call bodies"
+
+
 def test_opencode_plugin_cache_is_bounded_ttl_scoped_and_consumed() -> None:
-    plugin = _opencode_plugin_source()
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     assert "POST_TOOL_ARG_CACHE_TTL_MS" in plugin
     _assert_posttool_arg_cache_policy(plugin)

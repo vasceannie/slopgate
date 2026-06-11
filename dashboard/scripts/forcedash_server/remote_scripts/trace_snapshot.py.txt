@@ -82,6 +82,10 @@ def project_event(obj):
         "tool_name": obj.get("tool_name", ""),
         "candidate_paths": str_list(obj.get("candidate_paths")),
         "languages": str_list(obj.get("languages")),
+        "model": obj.get("model"),
+        "provider": obj.get("provider"),
+        "command": trim_text(obj.get("command"), 1000),
+        "tool_output": trim_text(obj.get("tool_output"), 1000),
         **trace_metadata(obj),
     }
 
@@ -99,6 +103,10 @@ def project_rule(obj):
         "message": trim_text(obj.get("message"), 180),
         "additional_context": trim_text(obj.get("additional_context"), 180),
         "metadata": object_dict(obj.get("metadata")) or {},
+        "model": obj.get("model"),
+        "provider": obj.get("provider"),
+        "command": trim_text(obj.get("command"), 1000),
+        "tool_output": trim_text(obj.get("tool_output"), 1000),
         **trace_metadata(obj),
     }
 
@@ -129,6 +137,10 @@ def project_result(obj):
         "output": None,
         "skipped": bool(obj.get("skipped", False)),
         "reason": trim_text(obj.get("reason"), 180),
+        "model": obj.get("model"),
+        "provider": obj.get("provider"),
+        "command": trim_text(obj.get("command"), 1000),
+        "tool_output": trim_text(obj.get("tool_output"), 1000),
         **trace_metadata(obj),
     }
 

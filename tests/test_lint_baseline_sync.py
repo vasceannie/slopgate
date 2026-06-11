@@ -14,31 +14,24 @@ from tests.lint_paths_support import (
     write_slopgate_toml,
 )
 
+GIT_TEST_USER_NAME = "Slopgate Tests"
+GIT_TEST_USER_EMAIL = "slopgate-tests@example.invalid"
 
-def _git(repo: Path, *args: str) -> None:
+
+def _run_git(repo: Path, *args: str, test_identity: bool = False) -> None:
+    command = ["git", "-C", str(repo)]
+    if test_identity:
+        command.extend(
+            [
+                "-c",
+                f"user.name={GIT_TEST_USER_NAME}",
+                "-c",
+                f"user.email={GIT_TEST_USER_EMAIL}",
+            ]
+        )
+    command.extend(args)
     subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-
-def _commit(repo: Path, message: str) -> None:
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo),
-            "-c",
-            "user.name=Slopgate Tests",
-            "-c",
-            "user.email=slopgate-tests@example.invalid",
-            "commit",
-            "-m",
-            message,
-        ],
+        command,
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -51,10 +44,10 @@ def _seed_git_base_debt_repo(tmp_path: Path) -> Path:
     src = tmp_path / "src"
     src.mkdir()
     (src / "base_debt.py").write_text("x = 1\n" * 130, encoding="utf-8")
-    _git(tmp_path, "init", "-b", "main")
-    _git(tmp_path, "add", "slopgate.toml", "src/base_debt.py")
-    _commit(tmp_path, "seed base debt")
-    _git(tmp_path, "checkout", "-b", "feature")
+    _run_git(tmp_path, "init", "-b", "main")
+    _run_git(tmp_path, "add", "slopgate.toml", "src/base_debt.py")
+    _run_git(tmp_path, "commit", "-m", "seed base debt", test_identity=True)
+    _run_git(tmp_path, "checkout", "-b", "feature")
     return src
 
 

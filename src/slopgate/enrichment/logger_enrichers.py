@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING
 
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
+    path_source_from_metadata,
     relative_path,
     safe_read,
 )
+from slopgate.enrichment.local_context import find_logger_citations
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -117,4 +119,16 @@ def enrich_stdlib_logger(finding: RuleFinding, ctx: HookContext) -> None:
             + "or use structlog/loguru instead of stdlib logging."
         )
 
+    append_enrichment_message(finding, extras)
+
+
+def enrich_boundary_logger(finding: RuleFinding, ctx: HookContext) -> None:
+    """Enrich PY-LOG-002 with nearby logger patterns."""
+    loaded = path_source_from_metadata(finding, ctx)
+    current_path = loaded[0] if loaded is not None else None
+    citations = find_logger_citations(ctx, current_path)
+    if not citations:
+        return
+    extras = ["\nNearby project logger patterns:"]
+    extras.extend(f"- {citation}" for citation in citations)
     append_enrichment_message(finding, extras)

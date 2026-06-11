@@ -24,6 +24,28 @@ def _write_source_and_denial_reason(
     )
 
 
+def _thin_wrapper_reason_with_call_site(tmp_project: Path) -> str:
+    src_dir = tmp_project / "src"
+    mkdir(src_dir, exist_ok=True)
+    code = (
+        "def load_config(path):\n"
+        '    return {"path": path}\n\n'
+        "def read_config(path):\n"
+        "    return load_config(path)\n"
+    )
+    write_text(src_dir / "api.py", code)
+    write_text(
+        src_dir / "cli.py",
+        "from .api import read_config\n\nVALUE = read_config('settings.toml')\n",
+    )
+    payload = pretool_write_payload("src/api.py", code, str(tmp_project))
+    result = evaluate_payload(payload)
+    support.assert_denied_by(result, "PY-CODE-013")
+    return support.required_string(
+        support.hook_output(result), "permissionDecisionReason"
+    )
+
+
 class TestPYCODE008Enrichment:
     """PY-CODE-008: long method denial includes function structure."""
 
@@ -105,30 +127,27 @@ class TestPYCODE009Enrichment:
 
 class TestPYCODE013RepoLocalEnrichment:
     def test_thin_wrapper_cites_repo_local_call_sites(self, tmp_project: Path) -> None:
-        src_dir = tmp_project / "src"
-        mkdir(src_dir, exist_ok=True)
-        code = (
-            "def load_config(path):\n"
-            '    return {"path": path}\n\n'
-            "def read_config(path):\n"
-            "    return load_config(path)\n"
+        reason = _thin_wrapper_reason_with_call_site(tmp_project)
+
+        assert "Local call sites" in reason, (
+            "thin-wrapper enrichment should include repo-local usage citations"
         )
-        write_text(src_dir / "api.py", code)
-        write_text(
-            src_dir / "cli.py",
-            "from .api import read_config\n\nVALUE = read_config('settings.toml')\n",
+        assert "src/cli.py" in reason, (
+            "thin-wrapper enrichment should cite the caller file"
+        )
+        assert "read_config" in reason, (
+            "thin-wrapper enrichment should name the wrapper function"
         )
 
-        payload = pretool_write_payload("src/api.py", code, str(tmp_project))
-        result = evaluate_payload(payload)
-        support.assert_denied_by(result, "PY-CODE-013")
-        reason = support.required_string(
-            support.hook_output(result), "permissionDecisionReason"
-        )
+    def test_thin_wrapper_lists_boundary_checklist(self, tmp_project: Path) -> None:
+        reason = _thin_wrapper_reason_with_call_site(tmp_project)
 
-        assert "Local call sites" in reason
-        assert "src/cli.py" in reason
-        assert "read_config" in reason
+        assert "Boundary check before keeping the wrapper" in reason, (
+            "thin-wrapper enrichment should explain when wrappers are valid"
+        )
+        assert "validate/normalize" in reason, (
+            "wrapper boundary checklist should include validation/normalization"
+        )
 
 
 class TestPYCODE015Enrichment:

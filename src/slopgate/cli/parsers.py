@@ -305,10 +305,13 @@ def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
 
 
 def _add_core_parsers(sub: SubparserRegistry) -> None:
+    from slopgate.cli.parsers_bundle import add_bundle_parsers
+
     _add_hook_runtime_parsers(sub)
     _add_repo_enrollment_parsers(sub)
     _add_platform_install_parsers(sub)
     _add_maintenance_parsers(sub)
+    add_bundle_parsers(sub)
 
 
 def _add_config_parsers(sub: SubparserRegistry) -> None:

@@ -21,7 +21,9 @@
 - Fix whatever the hooks flag instead of bypassing them.
 
 ## Tests
-- Use `@pytest.mark.parametrize` for data-driven tests, not `for` loops with `assert`.
+- Use `@pytest.mark.parametrize` for finite named examples, edge cases, and regressions; do not hide asserts inside `for` loops.
+- Use Hypothesis for broad input domains and invariants such as round-trip, idempotence, monotonicity, bounds, stable ordering, parser/validator no-crash behavior, or malformed input handling. Do not add Hypothesis as a new dependency without checking project policy.
+- Parametrization and Hypothesis can coexist: explicit examples document known behavior; property tests explore the general invariant.
 - Put shared fixtures through the nearest `conftest.py`. Keep `conftest.py` as a thin registry when fixtures are large; implementation-heavy fixtures may live in `tests/<area>/_fixtures/` or `tests/<area>/support/`. Use fixtures by name in test signatures or pytest decorators; do not import them from `conftest.py`.
 - No `time.sleep()` in tests. No `try/except` wrapping test logic.
 - Every `assert` needs a descriptive message (3+ bare asserts in a row = blocked).

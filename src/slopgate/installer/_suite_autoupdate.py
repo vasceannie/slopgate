@@ -124,27 +124,12 @@ def _macos_launchd_plan(
 def _windows_task_plan(
     source: str, *, include_missing: bool, interval_minutes: int
 ) -> SchedulerPlan:
-    script_dir = user_data_dir("slopgate")
-    script_path = script_dir / "slopgate-auto-update.ps1"
     args = _update_suite_args(source, include_missing=include_missing)
-    ps_args = " ".join("'" + arg.replace("'", "''") + "'" for arg in args[1:])
-    binary = args[0].replace("'", "''")
-    content = "\n".join(
-        [
-            f"# {AUTOUPDATE_MARKER}",
-            "$ErrorActionPreference = 'Stop'",
-            f"& '{binary}' {ps_args}",
-            "",
-        ]
-    )
-    task_command = (
-        "PowerShell -NoProfile -ExecutionPolicy Bypass -File "
-        + subprocess.list2cmdline([str(script_path)])
-    )
+    task_command = subprocess.list2cmdline(args)
     return SchedulerPlan(
         "windows-schtasks",
-        script_path,
-        content,
+        Path.home() / ".slopgate" / "auto-update.task",
+        f"# {AUTOUPDATE_MARKER}\n# Windows auto-updater removed; use `slopgate update` manually.\n",
         [
             "schtasks",
             "/Create",

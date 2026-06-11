@@ -15,6 +15,7 @@ import os
 import sys
 import warnings
 
+from slopgate.cli.lint import commands, report, report_format
 from slopgate.cli.main import main
 from slopgate.cli.parsers import build_parser
 from slopgate.constants import EXIT_KEYBOARD_INTERRUPT
@@ -22,6 +23,15 @@ from slopgate.constants import EXIT_KEYBOARD_INTERRUPT
 __all__ = ["build_parser", "main", "safe_main"]
 
 _DEPRECATED_CLI_NAMES = frozenset({"vfc", "isx"})
+
+_LEGACY_LINT_MODULES = {
+    f"{__name__}._lint_commands": commands,
+    f"{__name__}.lint_report": report,
+    f"{__name__}._lint_report_format": report_format,
+}
+
+for legacy_name, module in _LEGACY_LINT_MODULES.items():
+    sys.modules.setdefault(legacy_name, module)
 
 
 def _warn_deprecated_cli() -> None:

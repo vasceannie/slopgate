@@ -38,6 +38,7 @@ __all__ = [
     "python_lint_targets",
     "resolve_python_candidates",
     "PostEditQualityRule",
+    "QualityCommandFailure",
     "collect_quality_commands",
     "run_quality_commands",
     "DEFAULT_SPLIT_DETAIL",
@@ -86,22 +87,16 @@ from ._sensitive_system_git import (
     match_system_path,
     sensitive_pattern_expr,
 )
-from ._quality_lint import (
-    PostEditLintRule,
-    SearchReminderRule,
-    collect_touched_lint_failures,
-    python_lint_targets,
-    resolve_python_candidates,
-)
-from ._quality_postedit import (
-    PostEditQualityRule,
-    collect_quality_commands,
-    run_quality_commands,
-)
-from ._quality_lint_guidance import (
+from .quality import (
     DEFAULT_SPLIT_DETAIL,
     OVERSIZED_LINT_RULES,
     SPLIT_SCENARIO_DETAILS,
+    PostEditLintRule,
+    PostEditQualityRule,
+    QualityCommandFailure,
+    SearchReminderRule,
+    collect_quality_commands,
+    collect_touched_lint_failures,
     first_lint_path,
     has_oversized_module_failure,
     lint_check_instruction,
@@ -109,4 +104,7 @@ from ._quality_lint_guidance import (
     lint_target_summary,
     post_lint_oversized_guidance,
     post_lint_split_detail,
+    python_lint_targets,
+    resolve_python_candidates,
+    run_quality_commands,
 )

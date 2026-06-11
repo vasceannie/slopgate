@@ -68,6 +68,31 @@ function cloneArgs(value: unknown): Record<string, unknown> {
   }
 }
 
+function mergeToolArgs(...values: unknown[]): Record<string, unknown> {
+  const merged: Record<string, unknown> = {}
+  for (const value of values) {
+    Object.assign(merged, cloneArgs(value))
+  }
+  return merged
+}
+
+function inputToolArgs(input: Record<string, unknown>): Record<string, unknown> {
+  return mergeToolArgs(
+    input.args,
+    input.arguments,
+    input.input,
+    input.tool_input,
+    input.toolInput,
+    cloneArgs(input.call).args,
+    cloneArgs(input.call).arguments,
+    cloneArgs(input.call).input,
+  )
+}
+
+function outputToolArgs(output: Record<string, unknown>): Record<string, unknown> {
+  return mergeToolArgs(output.args, output.arguments, output.input)
+}
+
 function pruneToolArgCache(now: number = Date.now()): void {
   while (
     postToolArgCache.length > 0
@@ -212,7 +237,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
         output.args = {}
       }
 
-      const preToolArgs = cloneArgs(output.args)
+      const preToolArgs = mergeToolArgs(inputToolArgs(input), outputToolArgs(output))
       const payload = {
         hook_event_name: "tool.execute.before",
         tool_name: input.tool,
@@ -239,7 +264,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
           if (result.updated_args) {
             Object.assign(output.args, result.updated_args)
           }
-          rememberToolArgs(input.tool, currentDirectory, cloneArgs(output.args))
+          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
 
         case "context":
@@ -252,11 +277,11 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
               },
             })
           }
-          rememberToolArgs(input.tool, currentDirectory, cloneArgs(output.args))
+          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
 
         default:
-          rememberToolArgs(input.tool, currentDirectory, cloneArgs(output.args))
+          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
       }
     },
@@ -268,7 +293,11 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
       }
 
       const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)
-      const postToolArgs = { ...rememberedArgs, ...cloneArgs(output.args) }
+      const postToolArgs = mergeToolArgs(
+        rememberedArgs,
+        inputToolArgs(input),
+        outputToolArgs(output),
+      )
       const payload = {
         hook_event_name: "tool.execute.after",
         tool_name: input.tool,

@@ -70,10 +70,6 @@ def _attempt_fingerprint(ctx: HookContext) -> str | None:
     return _stable_hash(payload)
 
 
-def _current_denied_rule_ids(findings: list[RuleFinding]) -> list[str]:
-    return sorted({item.rule_id for item in retry_budget_relevant_denials(findings)})
-
-
 def dedupe_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     unique_by_key = {
         (item.rule_id, item.decision, item.message, item.additional_context): item
@@ -140,11 +136,12 @@ def _repeat_denial_hints(
     item: RuleFinding,
     repeat_count: int,
 ) -> list[str]:
-    hints = [denial_context(ctx, item, repeat_count), REPLAN_PROMPT]
+    hints = [denial_context(ctx, item, repeat_count)]
     hint = rule_hint(ctx, item)
     if hint:
         hints.append(hint)
     if repeat_count >= 2:
+        hints.append(REPLAN_PROMPT)
         hints.append(
             "Repeated deny detected: write a short repair plan before your next write."
         )
@@ -154,16 +151,6 @@ def _repeat_denial_hints(
 def _append_denial_hints(item: RuleFinding, hints: list[str]) -> None:
     item.additional_context = "\n\n".join(
         part for part in [item.additional_context, *hints] if part
-    )
-
-
-def _retry_lock_paths(ctx: HookContext) -> list[str]:
-    return sorted(
-        {
-            _normalize_attempt_path(ctx, path_value)
-            for path_value in ctx.candidate_paths
-            if path_value
-        }
     )
 
 
@@ -194,7 +181,9 @@ def _clear_resolved_thin_wrapper_hits(
 def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
     denied = retry_budget_relevant_denials(findings)
     attempt_fingerprint = _attempt_fingerprint(ctx)
-    current_rule_ids = _current_denied_rule_ids(findings)
+    current_rule_ids = sorted(
+        {item.rule_id for item in retry_budget_relevant_denials(findings)}
+    )
     repeated_rule_ids: set[str] = set()
     max_repeat_count = 0
     for item in denied:
@@ -210,7 +199,13 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
             payload=RetryLockPayload(
                 repeated_rule_ids=sorted(repeated_rule_ids),
                 current_rule_ids=current_rule_ids,
-                paths=_retry_lock_paths(ctx),
+                paths=sorted(
+                    {
+                        _normalize_attempt_path(ctx, path_value)
+                        for path_value in ctx.candidate_paths
+                        if path_value
+                    }
+                ),
                 attempt_fingerprint=attempt_fingerprint,
                 count=max_repeat_count,
             ),
@@ -274,7 +269,9 @@ def _retry_budget_block(
         and current_attempt_fingerprint != locked_attempt_fingerprint
     ):
         return None
-    current_rule_ids = set(_current_denied_rule_ids(findings))
+    current_rule_ids = {
+        item.rule_id for item in retry_budget_relevant_denials(findings)
+    }
     if not current_rule_ids:
         return None
     repeated_rule_ids = {
@@ -294,35 +291,6 @@ def _retry_budget_block(
     )
 
 
-def _retry_budget_finding(block: _RetryBudgetBlock) -> RuleFinding:
-    return RuleFinding(
-        rule_id="RETRY-BUDGET-001",
-        title="Retry budget enforcement",
-        severity=Severity.HIGH,
-        decision=DENY,
-        message=(
-            "Third write attempt blocked after repeated denies of the same edit pattern. "
-            "Reread the file, name violated constraints, and write a short repair plan first."
-        ),
-        metadata={
-            "repeated_rule_ids": sorted(block.repeated_rule_ids),
-            "matched_rule_ids": block.matched_rule_ids,
-            "current_rule_ids": sorted(block.current_rule_ids),
-            "locked_rule_ids": block.lock.get("current_rule_ids"),
-            "paths_locked": block.lock.get("paths"),
-            "attempt_fingerprint_locked": block.lock.get("attempt_fingerprint"),
-            "attempt_fingerprint_current": block.current_attempt_fingerprint,
-            "retry_count": block.lock.get("count"),
-        },
-        additional_context=(
-            "Required before next write:\n"
-            "1) reread the target file\n"
-            "2) list violated constraints\n"
-            "3) write a short repair plan"
-        ),
-    )
-
-
 def enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
     if ctx.event_name not in {PRE_TOOL_USE, PERMISSION_REQUEST}:
         return
@@ -330,7 +298,35 @@ def enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
         return
     block = _retry_budget_block(ctx, findings)
     if block is not None:
-        findings.append(_retry_budget_finding(block))
+        findings.append(
+            RuleFinding(
+                rule_id="RETRY-BUDGET-001",
+                title="Retry budget enforcement",
+                severity=Severity.HIGH,
+                decision=DENY,
+                message=(
+                    "Third write attempt blocked after repeated denies of the same "
+                    "edit pattern. Reread the file, name violated constraints, and "
+                    "write a short repair plan first."
+                ),
+                metadata={
+                    "repeated_rule_ids": sorted(block.repeated_rule_ids),
+                    "matched_rule_ids": block.matched_rule_ids,
+                    "current_rule_ids": sorted(block.current_rule_ids),
+                    "locked_rule_ids": block.lock.get("current_rule_ids"),
+                    "paths_locked": block.lock.get("paths"),
+                    "attempt_fingerprint_locked": block.lock.get("attempt_fingerprint"),
+                    "attempt_fingerprint_current": block.current_attempt_fingerprint,
+                    "retry_count": block.lock.get("count"),
+                },
+                additional_context=(
+                    "Required before next write:\n"
+                    "1) reread the target file\n"
+                    "2) list violated constraints\n"
+                    "3) write a short repair plan"
+                ),
+            )
+        )
 
 
 def capture_repair_plan_signal(ctx: HookContext) -> None:

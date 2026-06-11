@@ -632,7 +632,7 @@
         "(?m)^[ \\t]*(for|while)[^\\n]*:[ \\t]*\\n[ \\t]+assert[ \\t]+"
       ],
       "action": "deny",
-      "message": "Loops containing assert statements are blocked in tests. Use @pytest.mark.parametrize for data-driven tests instead.\n\nInstead of:\n    for x in [1, 2, 3]:\n        result = func(x)\n        assert result > 0\n\nUse:\n    @pytest.mark.parametrize(\"x\", [1, 2, 3])\n    def test_func(x):\n        result = func(x)\n        assert result > 0\n\nFor complex iteration with setup, extract a helper and parametrize the inputs.",
+      "message": "Loops containing assert statements are blocked in tests. Choose the right data-driven shape instead of hiding assertions inside a loop.\n\nUse @pytest.mark.parametrize when the cases are a finite named list of examples or regressions.\n\nUse Hypothesis when the behavior is an invariant over a broad input space: round-trip, idempotence, monotonicity, bounds, stable ordering, malformed input handling, or no-crash parser/validator behavior.\n\nParametrize example:\n    @pytest.mark.parametrize(\"x\", [pytest.param(1, id=\"one\"), pytest.param(2, id=\"two\")])\n    def test_func_accepts_named_cases(x):\n        result = func(x)\n        assert result > 0\n\nHypothesis example:\n    @given(st.text())\n    def test_parse_never_crashes(raw):\n        result = parse(raw)\n        assert isinstance(result, (ParseResult, type(None)))\n\nFor complex setup, extract helpers/fixtures; keep assertions visible in test functions.",
       "case_sensitive": false,
       "multiline": true
     },

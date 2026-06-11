@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from collections.abc import Callable
+from copy import deepcopy
 from pathlib import Path
 from typing import cast
 from slopgate.adapters import get_adapter
@@ -11,18 +12,33 @@ from slopgate.engine import _retry
 from slopgate.models import RuleFinding, Severity
 from tests import support
 
-
-def _posttool_context(repo: Path) -> HookContext:
-    return build_context(
-        {
-            "session_id": "quality-lint-response-rendering",
-            "cwd": str(repo),
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Write",
-            "tool_input": {"file_path": "src/session.py"},
-            "tool_response": {"filePath": "src/session.py", "success": True},
-        }
-    )
+QUALITY_LINT_FINDING = RuleFinding(
+    rule_id="QUALITY-LINT-001",
+    title="Touched-file lint advisory",
+    severity=Severity.HIGH,
+    decision="block",
+    message=(
+        "Touched-file lint detectors found issues for src/session.py. "
+        "untested-production-code: 1, duplicate-call-sequence: 1. "
+        "Repair touched files before continuing.\n"
+        "Blocking lint collector details:\n"
+        "[HOOK] untested-production-code\n"
+        "file: src/session.py\n"
+        "symbol: next_status\n\n"
+        "[HOOK] duplicate-call-sequence\n"
+        "file: src/session.py\n"
+        "detail: calls [parse, validate], shared with src/session.py:cmd_session"
+    ),
+    metadata={
+        "failing_collectors": [
+            "untested-production-code: 1",
+            "duplicate-call-sequence: 1",
+        ],
+        "path": "src/session.py",
+        "paths": ["src/session.py"],
+        "symbols": ["next_status", "add_session_parser", "cmd_session"],
+    },
+)
 
 
 def _apply_loop_hints(ctx: HookContext, findings: list[RuleFinding]) -> None:
@@ -33,26 +49,19 @@ def _apply_loop_hints(ctx: HookContext, findings: list[RuleFinding]) -> None:
     apply_loop_aware_steering(ctx, findings)
 
 
-def _quality_lint_finding() -> RuleFinding:
-    return RuleFinding(
-        rule_id="QUALITY-LINT-001",
-        title="Touched-file lint advisory",
-        severity=Severity.HIGH,
-        decision="block",
-        message="Touched-file lint detectors found issues for src/session.py. untested-production-code: 1. Repair touched files before continuing.",
-        metadata={
-            "failing_collectors": ["untested-production-code: 1"],
-            "path": "src/session.py",
-            "paths": ["src/session.py"],
-            "symbols": ["next_status", "add_session_parser", "cmd_session"],
-        },
-    )
-
-
 def _render_posttool(
     repo: Path, findings: list[RuleFinding], *, platform: str = "claude"
 ) -> dict[str, object]:
-    ctx = _posttool_context(repo)
+    ctx = build_context(
+        {
+            "session_id": "quality-lint-response-rendering",
+            "cwd": str(repo),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "src/session.py"},
+            "tool_response": {"filePath": "src/session.py", "success": True},
+        }
+    )
     _apply_loop_hints(ctx, findings)
     output = render_output(ctx, findings, adapter=get_adapter(platform))
     assert output is not None
@@ -97,7 +106,7 @@ def _assert_immediate_context_precedes_advisory_context(context: str) -> None:
 def test_quality_lint_untested_production_hint_names_symbols_and_repo_root_lint(
     tmp_path: Path,
 ) -> None:
-    output = _render_posttool(tmp_path, [_quality_lint_finding()])
+    output = _render_posttool(tmp_path, [deepcopy(QUALITY_LINT_FINDING)])
     reason = support.output_string(output, "reason")
     context = _hook_additional_context(output)
     response_text = f"{reason}\n{context}"
@@ -108,7 +117,7 @@ def test_quality_lint_untested_production_hint_names_symbols_and_repo_root_lint(
 def test_quality_lint_rendering_filters_virtualenv_and_content_sentinel_paths(
     tmp_path: Path,
 ) -> None:
-    finding = _quality_lint_finding()
+    finding = deepcopy(QUALITY_LINT_FINDING)
     finding.metadata.update(
         {
             "path": "content",
@@ -139,7 +148,7 @@ def test_quality_lint_rendering_filters_virtualenv_and_content_sentinel_paths(
 def test_codex_quality_lint_block_renders_decision_and_hook_context(
     tmp_path: Path,
 ) -> None:
-    output = _render_posttool(tmp_path, [_quality_lint_finding()], platform="codex")
+    output = _render_posttool(tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="codex")
     reason = support.output_string(output, "reason")
     context = _hook_additional_context(output)
     assert "QUALITY-LINT-001" in reason
@@ -162,7 +171,7 @@ def test_cursor_quality_lint_block_renders_top_level_additional_context(
     (tmp_path / "src" / "session.py").write_text("x = 1\n", encoding="utf-8")
     result = evaluate_payload(payload, platform="cursor")
     assert result.output is None or "permission" not in result.output
-    output = _render_posttool(tmp_path, [_quality_lint_finding()], platform="cursor")
+    output = _render_posttool(tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="cursor")
     context = support.required_string(output, "additional_context")
     assert "QUALITY-LINT-001" in context
     _assert_quality_lint_response_names_uncovered_surface(context, context)
@@ -178,7 +187,7 @@ def test_blocking_quality_lint_context_precedes_and_labels_advisory_design_debt(
         message="Advisory only: do not retry the write solely for this.",
         additional_context="Feature-envy design debt can be cleaned up later.",
     )
-    output = _render_posttool(tmp_path, [advisory, _quality_lint_finding()])
+    output = _render_posttool(tmp_path, [advisory, deepcopy(QUALITY_LINT_FINDING)])
     context = _hook_additional_context(output)
     assert "Later design debt / not the immediate unblock action" in context
     _assert_immediate_context_precedes_advisory_context(context)

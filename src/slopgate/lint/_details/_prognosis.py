@@ -102,7 +102,7 @@ _TYPE_OR_TEST_PROGNOSES: dict[str, tuple[str, ...]] = {
     ),
     "hypothesis-candidate": (
         "    prognosis: this function has enough input/branch/transform surface that examples alone may miss edge cases.",
-        "    scaffold: write a property around invariants such as round-trip, idempotence, monotonicity, bounds, rejected malformed input, or stable ordering.",
+        "    scaffold: keep finite named examples in pytest parametrize, then add a Hypothesis property for the broad invariant: round-trip, idempotence, monotonicity, bounds, rejected malformed input, no-crash parser behavior, or stable ordering.",
     ),
     "obsolete-or-deprecated-test": (
         "    prognosis: test coverage may be protecting removed/deprecated behavior instead of current production contracts.",

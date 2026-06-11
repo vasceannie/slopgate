@@ -72,7 +72,7 @@ from slopgate.lint._detectors.test_smells._fixtures import (
     is_fixture_support_module,
     detect_fixtures_outside_conftest,
 )
-from slopgate.rules.common._quality_postedit import (
+from slopgate.rules.common.quality.postedit import (
     collect_quality_commands,
     run_quality_commands,
     PostEditQualityRule,
@@ -105,7 +105,7 @@ from slopgate.lint._detectors.test_smells._production_detectors import (
     integration_seam_score,
     detect_missing_integration_tests,
 )
-from slopgate.rules.common._quality_lint import (
+from slopgate.rules.common.quality.lint import (
     SearchReminderRule,
     resolve_python_candidates,
     collect_touched_lint_failures,

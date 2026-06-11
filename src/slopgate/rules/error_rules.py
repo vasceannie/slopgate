@@ -125,9 +125,17 @@ _BENIGN_FAIL_PATTERNS = (
 )
 
 
+def _strip_command_wrapper(command: str) -> str:
+    stripped = command.strip()
+    lowered = stripped.lower()
+    if lowered.startswith("rtk "):
+        return stripped.split(maxsplit=1)[1].strip()
+    return stripped
+
+
 def _is_benign_failure(command: str) -> bool:
     """Check if a non-zero exit is expected/normal for this command."""
-    stripped = command.strip()
+    stripped = _strip_command_wrapper(command)
     for pattern in _BENIGN_FAIL_PATTERNS:
         if pattern.search(stripped):
             return True
@@ -153,38 +161,41 @@ _ERROR_CONTEXT = (
     "⚠️ ERRORS-BASH-001 — Bash produced error-like output even though the command exited 0.\n"
     "Next action: Rerun the smallest failing command, inspect the reported failure, "
     "and repair it before continuing feature work.",
-    "these errors are 'pre-existing' or 'introduced by your changes'.",
-    "Do NOT dismiss errors as 'out of scope', 'unrelated', or 'for a separate PR'.",
+    "Use the visible stdout/stderr as the repair target.",
+    "If the command semantics make non-zero or error-looking text expected, rerun "
+    "with an explicit probe command and record that classification.",
 )
 _QUALITY_COMMAND_CONTEXT = (
     "⚠️ ERRORS-BASH-001 — quality-command output/finding visibility: a lint or quality command exited 0 but printed violation/error-looking findings.\n"
     "Next action: Rerun the full quality command from the repo root without tail-only snippets; use `slopgate lint check --details` when you need exact repair context.",
-    "these findings are 'pre-existing' or 'introduced by your changes'.",
-    "Do NOT summarize only the tail output or continue before the full lint/details view has been inspected.",
+    "Use the full quality output as the repair target.",
+    "Do NOT summarize only the tail output or continue before the full lint/details "
+    "view has been inspected.",
 )
 _FAILURE_CONTEXT = (
     "⚠️ ERRORS-FAIL-001 — Bash command exited non-zero.\n"
     "Next action: Inspect stdout/stderr, fix the root cause, then rerun the same "
     "smallest command to verify.",
-    "this failure is 'pre-existing' or 'introduced by your changes'.",
-    "Do NOT dismiss as 'out of scope' or 'unrelated to my changes'.",
+    "Use the command output and exit status as the repair target.",
+    "If this command has expected non-zero semantics such as grep/rg no-match or "
+    "diff differences, rerun with an explicit probe command instead of treating it "
+    "as a code failure.",
 )
 
 
 def _command_error_context(command: str, template: tuple[str, str, str]) -> str:
-    heading_and_next_action, provenance_excuse, scope_excuse = template
+    heading_and_next_action, target_guidance, classification_guidance = template
     excerpt = _safe_command_excerpt(command)
     return (
         f"{heading_and_next_action}\n"
         f"Command: `{excerpt}`\n"
         "Rules:\n"
-        "1. Do NOT run git blame, git log, or any investigation into whether "
-        f"{provenance_excuse}\n"
-        f"2. {scope_excuse}\n"
+        f"1. {target_guidance}\n"
+        f"2. {classification_guidance}\n"
         "3. Fix the underlying issue now, or spawn a subagent if the fix "
         "would derail your current task.\n"
         "4. If you genuinely cannot fix it (e.g., missing credentials, "
-        "external service down), say so explicitly and add a TODO comment."
+        "external service down), report the blocker explicitly."
     )
 
 

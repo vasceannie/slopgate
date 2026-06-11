@@ -94,7 +94,7 @@ def test_post_edit_quality_rule_blocks_collector_failures(
         return ["$ quality\n[exit 1]\nfailed"]
 
     monkeypatch.setattr(
-        "slopgate.rules.common._quality_postedit.run_quality_commands",
+        "slopgate.rules.common.quality.postedit.run_quality_commands",
         fake_run_quality_commands,
     )
     ctx = context_for_payload(
@@ -118,16 +118,16 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
 ) -> None:
     def fake_collect_touched_lint_failures(
         ctx: HookContext,
-    ) -> tuple[list[str], list[str], list[str]]:
+    ) -> tuple[list[str], list[list[str]], list[str]]:
         _ = ctx
         return (
             ["long-test: 1"],
-            ["[HOOK] long-test", "file: tests/test_sample.py"],
+            [["[HOOK] long-test", "file: tests/test_sample.py"]],
             ["tests/test_sample.py"],
         )
 
     monkeypatch.setattr(
-        "slopgate.rules.common._quality_lint.collect_touched_lint_failures",
+        "slopgate.rules.common.quality.lint.collect_touched_lint_failures",
         fake_collect_touched_lint_failures,
     )
     ctx = context_for_payload(

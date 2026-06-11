@@ -17,6 +17,8 @@ from tests.test_suite_autoupdate import (
 )
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
+WINDOWS_SLOPGATE_EXE = "C:\\Tools\\slopgate.exe"
+
 
 @SKIP_LINUX_ONLY
 def test_linux_autoupdate_install_refuses_unowned_existing_units(
@@ -55,7 +57,7 @@ def test_install_with_autoupdate_stops_when_platform_install_fails(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     calls: list[bool] = []
 
-    def fail_install(_platform: str, dry_run: bool = False, **_kwargs: object) -> int:
+    def fail_install(_platform: str, _dry_run: bool = False, **_kwargs: object) -> int:
         return 1
 
     def fake_autoupdate(**_kwargs: object) -> int:
@@ -79,7 +81,7 @@ def test_install_suite_with_autoupdate_stops_when_platform_install_fails(
     (tmp_path / ".claude").mkdir()
     calls: list[bool] = []
 
-    def fail_install(_platform: str, dry_run: bool = False, **_kwargs: object) -> int:
+    def fail_install(_platform: str, _dry_run: bool = False, **_kwargs: object) -> int:
         return 1
 
     def fake_autoupdate(**_kwargs: object) -> int:
@@ -150,14 +152,9 @@ def _windows_autoupdate_context(
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: True)
     monkeypatch.setattr(
-        slopgate.installer._suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe"
+        slopgate.installer._suite, "find_binary", lambda: WINDOWS_SLOPGATE_EXE
     )
-
-    def fake_user_data_dir(app_name: str) -> Path:
-        return tmp_path / "LocalAppData" / app_name
-
-    monkeypatch.setattr(slopgate.installer._suite, "user_data_dir", fake_user_data_dir)
-    return tmp_path / "LocalAppData/slopgate/slopgate-auto-update.ps1"
+    return tmp_path / ".slopgate" / "auto-update.task"
 
 
 @SKIP_WINDOWS_ONLY
@@ -180,7 +177,7 @@ def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_c
     run_commands: list[list[str]] = []
 
     def fake_run(
-        command: list[str], **kwargs: object
+        command: list[str], **_kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         run_commands.append(command)
         if command[:2] == ["schtasks", "/Query"]:

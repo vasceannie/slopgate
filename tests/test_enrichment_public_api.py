@@ -187,6 +187,9 @@ def test_thin_wrapper_enricher_reports_inline_replacement(tmp_path: Path) -> Non
     assert item.message == (
         "\n\n`wrapper` is called ~1 time(s) in this file."
         "\nReplace each `wrapper(...)` call with `wrapped(...)`, then remove the wrapper."
+        "\nBoundary check before keeping the wrapper: it must validate/normalize, "
+        "name a domain boundary, centralize policy/caching/permission/logging, "
+        "adapt interfaces, or shield unstable third-party APIs."
     )
 
 

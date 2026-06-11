@@ -10,6 +10,8 @@ from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_s
 from slopgate.cli.parsers import build_parser
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
+WINDOWS_SLOPGATE_EXE = "C:\\Tools\\slopgate.exe"
+
 
 def _patch_linux_installer_config_dirs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -37,7 +39,7 @@ def windows_owned_task_install_snapshot(
     run_commands: list[list[str]] = []
 
     def fake_run(
-        command: list[str], **kwargs: object
+        command: list[str], **_kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         run_commands.append(command)
         if command[:2] == ["schtasks", "/Query"]:
@@ -68,7 +70,7 @@ def record_suite_subprocess_run(monkeypatch: pytest.MonkeyPatch) -> list[list[st
     run_commands: list[list[str]] = []
 
     def fake_run(
-        command: list[str], check: bool = False
+        command: list[str], _check: bool = False, **_kwargs: object
     ) -> subprocess.CompletedProcess[list[str]]:
         run_commands.append(command)
         return subprocess.CompletedProcess(command, 0)
@@ -231,24 +233,19 @@ def test_windows_scheduler_plan_uses_schtasks(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: True)
-
-    def fake_user_data_dir(app_name: str) -> Path:
-        return tmp_path / "LocalAppData" / app_name
-
-    monkeypatch.setattr(slopgate.installer._suite, "user_data_dir", fake_user_data_dir)
     monkeypatch.setattr(
-        slopgate.installer._suite, "find_binary", lambda: "C:\\Tools\\slopgate.exe"
+        slopgate.installer._suite, "find_binary", lambda: WINDOWS_SLOPGATE_EXE
     )
     plan = slopgate.installer._suite.build_scheduler_plan(interval_minutes=11)
     assert (
         plan.kind,
         plan.target_path,
-        "C:\\Tools\\slopgate.exe" in plan.content,
+        WINDOWS_SLOPGATE_EXE in (plan.enable_command or []),
         "/MO" in (plan.enable_command or []),
         "11" in (plan.enable_command or []),
     ) == (
         "windows-schtasks",
-        tmp_path / "LocalAppData/slopgate/slopgate-auto-update.ps1",
+        tmp_path / ".slopgate" / "auto-update.task",
         True,
         True,
         True,

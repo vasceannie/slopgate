@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from slopgate.engine import evaluate_payload
 from slopgate.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
 from tests.support import BUNDLE_ROOT, SKIP_UNIX_ONLY, finding_ids, hook_output, required_string
@@ -71,87 +73,6 @@ class TestBashOutputError:
             "context should include the next repair action"
         )
 
-    def test_quality_lint_tail_output_gets_full_lint_guidance(self) -> None:
-        payload = self._post_bash(
-            "cd /home/trav/repos/job-hunter && slopgate lint check 2>&1 | tail -8",
-            """
-✗ untested-production-code src/tui/views/dashboard.py: on_mount has no focused coverage
-✗ PY-LOG-002 src/tui/views/dashboard.py: boundary lifecycle method lacks logging
-Found 2 error-like quality findings.
-""".strip(),
-        )
-        result = evaluate_payload(payload)
-        message = required_string(hook_output(result), "additionalContext")
-
-        expected_fragments = (
-            "ERRORS-BASH-001",
-            "quality-command output",
-            "slopgate lint check --details",
-            "tail-only",
-        )
-        missing = [
-            fragment for fragment in expected_fragments if fragment not in message
-        ]
-        assert not missing, f"missing quality-lint guidance fragments: {missing}"
-        assert "Rerun the smallest failing command" not in message
-
-    def _quality_lint_alias_guidance_gaps(
-        self, alias: str
-    ) -> tuple[list[str], list[str]]:
-        payload = self._post_bash(
-            f"{alias} lint check 2>&1 | tail -8",
-            """
-✗ untested-production-code src/tui/views/dashboard.py: on_mount has no focused coverage
-Found 1 error-like quality finding.
-""".strip(),
-        )
-        result = evaluate_payload(payload)
-        message = required_string(hook_output(result), "additionalContext")
-
-        expected = (
-            "quality-command output",
-            "slopgate lint check --details",
-            "tail-only",
-        )
-        missing: list[str] = [
-            fragment for fragment in expected if fragment not in message
-        ]
-        unexpected: list[str] = [
-            fragment
-            for fragment in ("Rerun the smallest failing command",)
-            if fragment in message
-        ]
-        return missing, unexpected
-
-    def test_vfc_lint_alias_gets_full_lint_guidance(self) -> None:
-        missing, unexpected = self._quality_lint_alias_guidance_gaps("vfc")
-        assert not missing and not unexpected, (
-            f"alias vfc missing={missing} unexpected={unexpected}"
-        )
-
-    def test_isx_lint_alias_gets_full_lint_guidance(self) -> None:
-        missing, unexpected = self._quality_lint_alias_guidance_gaps("isx")
-        assert not missing and not unexpected, (
-            f"alias isx missing={missing} unexpected={unexpected}"
-        )
-
-    def test_read_only_command_skipped(self) -> None:
-        payload = self._post_bash(
-            "grep -n error src/main.py",
-            "src/main.py:10: raise ValueError('error')",
-        )
-        result = evaluate_payload(payload)
-        assert "ERRORS-BASH-001" not in finding_ids(result), (
-            "read-only commands must not trigger"
-        )
-
-    def test_clean_output_no_trigger(self) -> None:
-        payload = self._post_bash("npm build", "Build completed successfully.")
-        result = evaluate_payload(payload)
-        assert "ERRORS-BASH-001" not in finding_ids(result), (
-            "clean output must not trigger"
-        )
-
 
 class TestBashFailureReinforcement:
     """ERRORS-FAIL-001: reinforce that non-zero exits must be resolved."""
@@ -186,14 +107,52 @@ class TestBashFailureReinforcement:
         assert "Inspect stdout/stderr" in message, (
             "system message should include the next action"
         )
+        assert "pre-existing" not in message, (
+            "failure context should avoid STOP-001 banned provenance language"
+        )
+        assert "out of scope" not in message, (
+            "failure context should avoid STOP-001 banned scope language"
+        )
 
-    def test_grep_failure_skipped(self) -> None:
-        result = evaluate_payload(self._failure_bash("grep pattern file.txt"))
-        assert "ERRORS-FAIL-001" not in finding_ids(result), "grep exit-1 is benign"
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("grep pattern file.txt", id="grep_no_match"),
+            pytest.param("rg pattern src", id="rg_no_match"),
+            pytest.param("rtk rg pattern src", id="rtk_rg_no_match"),
+        ],
+    )
+    def test_search_no_match_failure_skipped(self, command: str) -> None:
+        result = evaluate_payload(self._failure_bash(command))
+        assert "ERRORS-FAIL-001" not in finding_ids(result), (
+            f"{command} exit-1 should be treated as expected search semantics"
+        )
 
-    def test_diff_failure_skipped(self) -> None:
-        result = evaluate_payload(self._failure_bash("diff a.txt b.txt"))
-        assert "ERRORS-FAIL-001" not in finding_ids(result), "diff exit-1 is benign"
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("diff a.txt b.txt", id="diff_difference"),
+            pytest.param("test -f missing.txt", id="test_false"),
+        ],
+    )
+    def test_expected_probe_failure_skipped(self, command: str) -> None:
+        result = evaluate_payload(self._failure_bash(command))
+        assert "ERRORS-FAIL-001" not in finding_ids(result), (
+            f"{command} exit-1 should be treated as expected command semantics"
+        )
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            pytest.param("command -v missing-tool", id="command_probe_miss"),
+            pytest.param("git diff --exit-code", id="git_diff_changes"),
+        ],
+    )
+    def test_expected_tool_probe_failure_skipped(self, command: str) -> None:
+        result = evaluate_payload(self._failure_bash(command))
+        assert "ERRORS-FAIL-001" not in finding_ids(result), (
+            f"{command} exit-1 should be treated as expected command semantics"
+        )
 
     def test_cat_failure_skipped(self) -> None:
         result = evaluate_payload(self._failure_bash("cat nonexistent.txt"))

@@ -110,6 +110,8 @@ class TestEnforcementModes:
         safety_candidate = evaluate_pretool_write(repo, "Makefile", "all:\n")
         assert "BUILTIN-PROTECTED-PATHS" in finding_ids(safety_candidate)
 
+
+class TestPostEditQualityModes:
     def test_post_edit_quality_runs_from_repo_root(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
@@ -241,6 +243,8 @@ class TestEnforcementModes:
         result = evaluate_payload(post_edit_bash_payload(repo))
         assert "QUALITY-POST-001" in finding_ids(result)
 
+
+class TestPostEditLintAndAstHealth:
     def test_post_edit_lint_rule_reports_touched_file_issues(
         self, tmp_path: Path
     ) -> None:

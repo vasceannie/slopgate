@@ -54,7 +54,7 @@ from slopgate.lint._detectors.test_smells._payload_core import (
     patch_target_is_internal,
     string_arg,
 )
-from slopgate.rules.common._quality_lint_guidance import (
+from slopgate.rules.common.quality.guidance import (
     lint_target_summary,
     lint_check_instruction,
     has_oversized_module_failure,
@@ -210,7 +210,7 @@ PUBLIC_SYMBOL_GROUPS_a: dict[str, tuple[object, ...]] = {
         patch_target_is_internal,
         string_arg,
     ),
-    "_quality_lint_guidance": (
+    "quality_guidance": (
         lint_target_summary,
         lint_check_instruction,
         has_oversized_module_failure,

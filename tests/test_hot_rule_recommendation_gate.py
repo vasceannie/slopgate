@@ -101,8 +101,8 @@ def _assert_quality_lint_repair_context(context: str, output_text: str) -> None:
     ]
     missing_context = [phrase for phrase in required_context if phrase not in context]
     assert missing_context == [], "QUALITY-LINT-001 repair context lost guidance"
-    assert "First lint violation detail" in output_text, (
-        "QUALITY-LINT-001 output should name the first lint violation detail"
+    assert "Blocking lint collector details" in output_text, (
+        "QUALITY-LINT-001 output should name blocking lint collector details"
     )
     assert "scaffold:" in output_text, (
         "QUALITY-LINT-001 output should include prescriptive scaffold text"
@@ -158,7 +158,7 @@ def test_quality_lint_posttool_reason_marks_already_mutated_repair(
     result = evaluate_payload(post_write_payload(tmp_path, "src/post_soft.py", content))
     support.assert_blocked(result, "QUALITY-LINT-001")
     context = additional_context(result)
-    assert "First lint violation detail" in str(result.output)
+    assert "Blocking lint collector details" in str(result.output)
     _assert_quality_lint_repair_context(context, str(result.output))
 
 

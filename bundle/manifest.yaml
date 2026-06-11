@@ -2,14 +2,14 @@ version: 1
 repo_root: ..
 links:
   - platform: claude
-    src: shared/skills/code-hygiene-refactor
-    dest: ~/.claude/skills/code-hygiene-refactor
+    src: shared/skills/slopgate-code-hygiene-refactor
+    dest: ~/.claude/skills/slopgate-code-hygiene-refactor
   - platform: claude
-    src: shared/skills/code-smell-utility-locator
-    dest: ~/.claude/skills/code-smell-utility-locator
+    src: shared/skills/slopgate-code-smell-utility-locator
+    dest: ~/.claude/skills/slopgate-code-smell-utility-locator
   - platform: claude
-    src: shared/skills/hygiene-orchestrator
-    dest: ~/.claude/skills/hygiene-orchestrator
+    src: shared/skills/slopgate-hygiene-orchestrator
+    dest: ~/.claude/skills/slopgate-hygiene-orchestrator
   - platform: claude
     src: shared/skills/implement-spec
     dest: ~/.claude/skills/implement-spec
@@ -26,23 +26,23 @@ links:
     src: shared/skills/requirements-spec
     dest: ~/.claude/skills/requirements-spec
   - platform: claude
-    src: shared/skills/test-extender
-    dest: ~/.claude/skills/test-extender
+    src: shared/skills/slopgate-test-extender
+    dest: ~/.claude/skills/slopgate-test-extender
   - platform: claude
     src: shared/skills/type-strictness
     dest: ~/.claude/skills/type-strictness
   - platform: claude
-    src: shared/skills/intelligent-coding-patterns
-    dest: ~/.claude/skills/intelligent-coding-patterns
+    src: shared/skills/slopgate-intelligent-coding-patterns
+    dest: ~/.claude/skills/slopgate-intelligent-coding-patterns
   - platform: opencode
-    src: shared/skills/code-hygiene-refactor
-    dest: ~/.config/opencode/skills/code-hygiene-refactor
+    src: shared/skills/slopgate-code-hygiene-refactor
+    dest: ~/.config/opencode/skills/slopgate-code-hygiene-refactor
   - platform: opencode
-    src: shared/skills/code-smell-utility-locator
-    dest: ~/.config/opencode/skills/code-smell-utility-locator
+    src: shared/skills/slopgate-code-smell-utility-locator
+    dest: ~/.config/opencode/skills/slopgate-code-smell-utility-locator
   - platform: opencode
-    src: shared/skills/hygiene-orchestrator
-    dest: ~/.config/opencode/skills/hygiene-orchestrator
+    src: shared/skills/slopgate-hygiene-orchestrator
+    dest: ~/.config/opencode/skills/slopgate-hygiene-orchestrator
   - platform: opencode
     src: shared/skills/implement-spec
     dest: ~/.config/opencode/skills/implement-spec
@@ -59,23 +59,23 @@ links:
     src: shared/skills/requirements-spec
     dest: ~/.config/opencode/skills/requirements-spec
   - platform: opencode
-    src: shared/skills/test-extender
-    dest: ~/.config/opencode/skills/test-extender
+    src: shared/skills/slopgate-test-extender
+    dest: ~/.config/opencode/skills/slopgate-test-extender
   - platform: opencode
     src: shared/skills/type-strictness
     dest: ~/.config/opencode/skills/type-strictness
   - platform: opencode
-    src: shared/skills/intelligent-coding-patterns
-    dest: ~/.config/opencode/skills/intelligent-coding-patterns
+    src: shared/skills/slopgate-intelligent-coding-patterns
+    dest: ~/.config/opencode/skills/slopgate-intelligent-coding-patterns
   - platform: codex
-    src: shared/skills/code-hygiene-refactor
-    dest: ~/.codex/skills/code-hygiene-refactor
+    src: shared/skills/slopgate-code-hygiene-refactor
+    dest: ~/.codex/skills/slopgate-code-hygiene-refactor
   - platform: codex
-    src: shared/skills/code-smell-utility-locator
-    dest: ~/.codex/skills/code-smell-utility-locator
+    src: shared/skills/slopgate-code-smell-utility-locator
+    dest: ~/.codex/skills/slopgate-code-smell-utility-locator
   - platform: codex
-    src: shared/skills/hygiene-orchestrator
-    dest: ~/.codex/skills/hygiene-orchestrator
+    src: shared/skills/slopgate-hygiene-orchestrator
+    dest: ~/.codex/skills/slopgate-hygiene-orchestrator
   - platform: codex
     src: shared/skills/implement-spec
     dest: ~/.codex/skills/implement-spec
@@ -92,17 +92,17 @@ links:
     src: shared/skills/requirements-spec
     dest: ~/.codex/skills/requirements-spec
   - platform: codex
-    src: shared/skills/test-extender
-    dest: ~/.codex/skills/test-extender
+    src: shared/skills/slopgate-test-extender
+    dest: ~/.codex/skills/slopgate-test-extender
   - platform: codex
     src: shared/skills/type-strictness
     dest: ~/.codex/skills/type-strictness
   - platform: codex
-    src: shared/skills/intelligent-coding-patterns
-    dest: ~/.codex/skills/intelligent-coding-patterns
+    src: shared/skills/slopgate-intelligent-coding-patterns
+    dest: ~/.codex/skills/slopgate-intelligent-coding-patterns
   - platform: cursor
-    src: shared/skills/intelligent-coding-patterns
-    dest: ~/.cursor/skills/intelligent-coding-patterns
+    src: shared/skills/slopgate-intelligent-coding-patterns
+    dest: ~/.cursor/skills/slopgate-intelligent-coding-patterns
   - platform: claude
     src: claude/agents/agent-feasibility.md
     dest: ~/.claude/agents/agent-feasibility.md

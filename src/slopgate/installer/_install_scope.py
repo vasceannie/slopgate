@@ -12,13 +12,21 @@ from slopgate.constants import METADATA_COMMAND
 from slopgate.installer._shared import command_is_slopgate_hook, remove_owned_hooks
 
 InstallScope = Literal["user", "project", "both"]
-INSTALL_SCOPES: frozenset[str] = frozenset({"user", "project", "both"})
+INSTALL_SCOPE_USER: InstallScope = "user"
+INSTALL_SCOPE_PROJECT: InstallScope = "project"
+INSTALL_SCOPE_BOTH: InstallScope = "both"
+INSTALL_SCOPES: frozenset[str] = frozenset(
+    {INSTALL_SCOPE_USER, INSTALL_SCOPE_PROJECT, INSTALL_SCOPE_BOTH}
+)
 
 # Backward-compatible alias used by early Cursor installer exports.
 CURSOR_INSTALL_SCOPES = INSTALL_SCOPES
 
 __all__ = [
     "CURSOR_INSTALL_SCOPES",
+    "INSTALL_SCOPE_BOTH",
+    "INSTALL_SCOPE_PROJECT",
+    "INSTALL_SCOPE_USER",
     "INSTALL_SCOPES",
     "InstallScope",
     "json_has_owned_slopgate_hooks",

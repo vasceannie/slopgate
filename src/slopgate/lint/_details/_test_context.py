@@ -179,8 +179,9 @@ _REPO_TEST_REPAIRS: dict[str, tuple[str, ...]] = {
         "    validation: .venv/bin/python -m pytest tests -q",
     ),
     "hypothesis-candidate": (
-        "    correction-options: add a small Hypothesis property for invariants, round-trips, idempotence, ordering, bounds, or malformed input handling.",
-        "    correction-options: keep example tests for named regressions; use Hypothesis to explore the input space around them.",
+        "    correction-options: add a small Hypothesis property for broad invariants, round-trips, idempotence, ordering, bounds, malformed input handling, or parser/validator no-crash behavior.",
+        "    correction-options: keep finite named examples and regressions as pytest parametrized cases; use Hypothesis to explore the input space around them.",
+        "    correction-options: do not add Hypothesis as a new dependency without checking project policy; if unavailable, leave a property-test note and cover named cases with parametrize.",
         "    validation: .venv/bin/python -m pytest tests -q",
     ),
 }

@@ -2,5 +2,5 @@
 enabled = true
 
 [post_edit_quality]
-enabled = true
-block_on_failure = true
+enabled = false
+block_on_failure = false

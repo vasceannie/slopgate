@@ -5,7 +5,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Literal
 
-from slopgate.constants import SESSION_ID
+from slopgate.constants import SESSION_ID, PLATFORM_OPENCODE, PLATFORM_CODEX
 from slopgate.config import (
     is_path_skipped,
     is_repo_disabled,
@@ -47,12 +47,12 @@ def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
 
 def platform_capability(platform: str) -> tuple[str, str | None]:
     normalized = platform.strip().lower()
-    if normalized == "opencode":
+    if normalized == PLATFORM_OPENCODE:
         return (
             "degraded",
             "opencode uses plugin events rather than Claude-style hooks; prompt interception is unavailable, stop blocking is advisory, and post-tool deny is best-effort",
         )
-    if normalized == "codex":
+    if normalized == PLATFORM_CODEX:
         return (
             "partial",
             "codex hooks are experimental and currently provide Bash-focused tool interception rather than Claude-style tool parity",

@@ -159,3 +159,25 @@ LINT_ALLOWED_STRINGS = (
     "text",
     "status",
 )
+
+PLATFORM_CLAUDE = "claude"
+PLATFORM_CODEX = "codex"
+PLATFORM_OPENCODE = "opencode"
+PLATFORM_CURSOR = "cursor"
+
+DEFAULT_MODEL_CLAUDE = "claude-3-5-sonnet-20241022"
+DEFAULT_MODEL_CODEX = "gpt-5.4-preview"
+DEFAULT_MODEL_OPENCODE = "gemini-3-flash-agent"
+DEFAULT_MODEL_CURSOR = "gpt-4o"
+
+PROVIDER_ANTHROPIC = "Anthropic"
+PROVIDER_OPENAI = "OpenAI"
+PROVIDER_GOOGLE = "Google"
+
+TOOL_WRITE = "Write"
+TOOL_EDIT = "Edit"
+TOOL_READ = "Read"
+TOOL_GLOB = "Glob"
+TOOL_GREP = "Grep"
+TOOL_WEB_SEARCH = "WebSearch"
+TOOL_WEB_FETCH = "WebFetch"
