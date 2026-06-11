@@ -23,7 +23,7 @@ dashboard-prod: dashboard-build-ssh dashboard-api
 VERSION_FILE := src/slopgate/_version.py
 
 publish:
-	@CURRENT=$$(grep -oP '__version__ = "\K[^"]+' $(VERSION_FILE)); \
+	@CURRENT=$$(cut -d'"' -f2 $(VERSION_FILE)); \
 	MAJ=$$(echo "$$CURRENT" | cut -d. -f1); \
 	MIN=$$(echo "$$CURRENT" | cut -d. -f2); \
 	PAT=$$(echo "$$CURRENT" | cut -d. -f3); \
