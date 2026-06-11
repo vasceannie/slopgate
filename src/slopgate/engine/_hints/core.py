@@ -5,13 +5,13 @@ from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 
 from .constants import RULE_HINTS
-from .paths import _is_test_path, failure_class, finding_path
-from .quality import _quality_lint_hint
+from .paths import failure_class, finding_path, is_test_path
+from .quality import quality_lint_hint
 
 
 def long_params_hint(item: RuleFinding) -> str:
     path = finding_path(item)
-    if _is_test_path(path):
+    if is_test_path(path):
         return (
             "Next step: this test helper is pretending to be a constructor. Prefer "
             "a named Case dataclass or builder defaults so each test only overrides "
@@ -27,7 +27,7 @@ def long_params_hint(item: RuleFinding) -> str:
 
 def rule_hint(ctx: HookContext, item: RuleFinding) -> str | None:
     if item.rule_id == "QUALITY-LINT-001":
-        return _quality_lint_hint(ctx, item)
+        return quality_lint_hint(ctx, item)
     if item.rule_id == "PY-CODE-009":
         return long_params_hint(item)
     return RULE_HINTS.get(item.rule_id)

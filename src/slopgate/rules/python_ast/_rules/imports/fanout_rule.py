@@ -15,11 +15,7 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import (
-    detect_family_prefix,
-    evaluate_common,
-    parse_module,
-)
+from ..._helpers import detect_family_prefix, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext

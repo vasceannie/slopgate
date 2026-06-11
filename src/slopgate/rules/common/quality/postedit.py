@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from typing_extensions import override
@@ -142,8 +143,10 @@ def _render_failure(failure: QualityCommandFailure | str) -> str:
     return failure.render()
 
 
-def _failure_message(failures: list[QualityCommandFailure | str]) -> str:
-    structured = [failure for failure in failures if isinstance(failure, QualityCommandFailure)]
+def _failure_message(failures: Sequence[QualityCommandFailure | str]) -> str:
+    structured = [
+        failure for failure in failures if isinstance(failure, QualityCommandFailure)
+    ]
     missing = [failure for failure in structured if failure.missing_executable]
     if missing:
         names = ", ".join(sorted({str(item.missing_executable) for item in missing}))

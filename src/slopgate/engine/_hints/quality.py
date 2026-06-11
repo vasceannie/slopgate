@@ -6,7 +6,7 @@ from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 
 from .constants import QUALITY_COLLECTOR_HINTS
-from .paths import _quality_display_path, finding_path
+from .paths import finding_path, quality_display_path
 
 QUALITY_SYMBOL_KEYS = {
     "symbol",
@@ -62,12 +62,12 @@ def _quality_lint_paths(item: RuleFinding) -> list[str]:
     if path:
         _append_unique(paths, path)
     for value in _flatten_strings(item.metadata.get("paths")):
-        display_path = _quality_display_path(value)
+        display_path = quality_display_path(value)
         if display_path:
             _append_unique(paths, display_path)
     for hit in object_list(item.metadata.get("hits")):
         hit_path = string_value(object_dict(hit).get(METADATA_PATH))
-        display_path = _quality_display_path(hit_path)
+        display_path = quality_display_path(hit_path)
         if display_path:
             _append_unique(paths, display_path)
     return paths[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]
@@ -113,7 +113,7 @@ def _collector_recovery_hints(item: RuleFinding) -> list[str]:
     return hints
 
 
-def _quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
+def quality_lint_hint(ctx: HookContext, item: RuleFinding) -> str:
     phase_note = ""
     if ctx.event_name == POST_TOOL_USE:
         phase_note = "PostToolUse already-mutated repair protocol: "

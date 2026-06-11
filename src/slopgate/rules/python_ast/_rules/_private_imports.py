@@ -16,7 +16,7 @@ from .._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from ._import_helpers import (
+from .imports import (
     PrivateImportFinding,
     imported_modules,
     module_path_from_python_file,

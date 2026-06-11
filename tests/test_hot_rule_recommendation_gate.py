@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 from slopgate.context import build_context
 from slopgate.engine import evaluate_payload, render_output
+from slopgate.engine._hints import quality_lint_hint
 from slopgate.engine import _retry
 from slopgate.models import EngineResult, RuleFinding, Severity
 from tests import support
@@ -171,6 +172,26 @@ def test_quality_lint_pathless_reason_names_last_edit_fallback(tmp_path: Path) -
     )
     assert "QUALITY-LINT-001" in reason
     _assert_pathless_quality_fallback(reason, context)
+
+
+def test_quality_lint_hint_public_helper_routes_collectors(tmp_path: Path) -> None:
+    enroll_repo(tmp_path)
+    ctx = build_context(post_write_payload(tmp_path, "src/post_soft.py", "VALUE = 1\n"))
+    finding = RuleFinding(
+        rule_id="QUALITY-LINT-001",
+        title="Touched-file lint failed",
+        severity=Severity.HIGH,
+        metadata={"failing_collectors": ["oversized-module-soft: 1"]},
+    )
+
+    hint = quality_lint_hint(ctx, finding)
+
+    assert "code-hygiene-refactor" in hint, (
+        "public quality lint hint should route oversized collectors to recovery skill"
+    )
+    assert "slopgate lint check" in hint, (
+        "public quality lint hint should keep repo-root lint verification guidance"
+    )
 
 
 def test_thin_wrapper_reason_lists_real_boundary_allowlist(tmp_path: Path) -> None:

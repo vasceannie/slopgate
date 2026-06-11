@@ -18,7 +18,7 @@ from slopgate.util.payloads import (
     is_edit_like_tool,
 )
 
-from ._source_parse import line_count, resolve_python_path
+from ..._source_parse import line_count, resolve_python_path
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -153,7 +153,10 @@ def project_multiedit_sources(
 
 
 def dedupe_sources(sources: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    return list(dict.fromkeys(sources))
+    deduped: dict[tuple[str, str], None] = {}
+    for source in sources:
+        deduped.setdefault(source, None)
+    return list(deduped)
 
 
 def pre_python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:

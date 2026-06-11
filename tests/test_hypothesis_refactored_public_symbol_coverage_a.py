@@ -72,7 +72,7 @@ from slopgate.rules.python_ast._rules._boundary_helpers import (
     function_name_has_event_signal,
     BoundaryFunction,
 )
-from slopgate.rules.python_ast._rules._import_helpers import (
+from slopgate.rules.python_ast._rules import (
     import_alias_full_name,
     allowed_import_alias,
     import_alias_replacement,
@@ -80,11 +80,11 @@ from slopgate.rules.python_ast._rules._import_helpers import (
     private_module_segments,
     imported_modules,
 )
-from slopgate.rules.python_ast._rules._module_size_guidance import (
+from slopgate.rules.python_ast._rules import (
     module_split_scenario,
     oversized_module_split_guidance,
 )
-from slopgate.rules.python_ast._rules._module_size_sources import (
+from slopgate.rules.python_ast._rules import (
     is_line_count_camouflage,
     read_python_source,
     project_replacement,

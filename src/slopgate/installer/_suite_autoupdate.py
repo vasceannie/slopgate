@@ -22,10 +22,12 @@ from slopgate.installer._suite_autoupdate_windows import (
     prepare_windows_task_replacement,
     scheduler_file_is_owned,
 )
-from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
+from slopgate.util import platform
+from slopgate.util.platform import is_windows, user_config_dir
 
 DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@master"
 DEFAULT_UPDATE_INTERVAL_MINUTES = 3 * 10
+user_data_dir = platform.user_data_dir
 
 
 def _validate_update_source(source: str) -> None:

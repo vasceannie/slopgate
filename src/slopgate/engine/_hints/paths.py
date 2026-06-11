@@ -6,7 +6,7 @@ from slopgate.models import RuleFinding
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
 
 
-def _is_test_path(path_value: str | None) -> bool:
+def is_test_path(path_value: str | None) -> bool:
     if path_value is None:
         return False
     normalized = path_value.replace("\\", "/")
@@ -21,7 +21,7 @@ def failure_class(rule_id: str) -> str:
     return "quality"
 
 
-def _quality_display_path(path_value: str | None) -> str | None:
+def quality_display_path(path_value: str | None) -> str | None:
     if not path_value:
         return None
     normalized = path_value.replace("\\", "/")
@@ -36,11 +36,11 @@ def _quality_display_path(path_value: str | None) -> str | None:
 def _first_hit_path(item: RuleFinding) -> str | None:
     for hit in object_list(item.metadata.get("hits")):
         if isinstance(hit, str) and hit and hit != "content":
-            display_path = _quality_display_path(hit)
+            display_path = quality_display_path(hit)
             if display_path:
                 return display_path
         hit_path = string_value(object_dict(hit).get(METADATA_PATH))
-        display_path = _quality_display_path(hit_path)
+        display_path = quality_display_path(hit_path)
         if display_path:
             return display_path
     return None
@@ -49,7 +49,7 @@ def _first_hit_path(item: RuleFinding) -> str | None:
 def finding_path(item: RuleFinding) -> str | None:
     path = item.metadata.get(METADATA_PATH)
     if isinstance(path, str) and path:
-        display_path = _quality_display_path(path)
+        display_path = quality_display_path(path)
         if display_path is None:
             return _first_hit_path(item)
         return display_path

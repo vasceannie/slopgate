@@ -24,7 +24,7 @@ SPLIT_MODULES = (
 
 SOFT_OVERSIZED_SPLIT_TARGETS = (
     "src/slopgate/installer/_suite.py",
-    "src/slopgate/rules/python_ast/_rules/_module_size_projection.py",
+    "src/slopgate/rules/python_ast/_rules/module/size/projection.py",
 )
 
 PUBLIC_IMPORT_CASES = (

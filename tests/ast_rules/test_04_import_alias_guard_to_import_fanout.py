@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
+from slopgate.engine._hints import compress_repeated_import_alias_examples
+
 from tests.test_ast_rules import (
     BUNDLE_ROOT,
     ObjectDict,
@@ -22,6 +26,32 @@ class TestImportAliasGuard(unittest.TestCase):
             "tool_input": tool_input,
             "cwd": str(BUNDLE_ROOT),
         }
+
+    def test_alias_examples_only_render_once_per_session(self) -> None:
+        code = "from app.services import resolver as r\n"
+        payload = self._make_payload(code)
+        payload["session_id"] = f"test-import-alias-examples-once-{uuid4().hex}"
+
+        assert callable(compress_repeated_import_alias_examples), (
+            "public alias compression helper should remain importable"
+        )
+        first_result = evaluate_payload(payload)
+        second_result = evaluate_payload(payload)
+
+        first_reason = permission_reason(first_result)
+        second_reason = permission_reason(second_result)
+        assert "pandas as pd" in first_reason, (
+            "first alias denial should include canonical examples"
+        )
+        assert "pandas as pd" not in second_reason, (
+            "second alias denial in the session should suppress repeated examples"
+        )
+        assert "from app.services import resolver" in second_reason, (
+            "compressed alias denial should keep the exact replacement import"
+        )
+        assert "resolver.<name>(...)" in second_reason, (
+            "compressed alias denial should keep call-site usage guidance"
+        )
 
     def test_nonstandard_module_import_alias_denied(self) -> None:
         code = "import app.shared.normalizers as normalizers_v2\n"
@@ -107,8 +137,6 @@ class TestImportFanout(unittest.TestCase):
 
     def test_family_prefix_detected(self) -> None:
         """Shared parse_ prefix family elevates severity to MEDIUM."""
-        from slopgate.models import Severity
-
         code = (
             "from myparser import "
             "parse_user, parse_order, parse_product, "
@@ -120,7 +148,7 @@ class TestImportFanout(unittest.TestCase):
         assert len(fanout_findings) > 0, (
             "family prefix must produce PY-IMPORT-001 finding"
         )
-        assert fanout_findings[0].severity == Severity.MEDIUM, (
+        assert fanout_findings[0].severity.name == "MEDIUM", (
             "family prefix must elevate severity to MEDIUM"
         )
 

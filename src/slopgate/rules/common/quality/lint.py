@@ -31,6 +31,7 @@ from .guidance import (
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+    from slopgate.lint._baseline import Violation
 
 
 class SearchReminderRule(Rule):
@@ -113,7 +114,7 @@ def _touched_lint_relative_paths(
     return touched
 
 
-def _first_violation_detail(rule_name: str, violation: object) -> list[str]:
+def _first_violation_detail(rule_name: str, violation: Violation) -> list[str]:
     from slopgate.lint._details import format_violation_details
 
     return format_violation_details(rule_name, violation, status="HOOK")

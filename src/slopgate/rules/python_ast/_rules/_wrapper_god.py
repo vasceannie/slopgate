@@ -19,7 +19,7 @@ from .._helpers import decision_for_context, evaluate_common
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from ._module_size_projection import python_structural_sources
+from .module import python_structural_sources
 from ._source_parse import parsed_classes, parsed_functions, python_ast_rule_is_disabled
 
 

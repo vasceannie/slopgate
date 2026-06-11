@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from hashlib import sha256
 from importlib import resources
 from pathlib import Path
-from typing import cast
 
 from slopgate.constants import (
     PLATFORM_CLAUDE,
@@ -166,7 +165,7 @@ def _requested_platforms(platforms: tuple[str, ...] | list[str] | None) -> tuple
         raise ValueError(f"unsupported platform(s): {', '.join(invalid)}")
     requested: list[PromptPlatform] = []
     for platform in platforms:
-        requested.append(cast(PromptPlatform, platform))
+        requested.append(platform)
     return tuple(requested)
 
 

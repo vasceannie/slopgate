@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 __all__ = [
     "first_significant_line",
     "is_full_module_candidate",
@@ -19,9 +21,11 @@ __all__ = [
     "OVERSIZED_SPLIT_PLANS",
     "dedupe_sources",
     "is_authored_python_path",
+    "is_line_count_camouflage",
     "module_split_scenario",
     "oversized_module_split_guidance",
     "post_python_structural_sources",
+    "pre_python_camouflage_sources",
     "pre_python_structural_sources",
     "project_multiedit_sources",
     "project_replacement",
@@ -108,16 +112,18 @@ from ._source_parse import (
     python_ast_rule_is_disabled,
     resolve_python_path,
 )
-from ._module_size_projection import PythonModuleSizeRule, ModuleSizeFinding
-from ._module_size_guidance import (
+from .module import PythonModuleSizeRule, ModuleSizeFinding
+from .module import (
     OVERSIZED_SPLIT_PLANS,
     module_split_scenario,
     oversized_module_split_guidance,
 )
-from ._module_size_sources import (
+from .module import (
     dedupe_sources,
     is_authored_python_path,
+    is_line_count_camouflage,
     post_python_structural_sources,
+    pre_python_camouflage_sources,
     pre_python_structural_sources,
     project_multiedit_sources,
     project_replacement,
@@ -190,7 +196,7 @@ from ._flat_siblings import (
     flat_sibling_projected_removed_files,
     flat_sibling_resolve_candidate_path,
 )
-from ._import_helpers import (
+from .imports import (
     ALLOWED_IMPORT_ALIASES,
     PrivateImportFinding,
     allowed_import_alias,
@@ -203,5 +209,18 @@ from ._import_helpers import (
     private_module_segments,
 )
 from ._private_imports import PythonPrivateImportChainRule
-from ._import_alias_rule import PythonImportAliasRule
-from ._import_fanout_rule import PythonImportFanoutRule
+from .imports import PythonImportAliasRule, PythonImportFanoutRule
+from .imports import alias_rule, fanout_rule, helpers
+from .module.size import guidance, projection, sources
+
+
+sys.modules.update(
+    {
+        f"{__name__}._import_alias_rule": alias_rule,
+        f"{__name__}._import_fanout_rule": fanout_rule,
+        f"{__name__}._import_helpers": helpers,
+        f"{__name__}._module_size_guidance": guidance,
+        f"{__name__}._module_size_projection": projection,
+        f"{__name__}._module_size_sources": sources,
+    }
+)

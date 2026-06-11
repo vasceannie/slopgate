@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings, strategies
 from tests.test_enrichment_public_api import context_for_source
 from slopgate.adapters.base import render_request_from_call
-from slopgate.cli import commands
+from slopgate.cli.commands import cmd_handle
 from slopgate.cli.main import main
 from slopgate.config._repo import enroll_repo
 from slopgate.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
@@ -203,7 +203,7 @@ def test_cmd_handle_accepts_empty_payload_property(platform: str) -> None:
     sys.stdin = io.StringIO("")
     try:
         args = argparse.Namespace(platform=platform)
-        assert commands.cmd_handle(args) == 0
+        assert cmd_handle(args) == 0
     finally:
         sys.stdin = original_stdin
 

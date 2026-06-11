@@ -20,7 +20,7 @@ from ._hints import (
     retry_budget_relevant_denials,
     rule_hint,
 )
-
+from ._hints.import_aliases import compress_repeated_import_alias_examples
 
 def _normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
     raw_path = Path(path_value)
@@ -187,6 +187,7 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
     repeated_rule_ids: set[str] = set()
     max_repeat_count = 0
     for item in denied:
+        compress_repeated_import_alias_examples(ctx, item)
         repeat_count = _record_denial_attempt(ctx, item, attempt_fingerprint)
         max_repeat_count = max(max_repeat_count, repeat_count)
         if _apply_repeat_escalation(item, repeat_count):

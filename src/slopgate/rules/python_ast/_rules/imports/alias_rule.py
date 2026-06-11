@@ -12,11 +12,11 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from .._helpers import decision_for_context, evaluate_common, parse_module
+from ..._helpers import decision_for_context, evaluate_common, parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from ._import_helpers import (
+from .helpers import (
     allowed_import_alias,
     import_alias_full_name,
     import_alias_replacement,
@@ -85,7 +85,20 @@ class PythonImportAliasRule(Rule):
                 replacement,
                 usage,
             ) in self._collect_aliases(module):
-                message = f"`{path_value}` imports `{imported_name} as {asname}` on line {lineno}. Non-standard import aliases are blocked because they hide duplicated code from clone/repeated-block detectors. Use the real module/name or extract shared behavior instead. Only canonical library aliases are allowed, e.g. `pandas as pd`, `polars as pl`, `numpy as np`, or `matplotlib.pyplot as plt`.\n\nUse this instead:\n    {replacement}\nThen call: `{usage}`"
+                alias_examples = (
+                    "Only canonical library aliases are allowed, e.g. "
+                    "`pandas as pd`, `polars as pl`, `numpy as np`, or "
+                    "`matplotlib.pyplot as plt`."
+                )
+                message = (
+                    f"`{path_value}` imports `{imported_name} as {asname}` "
+                    f"on line {lineno}. Non-standard import aliases are "
+                    "blocked because they hide duplicated code from "
+                    "clone/repeated-block detectors. Use the real module/name "
+                    f"or extract shared behavior instead. {alias_examples}\n\n"
+                    f"Use this instead:\n    {replacement}\n"
+                    f"Then call: `{usage}`"
+                )
                 findings.append(
                     RuleFinding(
                         rule_id=self.rule_id,

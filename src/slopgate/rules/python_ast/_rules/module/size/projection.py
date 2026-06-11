@@ -10,17 +10,17 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule
-from .._helpers import decision_for_context
-from ._module_size_guidance import (
+from ...._helpers import decision_for_context
+from .guidance import (
     module_split_scenario,
     oversized_module_split_guidance,
 )
-from ._module_size_sources import (
+from .sources import (
     is_line_count_camouflage,
     pre_python_camouflage_sources,
     python_structural_sources,
 )
-from ._source_parse import line_count, python_ast_rule_is_disabled
+from ..._source_parse import line_count, python_ast_rule_is_disabled
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -68,12 +68,20 @@ class PythonModuleSizeRule(Rule):
         collector = "oversized-module" if finding.hard else "oversized-module-soft"
         severity = Severity.HIGH if finding.hard else Severity.MEDIUM
         split = _split_context(ctx, finding.path_value)
+        summary = (
+            f"Python module `{finding.path_value}` is {collector}: "
+            f"{finding.line_count} lines exceeds limit {threshold}."
+        )
+        next_step = (
+            f"Use the {split.scenario} split plan before writing it; "
+            "line-count camouflage will be blocked."
+        )
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
             severity=severity,
             decision=split.decision,
-            message=f"Python module `{finding.path_value}` is {collector}: {finding.line_count} lines exceeds limit {threshold}. Use the {split.scenario} split plan before writing it; line-count camouflage will be blocked.",
+            message=f"{summary} {next_step}",
             additional_context=split.guidance,
             metadata={
                 METADATA_PATH: finding.path_value,
@@ -89,12 +97,21 @@ class PythonModuleSizeRule(Rule):
     ) -> RuleFinding:
         split = _split_context(ctx, finding.path_value)
         removed = finding.before_lines - finding.after_lines
+        counts = (
+            f"{removed} blank/spacing lines "
+            f"({finding.before_lines} -> {finding.after_lines})"
+        )
+        message = (
+            f"Line-count camouflage on oversized module `{finding.path_value}`: "
+            f"the edit removes {counts} while keeping the same nonblank content. "
+            "Do a package/facade split instead of shaving empty space."
+        )
         return RuleFinding(
             rule_id=self.rule_id,
             title="Block oversized-module line-count camouflage",
             severity=Severity.HIGH,
             decision=split.decision,
-            message=f"Line-count camouflage on oversized module `{finding.path_value}`: the edit removes {removed} blank/spacing lines ({finding.before_lines} -> {finding.after_lines}) while keeping the same nonblank content. Do a package/facade split instead of shaving empty space.",
+            message=message,
             additional_context=split.guidance,
             metadata={
                 METADATA_PATH: finding.path_value,
