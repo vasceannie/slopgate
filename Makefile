@@ -20,7 +20,28 @@ dashboard-build-ssh:
 
 dashboard-prod: dashboard-build-ssh dashboard-api
 
+VERSION_FILE := src/slopgate/_version.py
+
 publish:
-	rm -rf dist
-	uv build
-	uv publish --token $(UV_PUBLISH_TOKEN)
+	@CURRENT=$$(grep -oP '__version__ = "\K[^"]+' $(VERSION_FILE)); \
+	MAJ=$$(echo "$$CURRENT" | cut -d. -f1); \
+	MIN=$$(echo "$$CURRENT" | cut -d. -f2); \
+	PAT=$$(echo "$$CURRENT" | cut -d. -f3); \
+	case "$(BUMP)" in \
+		major) NEW="$$((MAJ + 1)).0.0" ;; \
+		minor) NEW="$$MAJ.$$((MIN + 1)).0" ;; \
+		*)     NEW="$$MAJ.$$MIN.$$((PAT + 1))" ;; \
+	esac; \
+	echo "Bumping $$CURRENT → $$NEW"; \
+	echo "__version__ = \"$$NEW\"" > $(VERSION_FILE); \
+	git add $(VERSION_FILE); \
+	git commit -m "Bump version to $$NEW"; \
+	git tag -a "v$$NEW" -m "Release v$$NEW"; \
+	git push origin v$$NEW; \
+	git push github v$$NEW; \
+	echo "Pushed tag v$$NEW to origin and github"; \
+	echo "Building and publishing to PyPI..."; \
+	rm -rf dist; \
+	uv build; \
+	uv publish --token $(UV_PUBLISH_TOKEN); \
+	echo "Done. v$$NEW is live on PyPI."
