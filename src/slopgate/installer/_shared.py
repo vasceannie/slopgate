@@ -23,14 +23,42 @@ HOOK_TYPE_COMMAND = METADATA_COMMAND
 HOOK_TIMEOUT_SHORT = 10
 HOOK_TIMEOUT_STANDARD = HOOK_TIMEOUT_SHORT + HOOK_TIMEOUT_SHORT
 HOOK_TIMEOUT_LONG = HOOK_TIMEOUT_STANDARD + HOOK_TIMEOUT_SHORT
+_BINARY_PROBE_TIMEOUT_SECONDS = 5
 
 
 def find_binary() -> str:
-    """Find the slopgate binary on PATH."""
+    """Find a runnable slopgate binary on PATH."""
     binary = shutil.which("slopgate")
-    if binary:
-        return binary
-    return sys.executable
+    if not binary:
+        return sys.executable
+    return binary if _binary_is_runnable(binary) else sys.executable
+
+
+def _binary_is_runnable(binary: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [binary, "--version"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=_BINARY_PROBE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning(
+            "installer slopgate binary probe failed",
+            binary=binary,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return False
+    if completed.returncode == 0:
+        return True
+    logger.warning(
+        "installer slopgate binary probe returned nonzero",
+        binary=binary,
+        returncode=completed.returncode,
+    )
+    return False
 
 
 def base_invocation(binary: str) -> list[str]:

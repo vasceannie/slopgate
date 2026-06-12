@@ -30,6 +30,7 @@ JSONL_FILES = [
 ]
 DEFAULT_REMOTE_LOGS = "~/.config/slopgate/logs"
 DEFAULT_LOOKBACK_HOURS = 24
+TOOL_INPUT_TEXT_LIMIT = 20000
 MAX_RECORDS_PER_CATEGORY: dict[Category, int] = {
     "events": 6000,
     "rules": 6000,
@@ -41,7 +42,28 @@ TRACE_META_KEYS = (
     "degraded_reason",
     "enforcement_mode",
     "resolved_repo_root",
+    "parent_session_id",
+    "root_session_id",
+    "origin_platform",
+    "origin_session_id",
+    "platform_source",
+    "subagent_type",
+    "spawn_description",
+    "lineage_role",
 )
+TRACE_META_ALIASES: dict[str, tuple[str, ...]] = {
+    "parent_session_id": ("parent_session_id", "parentSessionId", "parentSessionID"),
+    "root_session_id": ("root_session_id", "rootSessionId", "rootSessionID"),
+    "origin_platform": ("origin_platform", "originPlatform"),
+    "origin_session_id": ("origin_session_id", "originSessionId", "originSessionID"),
+    "platform_source": ("platform_source", "platformSource"),
+    "subagent_type": ("subagent_type", "subagentType"),
+    "spawn_description": ("spawn_description", "spawnDescription"),
+    "lineage_role": ("lineage_role", "lineageRole"),
+}
+KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "unknown"}
+KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
+METADATA_VALUE_OMITTED = object()
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent
 DIST_DIR = DASHBOARD_DIR / "dist"
 CANVAS_DEPLOY = Path.home() / ".openclaw" / "canvas" / "forcedash"
@@ -73,17 +95,65 @@ def _trace_metadata(obj: Mapping[str, object]) -> JSONDict:
     """Preserve small, non-payload trace context already emitted by the engine."""
     meta: JSONDict = {}
     for key in TRACE_META_KEYS:
-        if key in obj:
-            value = obj[key]
-            if isinstance(value, str) or value is None:
+        for source_key in TRACE_META_ALIASES.get(key, (key,)):
+            if source_key not in obj:
+                continue
+            value = _trace_metadata_value(key, obj[source_key])
+            if value is not METADATA_VALUE_OMITTED:
                 meta[key] = value
+            break
+    meta.setdefault("platform_source", _platform_source(obj))
     return meta
+
+
+def _trace_metadata_value(key: str, value: object) -> object:
+    if key == "origin_platform":
+        return (
+            _platform_value(value) if isinstance(value, str) else _nullable_value(value)
+        )
+    if key == "platform_source":
+        if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
+            return value
+        return _nullable_value(value)
+    return value if isinstance(value, str) or value is None else METADATA_VALUE_OMITTED
+
+
+def _nullable_value(value: object) -> object:
+    return None if value is None else METADATA_VALUE_OMITTED
+
+
+def _platform_value(value: object) -> str:
+    return value if isinstance(value, str) and value in KNOWN_PLATFORMS else "unknown"
+
+
+def _platform_source(obj: Mapping[str, object]) -> str:
+    value = obj.get("platform_source") or obj.get("platformSource")
+    if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
+        return value
+    raw_platform = obj.get("platform")
+    if raw_platform is None or raw_platform == "":
+        return "unknown"
+    return "explicit" if _platform_value(raw_platform) != "unknown" else "normalized"
+
+
+def _format_tool_input(value: object) -> JSONDict | None:
+    """Preserve bounded tool arguments needed for dashboard drill-downs."""
+    source = coerce_object_dict(value)
+    if source is None:
+        return None
+    projected: JSONDict = {}
+    for key, item in source.items():
+        if isinstance(item, str):
+            projected[key] = _trim_text(item, TOOL_INPUT_TEXT_LIMIT) or ""
+        elif isinstance(item, (bool, int, float)) or item is None:
+            projected[key] = item
+    return projected
 
 
 def _format_e(obj: Mapping[str, object]) -> JSONDict:
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": _platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -93,6 +163,7 @@ def _format_e(obj: Mapping[str, object]) -> JSONDict:
         "provider": obj.get("provider"),
         "command": _trim_text(obj.get("command"), 1000),
         "tool_output": _trim_text(obj.get("tool_output"), 1000),
+        "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj),
     }
 
@@ -100,7 +171,7 @@ def _format_e(obj: Mapping[str, object]) -> JSONDict:
 def _format_ru(obj: Mapping[str, object]) -> JSONDict:
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": _platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -114,6 +185,7 @@ def _format_ru(obj: Mapping[str, object]) -> JSONDict:
         "provider": obj.get("provider"),
         "command": _trim_text(obj.get("command"), 1000),
         "tool_output": _trim_text(obj.get("tool_output"), 1000),
+        "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj),
     }
 
@@ -137,7 +209,7 @@ def _format_res(obj: Mapping[str, object]) -> JSONDict:
             )
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": _platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -155,6 +227,7 @@ def _format_res(obj: Mapping[str, object]) -> JSONDict:
         "provider": obj.get("provider"),
         "command": _trim_text(obj.get("command"), 1000),
         "tool_output": _trim_text(obj.get("tool_output"), 1000),
+        "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj),
     }
 

@@ -1,5 +1,5 @@
 import { Clock, Flag, Radio, Target, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFlagSystem } from "@/context/useFlagSystem";
 import { FLAG_TARGET_LABELS } from "@/lib/chartTheme";
 import { cn } from "@/lib/utils";
@@ -28,24 +28,41 @@ export function FlagButton({ itemType, itemId, label, compact }: Props) {
 	const flagged = isFlagged(itemType, itemId);
 	const existingFlags = getFlagsForItem(itemType, itemId);
 
+	const triggerRef = useRef<HTMLButtonElement>(null);
+
+	const handleClose = useCallback(() => {
+		setShowPanel(false);
+		triggerRef.current?.focus();
+	}, []);
+
+	useEffect(() => {
+		if (!showPanel) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				handleClose();
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [showPanel, handleClose]);
+
 	const handleSubmit = useCallback(() => {
 		addFlag({ itemType, itemId, label, target, mode, notes });
 		setShowPanel(false);
 		setNotes("");
 	}, [addFlag, itemType, itemId, label, target, mode, notes]);
 
+
 	const togglePanel = useCallback((e: React.MouseEvent) => {
 		e.stopPropagation();
 		setShowPanel((v) => !v);
 	}, []);
-
-	const closePanel = useCallback(() => setShowPanel(false), []);
-
 	if (compact) {
 		return (
 			<div className="relative">
 				<button
 					type="button"
+					ref={triggerRef}
 					onClick={togglePanel}
 					className={cn(
 						"p-0.5 rounded transition-colors",
@@ -69,7 +86,7 @@ export function FlagButton({ itemType, itemId, label, compact }: Props) {
 							handleSubmit,
 							existingFlags,
 							removeFlag,
-							onClose: closePanel,
+							onClose: handleClose,
 						}}
 					/>
 				)}
@@ -81,6 +98,7 @@ export function FlagButton({ itemType, itemId, label, compact }: Props) {
 		<div className="relative inline-flex">
 			<button
 				type="button"
+				ref={triggerRef}
 				onClick={togglePanel}
 				className={cn(
 					"flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors",
@@ -104,7 +122,7 @@ export function FlagButton({ itemType, itemId, label, compact }: Props) {
 						handleSubmit,
 						existingFlags,
 						removeFlag,
-						onClose: closePanel,
+						onClose: handleClose,
 					}}
 				/>
 			)}

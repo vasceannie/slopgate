@@ -1,0 +1,44 @@
+{
+	"lsp": {
+		"basedpyright": {
+			"command": ["basedpyright-langserver", "--stdio"],
+			"disabled": true,
+			"extensions": [".py", ".pyi"]
+		},
+		"pyrefly": {
+			"command": ["pyrefly", "lsp"],
+			"disabled": true,
+			"extensions": [".py", ".pyi"]
+		},
+		"pyright": {
+			"command": ["pyright-langserver", "--stdio"],
+			"disabled": true,
+			"extensions": [".py", ".pyi"]
+		},
+		"typescript": {
+			"command": ["typescript-language-server", "--stdio"],
+			"extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]
+		},
+		"biome": {
+			"command": ["dashboard/node_modules/.bin/biome", "lsp-proxy"],
+			"extensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".jsonc", ".css", ".graphql", ".gql"]
+		},
+		"rust": {
+			"command": ["rust-analyzer"],
+			"extensions": [".rs"]
+		},
+		"sourcery": {
+			"command": ["sourcery", "lsp"],
+			"disabled": true,
+			"env": {
+				"PYTHONHASHSEED": "0"
+			},
+			"extensions": [".py", ".pyi", ".ts", ".tsx", ".js", ".jsx"]
+		},
+		"ty": {
+			"command": ["ty", "server"],
+			"disabled": false,
+			"extensions": [".py", ".pyi"]
+		}
+	}
+}

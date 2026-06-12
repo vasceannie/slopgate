@@ -9,7 +9,34 @@ LOOKBACK_HOURS = __LOOKBACK_HOURS__
 LOG_DIR = Path.home() / ".config" / "slopgate" / "logs"
 JSONL_FILES = ["events.jsonl", "rules.jsonl", "results.jsonl", "subprocess.jsonl", "async/subprocess.jsonl"]
 MAX_RECORDS = {"events": 120000, "rules": 240000, "results": 120000, "subprocesses": 10000}
-TRACE_META_KEYS = ("platform_capability", "degraded_reason", "enforcement_mode", "resolved_repo_root")
+TOOL_INPUT_TEXT_LIMIT = 20000
+TRACE_META_KEYS = (
+    "platform_capability",
+    "degraded_reason",
+    "enforcement_mode",
+    "resolved_repo_root",
+    "parent_session_id",
+    "root_session_id",
+    "origin_platform",
+    "origin_session_id",
+    "platform_source",
+    "subagent_type",
+    "spawn_description",
+    "lineage_role",
+)
+TRACE_META_ALIASES = {
+    "parent_session_id": ("parent_session_id", "parentSessionId", "parentSessionID"),
+    "root_session_id": ("root_session_id", "rootSessionId", "rootSessionID"),
+    "origin_platform": ("origin_platform", "originPlatform"),
+    "origin_session_id": ("origin_session_id", "originSessionId", "originSessionID"),
+    "platform_source": ("platform_source", "platformSource"),
+    "subagent_type": ("subagent_type", "subagentType"),
+    "spawn_description": ("spawn_description", "spawnDescription"),
+    "lineage_role": ("lineage_role", "lineageRole"),
+}
+KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "unknown"}
+KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
+METADATA_VALUE_OMITTED = object()
 DECISIONS = ("allow", "deny", "block", "ask", "context", "warn", "info")
 DECISION_PRIORITY = ("block", "deny", "ask", "warn", "context", "info", "allow")
 
@@ -107,16 +134,62 @@ def classify(obj):
 def trace_metadata(obj):
     meta = {}
     for key in TRACE_META_KEYS:
-        value = obj.get(key)
-        if isinstance(value, str) or value is None:
-            meta[key] = value
+        for source_key in TRACE_META_ALIASES.get(key, (key,)):
+            if source_key not in obj:
+                continue
+            value = trace_metadata_value(key, obj[source_key])
+            if value is not METADATA_VALUE_OMITTED:
+                meta[key] = value
+            break
+    meta.setdefault("platform_source", platform_source(obj))
     return meta
+
+
+def trace_metadata_value(key, value):
+    if key == "origin_platform":
+        return platform_value(value) if isinstance(value, str) else nullable_value(value)
+    if key == "platform_source":
+        if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
+            return value
+        return nullable_value(value)
+    return value if isinstance(value, str) or value is None else METADATA_VALUE_OMITTED
+
+
+def nullable_value(value):
+    return None if value is None else METADATA_VALUE_OMITTED
+
+
+def platform_value(value):
+    return value if isinstance(value, str) and value in KNOWN_PLATFORMS else "unknown"
+
+
+def platform_source(obj):
+    value = obj.get("platform_source") or obj.get("platformSource")
+    if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
+        return value
+    raw_platform = obj.get("platform")
+    if raw_platform is None or raw_platform == "":
+        return "unknown"
+    return "explicit" if platform_value(raw_platform) != "unknown" else "normalized"
+
+
+def project_tool_input(value):
+    source = object_dict(value)
+    if source is None:
+        return None
+    projected = {}
+    for key, item in source.items():
+        if isinstance(item, str):
+            projected[key] = trim_text(item, TOOL_INPUT_TEXT_LIMIT) or ""
+        elif isinstance(item, (bool, int, float)) or item is None:
+            projected[key] = item
+    return projected
 
 
 def project_event(obj):
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -126,6 +199,7 @@ def project_event(obj):
         "provider": obj.get("provider"),
         "command": trim_text(obj.get("command"), 1000),
         "tool_output": trim_text(obj.get("tool_output"), 1000),
+        "tool_input": project_tool_input(obj.get("tool_input")),
         **trace_metadata(obj),
     }
 
@@ -133,7 +207,7 @@ def project_event(obj):
 def project_rule(obj):
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -147,6 +221,7 @@ def project_rule(obj):
         "provider": obj.get("provider"),
         "command": trim_text(obj.get("command"), 1000),
         "tool_output": trim_text(obj.get("tool_output"), 1000),
+        "tool_input": project_tool_input(obj.get("tool_input")),
         **trace_metadata(obj),
     }
 
@@ -168,7 +243,7 @@ def project_result(obj):
         })
     return {
         "timestamp": obj.get("timestamp", ""),
-        "platform": obj.get("platform", "claude"),
+        "platform": platform_value(obj.get("platform")),
         "event_name": obj.get("event_name", ""),
         "session_id": obj.get("session_id", ""),
         "tool_name": obj.get("tool_name", ""),
@@ -181,6 +256,7 @@ def project_result(obj):
         "provider": obj.get("provider"),
         "command": trim_text(obj.get("command"), 1000),
         "tool_output": trim_text(obj.get("tool_output"), 1000),
+        "tool_input": project_tool_input(obj.get("tool_input")),
         **trace_metadata(obj),
     }
 

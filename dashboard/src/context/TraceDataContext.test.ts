@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EVENT_NAMES } from "@/types/slopgate";
 import { TraceDataProvider } from "./TraceDataContext";
 import { classifyLine, coerceTraceRecord } from "./traceRecordValidation";
 import { useTraceDataSource } from "./useTraceDataSource";
@@ -105,13 +106,37 @@ describe("live trace record validation", () => {
 		expect(coerceTraceRecord(rawEvent)).toMatchObject({
 			type: "event",
 			record: {
-				platform: "claude",
+				platform: "unknown",
+				platform_source: "unknown",
 				tool_name: "",
 				candidate_paths: [],
 				languages: [],
 			},
 		});
 	});
+
+	it.each(EVENT_NAMES)(
+		"accepts canonical platform event %s",
+		(eventName) => {
+			const rawEvent = {
+				timestamp: "2026-06-11T02:02:33.860998+00:00",
+				event_name: eventName,
+				session_id: `session-${eventName}`,
+			};
+
+			expect(coerceTraceRecord(rawEvent)).toMatchObject({
+				type: "event",
+				record: {
+					event_name: eventName,
+					platform: "unknown",
+					platform_source: "unknown",
+					tool_name: "",
+					candidate_paths: [],
+					languages: [],
+				},
+			});
+		},
+	);
 
 	it("preserves raw tool input on live event rows", () => {
 		const rawEvent = {
@@ -187,10 +212,43 @@ describe("live trace record validation", () => {
 		expect(coerceTraceRecord(rawResult)).toMatchObject({
 			type: "result",
 			record: {
-				platform: "claude",
+				platform: "unknown",
+				platform_source: "unknown",
 				tool_name: "",
 				errors: [],
 				output: null,
+			},
+		});
+	});
+
+	it("normalizes cursor platform and lineage aliases from live rows", () => {
+		const rawEvent = {
+			timestamp: "2026-06-11T02:02:33.860998+00:00",
+			platform: "cursor",
+			event_name: "PreToolUse",
+			session_id: "cursor-child-session",
+			parentSessionId: "parent-session",
+			rootSessionID: "root-session",
+			originPlatform: "claude",
+			originSessionID: "origin-session",
+			platformSource: "explicit",
+			subagentType: "explore",
+			spawnDescription: "Find session lineage",
+			lineageRole: "child_mirror",
+		};
+
+		expect(coerceTraceRecord(rawEvent)).toMatchObject({
+			type: "event",
+			record: {
+				platform: "cursor",
+				parent_session_id: "parent-session",
+				root_session_id: "root-session",
+				origin_platform: "claude",
+				origin_session_id: "origin-session",
+				platform_source: "explicit",
+				subagent_type: "explore",
+				spawn_description: "Find session lineage",
+				lineage_role: "child_mirror",
 			},
 		});
 	});

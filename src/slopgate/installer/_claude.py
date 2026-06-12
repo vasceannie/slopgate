@@ -4,7 +4,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import cast
-from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    METADATA_COMMAND,
+    PLATFORM_CLAUDE,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     json_has_owned_slopgate_hooks,
@@ -56,7 +61,7 @@ def _claude_project_settings_path(project_root: Path) -> Path:
 def claude_hooks_block(binary: str) -> _ClaudeHooks:
     """Build the hooks block for Claude Code settings.json."""
     hooks: _ClaudeHooks = {}
-    command = hook_command(binary, "handle")
+    command = hook_command(binary, "handle", "--platform", PLATFORM_CLAUDE)
     for event in CLAUDE_EVENTS:
         command_entry: _ClaudeHookCommand = {
             "type": HOOK_TYPE_COMMAND,

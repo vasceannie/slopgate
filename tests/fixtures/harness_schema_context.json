@@ -62,36 +62,57 @@
     "codex": {
       "blocking_notes": "Partial hooks. Re-check unsupported/fail-open/fail-closed response fields before claiming enforcement.",
       "canonical_events": [
+        "PostCompact",
+        "PreCompact",
         "SessionStart",
+        "SubagentStart",
         "UserPromptSubmit",
         "PreToolUse",
         "PermissionRequest",
         "PostToolUse",
+        "SubagentStop",
         "Stop"
       ],
       "native_events": [
+        "PostCompact",
+        "PreCompact",
         "SessionStart",
+        "SubagentStart",
         "UserPromptSubmit",
         "PreToolUse",
         "PermissionRequest",
         "PostToolUse",
+        "SubagentStop",
         "Stop"
       ]
     },
     "opencode": {
       "blocking_notes": "Plugin-mediated. tool.execute.before is the strongest blocking point; stop/prompt behavior is degraded/advisory unless proven by current docs and local smoke.",
       "canonical_events": [
+        "CommandExecuted",
         "PreToolUse",
         "PostToolUse",
+        "PermissionReplied",
         "PermissionRequest",
+        "PostCompact",
         "SessionStart",
+        "SessionError",
+        "SessionStatus",
+        "ShellEnv",
         "Stop"
       ],
       "native_events": [
+        "command.executed",
+        "file.edited",
+        "permission.replied",
+        "shell.env",
+        "session.compacted",
         "tool.execute.before",
         "tool.execute.after",
         "permission.asked",
         "session.created",
+        "session.error",
+        "session.status",
         "session.idle"
       ]
     }

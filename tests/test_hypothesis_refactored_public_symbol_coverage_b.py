@@ -81,7 +81,6 @@ is_slopgate_repo = _git_quality.is_slopgate_repo
 default_branch_name = _git_quality.default_branch_name
 path_contains_fragment = _infra_security.path_contains_fragment
 is_safe_bash_for_path = _infra_security.is_safe_bash_for_path
-is_modifying_tool = _infra_security.is_modifying_tool
 infra_deny = _infra_security.infra_deny
 check_config_path = _infra_security.check_config_path
 HookInfraExecProtectionRule = _infra_security.HookInfraExecProtectionRule
@@ -169,7 +168,6 @@ REFACTORED_PUBLIC_SYMBOLS_b = (
     default_branch_name,
     path_contains_fragment,
     is_safe_bash_for_path,
-    is_modifying_tool,
     infra_deny,
     check_config_path,
     HookInfraExecProtectionRule,

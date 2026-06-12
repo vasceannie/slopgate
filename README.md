@@ -68,12 +68,12 @@ make dashboard-build-ssh
 make dashboard-api
 ```
 
-Open **http://127.0.0.1:18834/** (or `http://0.0.0.0:18834/` when `BIND=0.0.0.0`).
+Open **http://192.168.50.151:18834/** on the LAN or **http://airbox:18834/** on the tailnet. The API binds to all IPv4 interfaces by default so both addresses work; set `BIND=127.0.0.1` to restrict ForceDash to local-only access.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `18834` | HTTP listen port |
-| `BIND` | `0.0.0.0` | Bind address |
+| `BIND` | `0.0.0.0` | Bind address for LAN/tailnet access (`192.168.50.151`, `airbox`) |
 | `SLOPGATE_SSH_HOST` | `little` | SSH host for live logs, config, and harness APIs |
 | `SLOPGATE_CONFIG_PATH` | `~/.config/slopgate/config.json` | Remote config file path used by the dashboard API |
 | `SLOPGATE_TRACE_DIR` | `~/.config/slopgate/logs` | Remote trace directory used by the dashboard API |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 import json
 from collections.abc import Iterable
@@ -39,9 +40,15 @@ def dry_run_install_json(
     def which(name: str) -> str | None:
         return case.binary if name == "slopgate" else None
 
+    def run_probe(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[list[str]]:
+        return subprocess.CompletedProcess(command, 0)
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: case.windows)
     monkeypatch.setattr(slopgate.installer._shared.shutil, "which", which)
+    monkeypatch.setattr(slopgate.installer._shared.subprocess, "run", run_probe)
     assert slopgate.installer.install_platform(case.platform, dry_run=True) == 0
     output = capsys.readouterr().out
     return object_dict(json.loads(output[output.index("{") :]))

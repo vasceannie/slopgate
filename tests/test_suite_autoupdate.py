@@ -8,6 +8,7 @@ import slopgate.installer._suite
 from slopgate.installer.suite import autoupdate
 from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
 from slopgate.cli.parsers import build_parser
+from slopgate.constants import PLATFORM_CLAUDE
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
 WINDOWS_SLOPGATE_EXE = "C:\\Tools\\slopgate.exe"
@@ -118,8 +119,8 @@ def test_discover_install_sites_respects_current_device_home(
             )
         ],
     ) == (
-        [("claude", True), ("opencode", True)],
-        ["claude", "codex", "opencode", "cursor"],
+        [(PLATFORM_CLAUDE, True), ("opencode", True)],
+        [PLATFORM_CLAUDE, "codex", "opencode", "cursor"],
     )
 
 
@@ -135,7 +136,7 @@ def test_discover_install_sites_respects_windows_appdata(
     (appdata / "opencode").mkdir(parents=True)
     sites = slopgate.installer._suite.discover_install_sites()
     assert [(site.platform, site.present) for site in sites] == [
-        ("claude", True),
+        (PLATFORM_CLAUDE, True),
         ("opencode", True),
     ]
 
@@ -194,7 +195,7 @@ def test_macos_scheduler_plan_uses_launch_agent(
 
 
 @SKIP_WINDOWS_ONLY
-def test_windows_scheduler_plan_uses_schtasks(
+def test_windows_scheduler_plan_records_removed_autoupdater(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -207,13 +208,13 @@ def test_windows_scheduler_plan_uses_schtasks(
     assert (
         plan.kind,
         plan.target_path,
-        WINDOWS_SLOPGATE_EXE in (plan.enable_command or []),
-        "/MO" in (plan.enable_command or []),
-        "11" in (plan.enable_command or []),
+        plan.enable_command,
+        "Windows auto-updater removed" in plan.content,
+        "slopgate update" in plan.content,
     ) == (
         "windows-schtasks",
         tmp_path / ".slopgate" / "auto-update.task",
-        True,
+        None,
         True,
         True,
     )

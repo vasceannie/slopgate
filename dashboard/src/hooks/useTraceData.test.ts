@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { HookEvent, HookResult, RuleFinding, SubprocessRun } from "@/types/slopgate";
+import type {
+	HookEvent,
+	HookResult,
+	Platform,
+	RuleFinding,
+	SubprocessRun,
+} from "@/types/slopgate";
 import {
 	buildTraceSessionIndexes,
 	streamSchemaValidationWarning,
@@ -22,6 +28,18 @@ function finding(
 		message: `${rule_id} ${decision ?? "none"}`,
 		additional_context: null,
 		metadata: {},
+	};
+}
+
+function event(session_id: string, platform: Platform = "opencode"): HookEvent {
+	return {
+		timestamp: "2026-05-27T12:00:00.000Z",
+		platform,
+		event_name: "PreToolUse",
+		session_id,
+		tool_name: "Bash",
+		candidate_paths: [],
+		languages: ["python"],
 	};
 }
 
@@ -172,5 +190,124 @@ describe("trace session indexes", () => {
 		expect(indexes.sessionPathCounts.get("session-a")).toBe(1);
 		expect(indexes.sessionDecisions.get("session-a")).toEqual(["deny"]);
 		expect(indexes.hottestRepos).toEqual([{ repo: "slopgate", count: 2 }]);
+	});
+
+	it("returns grouped primary rows with child and mirror lineage attached", () => {
+		const parent = event("parent-session", "claude");
+		const child: HookEvent = {
+			...event("child-session", "opencode"),
+			parent_session_id: "parent-session",
+			root_session_id: "parent-session",
+			lineage_role: "child",
+		};
+		const mirror: HookEvent = {
+			...event("mirror-session", "cursor"),
+			origin_session_id: "parent-session",
+			origin_platform: "claude",
+			lineage_role: "mirror",
+		};
+
+		const indexes = buildTraceSessionIndexes(
+			[parent, child, mirror],
+			[],
+			[],
+			[],
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "parent-session",
+			rawSessionIds: ["parent-session", "child-session", "mirror-session"],
+			platforms: ["claude", "cursor", "opencode"],
+			lineageConfidence: "explicit",
+		});
+		expect(indexes.sessions[0].childSessions?.map((session) => session.id)).toEqual([
+			"child-session",
+		]);
+		expect(indexes.sessions[0].mirrorSessions?.map((session) => session.id)).toEqual([
+			"mirror-session",
+		]);
+			expect(indexes.sessionGroups[0]).toMatchObject({
+			id: "parent-session",
+			rawSessionIds: ["parent-session", "child-session", "mirror-session"],
+			lineageConfidence: "explicit",
+		});
+	});
+
+	it("merges linked child evidence into grouped primary rows", () => {
+		const parent = event("parent-session", "claude");
+		const child: HookEvent = {
+			...event("child-session", "opencode"),
+			timestamp: "2026-05-27T12:00:01.000Z",
+			tool_name: "Edit",
+			candidate_paths: ["/home/trav/repos/slopgate/src/child.py"],
+			parent_session_id: "parent-session",
+			root_session_id: "parent-session",
+			lineage_role: "child",
+		};
+		const childFinding = finding("PY-CODE-013", "deny");
+		childFinding.session_id = "child-session";
+		childFinding.timestamp = "2026-05-27T12:00:02.000Z";
+		const childResult: HookResult = {
+			timestamp: "2026-05-27T12:00:03.000Z",
+			platform: "opencode",
+			event_name: "PostToolUse",
+			session_id: "child-session",
+			tool_name: "Edit",
+			findings: [
+				{
+					rule_id: "PY-CODE-013",
+					severity: "MEDIUM",
+					decision: "deny",
+					message: "blocked in child",
+				},
+			],
+			errors: null,
+			output: null,
+		};
+		const childSubprocess: SubprocessRun = {
+			timestamp: "2026-05-27T12:00:04.000Z",
+			event_name: "PostToolUse",
+			session_id: "child-session",
+			command: "pytest tests/test_child.py",
+			cwd: "/home/trav/repos/slopgate",
+			returncode: 1,
+			stdout: "",
+			stderr: "failed",
+			duration_ms: 50,
+		};
+
+		const indexes = buildTraceSessionIndexes(
+			[parent, child],
+			[childFinding],
+			[childResult],
+			[childSubprocess],
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+	expect(indexes.sessions[0]).toMatchObject({
+		id: "parent-session",
+		eventCount: 2,
+		finalOutcome: "deny",
+		pathCount: 1,
+	});
+	expect([...indexes.sessions[0].rawSessionIds].sort()).toEqual([
+		"child-session",
+		"parent-session",
+	]);
+		expect(indexes.sessions[0].tools).toEqual(["Bash", "Edit"]);
+		expect(indexes.sessions[0].events.map((item) => item.session_id)).toEqual([
+			"parent-session",
+			"child-session",
+		]);
+		expect(indexes.sessions[0].findings.map((item) => item.session_id)).toEqual([
+			"child-session",
+		]);
+		expect(indexes.sessions[0].results.map((item) => item.session_id)).toEqual([
+			"child-session",
+		]);
+		expect(indexes.sessions[0].subprocesses.map((item) => item.session_id)).toEqual([
+			"child-session",
+		]);
 	});
 });

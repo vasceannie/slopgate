@@ -173,6 +173,15 @@ class TestInlinePayloadDenies:
         )
         assert "BUILTIN-PROTECTED-PATHS" not in finding_ids(result)
 
+    def test_echo_command_substitution_is_not_treated_as_safe_read(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(
+            pretool_bash("echo $(rm ~/.claude/rules/boundary.md)")
+        )
+        assert_denied_by(result, "BUILTIN-PROTECTED-PATHS")
+        assert "BUILTIN-PROTECTED-PATHS" in finding_ids(result)
+
     def test_exec_protection_still_denies_writing_protected_rule_path_with_redirect(
         self, pretool_bash: BashBuilder
     ) -> None:

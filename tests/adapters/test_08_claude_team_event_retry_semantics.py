@@ -39,6 +39,8 @@ def _run_cmd_handle(
 
     import slopgate.engine
 
+    import slopgate.util.logger
+    monkeypatch.setattr(slopgate.util.logger, "_emit", lambda *args, **kwargs: None)
     monkeypatch.setattr(slopgate.engine, "evaluate_payload", fake_evaluate_payload)
     payload = {"hook_event_name": case.event_name, "cwd": "/tmp"}
     monkeypatch.setattr(

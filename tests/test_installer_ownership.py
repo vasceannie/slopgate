@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import slopgate.installer
 import slopgate.installer._shared
+from slopgate.constants import PLATFORM_CLAUDE
 from slopgate.installer._shared import (
     backup_existing_file,
     backup_existing_file_and_report,
@@ -98,7 +99,9 @@ def test_claude_reinstall_replaces_powershell_owned_hook_and_preserves_user_hook
         "result": 0,
         "commands": [
             "my-slopgate-helper handle",
-            slopgate.installer._shared.hook_command("slopgate", "handle"),
+            slopgate.installer._shared.hook_command(
+                "slopgate", "handle", "--platform", PLATFORM_CLAUDE
+            ),
         ],
     }
 

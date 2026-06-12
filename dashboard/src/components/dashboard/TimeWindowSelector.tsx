@@ -23,6 +23,8 @@ const PLATFORM_OPTIONS: { value: Platform; label: string; color: string }[] = [
 	{ value: "claude", label: "Claude", color: "bg-platform-claude" },
 	{ value: "codex", label: "Codex", color: "bg-platform-codex" },
 	{ value: "opencode", label: "OpenCode", color: "bg-platform-opencode" },
+	{ value: "cursor", label: "Cursor", color: "bg-platform-cursor" },
+	{ value: "unknown", label: "Unknown", color: "bg-platform-unknown" },
 ];
 
 interface Props {

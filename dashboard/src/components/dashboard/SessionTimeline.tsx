@@ -1,70 +1,30 @@
-import { memo, type ReactNode, useMemo, useState } from "react";
+import { AlertOctagon, CheckCircle2, FilterX, Info, ShieldAlert } from "lucide-react";
+import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { resolveDecision } from "@/hooks/useTraceData";
-import { DECISION_DOT_STYLE } from "@/lib/chartTheme";
+import type { SessionData, TimelineEntry, TimelineFinding } from "@/lib/sessionHelpers";
+import { correlationStatus, initialTimelineSelection, timelineRowSummary } from "@/lib/sessionHelpers";
 import { cn } from "@/lib/utils";
 import type {
 	Decision,
 	HookEvent,
 	HookResult,
-	Severity,
 } from "@/types/slopgate";
 import { FlagButton } from "./FlagButton";
-import type { SessionData } from "./SessionExplorer";
+import { TimelineVerdictStrip } from "./TimelineVerdictStrip";
 
 const PAGE_SIZE = 50;
 const TOOL_DRILLDOWN_CORRELATION_WINDOW_MS = 120_000;
 
 type DetailToggle = "findings" | "errors";
+type PayloadViewMode = "pretty" | "raw";
 
 const DETAIL_TOGGLE_LABELS: Record<DetailToggle, string> = {
-	findings: "Findings",
-	errors: "Errors",
+	findings: "Has findings",
+	errors: "Has errors",
 };
 
 const DETAIL_TOGGLES: DetailToggle[] = ["findings", "errors"];
 
-type TimelineEntry = {
-	id: string;
-	time: string;
-	type: "event" | "finding" | "result" | "subprocess" | "hook";
-	label: string;
-	detail: string;
-	sessionId: string;
-	platform?: string;
-	eventName?: string;
-	toolName?: string;
-	eventTime?: string;
-	resultTime?: string;
-	decision?: Decision;
-	resultLabel?: string;
-	resultDetail?: string;
-	findingCount?: number;
-	errorCount?: number;
-	flagItemType: "event" | "finding" | "result" | "session";
-	flagItemId: string;
-	flagLabel: string;
-	model?: string | null;
-	provider?: string | null;
-	command?: string | null;
-	tool_output?: string | null;
-	candidate_paths?: string[];
-	tool_context?: string[];
-	url_context?: string[];
-	patch_text?: string | null;
-	edit_before?: string | null;
-	edit_after?: string | null;
-	tool_input_json?: string | null;
-	findings?: TimelineFinding[];
-};
-
-type TimelineFinding = {
-	id: string;
-	ruleId: string;
-	severity: Severity;
-	decision: Decision | null;
-	message: string | null;
-	additionalContext?: string | null;
-};
 
 type EventMatch = {
 	event: HookEvent;
@@ -106,6 +66,11 @@ type FormattedHookOutput = {
 	variant: "context" | "decision" | "metadata" | "raw";
 };
 
+type FocusedEditPayload = {
+	prettyText: string;
+	rawText: string;
+};
+
 const FILE_CONTEXT_PATTERN =
 	/(^\.?\.?\/|\/|\\|\.(py|ts|tsx|js|jsx|json|md|toml|ya?ml|sh|css|html|tool)$|^(src|tests?|dashboard|bundle|docs|logs|scripts)$)/i;
 const TOOL_EXPRESSION_PATTERN =
@@ -113,6 +78,31 @@ const TOOL_EXPRESSION_PATTERN =
 const URL_CONTEXT_PATTERN = /^(https?:)?\/\//i;
 const LOW_VALUE_CONTEXT_PATTERN =
 	/^[{,\s]+|\b(textContent|className|length)\b|['")]+\./;
+const APPLY_PATCH_MARKER = "*** Begin Patch";
+const UNIFIED_DIFF_GIT_HEADER_PATTERN = /^diff --git\s+a\/.+\s+b\/.+/m;
+const UNIFIED_DIFF_FILE_HEADER_PATTERN =
+	/^---\s+(?:a\/.+|\/dev\/null)\s*\r?\n\+\+\+\s+(?:b\/.+|\/dev\/null)/m;
+const CODE_TOKEN_PATTERN =
+	/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60(?:\\.|[^\x60\\])*\x60|\b(?:true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b|--?[\w-]+|https?:\/\/[^\s)]+|[#@][\w/-]+|{}[\](),.:;=])/g;
+
+type DiffLineKind = "add" | "context" | "delete" | "file" | "hunk";
+
+type CodeTokenKind =
+	| "boolean"
+	| "comment"
+	| "heading"
+	| "key"
+	| "link"
+	| "number"
+	| "operator"
+	| "punctuation"
+	| "string"
+	| "text";
+
+type CodeToken = {
+	kind: CodeTokenKind;
+	text: string;
+};
 
 function textField(
 	record: Record<string, unknown> | null,
@@ -187,6 +177,8 @@ function hasDirectToolInputFields(record: Record<string, unknown>): boolean {
 		"file_path",
 		"filePath",
 		"path",
+		"url",
+		"uri",
 	].some((key) => record[key] !== undefined);
 }
 
@@ -278,6 +270,19 @@ function jsonRecordFromText(value: string): Record<string, unknown> | null {
 	} catch {
 		return null;
 	}
+}
+
+function jsonValueFromText(value: string): unknown | null {
+	try {
+		return JSON.parse(value);
+	} catch {
+		return null;
+	}
+}
+
+function formattedJsonValue(value: unknown): string {
+	const formatted = JSON.stringify(value, null, 2);
+	return formatted ?? String(value);
 }
 
 function textFromRecordKey(
@@ -415,6 +420,104 @@ function outputSectionClass(variant: FormattedHookOutput["variant"]): string {
 	return "border-border/20 bg-background/50";
 }
 
+function isApplyPatchText(value: string): boolean {
+	return value.includes(APPLY_PATCH_MARKER);
+}
+
+function isUnifiedDiffText(value: string): boolean {
+	const trimmed = value.trimStart();
+	return (
+		UNIFIED_DIFF_GIT_HEADER_PATTERN.test(trimmed) ||
+		UNIFIED_DIFF_FILE_HEADER_PATTERN.test(trimmed)
+	);
+}
+
+function isDiffText(value: string): boolean {
+	return isApplyPatchText(value) || isUnifiedDiffText(value);
+}
+
+function normalizePatchPath(path: string): string {
+	return path.trim() || "unknown";
+}
+
+function unifiedDiffHeaders(
+	path: string,
+	mode: "add" | "delete" | "update",
+): string[] {
+	const normalizedPath = normalizePatchPath(path);
+	if (mode === "add") {
+		return [
+			`diff --git a/${normalizedPath} b/${normalizedPath}`,
+			"--- /dev/null",
+			`+++ b/${normalizedPath}`,
+		];
+	}
+	if (mode === "delete") {
+		return [
+			`diff --git a/${normalizedPath} b/${normalizedPath}`,
+			`--- a/${normalizedPath}`,
+			"+++ /dev/null",
+		];
+	}
+	return [
+		`diff --git a/${normalizedPath} b/${normalizedPath}`,
+		`--- a/${normalizedPath}`,
+		`+++ b/${normalizedPath}`,
+	];
+}
+
+function applyPatchToUnifiedDiff(value: string): string {
+	if (!isApplyPatchText(value)) return value;
+	const output: string[] = [];
+	for (const line of value.split("\n")) {
+		if (line === "*** Begin Patch" || line === "*** End Patch") continue;
+		if (line.startsWith("*** Update File: ")) {
+			output.push(...unifiedDiffHeaders(line.slice(17), "update"));
+			continue;
+		}
+		if (line.startsWith("*** Add File: ")) {
+			output.push(...unifiedDiffHeaders(line.slice(14), "add"));
+			continue;
+		}
+		if (line.startsWith("*** Delete File: ")) {
+			output.push(...unifiedDiffHeaders(line.slice(17), "delete"));
+			continue;
+		}
+		if (line.startsWith("*** Move to: ")) {
+			output.push(`rename to ${normalizePatchPath(line.slice(13))}`);
+			continue;
+		}
+		output.push(line);
+	}
+	return output.join("\n").trimEnd();
+}
+
+function diffLineKind(line: string): DiffLineKind {
+	if (line.startsWith("@@")) return "hunk";
+	if (line.startsWith("diff --git") || line.startsWith("--- ")) return "file";
+	if (line.startsWith("+++ ")) return "file";
+	if (line.startsWith("+")) return "add";
+	if (line.startsWith("-")) return "delete";
+	return "context";
+}
+
+function diffLineClass(kind: DiffLineKind): string {
+	if (kind === "add") return "bg-signal-allow/10 text-signal-allow";
+	if (kind === "delete") return "bg-signal-deny/10 text-signal-deny";
+	if (kind === "hunk") return "bg-signal-ask/10 text-signal-ask";
+	if (kind === "file") return "bg-primary/10 text-primary";
+	return "text-foreground";
+}
+
+function keyedDiffLines(text: string): Array<{ id: string; line: string }> {
+	const counts = new Map<string, number>();
+	return text.split("\n").map((line) => {
+		const count = counts.get(line) ?? 0;
+		counts.set(line, count + 1);
+		return { id: `${line.slice(0, 48)}:${count}`, line };
+	});
+}
+
 function toolInputDetails(
 	output: Record<string, unknown> | null,
 ): ToolInputDetails {
@@ -449,16 +552,287 @@ function toolInputDetailsFromInput(
 	};
 }
 
-function focusedEditDiff(entry: TimelineEntry): string | null {
+function focusedEditPayload(entry: TimelineEntry): FocusedEditPayload | null {
 	const before = textFromUnknown(entry.edit_before);
 	const after = textFromUnknown(entry.edit_after);
-	if (!before && !after) return entry.patch_text ?? null;
-	return [
-		"--- before",
-		"+++ after",
-		...(before ?? "").split("\n").map((line) => `-${line}`),
-		...(after ?? "").split("\n").map((line) => `+${line}`),
-	].join("\n");
+	if (!before && !after) {
+		return entry.patch_text
+			? {
+					prettyText: isApplyPatchText(entry.patch_text)
+						? applyPatchToUnifiedDiff(entry.patch_text)
+						: entry.patch_text,
+					rawText: entry.patch_text,
+				}
+			: null;
+	}
+	return {
+		prettyText: [
+			"--- before",
+			"+++ after",
+			...(before ?? "").split("\n").map((line) => `-${line}`),
+			...(after ?? "").split("\n").map((line) => `+${line}`),
+		].join("\n"),
+		rawText: JSON.stringify({ before, after }, null, 2),
+	};
+}
+
+function codeTokenKind(value: string): CodeTokenKind {
+	if (value.startsWith("#") || value.startsWith("@")) return "comment";
+	if (value.startsWith("http://") || value.startsWith("https://")) return "link";
+	if (value.startsWith("\"") || value.startsWith("'") || value.startsWith("`")) {
+		return "string";
+	}
+	if (/^\d/.test(value)) return "number";
+	if (["true", "false", "null", "undefined"].includes(value)) return "boolean";
+	if (value.startsWith("-")) return "operator";
+	if (/^{}[\](),.:;=]$/.test(value)) return "punctuation";
+	return "text";
+}
+
+function tokenizeCodeLine(line: string): CodeToken[] {
+	const trimmed = line.trimStart();
+	if (trimmed.startsWith("#") || trimmed.startsWith("//")) {
+		return [{ kind: "comment", text: line }];
+	}
+	if (trimmed.startsWith("---") || trimmed.startsWith("# ")) {
+		return [{ kind: "heading", text: line }];
+	}
+
+	const tokens: CodeToken[] = [];
+	let cursor = 0;
+	for (const match of line.matchAll(CODE_TOKEN_PATTERN)) {
+		const tokenText = match[0];
+		const index = match.index ?? cursor;
+		if (index > cursor) {
+			tokens.push({ kind: "text", text: line.slice(cursor, index) });
+		}
+		tokens.push({ kind: codeTokenKind(tokenText), text: tokenText });
+		cursor = index + tokenText.length;
+	}
+	if (cursor < line.length) tokens.push({ kind: "text", text: line.slice(cursor) });
+	return tokens.length > 0 ? tokens : [{ kind: "text", text: line || " " }];
+}
+
+function highlightedValueClass(kind: CodeTokenKind): string {
+	if (kind === "boolean") return "text-signal-ask";
+	if (kind === "comment") return "text-muted-foreground";
+	if (kind === "heading") return "font-semibold text-primary";
+	if (kind === "key") return "text-primary";
+	if (kind === "link") return "text-primary underline decoration-primary/30";
+	if (kind === "number") return "text-signal-warn";
+	if (kind === "operator") return "text-signal-ask";
+	if (kind === "punctuation") return "text-muted-foreground";
+	if (kind === "string") return "text-signal-allow";
+	return "text-foreground";
+}
+
+function HighlightedValue({ token }: { token: CodeToken }) {
+	return (
+		<span data-token={token.kind} className={highlightedValueClass(token.kind)}>
+			{token.text}
+		</span>
+	);
+}
+
+function keyedCodeTokens(tokens: CodeToken[]): Array<{ id: string; token: CodeToken }> {
+	const counts = new Map<string, number>();
+	return tokens.map((token) => {
+		const signature = `${token.kind}:${token.text}`;
+		const count = counts.get(signature) ?? 0;
+		counts.set(signature, count + 1);
+		return { id: `${signature}:${count}`, token };
+	});
+}
+
+function yamlKeyMatch(line: string): { key: string; separator: string; value: string } | null {
+	const match = /^(\s*[\w.-]+)(\s*:\s?)(.*)$/.exec(line);
+	if (!match) return null;
+	return { key: match[1], separator: match[2], value: match[3] };
+}
+
+function HighlightedCodeLine({ line }: { line: string }) {
+	const yaml = yamlKeyMatch(line);
+	if (yaml) {
+		return (
+			<span className="block min-w-max whitespace-pre" data-token="line">
+				<span data-token="key" className={highlightedValueClass("key")}>
+					{yaml.key}
+				</span>
+				<span data-token="punctuation" className={highlightedValueClass("punctuation")}>
+					{yaml.separator}
+				</span>
+				{keyedCodeTokens(tokenizeCodeLine(yaml.value)).map(({ id, token }) => (
+					<HighlightedValue key={id} token={token} />
+				))}
+			</span>
+		);
+	}
+
+	return (
+		<span className="block min-w-max whitespace-pre" data-token="line">
+			{keyedCodeTokens(tokenizeCodeLine(line)).map(({ id, token }) => (
+				<HighlightedValue key={id} token={token} />
+			))}
+		</span>
+	);
+}
+
+function CodeBlock({ text }: { text: string }) {
+	return (
+		<pre className="max-h-56 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground whitespace-pre-wrap">
+			{keyedDiffLines(text).map(({ id, line }) => (
+				<HighlightedCodeLine key={id} line={line} />
+			))}
+		</pre>
+	);
+}
+
+function PrettyJsonValue({
+	value,
+	compactPatchText = false,
+}: {
+	value: unknown;
+	compactPatchText?: boolean;
+}) {
+	if (typeof value === "string") {
+		if (isDiffText(value)) {
+			if (compactPatchText) {
+				return (
+					<span className="break-words text-foreground">
+						{isApplyPatchText(value)
+							? "Captured apply_patch body. Use the dedicated diff panel for the pretty view or switch to Raw for the original JSON."
+							: "Captured diff text. Use the dedicated diff panel for the pretty view or switch to Raw for the original JSON."}
+					</span>
+				);
+			}
+			return (
+				<DiffPreview
+					text={isApplyPatchText(value) ? applyPatchToUnifiedDiff(value) : value}
+				/>
+			);
+		}
+		if (value.includes("\n") || value.length > 120) {
+			return <CodeBlock text={value} />;
+		}
+		return <span className="break-all text-foreground">{value}</span>;
+	}
+	if (typeof value === "number" || typeof value === "boolean" || value === null) {
+		return (
+			<span className="rounded bg-muted/30 px-1.5 py-0.5 text-foreground">
+				{String(value)}
+			</span>
+		);
+	}
+	return <CodeBlock text={formattedJsonValue(value)} />;
+}
+
+function PrettyJsonView({
+	text,
+	compactPatchText = false,
+}: {
+	text: string;
+	compactPatchText?: boolean;
+}) {
+	const parsed = jsonValueFromText(text);
+	const record = outputRecord(parsed);
+	if (!record) return <CodeBlock text={text} />;
+	const entries = Object.entries(record);
+	if (entries.length === 0) return <CodeBlock text="{}" />;
+	return (
+		<div className="space-y-1.5">
+			{entries.map(([key, value]) => (
+				<div
+					key={key}
+					className="rounded border border-border/20 bg-background/40 p-2"
+				>
+					<div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+						{key}
+					</div>
+					<PrettyJsonValue value={value} compactPatchText={compactPatchText} />
+				</div>
+			))}
+		</div>
+	);
+}
+
+function PayloadPanel({
+	title,
+	pretty,
+	rawText,
+}: {
+	title: string;
+	pretty: ReactNode;
+	rawText: string;
+}) {
+	const [mode, setMode] = useState<PayloadViewMode>("pretty");
+	return (
+		<section>
+			<div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+				<span className="text-muted-foreground select-none">{title}: </span>
+				<div className="flex items-center gap-1">
+					{(["pretty", "raw"] as const).map((option) => (
+						<button
+							key={option}
+							type="button"
+							aria-label={`${title} ${option} view`}
+							onClick={() => setMode(option)}
+							className={cn(
+								"rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider transition-colors",
+								mode === option
+									? "border-primary/40 bg-primary/15 text-primary"
+									: "border-border/40 bg-muted/20 text-muted-foreground hover:text-foreground",
+							)}
+						>
+							{option}
+						</button>
+					))}
+				</div>
+			</div>
+			{mode === "pretty" ? pretty : <CodeBlock text={rawText} />}
+		</section>
+	);
+}
+
+function FormattedOutputValue({ value }: { value: string }) {
+	const parsed = jsonValueFromText(value);
+	if (parsed !== null) return <PrettyJsonValue value={parsed} />;
+	return <CodeBlock text={value} />;
+}
+
+function PrettyOutputView({ text }: { text: string }) {
+	return (
+		<div className="space-y-1.5">
+			{formattedHookOutputSections(text).map((section) => (
+				<div
+					key={`${section.label}:${section.value.slice(0, 32)}`}
+					className={cn("rounded border p-2", outputSectionClass(section.variant))}
+				>
+					<div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+						{section.label}
+					</div>
+					<FormattedOutputValue value={section.value} />
+				</div>
+			))}
+		</div>
+	);
+}
+
+function DiffPreview({ text }: { text: string }) {
+	return (
+		<pre className="mt-1 max-h-56 max-w-full overflow-auto rounded border border-border/20 bg-background/50 py-2 text-foreground">
+			{keyedDiffLines(text).map(({ id, line }) => (
+				<span
+					key={id}
+					className={cn(
+						"block min-w-max px-2 whitespace-pre",
+						diffLineClass(diffLineKind(line)),
+					)}
+				>
+					{line || " "}
+				</span>
+			))}
+		</pre>
+	);
 }
 
 function outputSummary(output: Record<string, unknown> | null): string | null {
@@ -787,7 +1161,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 	const [page, setPage] = useState(0);
 	const [agentOnly, setAgentOnly] = useState(false);
 	const [openFilterMenu, setOpenFilterMenu] = useState<string | null>(null);
-	const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+	const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 	const [selectedEvents, setSelectedEvents] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -973,6 +1347,12 @@ export const SessionTimeline = memo(function SessionTimeline({
 		);
 		if (!agentOnly) return nestedMatches;
 		return nestedMatches.filter((e) => {
+			const isBlockOrDeny = e.decision === "block" || e.decision === "deny";
+			const hasFindingsOrErrors = (e.findingCount ?? 0) > 0 || (e.errorCount ?? 0) > 0;
+			if (isBlockOrDeny || hasFindingsOrErrors || e.type === "finding") {
+				return true;
+			}
+
 			if (e.type === "event" || e.type === "hook") {
 				return (
 					e.label === "PreToolUse" ||
@@ -980,9 +1360,6 @@ export const SessionTimeline = memo(function SessionTimeline({
 					e.label === "PermissionRequest" ||
 					e.label === "PostToolUseFailure"
 				);
-			}
-			if (e.type === "finding") {
-				return true;
 			}
 			if (e.type === "result") {
 				return !e.detail.startsWith("0 findings, 0 errors");
@@ -1017,17 +1394,403 @@ export const SessionTimeline = memo(function SessionTimeline({
 
 	const resetNestedPaging = () => {
 		setPage(0);
-		setExpandedEntryId(null);
+		setSelectedEntryId(null);
+	};
+	const activeFilters = useMemo(() => {
+		const list: string[] = [];
+		if (selectedEvents.size > 0) {
+			list.push(`Event: ${[...selectedEvents].join(", ")}`);
+		}
+		if (selectedTools.size > 0) {
+			list.push(`Tool: ${[...selectedTools].join(", ")}`);
+		}
+		if (selectedDecisions.size > 0) {
+			list.push(`Decision: ${[...selectedDecisions].join(", ")}`);
+		}
+		if (detailToggles.has("findings")) {
+			list.push("Has findings");
+		}
+		if (detailToggles.has("errors")) {
+			list.push("Has errors");
+		}
+		if (agentOnly) {
+			list.push("Agent actions only");
+		}
+		return list;
+	}, [selectedEvents, selectedTools, selectedDecisions, detailToggles, agentOnly]);
+
+	const clearAllFilters = () => {
+		setSelectedEvents(new Set());
+		setSelectedTools(new Set());
+		setSelectedDecisions(new Set());
+		setDetailToggles(new Set());
+		setAgentOnly(false);
+		resetNestedPaging();
+	};
+	const [metadataExpandedMap, setMetadataExpandedMap] = useState<Record<string, boolean>>({});
+
+	const defaultSelection = useMemo(() => initialTimelineSelection(filteredEntries), [filteredEntries]);
+	const activeEntryId = selectedEntryId ?? defaultSelection;
+
+	const activeEntry = useMemo(() => {
+		return filteredEntries.find((e) => e.id === activeEntryId);
+	}, [filteredEntries, activeEntryId]);
+	const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
+	const pageEntries = useMemo(() => {
+		return filteredEntries.slice(
+			page * PAGE_SIZE,
+			(page + 1) * PAGE_SIZE,
+		);
+	}, [filteredEntries, page]);
+
+
+	const pagePrimaryEntries = useMemo(() => pageEntries.filter(e => {
+		const isLifecycleOnly =
+			(e.type === "event" || e.type === "result") &&
+			(e.findingCount ?? 0) === 0 &&
+			(e.errorCount ?? 0) === 0;
+		return !isLifecycleOnly;
+	}), [pageEntries]);
+
+	const pageUnmatchedEntries = useMemo(() => pageEntries.filter(e => {
+		const isLifecycleOnly =
+			(e.type === "event" || e.type === "result") &&
+			(e.findingCount ?? 0) === 0 &&
+			(e.errorCount ?? 0) === 0;
+		return isLifecycleOnly;
+	}), [pageEntries]);
+
+	const renderTimelineRow = (entry: TimelineEntry, isUnmatched = false) => {
+		const isSelected = activeEntryId === entry.id;
+		const rowSummary = timelineRowSummary(entry);
+
+		const deEmphasize = isUnmatched || (
+			(entry.type === "event" || entry.type === "result") &&
+			(entry.findingCount ?? 0) === 0 &&
+			(entry.errorCount ?? 0) === 0
+		);
+
+		return (
+			<div
+				key={entry.id}
+				className={cn(
+					"relative flex flex-col mb-3 last:mb-0 group border-b border-border/10 pb-2 transition-all",
+					deEmphasize && "opacity-60 hover:opacity-100",
+					isSelected && "bg-primary/5 rounded px-2 -mx-2 border-primary/20",
+				)}
+			>
+				<button
+					type="button"
+					aria-label={`${entry.type} ${entry.label} ${entry.resultLabel ?? ""}`.trim()}
+					aria-expanded={isSelected}
+					className={cn(
+						"relative flex w-full cursor-pointer items-start gap-3 rounded p-1.5 pr-9 text-left transition-colors hover:bg-muted/10 focus:outline-none focus:ring-1 focus:ring-primary/50",
+						isSelected && "bg-primary/10 ring-1 ring-primary/30",
+					)}
+					onClick={() => {
+						setSelectedEntryId(entry.id);
+					}}
+				>
+					<div className="absolute left-0 top-3 z-10 flex items-center justify-center">
+						{entry.decision === "block" || entry.decision === "deny" ? (
+							<AlertOctagon className="w-3.5 h-3.5 text-signal-deny fill-signal-deny/10" />
+						) : entry.decision === "ask" || entry.decision === "warn" || entry.decision === "context" ? (
+							<ShieldAlert className="w-3.5 h-3.5 text-signal-ask fill-signal-ask/10" />
+						) : entry.decision === "allow" ? (
+							<CheckCircle2 className="w-3.5 h-3.5 text-signal-allow fill-signal-allow/10" />
+						) : (
+							<Info className="w-3.5 h-3.5 text-muted-foreground" />
+						)}
+					</div>
+
+					<div className="ml-5 min-w-0 flex-1">
+						<div className="flex items-center gap-2">
+							<span
+								className={cn(
+									"text-[9px] uppercase px-1 py-0.5 rounded font-bold tracking-wider",
+									entryTypeClass(entry.type),
+								)}
+							>
+								{entry.type}
+							</span>
+							<span className="text-xs font-semibold truncate">
+								{rowSummary.title}
+							</span>
+							<div className="ml-auto flex shrink-0 items-center gap-1.5">
+								<span className="text-[9px] text-muted-foreground">
+									{new Date(entry.time).toLocaleTimeString()}
+								</span>
+							</div>
+						</div>
+						<div className="text-[10px] text-muted-foreground mt-0.5 truncate font-mono">
+							{rowSummary.subtitle}
+						</div>
+					</div>
+				</button>
+				<div className="absolute right-2 top-2 z-20">
+					<FlagButton
+						itemType={entry.flagItemType}
+						itemId={entry.flagItemId}
+						label={entry.flagLabel}
+						compact
+					/>
+				</div>
+
+				{isSelected && (
+					<div className="md:hidden mt-2 pl-4">
+						{renderDetailPane(entry)}
+					</div>
+				)}
+			</div>
+		);
 	};
 
-	const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
-	const pageEntries = filteredEntries.slice(
-		page * PAGE_SIZE,
-		(page + 1) * PAGE_SIZE,
+	const renderDetailPane = (entry: TimelineEntry) => {
+		const diffPayload = focusedEditPayload(entry);
+		const missingBodyReason = hasToolCallBody(
+			entry,
+			diffPayload?.prettyText ?? null,
+		)
+			? null
+			: missingToolCallBodyReason(entry);
+
+		const hasMeaningfulEvidence = Boolean(
+			entry.command ||
+				entry.tool_output ||
+				(entry.findings && entry.findings.length > 0) ||
+				entry.edit_before ||
+				entry.edit_after ||
+				entry.tool_input_json,
+		);
+
+		const isMetaExpanded = metadataExpandedMap[entry.id] ?? !hasMeaningfulEvidence;
+		const corrStatus = correlationStatus(entry);
+
+		return (
+			<div className="bg-muted/15 border border-border/20 p-3 rounded text-[11px] space-y-3 font-sans">
+				<TimelineVerdictStrip entry={entry} />
+
+				{entry.candidate_paths && entry.candidate_paths.length > 0 && (
+					<div className="font-mono">
+						<span className="text-muted-foreground select-none">File(s): </span>
+						<span className="text-foreground break-all">
+							{entry.candidate_paths.join(", ")}
+						</span>
+					</div>
+				)}
+
+				{entry.tool_context && entry.tool_context.length > 0 && (
+					<div className="font-mono">
+						<span className="text-muted-foreground select-none">
+							{toolContextLabel(entry)}:{" "}
+						</span>
+						<span className="text-foreground break-all">
+							{entry.tool_context.join(", ")}
+						</span>
+					</div>
+				)}
+
+				{entry.url_context && entry.url_context.length > 0 && (
+					<div className="font-mono">
+						<span className="text-muted-foreground select-none">URL(s): </span>
+						<span className="text-foreground break-all">
+							{entry.url_context.join(", ")}
+						</span>
+					</div>
+				)}
+
+				{entry.findings && entry.findings.length > 0 && (
+					<div className="space-y-1.5">
+						<span className="text-muted-foreground font-semibold">
+							Grouped finding(s):
+						</span>
+						<div className="space-y-1.5">
+							{entry.findings.map((finding) => (
+								<div
+									key={finding.id}
+									className="rounded border border-signal-ask/20 bg-signal-ask/5 p-2"
+								>
+									<div className="flex flex-wrap items-center gap-2">
+										<span className="rounded bg-signal-ask/10 px-1 py-0.5 uppercase text-signal-ask font-bold text-[9px]">
+											Finding
+										</span>
+										<span className="font-bold text-foreground text-[10px]">
+											{finding.ruleId}
+										</span>
+									</div>
+									<div className="mt-1 text-muted-foreground font-mono">
+										{findingSummary(finding)}
+									</div>
+									{finding.additionalContext && (
+										<div className="mt-1 break-all text-foreground font-mono bg-background/25 p-1 rounded">
+											{finding.additionalContext}
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					</div>
+				)}
+
+				{(entry.model || entry.provider) && (
+					<div className="font-mono text-muted-foreground">
+						AI Model:{" "}
+						<span className="text-foreground font-semibold">
+							{entry.model || "Unknown"}
+						</span>{" "}
+						({entry.provider || "Unknown"})
+					</div>
+				)}
+
+				{entry.command && (
+					<PayloadPanel
+						title="Command"
+						pretty={<CodeBlock text={entry.command} />}
+						rawText={entry.command}
+					/>
+				)}
+
+				{diffPayload && (
+					<PayloadPanel
+						title="Patch / focused diff"
+						pretty={<DiffPreview text={diffPayload.prettyText} />}
+						rawText={diffPayload.rawText}
+					/>
+				)}
+
+				{(entry.edit_before || entry.edit_after) && (
+					<div className="space-y-1">
+						<span className="text-muted-foreground font-semibold">
+							Focused edit:
+						</span>
+						<div className="grid gap-2 md:grid-cols-2">
+							{entry.edit_before && (
+								<div className="min-w-0">
+									<div className="mb-1 text-muted-foreground text-[9px] uppercase tracking-wider">
+										Before
+									</div>
+									<pre className="max-h-48 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground font-mono whitespace-pre-wrap">
+										{entry.edit_before}
+									</pre>
+								</div>
+							)}
+							{entry.edit_after && (
+								<div className="min-w-0">
+									<div className="mb-1 text-muted-foreground text-[9px] uppercase tracking-wider">
+										After
+									</div>
+									<pre className="max-h-48 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground font-mono whitespace-pre-wrap">
+										{entry.edit_after}
+									</pre>
+								</div>
+							)}
+						</div>
+					</div>
+				)}
+
+				{entry.tool_input_json && (
+					<PayloadPanel
+						title="Tool input"
+						pretty={
+							<PrettyJsonView text={entry.tool_input_json} compactPatchText />
+						}
+						rawText={entry.tool_input_json}
+					/>
+				)}
+
+				{entry.tool_output && (
+					<PayloadPanel
+						title="Output"
+						pretty={<PrettyOutputView text={entry.tool_output} />}
+						rawText={entry.tool_output}
+					/>
+				)}
+
+				{missingBodyReason && (
+					<div className="rounded border border-signal-warn/20 bg-signal-warn/5 p-2.5 text-signal-warn">
+						<div className="mb-1 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
+							{corrStatus === "historical-missing-input"
+								? "Historical Trace Limitation"
+								: "Tool input unavailable"}
+						</div>
+						<div className="text-foreground">{missingBodyReason}</div>
+					</div>
+				)}
+
+				{!hasDrilldown(entry) && entry.type !== "hook" && (
+					<div className="text-muted-foreground italic">
+						No correlated drill-down data available for this entry.
+					</div>
+				)}
+
+				<div className="border border-border/20 rounded bg-background/30 overflow-hidden mt-3">
+					<button
+						type="button"
+						onClick={() =>
+							setMetadataExpandedMap((curr) => ({
+								...curr,
+								[entry.id]: !isMetaExpanded,
+							}))
+						}
+						className="w-full flex items-center justify-between px-3 py-1.5 bg-muted/20 hover:bg-muted/30 text-[9px] text-muted-foreground uppercase font-bold tracking-wider"
+					>
+						<span>Trace Metadata</span>
+						<span>{isMetaExpanded ? "Hide" : "Show"}</span>
+					</button>
+					{isMetaExpanded && (
+						<div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-3 font-mono border-t border-border/10 text-[10px]">
+							{auditRows(entry).map(([label, value]) => (
+								<div key={label} className="min-w-0">
+									<span className="text-muted-foreground select-none">
+										{label}:{" "}
+									</span>
+									<span className="text-foreground break-all">{value}</span>
+								</div>
+							))}
+							<div className="min-w-0 col-span-2 mt-1 pt-1 border-t border-border/10">
+								<span className="text-muted-foreground select-none">
+									Correlation Status:{" "}
+								</span>
+								<span className="text-foreground font-bold capitalize">
+									{corrStatus}
+								</span>
+							</div>
+						</div>
+					)}
+				</div>
+			</div>
+		);
+	};
+
+	const renderPagination = () => (
+		<div className="flex items-center justify-between px-4 py-2 border-t border-border text-[10px] text-muted-foreground sticky bottom-0 bg-background/95 backdrop-blur-sm">
+			<span>{filteredEntries.length} entries total</span>
+			<div className="flex gap-2">
+				<button
+					type="button"
+					disabled={page === 0}
+					onClick={() => setPage((p) => p - 1)}
+					className="hover:text-foreground disabled:opacity-30"
+				>
+					← Prev
+				</button>
+				<span>
+					{page + 1} / {pageCount}
+				</span>
+				<button
+					type="button"
+					disabled={page + 1 >= pageCount}
+					onClick={() => setPage((p) => p + 1)}
+					className="hover:text-foreground disabled:opacity-30"
+				>
+					Next →
+				</button>
+			</div>
+		</div>
 	);
 
 	return (
-		<div className="flex h-[520px] min-w-0 w-full flex-col overflow-hidden border-t border-border bg-background/50">
+		<div className="flex h-[600px] min-w-0 w-full flex-col overflow-hidden border-t border-border bg-background/50">
 			<div className="flex flex-col gap-2 px-4 py-2 border-b border-border bg-background/30 text-xs">
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<span className="text-muted-foreground font-medium">
@@ -1043,7 +1806,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 							}}
 							className="rounded border-border text-primary focus:ring-primary h-3 w-3"
 						/>
-						Focus on Agent Behavior (Hide Noise)
+						Agent actions only
 					</label>
 				</div>
 				<div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[10px]">
@@ -1055,9 +1818,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 							options={eventOptions}
 							selected={selectedEvents}
 							onToggle={(eventName) => {
-								setSelectedEvents((current) =>
-									toggleSetValue(current, eventName),
-								);
+								setSelectedEvents((current) => toggleSetValue(current, eventName));
 								resetNestedPaging();
 							}}
 						/>
@@ -1070,9 +1831,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 							options={toolOptions}
 							selected={selectedTools}
 							onToggle={(toolName) => {
-								setSelectedTools((current) =>
-									toggleSetValue(current, toolName),
-								);
+								setSelectedTools((current) => toggleSetValue(current, toolName));
 								resetNestedPaging();
 							}}
 						/>
@@ -1085,22 +1844,18 @@ export const SessionTimeline = memo(function SessionTimeline({
 							options={decisionOptions}
 							selected={selectedDecisions}
 							onToggle={(decision) => {
-								setSelectedDecisions((current) =>
-									toggleSetValue(current, decision),
-								);
+								setSelectedDecisions((current) => toggleSetValue(current, decision));
 								resetNestedPaging();
 							}}
 						/>
 					</NestedFilterGroup>
-					<NestedFilterGroup label="Details">
+					<NestedFilterGroup label="Rows">
 						{DETAIL_TOGGLES.map((toggle) => (
 							<NestedFilterChip
 								key={toggle}
 								active={detailToggles.has(toggle)}
 								onClick={() => {
-									setDetailToggles((current) =>
-										toggleSetValue(current, toggle),
-									);
+									setDetailToggles((current) => toggleSetValue(current, toggle));
 									resetNestedPaging();
 								}}
 							>
@@ -1108,311 +1863,61 @@ export const SessionTimeline = memo(function SessionTimeline({
 							</NestedFilterChip>
 						))}
 					</NestedFilterGroup>
-				</div>
-			</div>
-			<div className="relative min-h-0 flex-1 overflow-y-auto p-4 pl-10">
-				<div className="absolute left-[21px] top-6 bottom-6 w-px bg-border" />
-				{pageEntries.map((entry) => {
-					const isExpanded = expandedEntryId === entry.id;
-					const diffText = focusedEditDiff(entry);
-					const missingToolBodyReason = hasToolCallBody(entry, diffText)
-						? null
-						: missingToolCallBodyReason(entry);
-					return (
-						<div
-							key={entry.id}
-							className="relative flex flex-col mb-3 last:mb-0 group border-b border-border/10 pb-2"
-						>
-							<button
-								type="button"
-								aria-label={`${entry.type} ${entry.label} ${entry.resultLabel ?? ""}`.trim()}
-								aria-expanded={isExpanded}
-								className={cn(
-									"relative flex w-full cursor-pointer items-start gap-3 rounded p-1.5 pr-9 text-left transition-colors hover:bg-muted/10 focus:outline-none focus:ring-1 focus:ring-primary/50",
-									isExpanded && "bg-primary/10 ring-1 ring-primary/30",
-								)}
-								onClick={() =>
-									setExpandedEntryId((current) =>
-										current === entry.id ? null : entry.id,
-									)
-								}
-							>
-								<div
-									className={cn(
-										"absolute left-0 top-3 w-[7px] h-[7px] rounded-full border border-border z-10",
-										entry.decision
-											? DECISION_DOT_STYLE[entry.decision]
-											: "bg-muted-foreground",
-									)}
-								/>
-								<div className="ml-4 min-w-0 flex-1">
-									<div className="flex items-center gap-2">
-										<span
-											className={cn(
-												"text-[10px] uppercase px-1 py-0.5 rounded",
-												entryTypeClass(entry.type),
-											)}
-										>
-											{entry.type}
-										</span>
-										<span className="text-xs font-medium truncate">
-											{entry.label}
-										</span>
-										{entry.resultLabel && (
-											<>
-												<span className="text-muted-foreground">→</span>
-												<span className="text-xs font-medium truncate">
-													{entry.resultLabel}
-												</span>
-											</>
-										)}
-										<div className="ml-auto flex shrink-0 items-center gap-1.5">
-											<span className="text-[10px] text-muted-foreground">
-												{new Date(entry.time).toLocaleTimeString()}
-											</span>
-										</div>
-									</div>
-									<div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-										{entry.resultDetail
-											? `${entry.detail} · ${entry.resultDetail}`
-											: entry.detail}
-									</div>
-								</div>
-							</button>
-							<div className="absolute right-2 top-2 z-20">
-								<FlagButton
-									itemType={entry.flagItemType}
-									itemId={entry.flagItemId}
-									label={entry.flagLabel}
-									compact
-								/>
-							</div>
-							{isExpanded && (
-								<div className="ml-10 mt-2 p-3 bg-muted/20 border border-border/30 rounded text-[10px] space-y-2 font-mono">
-									<div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded border border-border/20 bg-background/30 p-2">
-										{auditRows(entry).map(([label, value]) => (
-											<div key={label} className="min-w-0">
-												<span className="text-muted-foreground select-none">
-													{label}:{" "}
-												</span>
-												<span className="text-foreground break-all">
-													{value}
-												</span>
-											</div>
-										))}
-									</div>
-									{entry.candidate_paths &&
-										entry.candidate_paths.length > 0 && (
-											<div>
-												<span className="text-muted-foreground select-none">
-													File(s):{" "}
-												</span>
-												<span className="text-foreground break-all">
-													{entry.candidate_paths.join(", ")}
-												</span>
-											</div>
-										)}
-									{entry.tool_context && entry.tool_context.length > 0 && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												{toolContextLabel(entry)}:{" "}
-											</span>
-											<span className="text-foreground break-all">
-												{entry.tool_context.join(", ")}
-											</span>
-										</div>
-									)}
-									{entry.url_context && entry.url_context.length > 0 && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												URL(s):{" "}
-											</span>
-											<span className="text-foreground break-all">
-												{entry.url_context.join(", ")}
-											</span>
-										</div>
-									)}
-									{entry.findings && entry.findings.length > 0 && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Grouped finding(s):{" "}
-											</span>
-											<div className="mt-1 space-y-1">
-												{entry.findings.map((finding) => (
-													<div
-														key={finding.id}
-														className="rounded border border-signal-ask/20 bg-signal-ask/5 p-2"
-													>
-														<div className="flex flex-wrap items-center gap-2">
-															<span className="rounded bg-signal-ask/10 px-1 py-0.5 uppercase text-signal-ask">
-																Finding
-															</span>
-															<span className="font-medium text-foreground">
-																{finding.ruleId}
-															</span>
-														</div>
-														<div className="mt-1 text-muted-foreground">
-															{findingSummary(finding)}
-														</div>
-														{finding.additionalContext && (
-															<div className="mt-1 break-all text-foreground">
-																{finding.additionalContext}
-															</div>
-														)}
-													</div>
-												))}
-											</div>
-										</div>
-									)}
-									{(entry.model || entry.provider) && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												AI Model:{" "}
-											</span>
-											<span className="text-foreground">
-												{entry.model || "Unknown"} (
-												{entry.provider || "Unknown"})
-											</span>
-										</div>
-									)}
-									{entry.command && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Command:{" "}
-											</span>
-											<pre className="mt-1 p-2 bg-background/50 border border-border/20 rounded max-w-full overflow-x-auto text-foreground whitespace-pre-wrap">
-												{entry.command}
-											</pre>
-										</div>
-									)}
-									{diffText && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Patch / focused diff:{" "}
-											</span>
-											<pre className="mt-1 max-h-56 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground whitespace-pre-wrap">
-												{diffText}
-											</pre>
-										</div>
-									)}
-									{(entry.edit_before || entry.edit_after) && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Focused edit:{" "}
-											</span>
-											<div className="mt-1 grid gap-2 md:grid-cols-2">
-												{entry.edit_before && (
-													<div className="min-w-0">
-														<div className="mb-1 text-muted-foreground">
-															Before
-														</div>
-														<pre className="max-h-48 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground whitespace-pre-wrap">
-															{entry.edit_before}
-														</pre>
-													</div>
-												)}
-												{entry.edit_after && (
-													<div className="min-w-0">
-														<div className="mb-1 text-muted-foreground">
-															After
-														</div>
-														<pre className="max-h-48 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground whitespace-pre-wrap">
-															{entry.edit_after}
-														</pre>
-													</div>
-												)}
-											</div>
-										</div>
-									)}
-									{entry.tool_input_json && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Tool input:{" "}
-											</span>
-											<pre className="mt-1 max-h-56 max-w-full overflow-auto rounded border border-border/20 bg-background/50 p-2 text-foreground whitespace-pre-wrap">
-												{entry.tool_input_json}
-											</pre>
-										</div>
-									)}
-									{entry.tool_output && (
-										<div>
-											<span className="text-muted-foreground select-none">
-												Output:{" "}
-											</span>
-											<div className="mt-1 space-y-1.5">
-												{formattedHookOutputSections(entry.tool_output).map(
-													(section) => (
-														<div
-															key={`${section.label}:${section.value.slice(0, 32)}`}
-															className={cn(
-																"rounded border p-2",
-																outputSectionClass(section.variant),
-															)}
-														>
-															<div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
-																{section.label}
-															</div>
-															<pre className="max-h-56 max-w-full overflow-auto whitespace-pre-wrap text-foreground">
-																{section.value}
-															</pre>
-														</div>
-													),
-												)}
-											</div>
-										</div>
-									)}
-									{missingToolBodyReason && (
-										<div className="rounded border border-signal-warn/20 bg-signal-warn/5 p-2 text-signal-warn">
-											<div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
-												Tool input unavailable
-											</div>
-											<div className="text-foreground">
-												{missingToolBodyReason}
-											</div>
-										</div>
-									)}
-									{!hasDrilldown(entry) && entry.type !== "hook" && (
-										<div className="text-muted-foreground italic">
-											No correlated drill-down data available for this entry.
-										</div>
-									)}
-								</div>
-							)}
+				{activeFilters.length > 0 && (
+					<div className="flex flex-wrap items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-border/10 text-[10px]">
+						<div className="flex items-center gap-1.5 text-muted-foreground">
+							<span className="font-semibold select-none">Active Filters:</span>
+							<span className="text-foreground">{activeFilters.join(" | ")}</span>
 						</div>
-					);
-				})}
-				{pageEntries.length === 0 && (
-					<div className="rounded border border-border/30 bg-muted/10 px-3 py-4 text-center text-[10px] text-muted-foreground">
-						No timeline entries match the current filters.
+						<button
+							type="button"
+							onClick={clearAllFilters}
+							className="flex items-center gap-1 text-primary hover:text-primary-foreground font-medium transition-colors"
+						>
+							<FilterX className="w-3 h-3" />
+							Clear timeline filters
+						</button>
 					</div>
 				)}
-			</div>
-			{pageCount > 1 && (
-				<div className="flex items-center justify-between px-4 py-2 border-t border-border text-[10px] text-muted-foreground sticky bottom-0 bg-background/95 backdrop-blur-sm">
-					<span>{filteredEntries.length} entries total</span>
-					<div className="flex gap-2">
-						<button
-							type="button"
-							disabled={page === 0}
-							onClick={() => setPage((p) => p - 1)}
-							className="hover:text-foreground disabled:opacity-30"
-						>
-							← Prev
-						</button>
-						<span>
-							{page + 1} / {pageCount}
-						</span>
-						<button
-							type="button"
-							disabled={page + 1 >= pageCount}
-							onClick={() => setPage((p) => p + 1)}
-							className="hover:text-foreground disabled:opacity-30"
-						>
-							Next →
-						</button>
-					</div>
 				</div>
-			)}
+			</div>
+
+			<div className="flex flex-1 min-h-0 md:flex-row flex-col overflow-hidden">
+				<div className="flex-[4] flex flex-col min-w-0 border-r border-border/40 overflow-y-auto pr-1">
+					<div className="p-4 pl-10 relative">
+						<div className="absolute left-[21px] top-6 bottom-6 w-px bg-border" />
+
+						{pagePrimaryEntries.map((entry) => renderTimelineRow(entry))}
+
+						{pageUnmatchedEntries.length > 0 && (
+							<div className="mt-4">
+								<h4 className="text-[9px] text-muted-foreground uppercase tracking-wider mb-2 font-bold pl-1.5">
+									Unmatched trace events ({pageUnmatchedEntries.length})
+								</h4>
+								{pageUnmatchedEntries.map((entry) => renderTimelineRow(entry, true))}
+							</div>
+						)}
+
+						{pageEntries.length === 0 && (
+							<div className="rounded border border-border/30 bg-muted/10 px-3 py-4 text-center text-[10px] text-muted-foreground">
+								No timeline entries match the current filters.
+							</div>
+						)}
+					</div>
+
+					{pageCount > 1 && renderPagination()}
+				</div>
+
+				<div className="hidden md:flex flex-[6] flex-col min-w-0 bg-background/25 overflow-y-auto p-4 sticky top-0 border-l border-border/20">
+					{activeEntry ? (
+						renderDetailPane(activeEntry)
+					) : (
+						<div className="flex flex-col items-center justify-center h-full text-muted-foreground italic text-xs">
+							Select an event from the timeline to view details.
+						</div>
+					)}
+				</div>
+			</div>
 		</div>
 	);
 });
@@ -1475,11 +1980,25 @@ function NestedMultiSelectMenu<T extends string>({
 	const isOpen = openMenuId === menuId;
 	const selectionLabel =
 		selected.size === 0 ? "All" : `${selected.size} selected`;
+	const triggerRef = useRef<HTMLButtonElement>(null);
+
+	useEffect(() => {
+		if (!isOpen) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				setOpenMenuId(null);
+				triggerRef.current?.focus();
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isOpen, setOpenMenuId]);
 
 	return (
 		<div className="relative">
 			<button
 				type="button"
+				ref={triggerRef}
 				onClick={() => setOpenMenuId(isOpen ? null : menuId)}
 				className={cn(
 					"rounded border px-1.5 py-0.5 transition-colors",

@@ -1,16 +1,49 @@
-export type Platform = "claude" | "codex" | "opencode";
+export type Platform = "claude" | "codex" | "opencode" | "cursor" | "unknown";
+export type PlatformSource = "explicit" | "defaulted" | "normalized" | "unknown";
+export type LineageRole = "parent" | "child" | "mirror" | "child_mirror" | "raw";
+export type LineageConfidence = "explicit" | "inferred" | "none";
 
-export type EventName =
-	| "SessionStart"
-	| "PreToolUse"
-	| "PermissionRequest"
-	| "PostToolUse"
-	| "PostToolUseFailure"
-	| "Stop"
-	| "UserPromptSubmit"
-	| "InstructionsLoaded"
-	| "SubagentStop"
-	| "ConfigChange";
+export const EVENT_NAMES = [
+	"AfterAgentResponse",
+	"AfterAgentThought",
+	"CommandExecuted",
+	"ConfigChange",
+	"CwdChanged",
+	"Elicitation",
+	"ElicitationResult",
+	"FileChanged",
+	"InstructionsLoaded",
+	"Notification",
+	"PermissionDenied",
+	"PermissionReplied",
+	"PermissionRequest",
+	"PostCompact",
+	"PostToolBatch",
+	"PostToolUse",
+	"PostToolUseFailure",
+	"PreCompact",
+	"PreToolUse",
+	"SessionEnd",
+	"SessionError",
+	"SessionStart",
+	"SessionStatus",
+	"Setup",
+	"ShellEnv",
+	"Stop",
+	"StopFailure",
+	"SubagentStart",
+	"SubagentStop",
+	"TaskCompleted",
+	"TaskCreated",
+	"TeammateIdle",
+	"UserPromptExpansion",
+	"UserPromptSubmit",
+	"WorkspaceOpen",
+	"WorktreeCreate",
+	"WorktreeRemove",
+] as const;
+
+export type EventName = (typeof EVENT_NAMES)[number];
 
 export type Decision =
 	| "allow"
@@ -31,6 +64,14 @@ export interface TraceMetadata {
 	degraded_reason?: string | null;
 	enforcement_mode?: EnforcementMode | string | null;
 	resolved_repo_root?: string | null;
+	parent_session_id?: string | null;
+	root_session_id?: string | null;
+	origin_platform?: Platform | null;
+	origin_session_id?: string | null;
+	platform_source?: PlatformSource | null;
+	subagent_type?: string | null;
+	spawn_description?: string | null;
+	lineage_role?: LineageRole | null;
 }
 
 export interface HookEvent extends TraceMetadata {

@@ -1,15 +1,19 @@
 import { useMemo } from "react";
 import { useTraceDataSource } from "@/context/useTraceDataSource";
 import { mockConfig } from "@/data/mockTraces";
+import type { SessionData, SessionGroup } from "@/lib/sessionHelpers";
 import type {
 	Decision,
 	EventName,
 	FilterState,
 	HookEvent,
 	HookResult,
+	LineageConfidence,
+	LineageRole,
 	OperationalContext,
 	OperationalCountRow,
 	Platform,
+	PlatformSource,
 	RuleFinding,
 	Severity,
 	SubprocessRun,
@@ -214,7 +218,7 @@ interface SessionAggregate {
 	subprocesses: SubprocessRun[];
 }
 
-interface SessionSummary extends SessionAggregate {
+interface SessionSummary extends SessionAggregate, SessionData {
 	id: string;
 	eventCount: number;
 	tools: string[];
@@ -226,7 +230,8 @@ interface SessionSummary extends SessionAggregate {
 }
 
 interface TraceSessionIndexes {
-	sessions: SessionSummary[];
+	sessions: SessionData[];
+	sessionGroups: SessionGroup[];
 	sessionDecisions: Map<string, Decision[]>;
 	sessionPathCounts: Map<string, number>;
 	hottestRepos: Array<{ repo: string; count: number }>;
@@ -247,6 +252,8 @@ function sessionBucket(
 			subprocesses: [],
 		};
 		sessionMap.set(sessionId, bucket);
+	} else if (bucket.platform === "unknown" && platform !== "unknown") {
+		bucket.platform = platform;
 	}
 	return bucket;
 }
@@ -268,6 +275,245 @@ function repoLabelForPath(path: string): string {
 	}
 	if (segments.length >= 3 && segments[0] === "home") return segments[2];
 	return segments[0] || path;
+}
+
+type LineageRecord = TraceMetadata & { platform?: Platform; timestamp?: string };
+
+function sessionRecords(data: SessionAggregate): LineageRecord[] {
+	return [...data.events, ...data.findings, ...data.results];
+}
+
+function firstString(
+	records: LineageRecord[],
+	key: keyof TraceMetadata,
+): string | null | undefined {
+	for (const record of records) {
+		const value = record[key];
+		if (typeof value === "string" && value.trim()) return value;
+		if (value === null) return null;
+	}
+	return undefined;
+}
+
+function firstPlatform(records: LineageRecord[]): Platform | null | undefined {
+	for (const record of records) {
+		const value = record.origin_platform;
+		if (value) return value;
+		if (value === null) return null;
+	}
+	return undefined;
+}
+
+function firstPlatformSource(
+	records: LineageRecord[],
+): PlatformSource | null | undefined {
+	for (const record of records) {
+		const value = record.platform_source;
+		if (value) return value;
+		if (value === null) return null;
+	}
+	return undefined;
+}
+
+function firstLineageRole(
+	records: LineageRecord[],
+): LineageRole | null | undefined {
+	for (const record of records) {
+		const value = record.lineage_role;
+		if (value) return value;
+		if (value === null) return null;
+	}
+	return undefined;
+}
+
+function lineageConfidenceFor(
+	lineage: Pick<
+		SessionData,
+		| "parentSessionId"
+		| "rootSessionId"
+		| "originSessionId"
+		| "originPlatform"
+		| "lineageRole"
+	>,
+): LineageConfidence {
+	return lineage.parentSessionId ||
+		lineage.rootSessionId ||
+		lineage.originSessionId ||
+		lineage.originPlatform ||
+		lineage.lineageRole
+		? "explicit"
+		: "none";
+}
+
+function deriveLineageRole(
+	recordRole: LineageRole | null | undefined,
+	parentSessionId: string | null | undefined,
+	originSessionId: string | null | undefined,
+): LineageRole | null {
+	if (recordRole) return recordRole;
+	if (parentSessionId && originSessionId) return "child_mirror";
+	if (parentSessionId) return "child";
+	if (originSessionId) return "mirror";
+	return "raw";
+}
+
+function sessionPlatformList(records: LineageRecord[], fallback: Platform): Platform[] {
+	const platforms = new Set<Platform>();
+	for (const record of records) {
+		if (record.platform) platforms.add(record.platform);
+		if (record.origin_platform) platforms.add(record.origin_platform);
+	}
+	platforms.add(fallback);
+	return Array.from(platforms).sort();
+}
+
+function lineageRootFor(session: SessionData): string {
+	return (
+		session.rootSessionId ||
+		session.parentSessionId ||
+		session.originSessionId ||
+		session.id
+	);
+}
+
+function uniqueSessions<T extends SessionData>(sessions: T[]): T[] {
+	const seen = new Set<string>();
+	return sessions.filter((session) => {
+		if (seen.has(session.id)) return false;
+		seen.add(session.id);
+		return true;
+	});
+}
+
+function timestampMs(item: { timestamp?: string }): number {
+	const parsed = Date.parse(item.timestamp ?? "");
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortByTimestamp<T extends { timestamp?: string }>(items: T[]): T[] {
+	return [...items].sort((a, b) => timestampMs(a) - timestampMs(b));
+}
+
+function mergeGroupSession(
+	group: SessionGroup,
+	sessionsById: Map<string, SessionSummary>,
+): SessionSummary {
+	const primary = sessionsById.get(group.primarySession.id);
+	if (!primary) {
+		throw new Error(`Missing primary session for group ${group.id}`);
+	}
+	const sourceSessions = uniqueSessions(
+		group.rawSessionIds.flatMap((id) => {
+			const session = sessionsById.get(id);
+			return session ? [session] : [];
+		}),
+	);
+	const sessionsToMerge = sourceSessions.length > 0 ? sourceSessions : [primary];
+	const events = sortByTimestamp(sessionsToMerge.flatMap((session) => session.events));
+	const findings = sortByTimestamp(
+		sessionsToMerge.flatMap((session) => session.findings),
+	);
+	const results = sortByTimestamp(sessionsToMerge.flatMap((session) => session.results));
+	const subprocesses = sortByTimestamp(
+		sessionsToMerge.flatMap((session) => session.subprocesses),
+	);
+	const tools = [...new Set(events.map((event) => event.tool_name).filter(Boolean))];
+	const languages = [...new Set(events.flatMap((event) => event.languages ?? []))];
+	const pathCount = new Set(events.flatMap((event) => event.candidate_paths ?? []))
+		.size;
+	const allTimestamps = [...events, ...findings, ...results, ...subprocesses].map(
+		timestampMs,
+	).filter((timestamp) => timestamp > 0);
+	const duration =
+		allTimestamps.length > 1
+			? Math.max(...allTimestamps) - Math.min(...allTimestamps)
+			: 0;
+	const latestTimestamp =
+		allTimestamps.length > 0 ? Math.max(...allTimestamps) : primary.latestTimestamp;
+	const decisions = [
+		...results.map(traceDecision),
+		...findings.map((finding) => finding.decision ?? "context"),
+	];
+	const platform =
+		primary.platform === "unknown"
+			? (group.platforms.find((item) => item !== "unknown") ?? primary.platform)
+			: primary.platform;
+
+	return {
+		...primary,
+		platform,
+		events,
+		findings,
+		results,
+		subprocesses,
+		childSessions: group.childSessions,
+		mirrorSessions: group.mirrorSessions,
+		rawSessionIds: group.rawSessionIds,
+		platforms: group.platforms,
+		lineageConfidence: group.lineageConfidence,
+		eventCount: events.length,
+		tools,
+		languages,
+		pathCount,
+		finalOutcome: finalOutcomeFor(decisions),
+		duration,
+		latestTimestamp,
+	};
+}
+
+function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
+	const buckets = new Map<string, SessionSummary[]>();
+	for (const session of sessions) {
+		const root = lineageRootFor(session);
+		const bucket = buckets.get(root) ?? [];
+		bucket.push(session);
+		buckets.set(root, bucket);
+	}
+	return Array.from(buckets.entries())
+		.map(([id, groupedSessions]) => {
+			const primarySession =
+				groupedSessions.find((session) => session.id === id) ??
+				groupedSessions.find((session) => session.lineageRole === "parent") ??
+				groupedSessions[0];
+			const related = groupedSessions.filter(
+				(session) => session.id !== primarySession.id,
+			);
+			const childSessions = related.filter(
+				(session) =>
+					session.lineageRole === "child" ||
+					session.lineageRole === "child_mirror" ||
+					Boolean(session.parentSessionId),
+			);
+			const mirrorSessions = related.filter(
+				(session) =>
+					session.lineageRole === "mirror" ||
+					session.lineageRole === "child_mirror" ||
+					Boolean(session.originSessionId),
+			);
+			const platforms = Array.from(
+				new Set(groupedSessions.flatMap((session) => session.platforms ?? [session.platform])),
+			).sort();
+			const confidence: LineageConfidence = groupedSessions.some(
+				(session) => session.lineageConfidence === "explicit",
+			)
+				? "explicit"
+				: groupedSessions.length > 1
+					? "inferred"
+					: "none";
+			return {
+				id,
+				primarySession,
+				childSessions: uniqueSessions(childSessions),
+				mirrorSessions: uniqueSessions(mirrorSessions),
+				rawSessionIds: groupedSessions.map((session) => session.id),
+				lineageConfidence: confidence,
+				platforms,
+			};
+		})
+		.sort(
+			(a, b) =>
+				b.primarySession.latestTimestamp - a.primarySession.latestTimestamp,
+		);
 }
 
 export function buildTraceSessionIndexes(
@@ -310,10 +556,24 @@ export function buildTraceSessionIndexes(
 	for (const subprocess of subprocesses) {
 		sessionMap.get(subprocess.session_id)?.subprocesses.push(subprocess);
 	}
-
-	return {
-		sessions: Array.from(sessionMap.entries())
-			.map(([id, data]) => {
+	const sessions = Array.from(sessionMap.entries())
+		.map(([id, data]) => {
+				const records = sessionRecords(data);
+				const parentSessionId = firstString(records, "parent_session_id");
+				const rootSessionId = firstString(records, "root_session_id");
+				const originSessionId = firstString(records, "origin_session_id");
+				const lineageRole = deriveLineageRole(
+					firstLineageRole(records),
+					parentSessionId,
+					originSessionId,
+				);
+				const lineageFields = {
+					parentSessionId,
+					rootSessionId,
+					originPlatform: firstPlatform(records),
+					originSessionId,
+					lineageRole,
+				};
 				const tools = [
 					...new Set(data.events.map((event) => event.tool_name).filter(Boolean)),
 				];
@@ -333,6 +593,13 @@ export function buildTraceSessionIndexes(
 				return {
 					id,
 					...data,
+					platforms: sessionPlatformList(records, data.platform),
+					...lineageFields,
+					platformSource: firstPlatformSource(records),
+					subagentType: firstString(records, "subagent_type"),
+					spawnDescription: firstString(records, "spawn_description"),
+					lineageConfidence: lineageConfidenceFor(lineageFields),
+					rawSessionIds: [id],
 					eventCount: data.events.length,
 					tools,
 					languages,
@@ -341,8 +608,17 @@ export function buildTraceSessionIndexes(
 					duration,
 					latestTimestamp,
 				};
-			})
-			.sort((a, b) => b.latestTimestamp - a.latestTimestamp),
+		})
+		.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+	const sessionGroups = buildSessionGroups(sessions);
+	const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+	const groupedSessions = sessionGroups.map((group) =>
+		mergeGroupSession(group, sessionsById),
+	);
+
+	return {
+		sessions: groupedSessions,
+		sessionGroups,
 		sessionDecisions,
 		sessionPathCounts: new Map(
 			Array.from(sessionPathSets.entries()).map(([id, paths]) => [
@@ -639,7 +915,7 @@ export function useTraceData(filters: FilterState) {
 	const sessionIndexes = useMemo(() => {
 		return buildTraceSessionIndexes(events, rules, results, subprocesses);
 	}, [events, results, rules, subprocesses]);
-	const { sessions } = sessionIndexes;
+	const { sessions, sessionGroups } = sessionIndexes;
 
 	const {
 		asyncPassCount,
@@ -878,6 +1154,7 @@ export function useTraceData(filters: FilterState) {
 			topRules,
 			duplicationByRule,
 			sessions,
+			sessionGroups,
 			async: {
 				passCount: asyncPassCount,
 				failCount: asyncFailCount,
@@ -908,6 +1185,7 @@ export function useTraceData(filters: FilterState) {
 			results,
 			rules,
 			sessions,
+			sessionGroups,
 			sessionIndexes,
 			skippedCount,
 			sourceStatus,

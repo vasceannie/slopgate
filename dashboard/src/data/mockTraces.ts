@@ -24,7 +24,7 @@ function pickN<T>(arr: T[], n: number): T[] {
 	return shuffled.slice(0, n);
 }
 
-const PLATFORMS: Platform[] = ["claude", "codex", "opencode"];
+const PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor"];
 const _EVENT_NAMES: EventName[] = [
 	"SessionStart",
 	"PreToolUse",

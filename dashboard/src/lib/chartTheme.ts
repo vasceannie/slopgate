@@ -1,4 +1,4 @@
-import type { Decision, FlagTarget, Severity } from "@/types/slopgate";
+import type { Decision, FlagTarget, Platform, Severity } from "@/types/slopgate";
 
 // Decision → HSL color string
 export const DECISION_COLORS: Record<Decision, string> = {
@@ -50,10 +50,12 @@ export const SEVERITY_TEXT_STYLE: Record<Severity, string> = {
 };
 
 // Platform → Tailwind badge style
-export const PLATFORM_BADGE_STYLE: Record<string, string> = {
+export const PLATFORM_BADGE_STYLE: Record<Platform, string> = {
 	claude: "bg-platform-claude/20 text-platform-claude",
 	codex: "bg-platform-codex/20 text-platform-codex",
 	opencode: "bg-platform-opencode/20 text-platform-opencode",
+	cursor: "bg-platform-cursor/20 text-platform-cursor",
+	unknown: "bg-platform-unknown/20 text-platform-unknown",
 };
 
 // Flag target labels & colors (shared between FlagButton and FlaggedItemsPanel)

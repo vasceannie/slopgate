@@ -41,6 +41,8 @@ _INTERPRETER_SHELL_VERBS = frozenset(
 _READ_ONLY_SHELL_VERBS = frozenset(
     {
         "cat",
+        "cd",
+        "echo",
         "file",
         "find",
         "grep",
@@ -73,10 +75,20 @@ _RTK_SAFE_READ_SUBCOMMANDS = frozenset(
         "wc",
     }
 )
+_POWERSHELL_MUTATING_TOKENS = (
+    "set-content",
+    "add-content",
+    "out-file",
+    "remove-item",
+    "copy-item",
+    "move-item",
+    "new-item",
+)
 _EMBEDDED_COMMAND_RE = re.compile(
     r"\b(?:system|popen|run|call|check_call|check_output)\(\s*['\"]([^'\"]+)['\"]",
     re.IGNORECASE,
 )
+_SHELL_COMMAND_SUBSTITUTION_RE = re.compile(r"\$\(([^)]*)\)|`([^`]*)`")
 
 
 def _is_leading_shell_assignment(value: str) -> bool:
@@ -139,9 +151,9 @@ def shell_command_executable_paths(command: str) -> list[str]:
 
 def shell_tokens(command: str) -> list[str]:
     try:
-        return shlex.split(command, posix=True)
+        return shlex.split(command.replace("\n", " ; "), posix=True)
     except ValueError:
-        return command.split()
+        return command.replace("\n", " ; ").split()
 
 
 def command_has_word(command: str, word: str) -> bool:
@@ -211,7 +223,9 @@ def _has_interpreter_write_snippet(command: str) -> bool:
     lowered = command.lower()
     tokens = shell_tokens(lowered)
     indexes = _shell_command_executable_indexes(tokens)
-    if not any(Path(tokens[index]).name in _INTERPRETER_SHELL_VERBS for index in indexes):
+    if not any(
+        Path(tokens[index]).name in _INTERPRETER_SHELL_VERBS for index in indexes
+    ):
         return False
     if script_write_paths(command):
         return True
@@ -250,8 +264,31 @@ def _has_embedded_mutating_shell(command: str) -> bool:
     return False
 
 
+def _has_mutating_shell_command_substitution(command: str) -> bool:
+    for match in _SHELL_COMMAND_SUBSTITUTION_RE.finditer(command):
+        embedded = match.group(1) or match.group(2) or ""
+        lowered = embedded.lower()
+        if _has_unsafe_shell_redirection(lowered):
+            return True
+        if find_command_has_mutation(shell_tokens(lowered)):
+            return True
+        if _has_mutating_shell_verb(lowered):
+            return True
+        if _has_interpreter_write_snippet(lowered):
+            return True
+    return False
+
+
+def _is_safe_read_executable_name(name: str, command: str) -> bool:
+    if name == "sed":
+        return _is_readonly_sed_command(command)
+    return name in _READ_ONLY_SHELL_VERBS or name in _RTK_SAFE_READ_SUBCOMMANDS
+
+
 def is_mutating_shell_command(command: str) -> bool:
     lowered = command.lower()
+    if _has_mutating_shell_command_substitution(lowered):
+        return True
     if "sed -i" in lowered or "tee " in lowered:
         return True
     if _has_unsafe_shell_redirection(lowered):
@@ -267,32 +304,18 @@ def is_safe_read_shell_command(
     command: str, *, reject_find_mutation: bool = False
 ) -> bool:
     lowered = command.lower()
-    if is_mutating_shell_command(lowered):
+    if _SHELL_COMMAND_SUBSTITUTION_RE.search(lowered):
         return False
-    if any(
-        token in lowered
-        for token in (
-            "set-content",
-            "add-content",
-            "out-file",
-            "remove-item",
-            "copy-item",
-            "move-item",
-            "new-item",
-        )
+    if is_mutating_shell_command(lowered) or any(
+        token in lowered for token in _POWERSHELL_MUTATING_TOKENS
     ):
-        return False
-    if reject_find_mutation and find_command_has_mutation(shell_tokens(lowered)):
         return False
     names = _safe_read_executable_names(command)
     if not names:
         return False
-    for name in names:
-        if name == "sed" and not _is_readonly_sed_command(command):
-            return False
-        if name not in _READ_ONLY_SHELL_VERBS and name not in _RTK_SAFE_READ_SUBCOMMANDS:
-            return False
-    return True
+    if reject_find_mutation and find_command_has_mutation(shell_tokens(lowered)):
+        return False
+    return all(_is_safe_read_executable_name(name, command) for name in names)
 
 
 def script_write_paths(command: str) -> list[str]:

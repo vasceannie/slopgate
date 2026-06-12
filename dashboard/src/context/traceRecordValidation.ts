@@ -3,11 +3,14 @@ import type {
 	EventName,
 	HookEvent,
 	HookResult,
+	LineageRole,
 	Platform,
+	PlatformSource,
 	RuleFinding,
 	Severity,
 	SubprocessRun,
 } from "@/types/slopgate";
+import { EVENT_NAMES } from "@/types/slopgate";
 
 export type TraceRecordType =
 	| "event"
@@ -91,36 +94,59 @@ function normalizePlatform(value: unknown): Platform {
 			return "codex";
 		case "opencode":
 			return "opencode";
+		case "cursor":
+			return "cursor";
+		case "unknown":
+			return "unknown";
 		default:
-			return "claude";
+			return "unknown";
 	}
 }
 
-function normalizeEventName(value: unknown): EventName | null {
+function normalizePlatformSource(
+	value: unknown,
+	rawPlatform: unknown,
+): PlatformSource {
 	switch (value) {
-		case "SessionStart":
-			return "SessionStart";
-		case "PreToolUse":
-			return "PreToolUse";
-		case "PermissionRequest":
-			return "PermissionRequest";
-		case "PostToolUse":
-			return "PostToolUse";
-		case "PostToolUseFailure":
-			return "PostToolUseFailure";
-		case "Stop":
-			return "Stop";
-		case "UserPromptSubmit":
-			return "UserPromptSubmit";
-		case "InstructionsLoaded":
-			return "InstructionsLoaded";
-		case "SubagentStop":
-			return "SubagentStop";
-		case "ConfigChange":
-			return "ConfigChange";
+		case "explicit":
+		case "defaulted":
+		case "normalized":
+		case "unknown":
+			return value;
+		default:
+			if (rawPlatform === undefined || rawPlatform === null || rawPlatform === "") {
+				return "unknown";
+			}
+			return normalizePlatform(rawPlatform) === "unknown"
+				? "normalized"
+				: "explicit";
+	}
+}
+
+function normalizeLineageRole(value: unknown): LineageRole | null | undefined {
+	if (value === undefined) return undefined;
+	if (value === null) return null;
+	switch (value) {
+		case "parent":
+		case "child":
+		case "mirror":
+		case "child_mirror":
+		case "raw":
+			return value;
 		default:
 			return null;
 	}
+}
+
+function isEventName(value: unknown): value is EventName {
+	return (
+		typeof value === "string" &&
+		EVENT_NAMES.some((eventName) => eventName === value)
+	);
+}
+
+function normalizeEventName(value: unknown): EventName | null {
+	return isEventName(value) ? value : null;
 }
 
 function normalizeSeverity(value: unknown): Severity {
@@ -160,12 +186,73 @@ function normalizeDecision(value: unknown): Decision | null {
 }
 
 function traceMetadata(obj: Record<string, unknown>) {
+	const originPlatform = optionalAliasedPlatform(obj, [
+		"origin_platform",
+		"originPlatform",
+	]);
+	const lineageRole = normalizeLineageRole(
+		aliasedValue(obj, ["lineage_role", "lineageRole"]),
+	);
 	return {
 		platform_capability: optionalString(obj.platform_capability),
 		degraded_reason: optionalString(obj.degraded_reason),
 		enforcement_mode: optionalString(obj.enforcement_mode),
 		resolved_repo_root: optionalString(obj.resolved_repo_root),
+		parent_session_id: optionalAliasedString(obj, [
+			"parent_session_id",
+			"parentSessionId",
+			"parentSessionID",
+		]),
+		root_session_id: optionalAliasedString(obj, [
+			"root_session_id",
+			"rootSessionId",
+			"rootSessionID",
+		]),
+		origin_platform: originPlatform,
+		origin_session_id: optionalAliasedString(obj, [
+			"origin_session_id",
+			"originSessionId",
+			"originSessionID",
+		]),
+		platform_source: normalizePlatformSource(
+			aliasedValue(obj, ["platform_source", "platformSource"]),
+			obj.platform,
+		),
+		subagent_type: optionalAliasedString(obj, ["subagent_type", "subagentType"]),
+		spawn_description: optionalAliasedString(obj, [
+			"spawn_description",
+			"spawnDescription",
+		]),
+		lineage_role: lineageRole,
 	};
+}
+
+function aliasedValue(
+	obj: Record<string, unknown>,
+	keys: string[],
+): unknown | undefined {
+	for (const key of keys) {
+		if (key in obj) return obj[key];
+	}
+	return undefined;
+}
+
+function optionalAliasedString(
+	obj: Record<string, unknown>,
+	keys: string[],
+): string | null | undefined {
+	const value = aliasedValue(obj, keys);
+	return optionalString(value);
+}
+
+function optionalAliasedPlatform(
+	obj: Record<string, unknown>,
+	keys: string[],
+): Platform | null | undefined {
+	const value = aliasedValue(obj, keys);
+	if (value === undefined) return undefined;
+	if (value === null) return null;
+	return normalizePlatform(value);
 }
 
 function normalizeEventRecord(obj: Record<string, unknown>): HookEvent | null {

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 
 import pytest
 from slopgate.installer._shared import base_invocation, find_binary
+
+BROKEN_BINARY_EXIT_CODE = 103
 
 
 def test_find_binary_returns_slopgate_path_when_on_path(
@@ -13,9 +16,34 @@ def test_find_binary_returns_slopgate_path_when_on_path(
     def _fake_which(name: str) -> str | None:
         return "/usr/local/bin/slopgate" if name == "slopgate" else None
 
+    def _fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[list[str]]:
+        return subprocess.CompletedProcess(command, 0)
+
     monkeypatch.setattr(shutil, "which", _fake_which)
+    monkeypatch.setattr(subprocess, "run", _fake_run)
     result = find_binary()
     assert result == "/usr/local/bin/slopgate", f"Expected slopgate path, got {result}"
+
+
+def test_find_binary_falls_back_when_slopgate_path_is_broken(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_which(name: str) -> str | None:
+        return "C:\\Users\\PC\\.local\\bin\\slopgate.exe" if name == "slopgate" else None
+
+    def _fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[list[str]]:
+        return subprocess.CompletedProcess(command, BROKEN_BINARY_EXIT_CODE)
+
+    monkeypatch.setattr(shutil, "which", _fake_which)
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    result = find_binary()
+    assert result == sys.executable, (
+        f"Expected sys.executable fallback for broken slopgate.exe, got {result}"
+    )
 
 
 def test_find_binary_falls_back_to_sys_executable_when_not_on_path(
