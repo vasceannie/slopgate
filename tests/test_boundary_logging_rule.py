@@ -99,6 +99,45 @@ class DashboardView(Static):
     assert "from src.logging import get_logger" not in output
 
 
+def test_boundary_logging_guidance_uses_configured_project_logger(
+    tmp_path: Path,
+) -> None:
+    repo = _enrolled_repo(tmp_path)
+    _ = (repo / "slopgate.toml").write_text(
+        """
+[slopgate]
+enabled = true
+
+[hook_guidance]
+project_logger_import = "from observability import get_logger"
+project_logger_usage = "logger = get_logger(__name__)"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    result = evaluate_payload(
+        write_payload(
+            repo,
+            "src/orders/events.py",
+            """
+from orders.bus import EventBus
+
+
+def publish_order_created(bus: EventBus, order_id: str) -> None:
+    bus.publish("order.created", {"order_id": order_id})
+""".lstrip(),
+        )
+    )
+
+    output = str(result.output)
+    expected_fragments = (
+        "from observability import get_logger",
+        "logger = get_logger(__name__)",
+    )
+    missing = [fragment for fragment in expected_fragments if fragment not in output]
+    assert "PY-LOG-002" in _rule_ids(result)
+    assert not missing, f"missing configured logger guidance fragments: {missing}"
+
+
 def test_boundary_logging_guidance_cites_sibling_logger_pattern(
     tmp_path: Path,
 ) -> None:

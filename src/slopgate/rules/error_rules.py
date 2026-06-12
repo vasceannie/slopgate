@@ -189,13 +189,11 @@ def _command_error_context(command: str, template: tuple[str, str, str]) -> str:
     return (
         f"{heading_and_next_action}\n"
         f"Command: `{excerpt}`\n"
-        "Rules:\n"
-        f"1. {target_guidance}\n"
-        f"2. {classification_guidance}\n"
-        "3. Fix the underlying issue now, or spawn a subagent if the fix "
-        "would derail your current task.\n"
-        "4. If you genuinely cannot fix it (e.g., missing credentials, "
-        "external service down), report the blocker explicitly."
+        f"{target_guidance} Fix the issue now, then rerun the same smallest "
+        "command to verify.\n"
+        f"{classification_guidance}\n"
+        "If credentials or an external service block repair, report that "
+        "blocker explicitly."
     )
 
 

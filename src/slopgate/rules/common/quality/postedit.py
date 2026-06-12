@@ -26,6 +26,36 @@ _MISSING_EXECUTABLE_PATTERN = re.compile(
     r"(?P<name>[A-Za-z0-9_.+-]+)(?:: command not found|: not found|: not found$)|"
     r"No such file or directory: '(?P<quoted>[^']+)'"
 )
+_TEST_FAILURE_MARKERS = (
+    "pytest",
+    "vitest",
+    "npm test",
+    "cargo test",
+    " failed,",
+    " failed\n",
+    "failed tests/",
+    " assertionerror",
+)
+_LINT_FAILURE_MARKERS = (
+    "ruff",
+    "mypy",
+    "basedpyright",
+    "pyright",
+    "eslint",
+    "tsc",
+    "clippy",
+    "format",
+    "lint",
+    "type error",
+    "diagnostic",
+)
+_BUILD_FAILURE_MARKERS = (
+    "build",
+    "cargo build",
+    "npm run build",
+    "compiler",
+    "compilation",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +173,43 @@ def _render_failure(failure: QualityCommandFailure | str) -> str:
     return failure.render()
 
 
+def _contains_marker(text: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in text for marker in markers)
+
+
+def _failure_kind(failures: Sequence[QualityCommandFailure]) -> str:
+    texts = [
+        f"{failure.command}\n{failure.stdout}\n{failure.stderr}".lower()
+        for failure in failures
+    ]
+    if any(_contains_marker(text, _TEST_FAILURE_MARKERS) for text in texts):
+        return "test"
+    if any(_contains_marker(text, _LINT_FAILURE_MARKERS) for text in texts):
+        return "lint/type/format"
+    if any(_contains_marker(text, _BUILD_FAILURE_MARKERS) for text in texts):
+        return "build"
+    return "quality"
+
+
+def _classified_prefix(kind: str) -> str:
+    if kind == "test":
+        return (
+            "Post-edit quality gate failed: tests failed. Repair the failing "
+            "behavior, then rerun the focused test command."
+        )
+    if kind == "lint/type/format":
+        return (
+            "Post-edit quality gate failed: lint/type/format diagnostics were "
+            "reported. Fix the diagnostics, then rerun the same command."
+        )
+    if kind == "build":
+        return (
+            "Post-edit quality gate failed: build failed. Repair the build error, "
+            "then rerun the build command."
+        )
+    return "Post-edit quality gate failed. Repair the reported output, then rerun it."
+
+
 def _failure_message(failures: Sequence[QualityCommandFailure | str]) -> str:
     structured = [
         failure for failure in failures if isinstance(failure, QualityCommandFailure)
@@ -157,7 +224,10 @@ def _failure_message(failures: Sequence[QualityCommandFailure | str]) -> str:
             f"correct quality command before treating this as code quality.\n\n{rendered}"
         )
     rendered = "\n\n".join(_render_failure(item) for item in failures)
-    return f"Post-edit quality gate failed.\n\n{rendered}"
+    prefix = _classified_prefix(_failure_kind(structured)) if structured else (
+        "Post-edit quality gate failed."
+    )
+    return f"{prefix}\n\n{rendered}"
 
 
 class PostEditQualityRule(Rule):

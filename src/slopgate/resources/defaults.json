@@ -86,6 +86,11 @@
       ]
     }
   },
+  "hook_guidance": {
+    "project_logger_import": "",
+    "project_logger_usage": "",
+    "quality_check_command": "slopgate lint check"
+  },
   "async_jobs": {
     "enabled": false,
     "commands_by_language": {

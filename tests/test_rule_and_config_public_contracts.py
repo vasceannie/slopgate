@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from slopgate._argparse_types import SubparserRegistry
+from slopgate.config import load_config
 from slopgate.lint.config_values import build_default_values
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import join_messages
@@ -57,6 +58,31 @@ def test_build_default_values_contains_repo_paths_and_quality_thresholds(
         "max_complexity": 12,
         "logger_variable": "logger",
     }
+
+
+def test_runtime_config_loads_hook_guidance_defaults_and_repo_overrides(
+    tmp_path: Path,
+) -> None:
+    _ = (tmp_path / "slopgate.toml").write_text(
+        """
+[hook_guidance]
+project_logger_import = "from app.telemetry import logger"
+project_logger_usage = "logger.info('event')"
+quality_check_command = "uv run pytest -q"
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(
+        root=tmp_path,
+        repo_root=tmp_path,
+        ensure_enrollment=False,
+        ensure_trace=False,
+    )
+
+    assert config.hook_project_logger_import == "from app.telemetry import logger"
+    assert config.hook_project_logger_usage == "logger.info('event')"
+    assert config.hook_quality_check_command == "uv run pytest -q"
 
 
 def test_join_messages_formats_findings_and_skips_empty_messages() -> None:

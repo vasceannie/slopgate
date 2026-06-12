@@ -79,6 +79,9 @@ def test_ensure_trace_directories_creates_async_trace_tree(tmp_path: Path) -> No
         post_edit_quality_enabled=False,
         post_edit_quality_block_on_failure=False,
         post_edit_quality_commands={},
+        hook_project_logger_import="",
+        hook_project_logger_usage="",
+        hook_quality_check_command="slopgate lint check",
         async_jobs_enabled=False,
         async_jobs_commands={},
     )

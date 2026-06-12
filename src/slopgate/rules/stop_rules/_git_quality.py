@@ -261,7 +261,13 @@ class IgnorePreexistingRule(Rule):
         return []
 
 
-QUALITY_REMINDER = "Before stopping, verify tests pass and quality gates are clean. Run `slopgate lint check` (or your project-specific quality command) before finishing this task."
+QUALITY_REMINDER = (
+    "Before stopping, run quality check `{command}` or report exactly why it cannot run."
+)
+
+
+def quality_reminder(ctx: HookContext) -> str:
+    return QUALITY_REMINDER.format(command=ctx.config.hook_quality_check_command)
 
 
 class RequireQualityCheckRule(Rule):
@@ -286,7 +292,7 @@ class RequireQualityCheckRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.LOW,
-                additional_context=QUALITY_REMINDER,
+                additional_context=quality_reminder(ctx),
             )
         ]
 

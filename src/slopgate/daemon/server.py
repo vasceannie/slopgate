@@ -18,12 +18,20 @@ from slopgate.daemon.protocol import (
 from slopgate.util import logger
 
 HookRequestHandler = Callable[[DaemonRequest], DaemonResponse]
+DEFAULT_CONNECTION_TIMEOUT_SECONDS = 1.0
 
 
 class HookDaemonServer:
-    def __init__(self, socket_path: Path, handler: HookRequestHandler) -> None:
+    def __init__(
+        self,
+        socket_path: Path,
+        handler: HookRequestHandler,
+        *,
+        connection_timeout: float = DEFAULT_CONNECTION_TIMEOUT_SECONDS,
+    ) -> None:
         self.socket_path = socket_path
         self._handler = handler
+        self._connection_timeout = connection_timeout
 
     def serve(self, *, max_requests: int | None = None) -> None:
         logger.info("hook daemon start", socket_path=str(self.socket_path))
@@ -35,6 +43,7 @@ class HookDaemonServer:
             server.listen()
             while max_requests is None or handled < max_requests:
                 connection, _ = server.accept()
+                connection.settimeout(self._connection_timeout)
                 with connection:
                     self._handle_connection(connection)
                 handled += 1
@@ -60,9 +69,11 @@ class HookDaemonServer:
             )
             response = self._handler(request)
         except (
+            KeyError,
             json.JSONDecodeError,
             OSError,
             RuntimeError,
+            TypeError,
             UnicodeDecodeError,
             ValueError,
         ) as exc:
@@ -72,7 +83,35 @@ class HookDaemonServer:
                 error=exc.__class__.__name__,
             )
             response = DaemonResponse(ok=False, error=str(exc))
-        connection.sendall(encode_response(response))
+        self._send_response(connection, response)
+
+    def _send_response(
+        self, connection: socket.socket, response: DaemonResponse
+    ) -> None:
+        frame = self._encode_response(response)
+        try:
+            connection.sendall(frame)
+        except OSError as exc:
+            logger.warning(
+                "hook daemon response dropped",
+                socket_path=str(self.socket_path),
+                error=exc.__class__.__name__,
+                response_ok=response.ok,
+            )
+
+    def _encode_response(self, response: DaemonResponse) -> bytes:
+        try:
+            return encode_response(response)
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "hook daemon response encode failed",
+                socket_path=str(self.socket_path),
+                error=exc.__class__.__name__,
+                response_ok=response.ok,
+            )
+            return encode_response(
+                DaemonResponse(ok=False, error="daemon response serialization failed")
+            )
 
     def _unlink_socket(self) -> None:
         try:

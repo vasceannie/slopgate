@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from slopgate.context import HookContext
     from slopgate.lint._baseline import Violation
 
+LINT_DETAIL_LIMIT = 3
+
 
 class SearchReminderRule(Rule):
     rule_id: str = "REMIND-SEARCH-001"
@@ -114,10 +116,17 @@ def _touched_lint_relative_paths(
     return touched
 
 
-def _first_violation_detail(rule_name: str, violation: Violation) -> list[str]:
+def _violation_details(rule_name: str, violations: list[Violation]) -> list[list[str]]:
     from slopgate.lint._details import format_violation_details
 
-    return format_violation_details(rule_name, violation, status="HOOK")
+    groups = [
+        format_violation_details(rule_name, violation, status="HOOK")
+        for violation in violations[:LINT_DETAIL_LIMIT]
+    ]
+    remaining = len(violations) - LINT_DETAIL_LIMIT
+    if remaining > 0 and groups:
+        groups[-1].append(f"    +{remaining} more {rule_name} violation(s) not shown.")
+    return groups
 
 
 def collect_touched_lint_failures(
@@ -143,7 +152,7 @@ def collect_touched_lint_failures(
         if not scoped:
             continue
         failures.append(f"{rule_name}: {len(scoped)}")
-        details.append(_first_violation_detail(rule_name, scoped[0]))
+        details.extend(_violation_details(rule_name, scoped))
     return (failures, details, lint_targets)
 
 

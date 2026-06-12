@@ -44,6 +44,7 @@ Found 2 error-like quality findings.
     assert "Rerun the smallest failing command" not in message, (
         "quality-output guidance should not use generic rerun text"
     )
+    assert "Rules:" not in message, "quality-output guidance should stay compact"
 
 
 def _lint_alias_message(alias: str) -> str:
@@ -66,6 +67,7 @@ def test_vfc_lint_alias_gets_full_lint_guidance() -> None:
     assert "Rerun the smallest failing command" not in message, (
         "alias vfc should use quality-output guidance"
     )
+    assert "Rules:" not in message, "alias vfc guidance should stay compact"
 
 
 def test_isx_lint_alias_gets_full_lint_guidance() -> None:
@@ -76,6 +78,7 @@ def test_isx_lint_alias_gets_full_lint_guidance() -> None:
     assert "Rerun the smallest failing command" not in message, (
         "alias isx should use quality-output guidance"
     )
+    assert "Rules:" not in message, "alias isx guidance should stay compact"
 
 
 def test_read_only_command_skipped() -> None:

@@ -1,6 +1,7 @@
 """Python AST runtime rule for oversized module projection checks."""
 
 from __future__ import annotations
+import ast
 from typing import TYPE_CHECKING, NamedTuple, final
 from typing_extensions import override
 from slopgate.constants import (
@@ -36,6 +37,8 @@ class ModuleSizeFinding(NamedTuple):
     path_value: str
     line_count: int
     hard: bool
+    symbol_count: int
+    symbols: tuple[str, ...]
 
 
 class _SplitContext(NamedTuple):
@@ -51,6 +54,21 @@ def _split_context(ctx: HookContext, path_value: str) -> _SplitContext:
         decision_for_context(ctx),
         oversized_module_split_guidance(path_value, scenario),
     )
+
+
+def _top_level_symbol_preview(source: str) -> tuple[int, tuple[str, ...]]:
+    try:
+        module = ast.parse(source)
+    except SyntaxError:
+        return (0, ())
+    names: list[str] = []
+    for node in module.body:
+        if not isinstance(node, (ast.AsyncFunctionDef, ast.ClassDef, ast.FunctionDef)):
+            continue
+        if node.name.startswith("_"):
+            continue
+        names.append(node.name)
+    return (len(names), tuple(names[:5]))
 
 
 @final
@@ -72,6 +90,11 @@ class PythonModuleSizeRule(Rule):
             f"Python module `{finding.path_value}` is {collector}: "
             f"{finding.line_count} lines exceeds limit {threshold}."
         )
+        symbols = ", ".join(finding.symbols)
+        symbol_preview = (
+            f" Top-level public symbols: {finding.symbol_count}"
+            f"{f' ({symbols})' if symbols else ''}."
+        )
         next_step = (
             f"Use the {split.scenario} split plan before writing it; "
             "line-count camouflage will be blocked."
@@ -81,7 +104,7 @@ class PythonModuleSizeRule(Rule):
             title=self.title,
             severity=severity,
             decision=split.decision,
-            message=f"{summary} {next_step}",
+            message=f"{summary}{symbol_preview} {next_step}",
             additional_context=split.guidance,
             metadata={
                 METADATA_PATH: finding.path_value,
@@ -89,6 +112,8 @@ class PythonModuleSizeRule(Rule):
                 "split_scenario": split.scenario,
                 "lines": finding.line_count,
                 "limit": threshold,
+                "top_level_symbol_count": finding.symbol_count,
+                "top_level_symbols": list(finding.symbols),
             },
         )
 
@@ -146,11 +171,31 @@ class PythonModuleSizeRule(Rule):
                 continue
             count = line_count(source)
             if count > LINT_MAX_MODULE_LINES_HARD:
+                symbol_count, symbols = _top_level_symbol_preview(source)
                 findings.append(
-                    self.finding(ctx, ModuleSizeFinding(path_value, count, hard=True))
+                    self.finding(
+                        ctx,
+                        ModuleSizeFinding(
+                            path_value,
+                            count,
+                            hard=True,
+                            symbol_count=symbol_count,
+                            symbols=symbols,
+                        ),
+                    )
                 )
             elif count > LINT_MAX_MODULE_LINES_SOFT:
+                symbol_count, symbols = _top_level_symbol_preview(source)
                 findings.append(
-                    self.finding(ctx, ModuleSizeFinding(path_value, count, hard=False))
+                    self.finding(
+                        ctx,
+                        ModuleSizeFinding(
+                            path_value,
+                            count,
+                            hard=False,
+                            symbol_count=symbol_count,
+                            symbols=symbols,
+                        ),
+                    )
                 )
         return findings

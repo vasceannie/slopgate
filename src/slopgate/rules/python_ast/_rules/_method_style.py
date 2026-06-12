@@ -202,7 +202,12 @@ class PythonLongLineRule(Rule):
                 title=self.title,
                 severity=Severity.MEDIUM,
                 decision=decision_for_context(ctx),
-                message=f"Line {worst_lineno} in `{path_value}` is {worst_length} code characters long. Keep executable code lines at or below {max_length} characters. Docstrings/string literals and whitespace-only padding are ignored; wrap the expression or extract an intermediate variable instead of mangling docs or spacing.",
+                message=(
+                    f"Line {worst_lineno} in `{path_value}` is {worst_length} "
+                    f"code characters long; limit is {max_length}. Wrap or "
+                    "extract executable code; docs, strings, and blank padding "
+                    "are ignored."
+                ),
                 metadata={
                     METADATA_PATH: path_value,
                     "line": worst_lineno,

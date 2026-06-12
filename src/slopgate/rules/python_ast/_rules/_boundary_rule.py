@@ -32,6 +32,26 @@ class PythonBoundaryLoggingRule(Rule):
     title = "Require boundary logging"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
+    @staticmethod
+    def _boundary_context(ctx: HookContext) -> str:
+        snippets = [
+            "Boundary logging required: use the project logger/telemetry abstraction, "
+            "not stdlib logging. For TUI/Textual lifecycle methods and package/event "
+            "boundaries, import the logger factory or telemetry client your project "
+            "already provides; define a module logger such as "
+            "`logger = get_project_logger(__name__)` when that matches your project "
+            "abstraction; then call `logger.info(...)` with "
+            "operation/state/count/status fields before the handoff. Include event "
+            "name, target package/service, correlation/request id when available, "
+            "and enough stable fields to debug failures without logging secrets or "
+            "raw payloads.",
+        ]
+        if ctx.config.hook_project_logger_import:
+            snippets.append(f"Project logger import: `{ctx.config.hook_project_logger_import}`.")
+        if ctx.config.hook_project_logger_usage:
+            snippets.append(f"Project logger usage: `{ctx.config.hook_project_logger_usage}`.")
+        return " ".join(snippets)
+
     def finding(
         self, ctx: HookContext, path_value: str, boundary: BoundaryFunction
     ) -> RuleFinding:
@@ -45,8 +65,12 @@ class PythonBoundaryLoggingRule(Rule):
             title=self.title,
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
-            message=f"Python {boundary.kind} `{owner}` in `{path_value}` crosses an observable boundary without a logging/telemetry call. Add structured logging before the event/package handoff.",
-            additional_context="Boundary logging required: use the project logger/telemetry abstraction, not stdlib logging. For TUI/Textual lifecycle methods and package/event boundaries, import the logger factory or telemetry client your project already provides; define a module logger such as `logger = get_project_logger(__name__)` when that matches your project abstraction; then call `logger.info(...)` with operation/state/count/status fields before the handoff. Include event name, target package/service, correlation/request id when available, and enough stable fields to debug failures without logging secrets or raw payloads.",
+            message=(
+                f"Python {boundary.kind} `{owner}` in `{path_value}` crosses an "
+                "observable boundary without a logging/telemetry call. Add "
+                "structured logging before the event/package handoff."
+            ),
+            additional_context=self._boundary_context(ctx),
             metadata={
                 METADATA_PATH: path_value,
                 METADATA_FUNCTION: owner,
@@ -70,7 +94,11 @@ class PythonBoundaryLoggingRule(Rule):
                 continue
             if has_boundary_log_call(node):
                 continue
-            boundary = BoundaryFunction(node=node, kind=kind, class_name=class_name)
+            boundary = BoundaryFunction(
+                node=node,
+                kind=kind,
+                class_name=class_name,
+            )
             findings.append(self.finding(ctx, path_value, boundary))
         return findings
 

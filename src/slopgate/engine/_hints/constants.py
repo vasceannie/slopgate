@@ -14,9 +14,8 @@ RULE_HINTS: dict[str, str] = {
     ),
     "PY-CODE-008": "Next step: extract one helper first; avoid full-file rewrites.",
     "PY-CODE-010": (
-        "Next step: break the executable expression or extract an intermediate variable. "
-        "The line-length hook ignores docstrings/string literals and whitespace-only "
-        "padding, so do not mangle docs or spacing to appease it."
+        "Next step: wrap/extract executable code; docs, strings, and blank "
+        "padding are ignored."
     ),
     "PY-CODE-011": (
         "Next step: use guard clauses or extract the inner branch before "
@@ -119,5 +118,55 @@ QUALITY_COLLECTOR_HINTS: dict[str, str] = {
     "unnecessary-wrapper": (
         "Recovery skill: load `code-hygiene-refactor`; inline pass-through "
         "wrappers unless they own a real boundary."
+    ),
+    "obsolete-or-deprecated-test": (
+        "Recovery skill: load `test-extender`; update tests to reference current "
+        "public production surfaces."
+    ),
+    "long-method": (
+        "Recovery skill: load `code-hygiene-refactor`; extract helpers by phase "
+        "instead of adding logic inside the long function."
+    ),
+    "god-class": (
+        "Recovery skill: load `code-hygiene-refactor`; split class "
+        "responsibilities into collaborators before adding methods."
+    ),
+    "too-many-params": (
+        "Recovery skill: load `code-hygiene-refactor`; group fields that travel "
+        "together into a named params object."
+    ),
+    "long-line": (
+        "Break the executable expression or extract an intermediate variable; "
+        "do not mangle docstrings or spacing."
+    ),
+    "repeated-magic-number": (
+        "Recovery skill: load `code-hygiene-refactor`; define a named constant "
+        "at the owning module boundary."
+    ),
+    "repeated-string-literal": (
+        "Recovery skill: load `code-hygiene-refactor`; centralize repeated strings "
+        "as named constants or shared fixtures."
+    ),
+    "wrong-logger-name": (
+        "Use the configured project logger variable name instead of local aliases."
+    ),
+    "direct-get-logger": (
+        "Use the project logger factory/helper rather than direct logger construction."
+    ),
+    "schema-bypass-test-data": (
+        "Recovery skill: load `test-extender`; build test data through real models "
+        "or schema fixtures."
+    ),
+    "hand-built-test-payload": (
+        "Recovery skill: load `test-extender`; reuse harness fixtures or payload "
+        "builders instead of raw dictionaries."
+    ),
+    "mocked-integration-test": (
+        "Recovery skill: load `test-extender`; run the real integration seam and "
+        "mock only external services."
+    ),
+    "weak-test-assertion": (
+        "Recovery skill: load `test-extender`; assert semantic outputs or payloads, "
+        "not call counts or object presence."
     ),
 }

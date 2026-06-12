@@ -7,7 +7,11 @@ from typing import cast
 from slopgate.context import build_context
 from slopgate.engine import evaluate_payload, render_output
 from slopgate.engine._hints import quality_lint_hint
+from slopgate.engine._hints.constants import QUALITY_COLLECTOR_HINTS
 from slopgate.engine import _retry
+from slopgate.lint._baseline import Violation
+from slopgate.lint._details import prognosis
+from slopgate.lint._parity import COLLECTOR_CATEGORIES
 from slopgate.models import EngineResult, RuleFinding, Severity
 from tests import support
 
@@ -191,6 +195,55 @@ def test_quality_lint_hint_public_helper_routes_collectors(tmp_path: Path) -> No
     )
     assert "slopgate lint check" in hint, (
         "public quality lint hint should keep repo-root lint verification guidance"
+    )
+
+
+def test_quality_lint_hot_collector_hints_cover_priority_collectors() -> None:
+    priority_collectors = {
+        "obsolete-or-deprecated-test",
+        "long-method",
+        "god-class",
+        "too-many-params",
+        "long-line",
+        "repeated-magic-number",
+        "repeated-string-literal",
+        "wrong-logger-name",
+        "direct-get-logger",
+        "schema-bypass-test-data",
+        "hand-built-test-payload",
+        "mocked-integration-test",
+        "weak-test-assertion",
+    }
+    baseline_collectors = COLLECTOR_CATEGORIES["baseline_lint"]
+
+    missing_from_parity = priority_collectors - baseline_collectors
+    missing_hints = priority_collectors - set(QUALITY_COLLECTOR_HINTS)
+
+    assert not missing_from_parity, (
+        f"priority collectors should stay in parity contract: {missing_from_parity}"
+    )
+    assert not missing_hints, (
+        f"priority collectors should have hook recovery hints: {missing_hints}"
+    )
+
+
+def test_quality_lint_collectors_have_hint_or_detail_prognosis() -> None:
+    missing_routes = {
+        collector
+        for collector in COLLECTOR_CATEGORIES["baseline_lint"]
+        if collector not in QUALITY_COLLECTOR_HINTS
+        and not prognosis(
+            collector,
+            Violation(
+                rule=collector,
+                relative_path="src/example.py",
+                identifier="line-1",
+            ),
+        )
+    }
+
+    assert not missing_routes, (
+        f"baseline lint collectors need hook hints or prognosis: {missing_routes}"
     )
 
 

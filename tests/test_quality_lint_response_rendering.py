@@ -9,6 +9,8 @@ from slopgate.adapters import get_adapter
 from slopgate.context import HookContext, build_context
 from slopgate.engine import evaluate_payload, render_output
 from slopgate.engine import _retry
+from slopgate.lint._baseline import Violation
+from slopgate.rules.common.quality.lint import _violation_details
 from slopgate.models import RuleFinding, Severity
 from tests import support
 
@@ -195,3 +197,26 @@ def test_blocking_quality_lint_context_precedes_and_labels_advisory_design_debt(
     context = _hook_additional_context(output)
     assert "Later design debt / not the immediate unblock action" in context
     _assert_immediate_context_precedes_advisory_context(context)
+
+
+def test_quality_lint_detail_rendering_shows_three_hits_and_overflow() -> None:
+    violations = [
+        Violation(
+            rule="obsolete-or-deprecated-test",
+            relative_path="tests/test_session.py",
+            identifier=f"line-{line_number}",
+            detail=f"deprecated import {line_number}",
+        )
+        for line_number in range(1, 5)
+    ]
+
+    details = _violation_details("obsolete-or-deprecated-test", violations)
+    rendered = "\n".join(line for group in details for line in group)
+
+    assert len(details) == 3, "quality lint should render at most three details"
+    assert "deprecated import 1" in rendered, "first detail should be rendered"
+    assert "deprecated import 3" in rendered, "third detail should be rendered"
+    assert "deprecated import 4" not in rendered, "fourth detail should be hidden"
+    assert "+1 more obsolete-or-deprecated-test violation" in rendered, (
+        "overflow summary should name the hidden collector count"
+    )

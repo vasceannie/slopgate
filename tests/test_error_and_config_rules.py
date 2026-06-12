@@ -78,6 +78,10 @@ class TestBashOutputError:
         assert "Rerun the smallest failing command" in message, (
             "context should include the next repair action"
         )
+        assert "Rules:" not in message, "compact context should not use rules list"
+        assert "spawn a subagent" not in message, (
+            "compact context should not add derailment escape hatches"
+        )
 
 
 class TestBashFailureReinforcement:
@@ -118,6 +122,10 @@ class TestBashFailureReinforcement:
         )
         assert "out of scope" not in message, (
             "failure context should avoid STOP-001 banned scope language"
+        )
+        assert "Rules:" not in message, "compact failure context should not list rules"
+        assert "spawn a subagent" not in message, (
+            "compact failure context should not suggest subagent escape hatches"
         )
 
     @pytest.mark.parametrize(

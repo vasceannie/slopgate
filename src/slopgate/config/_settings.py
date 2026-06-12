@@ -72,6 +72,7 @@ class _RepoQualityGateSettings:
     thresholds: dict[str, object]
     enabled_rules: dict[str, bool]
     post_edit_quality: dict[str, object]
+    hook_guidance: dict[str, object]
     async_jobs: dict[str, object]
     disabled_rules: list[str]
     severity_overrides: dict[str, str]
@@ -88,6 +89,13 @@ class _PostEditQualitySettings:
 class _AsyncJobSettings:
     enabled: bool
     commands: dict[str, list[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class _HookGuidanceSettings:
+    project_logger_import: str
+    project_logger_usage: str
+    quality_check_command: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +123,7 @@ def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
             for key, value in object_dict(toml_data.get("enabled_rules", {})).items()
         },
         post_edit_quality=object_dict(toml_data.get("post_edit_quality", {})),
+        hook_guidance=object_dict(toml_data.get("hook_guidance", {})),
         async_jobs=object_dict(toml_data.get("async_jobs", {})),
         disabled_rules=string_list(qg_section.get("disabled_rules", [])),
         severity_overrides={
@@ -124,6 +133,35 @@ def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
             ).items()
             if isinstance(value, str)
         },
+    )
+
+
+def _hook_guidance_settings(
+    raw: dict[str, object], repo_settings: _RepoQualityGateSettings
+) -> _HookGuidanceSettings:
+    hook_guidance = object_dict(raw.get("hook_guidance", {}))
+    repo_hook_guidance = repo_settings.hook_guidance
+    return _HookGuidanceSettings(
+        project_logger_import=string_value(
+            repo_hook_guidance.get(
+                "project_logger_import",
+                hook_guidance.get("project_logger_import", ""),
+            )
+        ).strip(),
+        project_logger_usage=string_value(
+            repo_hook_guidance.get(
+                "project_logger_usage",
+                hook_guidance.get("project_logger_usage", ""),
+            )
+        ).strip(),
+        quality_check_command=string_value(
+            repo_hook_guidance.get(
+                "quality_check_command",
+                hook_guidance.get("quality_check_command", "slopgate lint check"),
+            ),
+            "slopgate lint check",
+        ).strip()
+        or "slopgate lint check",
     )
 
 
@@ -263,6 +301,7 @@ def merge_config(
 ) -> RuntimeConfig:
     repo_settings = _repo_slopgate_settings(repo_root)
     post_edit = _post_edit_quality_settings(raw, repo_settings)
+    hook_guidance = _hook_guidance_settings(raw, repo_settings)
     async_jobs = _async_job_settings(raw, repo_settings)
     python_runtime = _python_runtime_settings(raw, repo_settings)
 
@@ -284,6 +323,9 @@ def merge_config(
         post_edit_quality_enabled=post_edit.enabled,
         post_edit_quality_block_on_failure=post_edit.block_on_failure,
         post_edit_quality_commands=post_edit.commands,
+        hook_project_logger_import=hook_guidance.project_logger_import,
+        hook_project_logger_usage=hook_guidance.project_logger_usage,
+        hook_quality_check_command=hook_guidance.quality_check_command,
         async_jobs_enabled=async_jobs.enabled,
         async_jobs_commands=async_jobs.commands,
         python_max_complexity=python_runtime.max_complexity,

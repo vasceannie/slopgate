@@ -110,6 +110,12 @@ default = "all"
 [post_edit_quality.commands_by_language]
 # python = ["python -m pytest -q tests/quality"]
 
+[hook_guidance]
+# Optional response wording hints for hook recovery messages.
+project_logger_import = ""
+project_logger_usage = ""
+quality_check_command = "slopgate lint check"
+
 [async_jobs]
 # enabled = false
 

@@ -85,6 +85,9 @@ class RuntimeConfig:
     post_edit_quality_enabled: bool
     post_edit_quality_block_on_failure: bool
     post_edit_quality_commands: dict[str, list[str]]
+    hook_project_logger_import: str
+    hook_project_logger_usage: str
+    hook_quality_check_command: str
     async_jobs_enabled: bool
     async_jobs_commands: dict[str, list[str]]
     # -- slopgate.toml overrides --
