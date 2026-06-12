@@ -33,39 +33,6 @@ def _patch_linux_installer_config_dirs(
     return config_home
 
 
-def windows_owned_task_install_snapshot(
-    script: Path, monkeypatch: pytest.MonkeyPatch, *, xml: str
-) -> dict[str, object]:
-    run_commands: list[list[str]] = []
-
-    def fake_run(
-        command: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
-        run_commands.append(command)
-        if command[:2] == ["schtasks", "/Query"]:
-            return slopgate.installer._suite.subprocess.CompletedProcess(
-                command, 0, stdout=xml
-            )
-        if command[:2] == ["schtasks", "/Create"]:
-            return slopgate.installer._suite.subprocess.CompletedProcess(command, 0)
-        raise AssertionError(f"unexpected command: {command}")
-
-    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
-    status = slopgate.installer._suite.install_autoupdate(dry_run=False)
-    task_backups = sorted(
-        script.parent.glob("slopgate-auto-update-task.xml.slopgate-bak-*")
-    )
-    return {
-        "status": status,
-        "backup_count": len(task_backups),
-        "backup_xml": task_backups[0].read_text(encoding="utf-8")
-        if task_backups
-        else "",
-        "query_command": run_commands[0] if run_commands else [],
-        "create_prefix": run_commands[1][:3] if len(run_commands) > 1 else [],
-    }
-
-
 def record_suite_subprocess_run(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     run_commands: list[list[str]] = []
 

@@ -13,7 +13,6 @@ from tests.test_suite_autoupdate import (
     linux_autoupdate_units,
     macos_autoupdate_context,
     record_suite_subprocess_run,
-    windows_owned_task_install_snapshot,
 )
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
@@ -170,9 +169,10 @@ def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
 
 
 @SKIP_WINDOWS_ONLY
-def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_create(
+def test_windows_autoupdate_install_removes_orphan_task_and_writes_marker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """An orphan scheduled task (no local marker file) is deleted by name during install."""
     script = _windows_autoupdate_context(tmp_path, monkeypatch)
     run_commands: list[list[str]] = []
 
@@ -182,41 +182,55 @@ def test_windows_autoupdate_install_refuses_existing_unowned_task_before_force_c
         run_commands.append(command)
         if command[:2] == ["schtasks", "/Query"]:
             return slopgate.installer._suite.subprocess.CompletedProcess(
-                command,
-                0,
-                stdout="<Task><Actions><Exec><Command>custom.exe</Command></Exec></Actions></Task>",
+                command, 0, stdout="<Task>exists</Task>"
             )
+        if command[:2] == ["schtasks", "/Delete"]:
+            return slopgate.installer._suite.subprocess.CompletedProcess(command, 0)
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
-    assert slopgate.installer._suite.install_autoupdate(dry_run=False) == 1
+    assert slopgate.installer._suite.install_autoupdate(dry_run=False) == 0
     assert run_commands == [
-        ["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"]
+        ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
+        ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
     ]
-    assert not script.exists()
+    assert script.exists()
+    assert (
+        slopgate.installer._suite.AUTOUPDATE_MARKER in script.read_text(encoding="utf-8")
+    )
 
 
 @SKIP_WINDOWS_ONLY
-def test_windows_autoupdate_install_exports_owned_existing_task_before_force_create(
+def test_windows_autoupdate_install_removes_existing_task_then_writes_owned_marker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """install_autoupdate deletes the scheduled task by name and writes the marker."""
     script = _windows_autoupdate_context(tmp_path, monkeypatch)
     script.parent.mkdir(parents=True)
     script.write_text(
         f"# {slopgate.installer._suite.AUTOUPDATE_MARKER}\nold script\n",
         encoding="utf-8",
     )
-    xml = (
-        f"<Task><Actions><Exec><Arguments>{script}</Arguments></Exec></Actions></Task>"
-    )
-    snapshot = windows_owned_task_install_snapshot(script, monkeypatch, xml=xml)
-    assert snapshot == {
-        "status": 0,
-        "backup_count": 1,
-        "backup_xml": xml,
-        "query_command": ["schtasks", "/Query", "/TN", "Slopgate Auto Update", "/XML"],
-        "create_prefix": ["schtasks", "/Create", "/F"],
-    }
+    run_commands: list[list[str]] = []
+
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        run_commands.append(command)
+        if command[:2] == ["schtasks", "/Query"]:
+            return slopgate.installer._suite.subprocess.CompletedProcess(
+                command, 0, stdout="<Task>exists</Task>"
+            )
+        if command[:2] == ["schtasks", "/Delete"]:
+            return slopgate.installer._suite.subprocess.CompletedProcess(command, 0)
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
+    assert slopgate.installer._suite.install_autoupdate(dry_run=False) == 0
+    assert run_commands == [
+        ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
+        ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
+    ]
 
 
 def _macos_uninstall_backup_snapshot(
@@ -300,38 +314,3 @@ def test_uninstall_suite_dry_run_reports_detected_sites_without_writing(
     )
     output = capsys.readouterr().out
     assert (status, called, "Would uninstall: claude" in output) == (0, [], True)
-
-
-class TestPathAppearsInTaskXml:
-    """Test suite_autoupdate_windows.path_appears_in_task_xml with edge cases."""
-
-    def test_returns_false_for_empty_xml(self) -> None:
-        from slopgate.installer._suite_autoupdate_windows import (
-            path_appears_in_task_xml,
-        )
-        from pathlib import Path
-
-        result = path_appears_in_task_xml(Path("C:\\slopgate.exe"), "")
-        assert result is False, "Empty XML should return False"
-
-    def test_returns_false_for_malformed_xml(self) -> None:
-        from slopgate.installer._suite_autoupdate_windows import (
-            path_appears_in_task_xml,
-        )
-        from pathlib import Path
-
-        result = path_appears_in_task_xml(
-            Path("C:\\slopgate.exe"), "<Malformed>no closing tag"
-        )
-        assert result is False, "Malformed XML should return False"
-
-    def test_returns_false_for_xml_without_path(self) -> None:
-        from slopgate.installer._suite_autoupdate_windows import (
-            path_appears_in_task_xml,
-        )
-        from pathlib import Path
-
-        result = path_appears_in_task_xml(
-            Path("C:\\slopgate.exe"), "<Task><Actions></Actions></Task>"
-        )
-        assert result is False, "XML without matching path should return False"
