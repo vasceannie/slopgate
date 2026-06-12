@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 
 from slopgate.models import RuntimeConfig
 
@@ -28,6 +29,7 @@ class _RawConfigCacheEntry:
 
 
 _raw_config_cache: dict[Path, _RawConfigCacheEntry] = {}
+_raw_config_cache_lock = threading.Lock()
 
 
 def _config_file_signature(path: Path) -> _ConfigFileSignature:
@@ -40,12 +42,14 @@ def _config_file_signature(path: Path) -> _ConfigFileSignature:
 
 def _load_raw_config(config_path: Path) -> dict[str, object]:
     signature = _config_file_signature(config_path)
-    cached = _raw_config_cache.get(config_path)
+    with _raw_config_cache_lock:
+        cached = _raw_config_cache.get(config_path)
     if cached is not None and cached.signature == signature:
         return dict(cached.raw)
 
     raw = load_json(config_path)
-    _raw_config_cache[config_path] = _RawConfigCacheEntry(signature, dict(raw))
+    with _raw_config_cache_lock:
+        _raw_config_cache[config_path] = _RawConfigCacheEntry(signature, dict(raw))
     return raw
 
 

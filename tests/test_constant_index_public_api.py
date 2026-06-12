@@ -13,6 +13,7 @@ from slopgate.quality.constant_index import (
     find_string_constant,
     get_session_constant_index,
     iter_constant_candidate_paths,
+    reset_session_constant_index,
     set_session_constant_index,
     suggest_constant_name,
 )
@@ -72,6 +73,19 @@ def test_session_constant_index_supplies_find_string_constant(tmp_path: Path) ->
         "match": StringConstantMatch("TOKEN", constants, 1),
         "missing": None,
     }
+
+
+def test_reset_session_constant_index_clears_active_index(tmp_path: Path) -> None:
+    constants = tmp_path / "constants.py"
+    constants.write_text('TOKEN = "secret-value"\n', encoding="utf-8")
+    index = build_project_constant_index(tmp_path, use_mtime_cache=False)
+    set_session_constant_index(index)
+
+    reset_session_constant_index()
+
+    assert get_session_constant_index() is None, (
+        "Reset should clear the session constant index"
+    )
 
 
 def test_find_string_constant_builds_session_index_from_root(

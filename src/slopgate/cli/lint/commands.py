@@ -1,9 +1,9 @@
 """Lint subcommand handlers (scan, freeze, init, update)."""
 
 from __future__ import annotations
-import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 from slopgate.cli.lint.git_base_debt import scan_git_base_debt
 from slopgate.cli.lint.report import (
     BASELINE_DISABLED_MESSAGE,
@@ -14,6 +14,7 @@ from slopgate.cli.lint.report import (
     print_collector_results,
     print_lint_header,
 )
+from slopgate.constants import LINT_SCOPE_ALL
 from slopgate.lint._baseline import Violation
 
 
@@ -29,29 +30,21 @@ def discover_project_root(start: Path) -> Path:
     return current
 
 
-def _restore_quality_scope(old_quality_scope: str | None) -> None:
-    if old_quality_scope is None:
-        os.environ.pop("QUALITY_SCOPE", None)
-    else:
-        os.environ["QUALITY_SCOPE"] = old_quality_scope
-
-
 def _configured_lint_files(root: Path, *, force_all_scope: bool) -> LintFiles:
     from slopgate.lint._config import load_config
+    from slopgate.lint._config import reset_quality_scope
     from slopgate.lint._config import set_config
+    from slopgate.lint._config import set_quality_scope
     from slopgate.lint._helpers import find_source_files, find_test_files
 
     root = discover_project_root(root)
-    old_quality_scope = os.environ.get("QUALITY_SCOPE")
-    if force_all_scope:
-        os.environ["QUALITY_SCOPE"] = "all"
+    scope_token = set_quality_scope(LINT_SCOPE_ALL if force_all_scope else None)
     cfg = load_config(root)
     set_config(cfg)
     try:
         return LintFiles(cfg, find_source_files(), find_test_files())
     finally:
-        if force_all_scope:
-            _restore_quality_scope(old_quality_scope)
+        reset_quality_scope(scope_token)
 
 
 def _lint_scan(
@@ -107,7 +100,9 @@ class _LintScanCommand:
 
 
 lint_check = _LintScanCommand(gate="new", header_label="")
-lint_strict = _LintScanCommand(gate="all", header_label="strict")
+lint_strict = _LintScanCommand(
+    gate=cast(LintGateMode, LINT_SCOPE_ALL), header_label="strict"
+)
 
 
 def lint_baseline(_root: Path) -> int:

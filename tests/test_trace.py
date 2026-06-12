@@ -3,9 +3,33 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 from slopgate.trace import TraceWriter, make_record
+
+TRACE_THREAD_COUNT = 2
+
+
+def _write_trace_event(trace_dir: Path, event_name: str) -> None:
+    TraceWriter(trace_dir).event({"event_name": event_name})
+
+
+def _concurrent_trace_event_names(trace_dir: Path) -> set[object]:
+    first = threading.Thread(target=_write_trace_event, args=(trace_dir, "first-event"))
+    second = threading.Thread(
+        target=_write_trace_event, args=(trace_dir, "second-event")
+    )
+    first.start()
+    second.start()
+    first.join()
+    second.join()
+    lines = (trace_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    records = [json.loads(line) for line in lines]
+    assert len(records) == TRACE_THREAD_COUNT, (
+        "concurrent trace writes should preserve every JSONL record"
+    )
+    return {record["event_name"] for record in records}
 
 
 class TestMakeRecord:
@@ -90,3 +114,11 @@ class TestTraceWriterAppend:
         tw.flush()
         record = json.loads((tmp_path / "events.jsonl").read_text().strip())
         assert record["event_name"] == "PreToolUse", "flush must persist event payload"
+
+    def test_concurrent_events_remain_valid_jsonl(self, tmp_path: Path) -> None:
+        event_names = _concurrent_trace_event_names(tmp_path)
+
+        assert event_names == {
+            "first-event",
+            "second-event",
+        }, "concurrent trace writes should preserve event payloads"

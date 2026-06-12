@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from slopgate.cli._claude_retry import claude_team_event_feedback
-from slopgate.constants import PLATFORM_CLAUDE
+from slopgate.constants import PLATFORM_CLAUDE, UNKNOWN_VALUE
 from slopgate.daemon.protocol import DaemonRequest, DaemonResponse
 from slopgate.engine import evaluate_payload
 from slopgate.util import logger
@@ -17,13 +17,13 @@ def evaluate_hook_request(request: DaemonRequest) -> DaemonResponse:
         logger.info(
             "hook daemon empty payload noop",
             platform=platform,
-            event=request.event or "unknown",
+            event=request.event or UNKNOWN_VALUE,
         )
         return DaemonResponse(ok=True)
     logger.info(
         "hook daemon evaluate payload",
         platform=platform,
-        event=request.event or "unknown",
+        event=request.event or UNKNOWN_VALUE,
     )
     result = evaluate_payload(request.payload, platform=platform)
     if platform == PLATFORM_CLAUDE:

@@ -26,12 +26,25 @@ SERVER_JOIN_TIMEOUT_SECONDS = 2.0
 SOCKET_READ_BYTES = 4096
 FAST_SERVER_CONNECTION_TIMEOUT_SECONDS = 0.05
 CLIENT_READ_TIMEOUT_SECONDS = 1.0
+REQUEST_START_TIMEOUT_SECONDS = 1.0
+REQUEST_BLOCKED_OBSERVATION_SECONDS = 0.15
 
 
 @dataclass(slots=True)
 class DaemonResponseObservation:
     response: DaemonResponse
     server_alive: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinatedRequestObservation:
+    first_started: bool
+    second_started_while_first_blocked: bool
+    second_started_after_release: bool
+    first_response: DaemonResponse | None
+    second_response: DaemonResponse | None
+    server_alive: bool
+    started_order: tuple[str, ...]
 
 
 @dataclass(slots=True)
@@ -75,6 +88,65 @@ class UnserializableHookRequestHandler:
         return DaemonResponse(ok=True, output={"bad": object()})
 
 
+class CoordinatedHookRequestHandler:
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._started: dict[str, threading.Event] = {}
+        self._release: dict[str, threading.Event] = {}
+        self.started_order: list[str] = []
+
+    def __call__(self, request: DaemonRequest) -> DaemonResponse:
+        request_id = _request_id(request)
+        with self._lock:
+            self.started_order.append(request_id)
+            self._started_event(request_id).set()
+            release = self._release_event(request_id)
+        _ = release.wait(SERVER_JOIN_TIMEOUT_SECONDS)
+        return DaemonResponse(ok=True, output={"request_id": request_id})
+
+    def wait_started(self, request_id: str, timeout: float) -> bool:
+        return self._started_event(request_id).wait(timeout)
+
+    def release(self, request_id: str) -> None:
+        self._release_event(request_id).set()
+
+    def release_all(self) -> None:
+        with self._lock:
+            release_events = list(self._release.values())
+        for release in release_events:
+            release.set()
+
+    def _started_event(self, request_id: str) -> threading.Event:
+        with self._lock:
+            return self._started.setdefault(request_id, threading.Event())
+
+    def _release_event(self, request_id: str) -> threading.Event:
+        with self._lock:
+            return self._release.setdefault(request_id, threading.Event())
+
+
+class DaemonClientThread:
+    def __init__(self, socket_path: Path, request: DaemonRequest) -> None:
+        self._socket_path = socket_path
+        self._request = request
+        self.response: DaemonResponse | None = None
+        self.thread = threading.Thread(target=self._send_request)
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def join(self) -> None:
+        self.thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
+
+    def _send_request(self) -> None:
+        self.response = send_daemon_request(self._socket_path, self._request)
+
+
+def _request_id(request: DaemonRequest) -> str:
+    raw_id = request.payload.get("request_id")
+    return raw_id if isinstance(raw_id, str) else "unknown"
+
+
 class DisconnectingResponseSocket(socket.socket):
     def __init__(self, request: DaemonRequest) -> None:
         super().__init__(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -109,6 +181,86 @@ def serve_one_request(
     thread.start()
     wait_for_socket(socket_path)
     return thread
+
+
+def serve_requests(
+    socket_path: Path,
+    response_handler: Callable[[DaemonRequest], DaemonResponse],
+    *,
+    max_requests: int,
+) -> threading.Thread:
+    server = HookDaemonServer(socket_path, response_handler)
+    thread = threading.Thread(
+        target=server.serve, kwargs={"max_requests": max_requests}
+    )
+    thread.start()
+    wait_for_socket(socket_path)
+    return thread
+
+
+def observe_parallel_request_start(
+    socket_path: Path,
+    first_request: DaemonRequest,
+    second_request: DaemonRequest,
+) -> CoordinatedRequestObservation:
+    handler = CoordinatedHookRequestHandler()
+    server_thread = serve_requests(socket_path, handler, max_requests=2)
+    first_client = DaemonClientThread(socket_path, first_request)
+    second_client = DaemonClientThread(socket_path, second_request)
+
+    first_client.start()
+    first_started = handler.wait_started("first", REQUEST_START_TIMEOUT_SECONDS)
+    second_client.start()
+    second_started = handler.wait_started("second", REQUEST_BLOCKED_OBSERVATION_SECONDS)
+    handler.release("first")
+    handler.release("second")
+    first_client.join()
+    second_client.join()
+    server_thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
+    return CoordinatedRequestObservation(
+        first_started=first_started,
+        second_started_while_first_blocked=second_started,
+        second_started_after_release=second_started,
+        first_response=first_client.response,
+        second_response=second_client.response,
+        server_alive=server_thread.is_alive(),
+        started_order=tuple(handler.started_order),
+    )
+
+
+def observe_serialized_request_start(
+    socket_path: Path,
+    first_request: DaemonRequest,
+    second_request: DaemonRequest,
+) -> CoordinatedRequestObservation:
+    handler = CoordinatedHookRequestHandler()
+    server_thread = serve_requests(socket_path, handler, max_requests=2)
+    first_client = DaemonClientThread(socket_path, first_request)
+    second_client = DaemonClientThread(socket_path, second_request)
+
+    first_client.start()
+    first_started = handler.wait_started("first", REQUEST_START_TIMEOUT_SECONDS)
+    second_client.start()
+    second_started_while_blocked = handler.wait_started(
+        "second", REQUEST_BLOCKED_OBSERVATION_SECONDS
+    )
+    handler.release("first")
+    second_started_after_release = handler.wait_started(
+        "second", REQUEST_START_TIMEOUT_SECONDS
+    )
+    handler.release("second")
+    first_client.join()
+    second_client.join()
+    server_thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
+    return CoordinatedRequestObservation(
+        first_started=first_started,
+        second_started_while_first_blocked=second_started_while_blocked,
+        second_started_after_release=second_started_after_release,
+        first_response=first_client.response,
+        second_response=second_client.response,
+        server_alive=server_thread.is_alive(),
+        started_order=tuple(handler.started_order),
+    )
 
 
 def observe_single_daemon_request(

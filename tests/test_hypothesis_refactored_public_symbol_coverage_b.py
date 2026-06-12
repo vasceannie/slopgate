@@ -26,6 +26,9 @@ _cli_lint = importlib.import_module("slopgate.cli.lint")
 _quality_lint = importlib.import_module("slopgate.rules.common.quality.lint")
 _config_coerce = importlib.import_module("slopgate.config._coerce")
 _lint_report = importlib.import_module("slopgate.cli.lint_report")
+_daemon_scheduler = importlib.import_module("slopgate.daemon.scheduler")
+_atomic_files = importlib.import_module("slopgate.util.atomic_files")
+_hook_runtime_parsers = importlib.import_module("slopgate.cli.hook_runtime_parsers")
 
 FlatSiblingFindingInput = _python_ast_rules.FlatSiblingFindingInput
 flat_sibling_resolve_candidate_path = (
@@ -124,6 +127,13 @@ LintHeader = _lint_report.LintHeader
 TallyInput = _lint_report.TallyInput
 tally_rule = _lint_report.tally_rule
 print_lint_summary = _lint_report.print_lint_summary
+DaemonRequestScheduler = _daemon_scheduler.DaemonRequestScheduler
+DaemonServerOptions = _daemon_scheduler.DaemonServerOptions
+RepoLockRegistry = _daemon_scheduler.RepoLockRegistry
+append_lines_locked = _atomic_files.append_lines_locked
+write_text_atomic_locked = _atomic_files.write_text_atomic_locked
+locked_path = _atomic_files.locked_path
+positive_int = _hook_runtime_parsers.positive_int
 
 REFACTORED_PUBLIC_SYMBOLS_b = (
     FlatSiblingFindingInput,
@@ -224,6 +234,13 @@ REFACTORED_PUBLIC_SYMBOLS_b = (
     TallyInput,
     tally_rule,
     print_lint_summary,
+    DaemonRequestScheduler,
+    DaemonServerOptions,
+    RepoLockRegistry,
+    append_lines_locked,
+    write_text_atomic_locked,
+    locked_path,
+    positive_int,
 )
 
 

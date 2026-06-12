@@ -11,6 +11,7 @@ from typing import cast
 
 from slopgate.constants import METADATA_COMMAND
 from slopgate._types import object_list
+from slopgate.util.atomic_files import append_lines_locked
 from slopgate.util import logger
 
 DEFAULT_FLUSH_THRESHOLD = int("20")
@@ -39,8 +40,7 @@ class TraceWriter:
     def _write_lines(self, filename: str, lines: list[str]) -> None:
         target = self.trace_dir / filename
         try:
-            with target.open("a", encoding="utf-8") as handle:
-                handle.writelines(lines)
+            append_lines_locked(target, lines)
         except OSError as exc:
             logger.warning("trace write failed", path=str(target), error=str(exc))
 

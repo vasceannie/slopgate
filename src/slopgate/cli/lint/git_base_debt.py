@@ -15,6 +15,7 @@ from typing import Protocol
 from slopgate._types import object_dict, object_list
 from slopgate.cli.lint.report import LintFiles
 from slopgate.lint._baseline import Violation
+from slopgate.util.atomic_files import write_text_atomic_locked
 
 GIT_BASE_DEBT_CACHE_VERSION = 1
 GIT_BASE_DEBT_CACHE_ROOT = ".slopgate/cache/git-base-debt"
@@ -243,7 +244,12 @@ def _write_git_base_debt_cache(
     }
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        write_text_atomic_locked(
+            cache_path,
+            json.dumps(payload, sort_keys=True),
+            prefix="git-base-debt-",
+            suffix=".json",
+        )
     except OSError:
         return
 
