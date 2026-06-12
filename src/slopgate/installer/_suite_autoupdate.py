@@ -263,7 +263,10 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     if disable_command:
         completed = subprocess.run(disable_command, check=False)
         if completed.returncode != 0:
-            return completed.returncode
+            print(
+                f"Warning: could not disable scheduler (may already be removed): "
+                f"{shell_command(disable_command)}"
+            )
     for target_path in existing_paths:
         backup_existing_file_and_report(target_path, "auto-update file")
         target_path.unlink()
