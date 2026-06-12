@@ -18,6 +18,8 @@
     ".claude/skills/",
     ".claude/commands/",
     "Makefile",
+    "Dockerfile",
+    "docker-compose.yml",
     "pyproject.toml",
     "pytest.ini",
     "tsconfig.json",

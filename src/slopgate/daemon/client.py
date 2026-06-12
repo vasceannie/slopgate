@@ -12,6 +12,7 @@ from slopgate.daemon.protocol import (
     decode_response,
     encode_request,
     read_frame,
+    UNKNOWN_DAEMON_VALUE,
 )
 from slopgate.util import logger
 
@@ -27,8 +28,8 @@ def send_daemon_request(
     logger.info(
         "hook daemon client request",
         socket_path=str(socket_path),
-        platform=request.platform or "unknown",
-        event=request.event or "unknown",
+        platform=request.platform or UNKNOWN_DAEMON_VALUE,
+        event=request.event or UNKNOWN_DAEMON_VALUE,
     )
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:

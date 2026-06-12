@@ -13,7 +13,7 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.util.payloads import is_bash_tool, is_edit_like_tool
+from slopgate.util.payloads import is_bash_tool, is_mutating_tool_use
 from .._helpers import decision_for_context
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ class PythonAstHealthRule(Rule):
         return [finding for finding in findings if finding is not None]
 
     def _evaluate_post(self, ctx: HookContext) -> list[RuleFinding]:
-        if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+        if not is_mutating_tool_use(ctx):
             return []
         findings = [self._post_path_failure(ctx, path) for path in ctx.candidate_paths]
         return [finding for finding in findings if finding is not None]

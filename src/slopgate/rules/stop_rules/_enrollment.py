@@ -8,10 +8,11 @@ from typing_extensions import override
 from slopgate.constants import DENY, PERMISSION_REQUEST, PRE_TOOL_USE, METADATA_PATH
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from ._infra_security import is_modifying_tool, is_safe_bash_for_path
+from ._infra_security import is_safe_bash_for_path
 
 ENROLLMENT_SENTINELS = frozenset({".noslopgate", ".no-slop-gate"})
 ENROLLMENT_MARKER = "slopgate.toml"
@@ -140,7 +141,7 @@ class RepoEnrollmentProtectionRule(Rule):
         if is_safe_bash_for_path(ctx):
             return []
         tool_name = ctx.tool_name.lower()
-        if not (is_modifying_tool(ctx) or is_delete_like_tool(tool_name)):
+        if not (is_mutating_tool_use(ctx) or is_delete_like_tool(tool_name)):
             return []
         for path_value in ctx.candidate_paths:
             finding = repo_enrollment_sentinel_finding(path_value)

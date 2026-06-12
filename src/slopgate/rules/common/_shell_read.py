@@ -16,6 +16,7 @@ from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
 from slopgate.util.payloads import (
+    is_read_only_tool_use,
     is_shell_tool,
     path_matches_glob,
 )
@@ -190,9 +191,7 @@ class FullFileReadRule(Rule):
 
 
 def is_readonly_tool(tool_name: str | None) -> bool:
-    from slopgate.constants import READ_TOOL_NAMES
-
-    return bool(tool_name and tool_name.lower() in READ_TOOL_NAMES)
+    return bool(tool_name and tool_name.lower() in {"glob", "grep", "read"})
 
 
 def is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
@@ -246,7 +245,7 @@ class ProtectedPathsRule(Rule):
         patterns = ctx.config.protected_paths
         if not patterns:
             return []
-        if is_readonly_tool(ctx.tool_name):
+        if is_read_only_tool_use(ctx):
             return []
         matched_path = find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:

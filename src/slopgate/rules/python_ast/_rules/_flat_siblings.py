@@ -15,7 +15,12 @@ from slopgate.constants import (
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
-from slopgate.util.payloads import first_present, is_bash_tool, is_edit_like_tool
+from slopgate.util.payloads import (
+    first_present,
+    is_bash_tool,
+    is_edit_like_tool,
+    is_mutating_tool_use,
+)
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -252,7 +257,9 @@ class PythonFlatFileSiblingsRule(Rule):
         if ctx.event_name in {PRE_TOOL_USE, PERMISSION_REQUEST}:
             return is_edit_like_tool(ctx.tool_name)
         if ctx.event_name == POST_TOOL_USE:
-            return is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)
+            return is_edit_like_tool(ctx.tool_name) or (
+                is_bash_tool(ctx.tool_name) and is_mutating_tool_use(ctx)
+            )
         return False
 
     @override

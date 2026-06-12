@@ -18,7 +18,7 @@ from slopgate.constants import (
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
-from slopgate.util.payloads import is_edit_like_tool, is_shell_tool, lower_path
+from slopgate.util.payloads import is_mutating_tool_use, lower_path
 
 from .._shell_safe_read import command_has_word
 from .guidance import (
@@ -197,7 +197,7 @@ class PostEditLintRule(Rule):
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
-        if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
+        if not is_mutating_tool_use(ctx):
             return []
         failures, details, lint_targets = collect_touched_lint_failures(ctx)
         if not failures:

@@ -2,11 +2,17 @@ from __future__ import annotations
 import fnmatch
 from collections.abc import Iterable
 from pathlib import Path
+
 from slopgate._types import ObjectMapping
-from slopgate.constants import EDIT_TOOL_NAMES, LANGUAGE_BY_SUFFIX, METADATA_PATH
+from slopgate.constants import (
+    EDIT_TOOL_NAMES,
+    LANGUAGE_BY_SUFFIX,
+    METADATA_PATH,
+)
 from slopgate.util.platform import lower_path_for_match
 
 lower_path = lower_path_for_match
+UNKNOWN_SHELL_KIND = "unknown"
 
 
 def first_present(
@@ -87,9 +93,9 @@ SHELL_TOOL_KINDS = {
     "cmd": "cmd",
     "cmd.exe": "cmd",
     "command_prompt": "cmd",
-    "shell": "unknown",
-    "local_shell": "unknown",
-    "terminal": "unknown",
+    "shell": UNKNOWN_SHELL_KIND,
+    "local_shell": UNKNOWN_SHELL_KIND,
+    "terminal": UNKNOWN_SHELL_KIND,
 }
 
 

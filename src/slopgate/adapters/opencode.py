@@ -23,10 +23,17 @@ from slopgate.constants import (
 )
 
 OPENCODE_EVENT_MAP: dict[str, str] = {
+    "command.executed": "CommandExecuted",
+    "file.edited": POST_TOOL_USE,
+    "permission.replied": "PermissionReplied",
+    "shell.env": "ShellEnv",
+    "session.compacted": "PostCompact",
     "tool.execute.before": PRE_TOOL_USE,
     "tool.execute.after": POST_TOOL_USE,
     "session.created": "SessionStart",
     "session.idle": "Stop",
+    "session.error": "SessionError",
+    "session.status": "SessionStatus",
     "permission.asked": PERMISSION_REQUEST,
 }
 
@@ -43,6 +50,8 @@ OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
     "websearch": "WebSearch",
     "write": "Write",
 }
+
+OPENCODE_MUTATION_EVENTS = frozenset({"file.edited"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +76,8 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["opencode_hook_event"] = oc_event
 
         tool_name = string_value(raw.get("tool_name")) or ""
+        if not tool_name and oc_event in OPENCODE_MUTATION_EVENTS:
+            tool_name = "Write"
         if tool_name:
             lowered = tool_name.strip().lower().replace("-", "_")
             canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)

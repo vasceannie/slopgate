@@ -7,7 +7,7 @@ from typing_extensions import override
 from slopgate.constants import DENY, PERMISSION_REQUEST, PRE_TOOL_USE, METADATA_PATH
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.rules.common import is_safe_read_shell_command
+from slopgate.util.payloads import is_mutating_tool_use, is_safe_read_shell_command
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -43,17 +43,6 @@ def is_safe_bash_for_path(ctx: HookContext) -> bool:
     return is_safe_read_shell_command(ctx.shell_command.lower())
 
 
-def is_modifying_tool(ctx: HookContext) -> bool:
-    """Return True if the tool can modify files (bash or edit-like)."""
-    from slopgate.util.payloads import is_shell_tool
-
-    if ctx.tool_name and is_shell_tool(ctx.tool_name):
-        return True
-    from slopgate.util.payloads import is_edit_like_tool
-
-    return is_edit_like_tool(ctx.tool_name)
-
-
 def infra_deny(path_value: str, fragment: str, kind: str) -> list[RuleFinding]:
     label = "config" if kind == "config" else "infrastructure"
     return [
@@ -75,7 +64,7 @@ def check_config_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | 
             continue
         if is_safe_bash_for_path(ctx):
             return []
-        if is_modifying_tool(ctx):
+        if is_mutating_tool_use(ctx) or not ctx.read_only:
             return infra_deny(path_value, cfrag, "config")
     return None
 
@@ -93,7 +82,7 @@ def check_infra_path(path_value: str, ctx: HookContext) -> list[RuleFinding] | N
             return []
         if is_safe_bash_for_path(ctx):
             return []
-        if is_modifying_tool(ctx):
+        if is_mutating_tool_use(ctx) or not ctx.read_only:
             return infra_deny(path_value, frag, "infra")
     return None
 

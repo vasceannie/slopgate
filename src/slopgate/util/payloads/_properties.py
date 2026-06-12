@@ -9,6 +9,15 @@ from slopgate.models import ContentTarget, RuntimeConfig
 from slopgate.util import logger
 
 from ._basic import detect_language, first_present, shell_kind_for_tool
+from ._intent import (
+    ToolIntent,
+    candidate_path_source,
+    is_mutating_tool_use,
+    is_read_only_tool_use,
+    platform_event_name,
+    tool_intent,
+    tool_intent_reason,
+)
 from ._shell import shell_command_paths
 from .targets import (
     direct_candidate_paths,
@@ -94,6 +103,30 @@ class _ShellHookPayloadProperties(_CoreHookPayloadProperties):
 
 
 class _TargetHookPayloadProperties(_ShellHookPayloadProperties):
+    @cached_property
+    def tool_intent(self) -> ToolIntent:
+        return tool_intent(self)
+
+    @cached_property
+    def intent_reason(self) -> str:
+        return tool_intent_reason(self)
+
+    @cached_property
+    def read_only(self) -> bool:
+        return is_read_only_tool_use(self)
+
+    @cached_property
+    def mutating(self) -> bool:
+        return is_mutating_tool_use(self)
+
+    @cached_property
+    def candidate_path_source(self) -> str:
+        return candidate_path_source(self)
+
+    @cached_property
+    def platform_event_name(self) -> str:
+        return platform_event_name(self)
+
     @cached_property
     def content_targets(self) -> list[ContentTarget]:
         targets: list[ContentTarget] = []

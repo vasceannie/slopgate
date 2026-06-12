@@ -14,8 +14,7 @@ from slopgate.util.path_filters import is_authored_python_path
 from slopgate.util.payloads import (
     extract_path_from_mapping,
     first_present,
-    is_bash_tool,
-    is_edit_like_tool,
+    is_mutating_tool_use,
 )
 
 from ..._source_parse import line_count, resolve_python_path
@@ -175,7 +174,7 @@ def pre_python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
 
 
 def post_python_structural_sources(ctx: HookContext) -> list[tuple[str, str]]:
-    if not (is_edit_like_tool(ctx.tool_name) or is_bash_tool(ctx.tool_name)):
+    if not is_mutating_tool_use(ctx):
         return []
     sources: list[tuple[str, str]] = []
     for path_value in ctx.candidate_paths:

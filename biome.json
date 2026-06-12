@@ -1,0 +1,50 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    },
+    "enabled": true
+  },
+  "files": {
+    "includes": [
+      "dashboard/src/**/*",
+      "dashboard/components.json",
+      "dashboard/eslint.config.js",
+      "dashboard/index.html",
+      "dashboard/package.json",
+      "dashboard/postcss.config.js",
+      "dashboard/tailwind.config.ts",
+      "dashboard/tsconfig*.json",
+      "dashboard/vite.config.ts",
+      "dashboard/vitest.config.ts",
+      "src/slopgate/resources/opencode_plugin.ts",
+      "!!**/dist",
+      "!!**/node_modules",
+      "!!.git",
+      "!!.gitnexus",
+      "!!.slopgate",
+      "!!.venv",
+      "!!build"
+    ]
+  },
+  "formatter": {
+    "enabled": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
+  }
+}

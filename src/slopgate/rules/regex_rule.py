@@ -11,9 +11,23 @@ from slopgate.constants import (
 from slopgate.models import RegexRuleConfig, RuleFinding, Severity
 from slopgate.rules.base import Rule
 from slopgate.rules.regex_rule_matching import RegexHit, RegexRuleMatcher
+from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+
+EDIT_ONLY_PATH_RULE_IDS = frozenset(
+    {
+        "CONFIG-002",
+        "CONFIG-004",
+        "FE-LINTER-001",
+        "PY-LINTER-001",
+        "PY-QUALITY-011",
+        "QA-PATH-001",
+        "QA-PATH-003",
+        "WARN-BASELINE-001",
+    }
+)
 
 
 @final
@@ -56,6 +70,8 @@ class RegexRule(Rule):
         return self._matcher.scalar_hit(ctx.shell_command)
 
     def _collect_path_hits(self, ctx: HookContext) -> list[RegexHit]:
+        if self.rule_id in EDIT_ONLY_PATH_RULE_IDS and not is_mutating_tool_use(ctx):
+            return []
         hits: list[RegexHit] = []
         for path_value in ctx.candidate_paths:
             hit = self._matcher.path_hit(path_value, path_value)

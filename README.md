@@ -1,6 +1,6 @@
 # slopgate
 
-Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Codex CLI and OpenCode are supported with platform-specific limitations.
+Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Cursor, Codex CLI, and OpenCode are supported with platform-specific limitations.
 
 ![Slopgate analytics dashboard — decision volume, event pipeline, top rules, severity mix](docs/assets/dashboard-overview.png)
 
@@ -23,8 +23,9 @@ uv run slopgate test
 ## Quick Start
 
 ```bash
-# Initialize config (creates ~/.config/slopgate/)
+# Initialize config (creates config.json in the active slopgate config dir)
 slopgate config init
+slopgate config path   # print the active config.json location
 
 # Install hooks for your platform
 slopgate install claude    # patches ~/.claude/settings.json
@@ -32,7 +33,8 @@ slopgate install codex     # patches ~/.codex/hooks.json
 slopgate install opencode  # copies plugin to the user OpenCode plugins dir
 
 # Or use the native all-harness installer and OS auto-updater
-slopgate install all --with-autoupdate
+slopgate install all                # auto-update is on by default
+slopgate install all --disable-autoupdate
 
 # Run self-test
 slopgate test
@@ -49,7 +51,7 @@ slopgate lint init .            # scaffold slopgate.toml
 
 ## Dashboard
 
-The [`dashboard/`](dashboard/) app visualizes Slopgate JSONL traces (`~/.config/slopgate/logs/*.jsonl`): decision volume, top rules, sessions, harness status, and rule toggles. It complements `slopgate stats` with interactive charts and file upload.
+The [`dashboard/`](dashboard/) app visualizes Slopgate JSONL traces from the configured trace directory (by default `config_dir()/logs`): decision volume, top rules, sessions, harness status, and rule toggles. It complements `slopgate stats` with interactive charts, config editing, and file upload.
 
 ### Live dashboard (default: port 18834)
 
@@ -73,8 +75,8 @@ Open **http://127.0.0.1:18834/** (or `http://0.0.0.0:18834/` when `BIND=0.0.0.0`
 | `PORT` | `18834` | HTTP listen port |
 | `BIND` | `0.0.0.0` | Bind address |
 | `SLOPGATE_SSH_HOST` | `little` | SSH host for live logs, config, and harness APIs |
-| `SLOPGATE_CONFIG_PATH` | `~/.config/slopgate/config.json` | Documented config path (read via SSH) |
-| `SLOPGATE_TRACE_DIR` | `~/.config/slopgate/logs` | Documented trace dir (read via SSH) |
+| `SLOPGATE_CONFIG_PATH` | `~/.config/slopgate/config.json` | Remote config file path used by the dashboard API |
+| `SLOPGATE_TRACE_DIR` | `~/.config/slopgate/logs` | Remote trace directory used by the dashboard API |
 
 `serve.py` serves files from `~/.openclaw/canvas/forcedash` (populated by `build-standalone.py`). Without a prior build, start `serve.py` only after `build-standalone.py` has run at least once.
 
@@ -126,6 +128,8 @@ slopgate install all                      # hook files remain CLI-owned
 
 Important ownership boundary: the bundle **does not** symlink full prompt entrypoints (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`) and does **not** own Claude/Codex/Cursor `hooks.json` or Claude `settings.json` hook commands. Keep hook wiring under `slopgate install ...` so install/uninstall can merge safely, back up user config, and point at the correct local binary.
 
+The package-managed prompt sync commands are `slopgate bundle sync-prompts` and `slopgate bundle uninstall-prompts`.
+
 For Claude Code marketplace work, `bundle/claude-plugin/` is a plugin-shaped tree and `bundle/marketplace/` is a local marketplace catalog. Build/test locally with:
 
 ```bash
@@ -138,7 +142,7 @@ claude --plugin-dir ./bundle/claude-plugin
 - **Claude Code**: full first-class hook target. Installs into `~/.claude/settings.json` and/or `.claude/settings.json` (`--install-scope`). Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
 - **Cursor**: native hooks via `~/.cursor/hooks.json` (user) and/or `.cursor/hooks.json` (project). Install with `slopgate install <platform>` (user default), `--install-scope project|both`, and optional `--project-root /path/to/repo`. The same flags apply to `install all`, `setup`, `update`, and `uninstall`. Slopgate maps Cursor events to its canonical model and renders Cursor-native stdout (`permission` gates, `continue` for `beforeSubmitPrompt`, `additional_context` for `postToolUse`/`afterFileEdit`, `followup_message` for `stop`/`subagentStop`). Post-tool hooks cannot hard-block edits the way Claude `PostToolUse` denial does; use `preToolUse`, `beforeShellExecution`, or `beforeReadFile` for enforcement. Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`) are installed for inline-completion policy; `workspaceOpen` is not wired yet.
 - **Codex CLI**: partial hooks via `~/.codex/hooks.json` and/or `.codex/hooks.json`, with `features.hooks = true` enabled in the adjacent `config.toml` when that file exists. Matchers target `Bash|apply_patch|Edit|Write`. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per [Codex hooks docs](https://developers.openai.com/codex/config-reference).
-- **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `session.created`, `session.idle`, `permission.asked`) map to the canonical model; blocking is strongest at `tool.execute.before`. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
+- **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `file.edited`, `permission.asked`, `permission.replied`, `session.created`, `session.compacted`, `session.idle`, `session.error`, `session.status`, `shell.env`, and `command.executed`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool.execute.before`; `file.edited` is the preferred post-edit quality/lint signal when OpenCode emits it. Lifecycle/telemetry events are replayable and may log advisory context, but do not provide hard enforcement. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
 
 ## Architecture
 
@@ -171,60 +175,61 @@ No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 
 ## CLI
 
-### Hook Enforcement (real-time)
+### Hook runtime
 
 ```bash
-# Core hook handler (called by platform hooks)
+slopgate daemon [--socket PATH] [--max-requests N]
 slopgate handle [--platform claude|cursor|codex|opencode]
-
-# Replay a captured payload
+slopgate handle-async
 slopgate replay --payload fixture.json [--platform codex] [--pretty]
+```
 
-# Check quality gate status for a repo
+`slopgate handle` is the entrypoint that platform hooks invoke. `slopgate daemon` runs the optional resident Unix-socket server, and `handle-async` runs post-edit jobs when a platform supports them.
+
+### Repo enrollment and status
+
+```bash
 slopgate check [path]
+slopgate enroll [path] [--no-worktrees]
+```
 
-# Install/uninstall hooks
-slopgate install <platform|all> [--disable-autoupdate] [--dry-run]
-slopgate uninstall <platform> [--disable-autoupdate] [--dry-run]
-slopgate setup [--disable-autoupdate] [--dry-run]
-slopgate update [--dry-run]
+`slopgate check` reports whether a path is enrolled, relaxed, skipped, or not enrolled. `slopgate enroll` writes the repo marker and can include git worktrees.
 
-# Activity analysis
+### Install / update / lifecycle
+
+```bash
+slopgate install <claude|cursor|codex|opencode|all> [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate uninstall <claude|cursor|codex|opencode|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
+slopgate setup [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate update [--dry-run] [--source URL] [--include-missing] [--refresh-hooks] [--install-scope user|project|both] [--project-root PATH]
+slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
+```
+
+`install all` only targets harnesses that already exist unless `--include-missing` is set. `--disable-autoupdate` skips the periodic package updater.
+
+### Activity, config, and self-test
+
+```bash
 slopgate stats [--log results.jsonl] [--days N] [--json]
-
-# Configuration
-slopgate config show        # show effective config
-slopgate config init        # create from defaults
-slopgate config path        # print config file location
-
-# Self-test
+slopgate config show
+slopgate config init [--force]
+slopgate config path
 slopgate test
-
-# Version
 slopgate version
 ```
 
-For Codex CLI and OpenCode, "real-time" should be read as best-effort within the host platform's current hook or plugin surface, not as Claude-equivalent parity.
-
-### Code Quality Linting (batch)
+### Batch code quality linting (project-local)
 
 ```bash
-# Scan the current project root for violations (compares against baseline)
-# Intentionally accepts no path/file argument; use cd <project-root> first.
 slopgate lint check [--details|--verbose]
-
-# Repo-wide rebaselining is intentionally disabled
-# Do not run slopgate lint baseline [path]
-
-# One-time snapshot when baselines.json has empty rules (initial enrollment)
-slopgate lint freeze
-
-# Scaffold a slopgate.toml config
+slopgate lint strict [--details|--verbose]
+slopgate lint test-integrity [--details|--verbose]
+slopgate lint freeze [path]
 slopgate lint init [path]
-
-# Merge missing config keys into existing slopgate.toml
 slopgate lint update [path] [--dry-run]
 ```
+
+`slopgate lint baseline` is intentionally disabled. `lint check` fails only on new violations; `lint strict` fails on any violation. `lint freeze` is the one-time baseline snapshot while `baselines.json` is empty.
 
 Set the lint baseline file under `[paths]` in `slopgate.toml` (relative paths are resolved from the repo root):
 
@@ -258,13 +263,14 @@ Separate from hook rule IDs: `slopgate lint check` runs these AST/static detecto
 slopgate resolves config in this order:
 
 1. `$SLOPGATE_CONFIG` (explicit file path)
-2. `%APPDATA%\slopgate\config.json` on native Windows
-3. `~/.config/slopgate/config.json` (XDG/POSIX)
-4. `$CLAUDE_HOOK_LAYER_ROOT/.claude/hook-layer/config.json` (legacy)
-5. `~/.claude/hooks/enforcer/.claude/hook-layer/config.json` (legacy default)
-6. Bundled defaults
+2. `config_dir()/config.json`, where `config_dir()` resolves from `$SLOPGATE_CONFIG_DIR`, then native Windows `%APPDATA%\slopgate`, then `$XDG_CONFIG_HOME/slopgate`, then `~/.config/slopgate`
+3. `$CLAUDE_HOOK_LAYER_ROOT/.claude/hook-layer/config.json` or `$HOOK_LAYER_ROOT/.claude/hook-layer/config.json` (legacy)
+4. `~/.claude/hooks/enforcer/.claude/hook-layer/config.json` (legacy default)
+5. Bundled defaults
 
-Per-repo overrides via `slopgate.toml` in the repo root.
+Trace and prompt-root discovery use `$SLOPGATE_ROOT` first, then the config directory, then the legacy hook-layer roots.
+
+Per-repo overrides live in `slopgate.toml` in the repo root.
 
 ## Rules
 

@@ -34,19 +34,27 @@ from slopgate.models import RuleFinding, Severity
 
 CODEX_EVENTS = {
     "SessionStart",
+    "SubagentStart",
     PRE_TOOL_USE,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
+    "PreCompact",
+    "PostCompact",
     "UserPromptSubmit",
+    "SubagentStop",
     "Stop",
 }
 
 _CODEX_EVENT_ALIASES: dict[str, str] = {
+    "postcompact": "PostCompact",
+    "precompact": "PreCompact",
     "sessionstart": "SessionStart",
+    "subagentstart": "SubagentStart",
     "pretooluse": PRE_TOOL_USE,
     "permissionrequest": PERMISSION_REQUEST,
     "posttooluse": POST_TOOL_USE,
     "userpromptsubmit": "UserPromptSubmit",
+    "subagentstop": "SubagentStop",
     "stop": "Stop",
 }
 
@@ -239,9 +247,15 @@ class CodexAdapter(PlatformAdapter):
         if request.event_name == POST_TOOL_USE:
             return _render_codex_post_tool_use(self, request)
 
-        if request.event_name == "SessionStart":
+        if request.event_name in {
+            "PostCompact",
+            "PreCompact",
+            "SessionStart",
+            "SubagentStart",
+            "SubagentStop",
+        }:
             if request.context:
-                return hook_specific_context_output("SessionStart", request.context)
+                return hook_specific_context_output(request.event_name, request.context)
             return None
 
         if request.event_name == "UserPromptSubmit":

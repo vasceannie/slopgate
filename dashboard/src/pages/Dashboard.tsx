@@ -1,6 +1,6 @@
 import { Filter, LoaderCircle, Settings2, Terminal, X } from "lucide-react";
-import { lazy, memo, Suspense, useCallback, useState } from "react";
 import type { ReactNode } from "react";
+import { lazy, memo, Suspense, useCallback, useState } from "react";
 import { DecisionFunnel } from "@/components/dashboard/DecisionFunnel";
 import { FileDropZone } from "@/components/dashboard/FileDropZone";
 import { PostureStrip } from "@/components/dashboard/PostureStrip";

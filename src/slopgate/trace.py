@@ -14,6 +14,7 @@ from slopgate._types import object_list
 from slopgate.util import logger
 
 DEFAULT_FLUSH_THRESHOLD = int("20")
+UNKNOWN_TRACE_VALUE = "unknown"
 
 
 def make_record(payload: Mapping[str, object]) -> str:
@@ -64,7 +65,7 @@ class TraceWriter:
 
     def event(self, payload: Mapping[str, object]) -> None:
         raw_event = payload.get("event_name")
-        event_name = raw_event if isinstance(raw_event, str) else "unknown"
+        event_name = raw_event if isinstance(raw_event, str) else UNKNOWN_TRACE_VALUE
         logger.info(
             "trace event write",
             event_name=event_name,
@@ -79,8 +80,10 @@ class TraceWriter:
         raw_decision = payload.get("decision")
         logger.info(
             "trace rule write",
-            rule_id=raw_rule if isinstance(raw_rule, str) else "unknown",
-            decision=raw_decision if isinstance(raw_decision, str) else "unknown",
+            rule_id=raw_rule if isinstance(raw_rule, str) else UNKNOWN_TRACE_VALUE,
+            decision=raw_decision
+            if isinstance(raw_decision, str)
+            else UNKNOWN_TRACE_VALUE,
             target="rules.jsonl",
             buffered=self._buffered,
             trace_dir=str(self.trace_dir),

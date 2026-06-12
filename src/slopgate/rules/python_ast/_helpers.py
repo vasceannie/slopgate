@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from slopgate.models import RuleFinding
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_authored_python_path
-from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
+from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -73,7 +73,7 @@ def _pre_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
 
 
 def _post_tool_sources(ctx: HookContext) -> list[tuple[str, str]]:
-    if not (is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)):
+    if not is_mutating_tool_use(ctx):
         return []
     sources: list[tuple[str, str]] = []
     for path_value in ctx.candidate_paths:

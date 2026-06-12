@@ -4,10 +4,10 @@
  * Thin TypeScript shim that bridges OpenCode's plugin system to the
  * slopgate hook engine via subprocess.
  *
- * The plugin intercepts tool.execute.before and tool.execute.after events,
- * listens to session lifecycle and permission events, translates them into
- * slopgate's canonical JSON format, and applies the engine's decisions
- * (block, modify args, or allow with context).
+ * The plugin intercepts tool.execute.before, tool.execute.after, and
+ * file.edited events, listens to session lifecycle, permission, shell, and
+ * command events, translates them into slopgate's canonical JSON format, and
+ * applies the engine's decisions where the OpenCode event can enforce them.
  *
  * Platform limitations (vs Claude Code / Codex):
  *   - session.idle (Stop): slopgate can advise "continue" but OpenCode's
@@ -18,9 +18,13 @@
  *   - No UserPromptSubmit equivalent: OpenCode doesn't expose a hook for
  *     intercepting user prompts before they're sent to the model. Rules
  *     like BUILTIN-INJECT-PROMPT are inactive on OpenCode.
- *   - tool.execute.after may omit original tool args on some OpenCode
+ *   - file.edited is preferred for post-edit quality/lint when available.
+ *     tool.execute.after may omit original tool args on some OpenCode
  *     versions; this shim caches tool.execute.before args in-memory and
  *     reattaches them best-effort for post-tool backstops.
+ *   - permission.replied, session.compacted, session.error, session.status,
+ *     shell.env, and command.executed are forwarded for replay/trace coverage;
+ *     findings on those events are advisory.
  *   - transcript_path: not available from OpenCode's plugin context.
  *     Rules that read the transcript (e.g. STOP-001) operate in
  *     advisory mode without full transcript access.
@@ -29,9 +33,84 @@
  * Bun.spawn: https://bun.sh/docs/api/spawn
  */
 
-import type { Plugin } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
+
+type BunResponseBody = ConstructorParameters<typeof Response>[0]
+
+type LogLevel = "error" | "info" | "warn"
+
+interface OpenCodeLogEntry {
+  body: {
+    service: string
+    level: LogLevel
+    message: string
+  }
+}
+
+interface OpenCodeClient {
+  app: {
+    log(entry: OpenCodeLogEntry): Promise<void>
+  }
+}
+
+interface OpenCodeEvent extends Record<string, unknown> {
+  type: string
+  cwd?: unknown
+  tool?: unknown
+}
+
+interface OpenCodeEventEnvelope {
+  event: OpenCodeEvent
+}
+
+interface OpenCodePluginContext {
+  client: OpenCodeClient
+  directory: string
+}
+
+interface OpenCodePluginHandlers {
+  "tool.execute.before": (
+    input: OpenCodeToolInput,
+    output: OpenCodeToolOutput,
+  ) => Promise<void>
+  "tool.execute.after": (
+    input: OpenCodeToolInput,
+    output: OpenCodeToolOutput,
+  ) => Promise<void>
+  event(input: OpenCodeEventEnvelope): Promise<void>
+}
+
+type Plugin = (context: OpenCodePluginContext) => Promise<OpenCodePluginHandlers>
+
+interface BunFileSink {
+  write(data: string): number | undefined
+  flush(): void | Promise<void>
+  end(): void
+}
+
+interface BunSpawnResult {
+  stdin: BunFileSink
+  stdout: BunResponseBody
+  stderr: BunResponseBody
+  exited: Promise<number>
+}
+
+interface BunRuntime {
+  env: Record<string, string | undefined>
+  spawn(
+    argv: string[],
+    options: {
+      env: Record<string, string | undefined>
+      cwd?: string
+      stdin: "pipe"
+      stdout: "pipe"
+      stderr: "pipe"
+    },
+  ): BunSpawnResult
+}
+
+declare const Bun: BunRuntime
 
 const SLOPGATE_ARGV = Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SLOPGATE_BIN = SLOPGATE_ARGV.join(" ")
@@ -51,6 +130,16 @@ interface ToolArgsCacheEntry {
   cwd: string
   args: Record<string, unknown>
   timestamp: number
+}
+
+interface OpenCodeToolInput extends Record<string, unknown> {
+  cwd?: unknown
+  tool?: unknown
+}
+
+interface OpenCodeToolOutput extends Record<string, unknown> {
+  args?: Record<string, unknown>
+  result?: unknown
 }
 
 const POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000
@@ -91,6 +180,33 @@ function inputToolArgs(input: Record<string, unknown>): Record<string, unknown> 
 
 function outputToolArgs(output: Record<string, unknown>): Record<string, unknown> {
   return mergeToolArgs(output.args, output.arguments, output.input)
+}
+
+function ensureOutputArgs(output: OpenCodeToolOutput): Record<string, unknown> {
+  if (!output.args || typeof output.args !== "object" || Array.isArray(output.args)) {
+    output.args = {}
+  }
+  return output.args
+}
+
+function firstString(value: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const candidate = value[key]
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return ""
+}
+
+function eventToolArgs(event: Record<string, unknown>): Record<string, unknown> {
+  return mergeToolArgs(
+    event.args,
+    event.arguments,
+    event.input,
+    event.tool_input,
+    event.toolInput,
+  )
 }
 
 function pruneToolArgCache(now: number = Date.now()): void {
@@ -212,7 +328,7 @@ async function callEnforcer(
   }
 }
 
-export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
   // `directory` is set at init time. OpenCode may change CWD mid-session;
   // tool hooks receive the current CWD via their input object.
   // For event hooks (session.idle, etc.), we fall back to the init-time value.
@@ -226,16 +342,69 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
     },
   })
 
+  const managedRepo = (): boolean => findManagedRepoRoot(currentDirectory) !== null
+
+  const payloadForEvent = (
+    hookEventName: string,
+    toolName: string = "",
+    toolInput: Record<string, unknown> = {},
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    hook_event_name: hookEventName,
+    tool_name: toolName,
+    tool_input: toolInput,
+    cwd: currentDirectory,
+    session_id: SESSION_ID,
+    transcript_path: null,
+    ...extra,
+  })
+
+  const logAdvisoryResult = async (
+    prefix: string,
+    result: EnforcerResult | null,
+  ): Promise<void> => {
+    if (!result) return
+    const message = result.reason || result.context
+    if (!message) return
+    await client.app.log({
+      body: {
+        service: "slopgate",
+        level: result.action === "block" ? "error" : "info",
+        message: `[${prefix}] ${message}`,
+      },
+    })
+  }
+
+  const handlePostToolResult = async (
+    prefix: string,
+    result: EnforcerResult | null,
+  ): Promise<void> => {
+    if (!result) return
+    if (result.action === "block") {
+      throw new Error(`[${prefix}] ${result.reason || "Post-tool policy violation"}`)
+    }
+    if (result.action === "warn" || result.action === "context") {
+      const message = result.reason || result.context
+      if (message) {
+        await client.app.log({
+          body: {
+            service: "slopgate",
+            level: "warn",
+            message,
+          },
+        })
+      }
+    }
+  }
+
   return {
     // -- Pre-tool: intercept before execution ---------------------------------
-    "tool.execute.before": async (input: any, output: any) => {
+    "tool.execute.before": async (input: OpenCodeToolInput, output: OpenCodeToolOutput) => {
       if (input.cwd && typeof input.cwd === "string") {
         currentDirectory = input.cwd
       }
 
-      if (!output.args || typeof output.args !== "object" || Array.isArray(output.args)) {
-        output.args = {}
-      }
+      const outputArgs = ensureOutputArgs(output)
 
       const preToolArgs = mergeToolArgs(inputToolArgs(input), outputToolArgs(output))
       const payload = {
@@ -249,7 +418,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
 
       const result = await callEnforcer(
         payload,
-        findManagedRepoRoot(currentDirectory) !== null,
+        managedRepo(),
       )
       if (!result) {
         rememberToolArgs(input.tool, currentDirectory, preToolArgs)
@@ -262,7 +431,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
 
         case "allow":
           if (result.updated_args) {
-            Object.assign(output.args, result.updated_args)
+            Object.assign(outputArgs, result.updated_args)
           }
           rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
@@ -287,7 +456,7 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
     },
 
     // -- Post-tool: review after execution ------------------------------------
-    "tool.execute.after": async (input: any, output: any) => {
+    "tool.execute.after": async (input: OpenCodeToolInput, output: OpenCodeToolOutput) => {
       if (input.cwd && typeof input.cwd === "string") {
         currentDirectory = input.cwd
       }
@@ -311,70 +480,35 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
 
       const result = await callEnforcer(
         payload,
-        findManagedRepoRoot(currentDirectory) !== null,
+        managedRepo(),
       )
-      if (!result) return
-
-      if (result.action === "block") {
-        throw new Error(`[slopgate-posttool] ${result.reason || "Post-tool policy violation"}`)
-      }
-
-      if (result.action === "warn" || result.action === "context") {
-        const message = result.reason || result.context
-        if (message) {
-          await client.app.log({
-            body: {
-              service: "slopgate",
-              level: "warn",
-              message,
-            },
-          })
-        }
-      }
+      await handlePostToolResult("slopgate-posttool", result)
     },
 
     // -- Events: session lifecycle + permissions --------------------------------
     event: async ({ event }: { event: { type: string; [key: string]: unknown } }) => {
+      if (event.cwd && typeof event.cwd === "string") {
+        currentDirectory = event.cwd
+      }
+
       // -- SessionStart (session.created) ------------------------------------
       if (event.type === "session.created") {
-        const payload = {
-          hook_event_name: "session.created",
-          tool_name: "",
-          tool_input: {},
-          cwd: currentDirectory,
-          session_id: SESSION_ID,
-          transcript_path: null,
-        }
+        const payload = payloadForEvent("session.created")
 
         const result = await callEnforcer(
           payload,
-          findManagedRepoRoot(currentDirectory) !== null,
+          managedRepo(),
         )
-        if (result?.context) {
-          await client.app.log({
-            body: {
-              service: "slopgate",
-              level: "info",
-              message: `[session-start] ${result.context}`,
-            },
-          })
-        }
+        await logAdvisoryResult("session-start", result)
       }
 
       // -- Stop (session.idle) -----------------------------------------------
       if (event.type === "session.idle") {
-        const payload = {
-          hook_event_name: "session.idle",
-          tool_name: "",
-          tool_input: {},
-          cwd: currentDirectory,
-          session_id: SESSION_ID,
-          transcript_path: null,
-        }
+        const payload = payloadForEvent("session.idle")
 
         const result = await callEnforcer(
           payload,
-          findManagedRepoRoot(currentDirectory) !== null,
+          managedRepo(),
         )
         if (!result) return
 
@@ -401,34 +535,54 @@ export const EnforcerPlugin: Plugin = async ({ project, client, $, directory, wo
       // -- PermissionRequest (permission.asked) -------------------------------
       if (event.type === "permission.asked") {
         const toolName = typeof event.tool === "string" ? event.tool : ""
-        const toolArgs = (
-          event.args && typeof event.args === "object" && !Array.isArray(event.args)
-        ) ? event.args as Record<string, unknown> : {}
+        const toolArgs = eventToolArgs(event)
 
-        const payload = {
-          hook_event_name: "permission.asked",
-          tool_name: toolName,
-          tool_input: toolArgs,
-          cwd: currentDirectory,
-          session_id: SESSION_ID,
-          transcript_path: null,
-        }
+        const payload = payloadForEvent("permission.asked", toolName, toolArgs)
 
         const result = await callEnforcer(
           payload,
-          findManagedRepoRoot(currentDirectory) !== null,
+          managedRepo(),
         )
-        if (!result) return
+        await logAdvisoryResult("permission-advisory", result)
+      }
 
-        if (result.action === "block") {
-          await client.app.log({
-            body: {
-              service: "slopgate",
-              level: "error",
-              message: `[permission-advisory] Slopgate would deny this permission: ${result.reason}`,
-            },
-          })
+      if (event.type === "file.edited") {
+        const filePath = firstString(
+          event,
+          "path",
+          "file_path",
+          "filePath",
+          "filename",
+        )
+        const toolInput = eventToolArgs(event)
+        if (filePath) {
+          toolInput.file_path = filePath
         }
+        const payload = payloadForEvent("file.edited", "Write", toolInput, {
+          path: filePath,
+          tool_result: event,
+          tool_response: event,
+        })
+
+        const result = await callEnforcer(payload, managedRepo())
+        await handlePostToolResult("slopgate-file-edited", result)
+      }
+
+      if (
+        event.type === "permission.replied"
+        || event.type === "session.compacted"
+        || event.type === "session.error"
+        || event.type === "session.status"
+        || event.type === "shell.env"
+        || event.type === "command.executed"
+      ) {
+        const toolName = typeof event.tool === "string" ? event.tool : ""
+        const payload = payloadForEvent(event.type, toolName, eventToolArgs(event), {
+          tool_result: event,
+          tool_response: event,
+        })
+        const result = await callEnforcer(payload, managedRepo())
+        await logAdvisoryResult(event.type, result)
       }
     },
   }

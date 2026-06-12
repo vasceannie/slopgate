@@ -13,10 +13,8 @@ from typing_extensions import override
 from slopgate.constants import BLOCK, METADATA_COMMAND, POST_TOOL_USE, SESSION_ID
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
+from slopgate.util.payloads import is_mutating_tool_use
 from slopgate.util.subprocesses import CommandResult, run_shell
-
-from .._shell_read import is_safe_bash_read
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -160,11 +158,17 @@ def run_quality_commands(
 
 
 def _should_run_post_edit_quality(ctx: HookContext) -> bool:
-    if is_edit_like_tool(ctx.tool_name):
-        return True
-    if is_shell_tool(ctx.tool_name):
-        return not is_safe_bash_read(ctx.tool_name, ctx.shell_command)
-    return False
+    should_run = is_mutating_tool_use(ctx)
+    if not should_run:
+        ctx.trace.subprocess(
+            {
+                "event_name": ctx.event_name,
+                SESSION_ID: ctx.session_id,
+                "tool_intent": ctx.tool_intent,
+                "skip_reason": "post_edit_quality_requires_mutation_intent",
+            }
+        )
+    return should_run
 
 
 def _render_failure(failure: QualityCommandFailure | str) -> str:

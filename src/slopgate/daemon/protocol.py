@@ -11,6 +11,7 @@ from slopgate._types import ObjectDict, object_dict, string_value
 FRAME_DELIMITER = b"\n"
 FRAME_ENCODING = "utf-8"
 MAX_FRAME_BYTES = 1024 * 1024
+UNKNOWN_DAEMON_VALUE = "unknown"
 
 
 class _FrameConnection(Protocol):
@@ -120,6 +121,7 @@ def read_frame(
 __all__ = [
     "DaemonRequest",
     "DaemonResponse",
+    "UNKNOWN_DAEMON_VALUE",
     "decode_request",
     "decode_response",
     "encode_request",

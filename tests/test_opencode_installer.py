@@ -100,6 +100,30 @@ def test_opencode_plugin_logs_posttool_context_actions() -> None:
     assert 'level: "warn"' in plugin
 
 
+def test_opencode_plugin_forwards_documented_runtime_events() -> None:
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    expected_fragments = [
+        'event.type === "file.edited"',
+        '"slopgate-file-edited"',
+        'payloadForEvent("file.edited", "Write"',
+        'event.type === "permission.replied"',
+        'event.type === "session.compacted"',
+        'event.type === "session.error"',
+        'event.type === "session.status"',
+        'event.type === "shell.env"',
+        'event.type === "command.executed"',
+        "eventToolArgs(event)",
+        "payloadForEvent(",
+        "logAdvisoryResult(",
+    ]
+    missing_fragments = [
+        fragment for fragment in expected_fragments if fragment not in plugin
+    ]
+    assert missing_fragments == [], (
+        "OpenCode plugin must forward documented runtime events"
+    )
+
+
 def _assert_posttool_arg_cache_contract(plugin: str) -> None:
     expected_cache_contract = [
         "const postToolArgCache: ToolArgsCacheEntry[] = []",

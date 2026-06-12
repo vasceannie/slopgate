@@ -263,7 +263,7 @@ class TestPostEditLintAndAstHealth:
             "cwd": str(repo),
             "hook_event_name": "PostToolUse",
             "tool_name": "Bash",
-            "tool_input": {"command": "cat tests/test_smell.py"},
+            "tool_input": {"command": "printf '\\n' >> tests/test_smell.py"},
         }
         result = evaluate_payload(payload)
         assert "QUALITY-LINT-001" in finding_ids(result)

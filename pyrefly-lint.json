@@ -1,27 +1,15 @@
 {
   "errors": [
     {
-      "line": 73,
-      "column": 9,
-      "stop_line": 73,
-      "stop_column": 13,
-      "path": "tests/test_daemon_protocol.py",
+      "line": 32,
+      "column": 47,
+      "stop_line": 37,
+      "stop_column": 2,
+      "path": "src/slopgate/util/payloads/_intent.py",
       "code": -2,
-      "name": "bad-override",
-      "description": "Class member `_DisconnectingResponseSocket.recv` overrides parent class `socket` in an inconsistent manner\n  `_DisconnectingResponseSocket.recv` has type `(self: _DisconnectingResponseSocket, _size: int, /) -> bytes`, which is not assignable to `(self: _DisconnectingResponseSocket, bufsize: int, flags: int = 0, /) -> bytes`, the type of `socket.recv`\n  Signature mismatch:\n  expected: def recv(self: _DisconnectingResponseSocket, bufsize: int, flags: int = 0, /) -> bytes: ...\n                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ parameters\n  found:    def recv(self: _DisconnectingResponseSocket, _size: int, /) -> bytes: ...\n                                                         ^^^^^^^^^^ parameters",
-      "concise_description": "Class member `_DisconnectingResponseSocket.recv` overrides parent class `socket` in an inconsistent manner",
-      "severity": "error"
-    },
-    {
-      "line": 78,
-      "column": 9,
-      "stop_line": 78,
-      "stop_column": 16,
-      "path": "tests/test_daemon_protocol.py",
-      "code": -2,
-      "name": "bad-override",
-      "description": "Class member `_DisconnectingResponseSocket.sendall` overrides parent class `socket` in an inconsistent manner\n  `_DisconnectingResponseSocket.sendall` has type `(self: _DisconnectingResponseSocket, _data: bytes, flags: int = 0, /) -> None`, which is not assignable to `(self: _DisconnectingResponseSocket, data: Buffer, flags: int = 0, /) -> None`, the type of `socket.sendall`\n  Signature mismatch:\n  expected: def sendall(self: _DisconnectingResponseSocket, data: Buffer, flags: int = 0, /) -> None: ...\n                                                            ^^^^^^^^^^^^ parameters\n  found:    def sendall(self: _DisconnectingResponseSocket, _data: bytes, flags: int = 0, /) -> None: ...\n                                                            ^^^^^^^^^^^^ parameters",
-      "concise_description": "Class member `_DisconnectingResponseSocket.sendall` overrides parent class `socket` in an inconsistent manner",
+      "name": "bad-assignment",
+      "description": "`dict[str, str]` is not assignable to `dict[str, ToolIntent]`",
+      "concise_description": "`dict[str, str]` is not assignable to `dict[str, ToolIntent]`",
       "severity": "error"
     }
   ]

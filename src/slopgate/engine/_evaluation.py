@@ -138,6 +138,12 @@ def _trace_drilldown_fields(
         "command": _extract_command(ctx),
         "tool_output": _extract_tool_output(ctx.payload.payload),
         "tool_input": ctx.tool_input,
+        "tool_intent": ctx.tool_intent,
+        "intent_reason": ctx.intent_reason,
+        "read_only": ctx.read_only,
+        "mutating": ctx.mutating,
+        "candidate_path_source": ctx.candidate_path_source,
+        "platform_event_name": ctx.platform_event_name,
     }
 
 

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from slopgate._types import ObjectDict, object_dict, object_list, string_value
 from slopgate.constants import METADATA_PATH, SESSION_ID
 
+UNKNOWN_STATS_VALUE = "unknown"
+
 
 @dataclass
 class _Counters:
@@ -73,9 +75,9 @@ def _process_finding(
     counters: _Counters,
 ) -> bool:
     """Process a single finding dict. Returns True if it was a deny."""
-    rule_id = str(finding.get("rule_id", "unknown"))
+    rule_id = str(finding.get("rule_id", UNKNOWN_STATS_VALUE))
     decision = finding.get("decision")
-    severity = str(finding.get("severity", "unknown"))
+    severity = str(finding.get("severity", UNKNOWN_STATS_VALUE))
 
     counters.by_rule[rule_id] += 1
     if _is_enrichment_rule(rule_id):
@@ -125,13 +127,13 @@ def _classify_findings(
 
 def _process_entry(entry: dict[str, object], counters: _Counters) -> None:
     """Process a single results.jsonl entry into the counters."""
-    session = str(entry.get(SESSION_ID, "unknown"))
+    session = str(entry.get(SESSION_ID, UNKNOWN_STATS_VALUE))
     if session.startswith("fixture-") or session.startswith("test-"):
         counters.fixture_filtered += 1
         return
 
     counters.analyzed_events += 1
-    event = str(entry.get("event_name", "unknown"))
+    event = str(entry.get("event_name", UNKNOWN_STATS_VALUE))
     counters.by_event[event] += 1
     tool = str(entry.get("tool_name", "")) or "(none)"
     counters.by_tool[tool] += 1
@@ -189,7 +191,7 @@ def _first_time_resolution_rate(counters: _Counters) -> float:
 
 def _date_range(counters: _Counters) -> str:
     dates = sorted(counters.daily_counts.keys())
-    return f"{dates[0]} to {dates[-1]}" if dates else "unknown"
+    return f"{dates[0]} to {dates[-1]}" if dates else UNKNOWN_STATS_VALUE
 
 
 def analyze(entries: list[dict[str, object]]) -> ObjectDict:

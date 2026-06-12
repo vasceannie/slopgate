@@ -11,6 +11,7 @@ import stat
 from slopgate.daemon.protocol import (
     DaemonRequest,
     DaemonResponse,
+    UNKNOWN_DAEMON_VALUE,
     decode_request,
     encode_response,
     read_frame,
@@ -64,8 +65,8 @@ class HookDaemonServer:
             logger.info(
                 "hook daemon request",
                 socket_path=str(self.socket_path),
-                platform=request.platform or "unknown",
-                event=request.event or "unknown",
+                platform=request.platform or UNKNOWN_DAEMON_VALUE,
+                event=request.event or UNKNOWN_DAEMON_VALUE,
             )
             response = self._handler(request)
         except (

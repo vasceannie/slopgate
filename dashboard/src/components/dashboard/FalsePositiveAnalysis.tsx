@@ -1,6 +1,6 @@
 import { AlertTriangle, Eye, Flag, ShieldCheck, ShieldX } from "lucide-react";
-import { memo, useEffect, useMemo, useState } from "react";
 import type { ElementType } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { resolveDecision } from "@/hooks/useTraceData";
 import { getRuleDescription } from "@/lib/ruleDescriptions";
 import { cn } from "@/lib/utils";

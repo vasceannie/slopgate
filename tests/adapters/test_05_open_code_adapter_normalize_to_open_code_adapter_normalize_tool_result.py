@@ -7,6 +7,7 @@ from tests.test_adapters import (
     Severity,
     require_rendered,
 )
+from slopgate.util.payloads import is_mutating_tool_use, tool_intent
 
 
 class TestOpenCodeAdapterNormalize:
@@ -93,6 +94,22 @@ class TestOpenCodeAdapterNormalize:
             "permission.asked not mapped to PermissionRequest"
         )
         assert canonical["tool_name"] == "Bash", "tool name not capitalized"
+
+    def test_normalize_file_edited_is_mutating(self) -> None:
+        adapter = OpenCodeAdapter()
+        raw: ObjectDict = {
+            "hook_event_name": "file.edited",
+            "path": "app.py",
+            "cwd": "/tmp",
+            "session_id": "oc-file-edited",
+        }
+        canonical = adapter.normalize_payload(raw)
+
+        assert canonical["hook_event_name"] == "PostToolUse", (
+            "file.edited should normalize to post-tool"
+        )
+        assert tool_intent(canonical) == "mutate", "file.edited should mutate"
+        assert is_mutating_tool_use(canonical), "file.edited should be mutating"
 
     def test_normalize_does_not_mutate_original(self) -> None:
         """normalize_payload must return a new dict, not modify the input."""

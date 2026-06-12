@@ -20,7 +20,7 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
-from slopgate.util.payloads import is_edit_like_tool, is_shell_tool
+from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -84,11 +84,6 @@ def _read_source(path_value: str, ctx: HookContext) -> str | None:
     except OSError:
         return None
     return source if len(source) <= max_chars else None
-
-
-def _is_applicable_tool(ctx: HookContext) -> bool:
-    """Return True if the tool is an edit or bash tool."""
-    return is_edit_like_tool(ctx.tool_name) or is_shell_tool(ctx.tool_name)
 
 
 def _iter_langgraph_sources(
@@ -208,7 +203,7 @@ class LangGraphStateReducerRule(Rule):
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        if not is_rule_enabled(ctx, self.rule_id) or not _is_applicable_tool(ctx):
+        if not is_rule_enabled(ctx, self.rule_id) or not is_mutating_tool_use(ctx):
             return []
         findings: list[RuleFinding] = []
         for path_value, source in _iter_langgraph_sources(ctx):
@@ -284,7 +279,7 @@ class LangGraphStateMutationRule(Rule):
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        if not is_rule_enabled(ctx, self.rule_id) or not _is_applicable_tool(ctx):
+        if not is_rule_enabled(ctx, self.rule_id) or not is_mutating_tool_use(ctx):
             return []
         findings: list[RuleFinding] = []
         for path_value, source in _iter_langgraph_sources(ctx):
@@ -321,7 +316,7 @@ class LangGraphDeprecatedAPIRule(Rule):
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
-        if not is_rule_enabled(ctx, self.rule_id) or not _is_applicable_tool(ctx):
+        if not is_rule_enabled(ctx, self.rule_id) or not is_mutating_tool_use(ctx):
             return []
         findings: list[RuleFinding] = []
         for path_value, source in _iter_langgraph_sources(ctx):

@@ -8,7 +8,7 @@ from slopgate.config import load_config
 from slopgate.models import ContentTarget, RuntimeConfig
 from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
-from slopgate.util.payloads import HookPayload
+from slopgate.util.payloads import HookPayload, ToolIntent
 
 
 class _CoreContextProperties:
@@ -65,6 +65,30 @@ class _TargetContextProperties(_ShellContextProperties):
     @property
     def languages(self) -> set[str]:
         return self.payload.languages
+
+    @property
+    def tool_intent(self) -> ToolIntent:
+        return self.payload.tool_intent
+
+    @property
+    def intent_reason(self) -> str:
+        return self.payload.intent_reason
+
+    @property
+    def read_only(self) -> bool:
+        return self.payload.read_only
+
+    @property
+    def mutating(self) -> bool:
+        return self.payload.mutating
+
+    @property
+    def candidate_path_source(self) -> str:
+        return self.payload.candidate_path_source
+
+    @property
+    def platform_event_name(self) -> str:
+        return self.payload.platform_event_name
 
 
 @dataclass(slots=True)
