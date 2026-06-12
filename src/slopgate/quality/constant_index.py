@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import re
+import threading
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,16 +51,34 @@ class ConstantIndex:
 
 
 _FILE_CACHE: dict[Path, tuple[int, int, dict[str, list[StringConstantMatch]]]] = {}
-_session_index: ConstantIndex | None = None
+_FILE_CACHE_LOCK = threading.Lock()
+_SESSION_INDEX_CONTEXT_NAME = "slopgate_constant_index"
+_session_index: ContextVar[ConstantIndex | None] | None = ContextVar(
+    _SESSION_INDEX_CONTEXT_NAME, default=None
+)
+
+
+def _session_index_context() -> ContextVar[ConstantIndex | None]:
+    global _session_index
+    if _session_index is None:
+        _session_index = ContextVar(_SESSION_INDEX_CONTEXT_NAME, default=None)
+    return _session_index
 
 
 def set_session_constant_index(index: ConstantIndex) -> None:
-    global _session_index
-    _session_index = index
+    context = _session_index_context()
+    if context.get() is index:
+        return
+    context.set(index)
 
 
 def get_session_constant_index() -> ConstantIndex | None:
-    return _session_index
+    context = _session_index_context()
+    return context.get()
+
+
+def reset_session_constant_index() -> None:
+    _session_index_context().set(None)
 
 
 def iter_constant_candidate_paths(
@@ -127,7 +147,8 @@ def _cached_constants_for(
 ) -> dict[str, list[StringConstantMatch]] | None:
     if not use_mtime_cache:
         return None
-    cache_entry = _FILE_CACHE.get(candidate)
+    with _FILE_CACHE_LOCK:
+        cache_entry = _FILE_CACHE.get(candidate)
     if cache_entry is None:
         return None
     cached_mtime, cached_size, cached_values = cache_entry
@@ -156,7 +177,8 @@ def _extract_constants_with_cache(
     except (OSError, SyntaxError, UnicodeError):
         return None
     if use_mtime_cache:
-        _FILE_CACHE[candidate] = (stat_mtime_ns, stat_size, extracted)
+        with _FILE_CACHE_LOCK:
+            _FILE_CACHE[candidate] = (stat_mtime_ns, stat_size, extracted)
     return extracted
 
 

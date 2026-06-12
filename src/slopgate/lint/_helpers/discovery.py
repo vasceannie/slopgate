@@ -7,7 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from slopgate.lint._config import get_config
+from slopgate.lint._config import get_config, get_quality_scope
 from slopgate.lint._helpers.paths import project_root, src_roots, test_roots
 
 
@@ -24,7 +24,9 @@ def _is_excluded_file(name: str) -> bool:
 
 def _scope() -> str:
     """Return the effective scan scope (all | changed | staged)."""
-    return os.environ.get("QUALITY_SCOPE", get_config().default_scope)
+    return get_quality_scope() or os.environ.get(
+        "QUALITY_SCOPE", get_config().default_scope
+    )
 
 
 def _git_diff_paths(*args: str) -> set[Path]:

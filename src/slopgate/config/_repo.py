@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,7 @@ class _RepoRootCacheEntry:
 
 
 _repo_root_cache: dict[Path, _RepoRootCacheEntry] = {}
+_repo_root_cache_lock = threading.Lock()
 
 
 def _marker_signature(candidates: tuple[Path, ...]) -> MarkerSignature:
@@ -181,7 +183,8 @@ def resolve_repo_root(start: Path | None = None) -> Path | None:
     base = path if path.is_dir() else path.parent
     candidates = (base, *base.parents)
     signature = _marker_signature(candidates)
-    cached = _repo_root_cache.get(base)
+    with _repo_root_cache_lock:
+        cached = _repo_root_cache.get(base)
     if cached is not None and cached.signature == signature:
         return cached.repo_root
 
@@ -190,7 +193,8 @@ def resolve_repo_root(start: Path | None = None) -> Path | None:
         if size != MISSING_FILE_SIZE:
             repo_root = candidate
             break
-    _repo_root_cache[base] = _RepoRootCacheEntry(signature, repo_root)
+    with _repo_root_cache_lock:
+        _repo_root_cache[base] = _RepoRootCacheEntry(signature, repo_root)
     return repo_root
 
 

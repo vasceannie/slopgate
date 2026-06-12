@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
+from slopgate.constants import LINT_SCOPE_ALL, LINT_SCOPE_CHANGED, LINT_SCOPE_STAGED
 from slopgate.lint._toml_overrides import apply_paths_overrides, resolve_baseline_path
 from slopgate.lint.config_values import build_default_values
 
@@ -72,7 +74,15 @@ class QualityConfig:
     enable_git_base_debt: bool
 
 
-_config_instance: QualityConfig | None = None
+_config_instance: ContextVar[QualityConfig | None] = ContextVar(
+    "slopgate_lint_config", default=None
+)
+_quality_scope: ContextVar[str | None] = ContextVar(
+    "slopgate_quality_scope", default=None
+)
+_VALID_QUALITY_SCOPES = frozenset(
+    (LINT_SCOPE_ALL, LINT_SCOPE_CHANGED, LINT_SCOPE_STAGED)
+)
 
 
 class _QualityConfigValues(TypedDict):
@@ -144,21 +154,45 @@ def load_config(project_root: Path) -> QualityConfig:
 def get_config() -> QualityConfig:
     """Return global lint config, loading cwd defaults if needed."""
 
-    global _config_instance
-    if _config_instance is None:
+    config = _config_instance.get()
+    if config is None:
         return load_config(Path.cwd())
-    return _config_instance
+    return config
 
 
 def set_config(config: QualityConfig) -> None:
     """Set global lint config instance."""
 
-    global _config_instance
-    _config_instance = config
+    if _config_instance.get() is config:
+        return
+    _config_instance.set(config)
 
 
 def reset_config() -> None:
     """Clear global lint config singleton."""
 
-    global _config_instance
-    _config_instance = None
+    _config_instance.set(None)
+
+
+def set_quality_scope(scope: str | None) -> Token[str | None]:
+    """Set the current lint scan scope for this execution context."""
+
+    if scope is not None and scope not in _VALID_QUALITY_SCOPES:
+        raise ValueError(f"unsupported lint quality scope: {scope}")
+    return _quality_scope.set(scope)
+
+
+def reset_quality_scope(token: Token[str | None]) -> None:
+    """Restore a previous lint scan scope token."""
+
+    try:
+        _quality_scope.reset(token)
+    except ValueError as exc:
+        raise ValueError("quality scope token does not belong to lint scope") from exc
+
+
+def get_quality_scope() -> str | None:
+    """Return the current context-local lint scan scope."""
+
+    scope = _quality_scope.get()
+    return scope if scope in _VALID_QUALITY_SCOPES else None

@@ -16,6 +16,7 @@ _hook_runtime = importlib.import_module("slopgate.cli.hook_runtime")
 _cli_io = importlib.import_module("slopgate.cli.io")
 default_daemon_socket_path = _hook_runtime.default_daemon_socket_path
 report_cli_input_error = _cli_io.report_cli_input_error
+EXPECTED_SERIAL_ENABLED = True
 
 
 class _DaemonResponseStub:
@@ -24,12 +25,13 @@ class _DaemonResponseStub:
         *,
         ok: bool,
         output: dict[str, object] | None = None,
+        error: str | None = None,
         stderr: str | None = None,
         exit_code: int = 0,
     ) -> None:
         self.ok = ok
         self.output = output or {}
-        self.error = None
+        self.error = error
         self.stderr = stderr
         self.exit_code = exit_code
 
@@ -49,9 +51,19 @@ class _DaemonClientStub:
 class _DaemonServerStub:
     socket_path: Path | None = None
     max_requests: int | None = None
+    workers: int | None = None
+    serial: bool | None = None
 
-    def __init__(self, socket_path: Path, _handler: object) -> None:
+    def __init__(
+        self,
+        socket_path: Path,
+        _handler: object,
+        *,
+        options: object | None = None,
+    ) -> None:
         type(self).socket_path = socket_path
+        type(self).workers = getattr(options, "workers", None)
+        type(self).serial = getattr(options, "serial", False)
 
     def serve(self, *, max_requests: int | None = None) -> None:
         type(self).max_requests = max_requests
@@ -84,6 +96,48 @@ def test_daemon_parser_registers_resident_daemon_command() -> None:
     assert args.max_requests == 1, "Parser should preserve max request limit"
 
 
+def test_daemon_parser_registers_concurrency_options() -> None:
+    worker_args = build_parser().parse_args(["daemon", "--workers", "4"])
+    serial_args = build_parser().parse_args(["daemon", "--serial"])
+
+    assert worker_args.workers == 4, "Parser should preserve daemon worker count"
+    assert serial_args.serial == EXPECTED_SERIAL_ENABLED, (
+        "Parser should preserve serial daemon mode"
+    )
+
+
+@pytest.mark.parametrize(
+    "workers",
+    [
+        pytest.param("0", id="zero_workers"),
+        pytest.param("-1", id="negative_workers"),
+    ],
+)
+def test_daemon_parser_rejects_non_positive_workers(workers: str) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        build_parser().parse_args(["daemon", "--workers", workers])
+
+    assert exc_info.value.code != 0, "Invalid worker counts should fail parsing"
+
+
+def test_daemon_parser_keeps_existing_options_with_workers() -> None:
+    args = build_parser().parse_args(
+        [
+            "daemon",
+            "--socket",
+            "/tmp/slopgate.sock",
+            "--max-requests",
+            "2",
+            "--workers",
+            "3",
+        ]
+    )
+
+    assert args.socket == "/tmp/slopgate.sock", "Parser should preserve socket path"
+    assert args.max_requests == 2, "Parser should preserve max request limit"
+    assert args.workers == 3, "Parser should preserve worker count"
+
+
 def test_daemon_parser_allows_default_socket() -> None:
     args = build_parser().parse_args(["daemon"])
 
@@ -112,7 +166,12 @@ def test_cmd_daemon_runs_socket_server(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("slopgate.daemon.server.HookDaemonServer", _DaemonServerStub)
 
     exit_code = cmd_daemon(
-        argparse.Namespace(socket="/tmp/slopgate-daemon.sock", max_requests=1)
+        argparse.Namespace(
+            socket="/tmp/slopgate-daemon.sock",
+            max_requests=1,
+            workers=3,
+            serial=False,
+        )
     )
 
     assert exit_code == 0, "Daemon command should return success after server exits"
@@ -120,6 +179,8 @@ def test_cmd_daemon_runs_socket_server(monkeypatch: pytest.MonkeyPatch) -> None:
         "Daemon command should pass configured socket path to server"
     )
     assert _DaemonServerStub.max_requests == 1, "Daemon command should pass request cap"
+    assert _DaemonServerStub.workers == 3, "Daemon command should pass worker count"
+    assert _DaemonServerStub.serial is False, "Daemon command should pass serial mode"
 
 
 def test_cmd_daemon_uses_default_socket(
@@ -128,11 +189,16 @@ def test_cmd_daemon_uses_default_socket(
     monkeypatch.setattr("slopgate.daemon.server.HookDaemonServer", _DaemonServerStub)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
 
-    exit_code = cmd_daemon(argparse.Namespace(socket="", max_requests=None))
+    exit_code = cmd_daemon(
+        argparse.Namespace(socket="", max_requests=None, workers=None, serial=True)
+    )
 
     assert exit_code == 0, "Daemon command should run with the default socket"
     assert _DaemonServerStub.socket_path == tmp_path / ("slopgate-hookd.sock"), (
         "Daemon command should use XDG runtime socket by default"
+    )
+    assert _DaemonServerStub.serial == EXPECTED_SERIAL_ENABLED, (
+        "Daemon command should pass serial mode"
     )
 
 
@@ -207,3 +273,26 @@ def test_cmd_handle_preserves_daemon_stderr_and_exit_code(
     assert exit_code == 2, "Handle should preserve daemon nonzero exit code"
     assert captured.err.endswith("blocked\n"), "Handle should preserve daemon stderr"
     assert captured.out == "", "Daemon stderr-only blocks should not emit hook JSON"
+
+
+def test_cmd_handle_does_not_fallback_after_daemon_accept_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from slopgate.daemon import DAEMON_ACCEPTED_FAILURE_ERROR
+
+    exit_code, _daemon_client = _run_handle_with_daemon(
+        monkeypatch,
+        {"cwd": "/tmp"},
+        _DaemonResponseStub(
+            ok=False,
+            error=DAEMON_ACCEPTED_FAILURE_ERROR,
+            stderr="daemon accepted request timed out\n",
+            exit_code=1,
+        ),
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1, "Accepted daemon failures should fail closed"
+    assert captured.err.endswith("daemon accepted request timed out\n"), (
+        "Accepted daemon failures should preserve daemon stderr"
+    )

@@ -8,6 +8,7 @@ from slopgate.cli.hook_runtime_parsers import (
     CommandParserFactory,
     HookRuntimeParserRegistration,
     add_hook_runtime_parsers,
+    positive_int,
 )
 from slopgate.cli.io import (
     CliInputError,
@@ -28,6 +29,12 @@ from slopgate.daemon.protocol import (
     encode_request,
     encode_response,
     read_frame,
+)
+from slopgate.daemon.client import DAEMON_ACCEPTED_FAILURE_ERROR
+from slopgate.daemon.scheduler import (
+    DaemonRequestScheduler,
+    DaemonServerOptions,
+    RepoLockRegistry,
 )
 from slopgate.installer.hook_proxy import posix_daemon_proxy_command
 from slopgate.installer.suite import (
@@ -62,6 +69,11 @@ from slopgate.search.cli.command_specs import (
     SearchCommands,
     command_specs,
     init_argument_specs,
+)
+from slopgate.util.atomic_files import (
+    append_lines_locked,
+    locked_path,
+    write_text_atomic_locked,
 )
 
 _magic_number_import_hints = importlib.import_module(
@@ -119,6 +131,7 @@ PUBLIC_SYMBOL_GROUPS_b: dict[str, tuple[object, ...]] = {
         CommandParserFactory,
         HookRuntimeParserRegistration,
         add_hook_runtime_parsers,
+        positive_int,
     ),
     "cli_io": (
         CliInputError,
@@ -166,11 +179,22 @@ PUBLIC_SYMBOL_GROUPS_b: dict[str, tuple[object, ...]] = {
         init_argument_specs,
     ),
     "daemon_protocol": (
+        DAEMON_ACCEPTED_FAILURE_ERROR,
         encode_request,
         decode_request,
         encode_response,
         decode_response,
         read_frame,
+    ),
+    "daemon_scheduler": (
+        DaemonRequestScheduler,
+        DaemonServerOptions,
+        RepoLockRegistry,
+    ),
+    "atomic_files": (
+        append_lines_locked,
+        write_text_atomic_locked,
+        locked_path,
     ),
 }
 

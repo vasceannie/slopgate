@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
+import importlib
 from pathlib import Path
 
+from hypothesis import HealthCheck, given, settings, strategies
 import pytest
 
 from tests.daemon_protocol.support import (
@@ -22,6 +25,10 @@ from tests.daemon_protocol.support import (
     serve_one_request,
     serve_raw_daemon_response,
 )
+
+_daemon_server = importlib.import_module("slopgate.daemon.server")
+
+DAEMON_CLIENT_PROPERTY_EXAMPLES = 5
 
 pytestmark = pytest.mark.skipif(
     not HAS_UNIX_SOCKETS, reason="resident daemon transport uses Unix sockets"
@@ -177,9 +184,7 @@ def test_daemon_survives_client_disconnect_before_response(tmp_path: Path) -> No
         "event": None,
         "platform": "codex",
         "source": None,
-    }, (
-        "Daemon should build the handler response before tolerating disconnects"
-    )
+    }, "Daemon should build the handler response before tolerating disconnects"
 
 
 def test_daemon_times_out_idle_client_without_hanging(tmp_path: Path) -> None:
@@ -223,6 +228,22 @@ def test_daemon_client_reports_missing_socket(tmp_path: Path) -> None:
     )
 
 
+@settings(
+    max_examples=DAEMON_CLIENT_PROPERTY_EXAMPLES,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(strategies.from_regex(r"[a-z]{1,8}", fullmatch=True))
+def test_daemon_client_missing_socket_fails_property(
+    tmp_path: Path, suffix: str
+) -> None:
+    response = send_daemon_request(
+        tmp_path / f"missing-{suffix}.sock", DaemonRequest(payload={})
+    )
+
+    assert response.ok is False, "Missing daemon sockets should fail closed"
+    assert response.error, "Missing daemon socket failures should include detail"
+
+
 def test_daemon_refuses_to_unlink_existing_non_socket_path(tmp_path: Path) -> None:
     socket_path = tmp_path / "slopgate.sock"
     socket_path.write_text("keep me", encoding="utf-8")
@@ -246,3 +267,15 @@ def test_daemon_client_reports_malformed_response_frame(tmp_path: Path) -> None:
     assert not thread.is_alive(), "Malformed-response test server should stop"
     assert response.ok is False, "Malformed daemon responses should fail closed"
     assert response.error, "Malformed daemon response should include parse detail"
+
+
+def test_daemon_retains_only_pending_worker_futures() -> None:
+    completed: Future[None] = Future()
+    pending: Future[None] = Future()
+    completed.set_result(None)
+
+    retained = _daemon_server._retain_pending_futures({completed, pending})
+
+    assert retained == {pending}, (
+        "Long-lived daemon worker bookkeeping should drop completed futures"
+    )

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import cast
 
 from slopgate._types import ObjectDict
+from slopgate.util.atomic_files import write_text_atomic_locked
 
 from typing_extensions import override
 
@@ -101,9 +102,11 @@ def save_baseline_ids(rules: dict[str, set[str]]) -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "rules": {rule: sorted(ids) for rule, ids in sorted(rules.items()) if ids},
     }
-    _ = bp.write_text(
+    write_text_atomic_locked(
+        bp,
         json.dumps(data, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        prefix="baselines-",
+        suffix=".json",
     )
 
 

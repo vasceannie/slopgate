@@ -51,6 +51,8 @@ def add_hook_runtime_parsers(
     )
     _ = daemon.add_argument("--socket")
     _ = daemon.add_argument("--max-requests", type=int)
+    _ = daemon.add_argument("--workers", type=positive_int)
+    _ = daemon.add_argument("--serial", action="store_true")
 
     registration.add_command_parser(
         sub,
@@ -70,8 +72,19 @@ def add_hook_runtime_parsers(
     registration.add_platform_argument(replay)
 
 
+def positive_int(raw_value: str) -> int:
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
+
+
 __all__ = [
     "CommandParserFactory",
     "HookRuntimeParserRegistration",
     "add_hook_runtime_parsers",
+    "positive_int",
 ]

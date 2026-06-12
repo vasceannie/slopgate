@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,7 @@ class _ParsedFileCacheEntry:
 
 
 _PARSED_FILE_CACHE: dict[Path, _ParsedFileCacheEntry] = {}
+_PARSED_FILE_CACHE_LOCK = threading.Lock()
 
 
 def safe_parse(path: Path) -> ast.Module | None:
@@ -49,7 +51,8 @@ def parse_file(path: Path) -> ParsedFile | None:
     except OSError:
         return None
     cache_path = path.resolve()
-    cached = _PARSED_FILE_CACHE.get(cache_path)
+    with _PARSED_FILE_CACHE_LOCK:
+        cached = _PARSED_FILE_CACHE.get(cache_path)
     if (
         cached is not None
         and cached.mtime_ns == stat.st_mtime_ns
@@ -68,11 +71,12 @@ def parse_file(path: Path) -> ParsedFile | None:
         parent_map=build_parent_map(tree),
         string_line_ranges=compute_string_line_ranges(tree),
     )
-    _PARSED_FILE_CACHE[cache_path] = _ParsedFileCacheEntry(
-        mtime_ns=stat.st_mtime_ns,
-        size=stat.st_size,
-        parsed=parsed,
-    )
+    with _PARSED_FILE_CACHE_LOCK:
+        _PARSED_FILE_CACHE[cache_path] = _ParsedFileCacheEntry(
+            mtime_ns=stat.st_mtime_ns,
+            size=stat.st_size,
+            parsed=parsed,
+        )
     return parsed
 
 
