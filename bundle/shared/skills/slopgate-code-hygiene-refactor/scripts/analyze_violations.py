@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
 from pathlib import Path
 
 
@@ -50,7 +49,9 @@ def print_summary(baselines: dict[str, list[str]]) -> None:
         print(f"  {rule}: {len(violations)}")
 
 
-def print_by_file(baselines: dict[str, list[str]], target_file: str | None = None) -> None:
+def print_by_file(
+    baselines: dict[str, list[str]], target_file: str | None = None
+) -> None:
     """Print violations grouped by file."""
     by_file: dict[str, list[dict[str, str]]] = {}
 
@@ -84,14 +85,12 @@ def print_actionable(baselines: dict[str, list[str]]) -> None:
         ("raises_without_match", "Add match= to pytest.raises", "LOW"),
         ("sensitive_equality", "Replace str() comparison with attribute check", "LOW"),
         ("redundant_print", "Remove print statements", "LOW"),
-
         # Medium fixes (5-15 min each)
         ("thin_wrapper", "Inline or add meaningful logic", "MEDIUM"),
         ("sleepy_test", "Replace sleep with async patterns/mocks", "MEDIUM"),
         ("magic_number_test", "Extract to named constant", "MEDIUM"),
         ("long_test", "Split into focused tests", "MEDIUM"),
         ("eager_test", "Split into single-behavior tests", "MEDIUM"),
-
         # Larger refactors (15+ min each)
         ("long_method", "Extract helper functions", "HIGH"),
         ("deep_nesting", "Use early returns/guard clauses", "HIGH"),
@@ -159,29 +158,20 @@ def print_rule_details(baselines: dict[str, list[str]], rule: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyze quality violations"
-    )
+    parser = argparse.ArgumentParser(description="Analyze quality violations")
     parser.add_argument(
-        "--baselines", type=Path,
+        "--baselines",
+        type=Path,
         default=Path("tests/quality/baselines.json"),
-        help="Path to baselines.json"
+        help="Path to baselines.json",
     )
+    parser.add_argument("--rule", type=str, help="Show details for specific rule")
+    parser.add_argument("--file", type=str, help="Filter by file path")
+    parser.add_argument("--summary", action="store_true", help="Show summary only")
     parser.add_argument(
-        "--rule", type=str,
-        help="Show details for specific rule"
-    )
-    parser.add_argument(
-        "--file", type=str,
-        help="Filter by file path"
-    )
-    parser.add_argument(
-        "--summary", action="store_true",
-        help="Show summary only"
-    )
-    parser.add_argument(
-        "--actionable", action="store_true",
-        help="Show actionable recommendations by priority"
+        "--actionable",
+        action="store_true",
+        help="Show actionable recommendations by priority",
     )
     args = parser.parse_args()
 

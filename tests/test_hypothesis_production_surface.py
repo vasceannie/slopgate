@@ -16,7 +16,7 @@ from slopgate.config._repo import enroll_repo
 from slopgate.enrichment.pytest_enrichers import enrich_fixture_outside_conftest
 from slopgate.installer import _shared
 from slopgate.installer import _suite
-from slopgate.installer import _suite_autoupdate
+from slopgate.installer.suite import autoupdate
 from slopgate.lint import _collectors
 from slopgate.lint._baseline import Violation
 from slopgate.lint._detectors import (
@@ -167,7 +167,6 @@ def test_detect_unnecessary_wrappers_ignores_direct_logic_property(name: str) ->
 
 @given(model_id=SHORT_TEXT.filter(lambda value: bool(value.strip())))
 def test_fetch_models_parses_model_ids_property(model_id: str) -> None:
-
     class Response:
         def __enter__(self) -> Response:
             return self
@@ -219,14 +218,13 @@ def test_command_is_slopgate_hook_detects_handle_invocation_property(
 def test_update_suite_returns_nonzero_when_package_update_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
     class _FailedRun:
         returncode = 1
 
-    def fake_subprocess_run(*_args: object, **_kwargs: object) -> _FailedRun:
-        return _FailedRun()
+        def __call__(self, *_args: object, **_kwargs: object) -> "_FailedRun":
+            return self
 
-    monkeypatch.setattr(_suite.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(_suite.subprocess, "run", _FailedRun())
     assert _suite.update_suite(_suite.SuiteUpdateOptions(dry_run=False)) == 1
 
 
@@ -234,19 +232,19 @@ def test_install_autoupdate_dry_run_allows_missing_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(_suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(_suite_autoupdate.sys, "platform", "linux")
-    monkeypatch.setattr(_suite_autoupdate, "find_binary", lambda: "")
-    assert _suite_autoupdate.install_autoupdate(dry_run=True) == 0
+    monkeypatch.setattr(autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(autoupdate.sys, "platform", "linux")
+    monkeypatch.setattr(autoupdate, "find_binary", lambda: "")
+    assert autoupdate.install_autoupdate(dry_run=True) == 0
 
 
 def test_uninstall_autoupdate_is_noop_without_scheduler_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(_suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(_suite_autoupdate.sys, "platform", "linux")
-    assert _suite_autoupdate.uninstall_autoupdate(dry_run=True) == 0
+    monkeypatch.setattr(autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(autoupdate.sys, "platform", "linux")
+    assert autoupdate.uninstall_autoupdate(dry_run=True) == 0
 
 
 def _write_sample_module(root: Path, name: str) -> Path:

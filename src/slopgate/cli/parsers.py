@@ -14,6 +14,7 @@ from slopgate.cli.commands import (
     cmd_config_init,
     cmd_config_path,
     cmd_config_show,
+    cmd_daemon,
     cmd_enroll,
     cmd_handle,
     cmd_handle_async,
@@ -223,21 +224,30 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
 
 
 def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
-    handle = _add_command_parser(
-        sub, "handle", help_text="Read hook payload from stdin", func=cmd_handle
-    )
-    _add_platform_argument(handle)
-
-    _add_command_parser(
-        sub, "handle-async", help_text="Run async post-edit jobs", func=cmd_handle_async
+    from slopgate.cli.hook_runtime_parsers import (
+        HookRuntimeParserRegistration,
+        add_hook_runtime_parsers,
     )
 
-    replay = _add_command_parser(
-        sub, "replay", help_text="Replay a saved payload", func=cmd_replay
+    help_by_name = {
+        "daemon": "Run a resident hook daemon over a Unix socket",
+        "handle": "Read hook payload from stdin",
+        "handle-async": "Run async post-edit jobs",
+        "replay": "Replay a saved payload",
+    }
+    func_by_name = {
+        "daemon": cmd_daemon,
+        "handle": cmd_handle,
+        "handle-async": cmd_handle_async,
+        "replay": cmd_replay,
+    }
+    registration = HookRuntimeParserRegistration(
+        add_command_parser=_add_command_parser,
+        add_platform_argument=_add_platform_argument,
+        help_by_name=help_by_name,
+        func_by_name=func_by_name,
     )
-    _ = replay.add_argument("--payload", required=True)
-    _ = replay.add_argument("--pretty", action="store_true")
-    _add_platform_argument(replay)
+    add_hook_runtime_parsers(sub, registration)
 
 
 def _add_repo_enrollment_parsers(sub: SubparserRegistry) -> None:

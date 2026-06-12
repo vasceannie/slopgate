@@ -13,7 +13,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ROOT = REPO_ROOT / "bundle"
 VERIFY = BUNDLE_ROOT / "scripts" / "verify-local.sh"
 UNLINK = BUNDLE_ROOT / "scripts" / "unlink-local.sh"
-INTELLIGENT_SKILL = BUNDLE_ROOT / "shared" / "skills" / "intelligent-coding-patterns"
+INTELLIGENT_SKILL = (
+    BUNDLE_ROOT / "shared" / "skills" / "slopgate-intelligent-coding-patterns"
+)
 
 
 def run_script(
@@ -33,7 +35,7 @@ def run_script(
 
 
 def prepare_exact_and_legacy_links(tmp_home: Path) -> tuple[Path, Path, Path]:
-    exact = tmp_home / ".claude" / "skills" / "intelligent-coding-patterns"
+    exact = tmp_home / ".claude" / "skills" / "slopgate-intelligent-coding-patterns"
     legacy = tmp_home / ".claude" / "skills" / "code-smell-utility-locator"
     legacy_target = tmp_home / "legacy" / "code-smell-utility-locator"
     exact.parent.mkdir(parents=True)
@@ -69,7 +71,7 @@ def test_verify_strict_fails_when_manifest_destinations_are_not_exact_links(
     assert "verify failed:" in result.stderr or "verify failed:" in result.stdout
 
 
-def test_verify_accepts_exact_manifest_link_but_warns_for_legacy_symlink(
+def test_verify_accepts_exact_manifest_link_and_ignores_legacy_symlink(
     tmp_path: Path,
 ) -> None:
     exact, _, _ = prepare_exact_and_legacy_links(tmp_path)
@@ -78,7 +80,7 @@ def test_verify_accepts_exact_manifest_link_but_warns_for_legacy_symlink(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"OK {exact} -> {INTELLIGENT_SKILL}" in result.stdout
-    assert "WARN existing non-bundle symlink:" in result.stdout
+    assert "WARN existing non-bundle symlink:" not in result.stdout
 
 
 def test_unlink_removes_only_exact_manifest_owned_symlinks(tmp_path: Path) -> None:
@@ -89,4 +91,4 @@ def test_unlink_removes_only_exact_manifest_owned_symlinks(tmp_path: Path) -> No
     assert result.returncode == 0, result.stdout + result.stderr
     assert not exact.exists(), "exact manifest-owned symlink should be removed"
     assert_legacy_link_preserved(legacy, legacy_target)
-    assert "SKIP symlink not owned by manifest entry:" in result.stdout
+    assert "removed_or_would_remove=1" in result.stdout

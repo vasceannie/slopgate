@@ -47,8 +47,6 @@ __all__ = [
 ]
 
 
-
-
 import json
 import types
 from collections.abc import Callable
@@ -188,7 +186,6 @@ def _set_skip_paths(defaults: ObjectDict, repo: Path) -> None:
 def write_skip_paths_config(
     tmp_path: Path, monkeypatch: MonkeyPatch, repo: Path
 ) -> Path:
-
     def mutate(defaults: ObjectDict) -> None:
         _set_skip_paths(defaults, repo)
 

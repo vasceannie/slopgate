@@ -19,16 +19,25 @@ from slopgate.bundle_prompt_sync import (
 from slopgate.cli.parsers import build_parser
 from slopgate.cli.commands_bundle import cmd_bundle_sync_prompts
 from slopgate.cli.parsers_bundle import add_bundle_parsers
-from slopgate.constants import PLATFORM_CLAUDE, PLATFORM_CODEX, PLATFORM_CURSOR, PLATFORM_OPENCODE
+from slopgate.constants import (
+    PLATFORM_CLAUDE,
+    PLATFORM_CODEX,
+    PLATFORM_CURSOR,
+    PLATFORM_OPENCODE,
+)
 
 START_TOKEN = f"slopgate:managed:start id={MANAGED_BLOCK_ID}"
-ROUTING_SOURCE = "slopgate.resources.bundle/shared/prompt-fragments/slopgate-skill-routing.md"
+ROUTING_SOURCE = (
+    "slopgate.resources.bundle/shared/prompt-fragments/slopgate-skill-routing.md"
+)
 SAFE_TEXT = st.text(
     alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\r"),
     max_size=200,
 ).filter(
-    lambda value: START_TOKEN not in value
-    and f"slopgate:managed:end id={MANAGED_BLOCK_ID}" not in value
+    lambda value: (
+        START_TOKEN not in value
+        and f"slopgate:managed:end id={MANAGED_BLOCK_ID}" not in value
+    )
 )
 
 
@@ -96,7 +105,9 @@ def test_remove_managed_block_preserves_preexisting_prefix_and_suffix() -> None:
     assert "managed routing" not in removed, "managed block body should be removed"
     assert START_TOKEN not in removed, "managed start marker should be removed"
     assert "# Existing\n\nKeep this.\n" in removed, "preexisting prefix survives"
-    assert "## User notes\nNever clobber me.\n" in removed, "preexisting suffix survives"
+    assert "## User notes\nNever clobber me.\n" in removed, (
+        "preexisting suffix survives"
+    )
 
 
 @given(prefix=SAFE_TEXT, suffix=SAFE_TEXT)
@@ -121,7 +132,9 @@ def test_remove_managed_block_preserves_unmanaged_content_property(
 def test_remove_managed_block_is_noop_without_managed_region() -> None:
     original = "# Existing\n\nNo Slopgate managed prompt block here.\n"
 
-    assert remove_managed_block(original) == original, "remove without block should not rewrite"
+    assert remove_managed_block(original) == original, (
+        "remove without block should not rewrite"
+    )
 
 
 def test_update_managed_block_rejects_duplicate_regions() -> None:
@@ -129,7 +142,9 @@ def test_update_managed_block_rejects_duplicate_regions() -> None:
     malformed = f"{start}\none\n{end}\n{start}\ntwo\n{end}\n"
 
     with pytest.raises(ValueError, match="multiple managed blocks"):
-        update_managed_block(malformed, managed_content="new\n", source_label="source.md")
+        update_managed_block(
+            malformed, managed_content="new\n", source_label="source.md"
+        )
 
 
 def test_sync_skill_routing_prompts_uses_home_and_preserves_files(
@@ -139,15 +154,21 @@ def test_sync_skill_routing_prompts_uses_home_and_preserves_files(
     monkeypatch.setenv("HOME", str(tmp_path))
     claude_file = tmp_path / ".claude" / "CLAUDE.md"
     claude_file.parent.mkdir(parents=True)
-    claude_file.write_text("# Claude local rules\n\nDo not clobber.\n", encoding="utf-8")
+    claude_file.write_text(
+        "# Claude local rules\n\nDo not clobber.\n", encoding="utf-8"
+    )
 
     results = sync_skill_routing_prompts(platforms=(PLATFORM_CLAUDE,), scope="user")
 
-    assert [result.path for result in results] == [claude_file], "Claude user target path"
+    assert [result.path for result in results] == [claude_file], (
+        "Claude user target path"
+    )
     text = claude_file.read_text(encoding="utf-8")
     assert "Do not clobber." in text, "preexisting Claude prompt should be preserved"
     assert "slopgate-test-extender" in text, "routing fragment should name test skill"
-    assert "/home/trav/.openclaw" not in text, "fragment must not hardcode repo checkout"
+    assert "/home/trav/.openclaw" not in text, (
+        "fragment must not hardcode repo checkout"
+    )
 
 
 def test_sync_skill_routing_prompts_remove_preserves_preexisting_file_content(
@@ -209,8 +230,12 @@ def _sync_twice_in_temp_home(existing: str) -> tuple[bool, bool, str]:
             claude_file = tmp_path / ".claude" / "CLAUDE.md"
             claude_file.parent.mkdir(parents=True)
             claude_file.write_text(existing, encoding="utf-8")
-            first = sync_skill_routing_prompts(platforms=(PLATFORM_CLAUDE,), scope="user")
-            second = sync_skill_routing_prompts(platforms=(PLATFORM_CLAUDE,), scope="user")
+            first = sync_skill_routing_prompts(
+                platforms=(PLATFORM_CLAUDE,), scope="user"
+            )
+            second = sync_skill_routing_prompts(
+                platforms=(PLATFORM_CLAUDE,), scope="user"
+            )
             text = claude_file.read_text(encoding="utf-8")
         finally:
             if old_home is None:
@@ -242,10 +267,14 @@ def test_sync_skill_routing_prompts_deduplicates_project_agents_file(
         project_root=project_root,
     )
 
-    assert [result.path for result in results] == [project_root / "AGENTS.md"], "deduped file"
+    assert [result.path for result in results] == [project_root / "AGENTS.md"], (
+        "deduped file"
+    )
     text = (project_root / "AGENTS.md").read_text(encoding="utf-8")
     assert text.count(START_TOKEN) == 1, "shared AGENTS.md should get one block"
-    assert "slopgate-hygiene-orchestrator" in text, "routing fragment should name skills"
+    assert "slopgate-hygiene-orchestrator" in text, (
+        "routing fragment should name skills"
+    )
 
 
 def test_add_bundle_parsers_registers_sync_command_directly() -> None:
@@ -256,9 +285,13 @@ def test_add_bundle_parsers_registers_sync_command_directly() -> None:
     args = parser.parse_args(["bundle", "sync-prompts", "--only", PLATFORM_CLAUDE])
 
     assert args.command == "bundle", "direct parser helper should add bundle command"
-    assert args.bundle_command == "sync-prompts", "direct helper should add sync subcommand"
+    assert args.bundle_command == "sync-prompts", (
+        "direct helper should add sync subcommand"
+    )
     assert args.only == PLATFORM_CLAUDE, "direct helper should preserve platform choice"
-    assert args.func is cmd_bundle_sync_prompts, "direct helper should attach bundle handler"
+    assert args.func is cmd_bundle_sync_prompts, (
+        "direct helper should attach bundle handler"
+    )
 
 
 def test_add_bundle_parsers_registers_uninstall_alias_directly() -> None:
@@ -269,10 +302,14 @@ def test_add_bundle_parsers_registers_uninstall_alias_directly() -> None:
     args = parser.parse_args(["bundle", "uninstall-prompts", "--only", PLATFORM_CLAUDE])
 
     assert args.command == "bundle", "direct parser helper should add bundle command"
-    assert args.bundle_command == "uninstall-prompts", "direct helper should add uninstall alias"
+    assert args.bundle_command == "uninstall-prompts", (
+        "direct helper should add uninstall alias"
+    )
     assert args.only == PLATFORM_CLAUDE, "alias should preserve platform choice"
     assert args.remove is True, "alias should default to remove mode"
-    assert args.func is cmd_bundle_sync_prompts, "alias should use bundle prompt handler"
+    assert args.func is cmd_bundle_sync_prompts, (
+        "alias should use bundle prompt handler"
+    )
 
 
 def test_bundle_sync_prompts_parser_is_registered() -> None:
@@ -296,7 +333,9 @@ def test_bundle_uninstall_prompts_alias_parser_is_registered() -> None:
     )
 
     assert args.command == "bundle", "top-level command should be bundle"
-    assert args.bundle_command == "uninstall-prompts", "subcommand should be uninstall-prompts"
+    assert args.bundle_command == "uninstall-prompts", (
+        "subcommand should be uninstall-prompts"
+    )
     assert args.only == PLATFORM_CLAUDE, "--only should preserve selected platform"
     assert args.dry_run is True, "--dry-run should be parsed"
     assert args.remove is True, "alias should default to remove mode"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,13 +12,17 @@ from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
 from slopgate.util.payloads import HookPayload
 
+from tests.integration.config_override_support import (
+    GuardRuleConfigOverrides,
+    apply_guard_rule_config_overrides,
+)
 from tests.support import SKIP_UNIX_ONLY
 
 
 def context_for_payload(
     tmp_path: Path,
     payload: dict[str, object],
-    **overrides: object,
+    config_overrides: GuardRuleConfigOverrides | None = None,
 ) -> HookContext:
     config = load_config(
         root=tmp_path,
@@ -27,8 +30,8 @@ def context_for_payload(
         ensure_enrollment=False,
         ensure_trace=False,
     )
-    if overrides:
-        config = replace(config, **overrides)
+    if config_overrides is not None:
+        config = apply_guard_rule_config_overrides(config, config_overrides)
     trace = TraceWriter(tmp_path / ".slopgate" / "trace")
     return HookContext(
         payload=HookPayload(payload, config),
@@ -75,7 +78,9 @@ def test_search_reminder_reports_grep_without_search_tool(tmp_path: Path) -> Non
     ctx = context_for_payload(
         tmp_path,
         bash_payload("grep -R needle src"),
-        search_reminder_message="Use rg before broad scans.",
+        config_overrides=GuardRuleConfigOverrides(
+            search_reminder_message="Use rg before broad scans."
+        ),
     )
 
     findings = rules.SearchReminderRule().evaluate(ctx)
@@ -100,9 +105,11 @@ def test_post_edit_quality_rule_blocks_collector_failures(
     ctx = context_for_payload(
         tmp_path,
         write_payload("sample.py", "print('x')\n", event="PostToolUse"),
-        post_edit_quality_enabled=True,
-        post_edit_quality_block_on_failure=True,
-        post_edit_quality_commands={"python": ["quality {files}"]},
+        config_overrides=GuardRuleConfigOverrides(
+            post_edit_quality_enabled=True,
+            post_edit_quality_block_on_failure=True,
+            post_edit_quality_commands={"python": ["quality {files}"]},
+        ),
     )
 
     findings = rules.PostEditQualityRule().evaluate(ctx)
@@ -143,69 +150,6 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
 
     assert [(item.rule_id, item.metadata.get("paths")) for item in findings] == [
         ("QUALITY-LINT-001", ["tests/test_sample.py"])
-    ]
-
-
-def langgraph_context(tmp_path: Path, source: str) -> HookContext:
-    (tmp_path / "graph.py").write_text(source, encoding="utf-8")
-    return context_for_payload(
-        tmp_path, write_payload("graph.py", source, event="PostToolUse")
-    )
-
-
-def test_langgraph_state_reducer_rule_reports_bare_list_field(tmp_path: Path) -> None:
-    source = """
-from typing import TypedDict
-from langgraph.graph import StateGraph
-
-class State(TypedDict):
-    messages: list[str]
-""".lstrip()
-    ctx = langgraph_context(tmp_path, source)
-
-    findings = rules.LangGraphStateReducerRule().evaluate(ctx)
-
-    assert [(item.rule_id, item.metadata.get("path")) for item in findings] == [
-        ("LG-STATE-001", "graph.py")
-    ]
-
-
-def test_langgraph_state_mutation_rule_reports_direct_state_change(
-    tmp_path: Path,
-) -> None:
-    mutation_line = 'state["messages"]' + '.append("hello")'
-    source = f"""
-from langgraph.graph import StateGraph
-
-def node(state):
-    {mutation_line}
-    return state
-""".lstrip()
-    ctx = langgraph_context(tmp_path, source)
-
-    findings = rules.LangGraphStateMutationRule().evaluate(ctx)
-
-    assert [(item.rule_id, item.metadata.get("path")) for item in findings] == [
-        ("LG-NODE-001", "graph.py")
-    ]
-
-
-def test_langgraph_deprecated_api_rule_reports_old_entrypoint_api(
-    tmp_path: Path,
-) -> None:
-    old_entrypoint = "set_" + "entry_point"
-    source = f"""
-from langgraph.graph import StateGraph
-
-graph = StateGraph(dict)
-graph.{old_entrypoint}("node")
-""".lstrip()
-    ctx = langgraph_context(tmp_path, source)
-
-    findings = rules.LangGraphDeprecatedAPIRule().evaluate(ctx)
-
-    assert [(item.rule_id, item.metadata.get("path")) for item in findings] == [
-        ("LG-API-001", "graph.py"),
     ]
 
 
@@ -327,7 +271,7 @@ def test_system_protection_rule_blocks_configured_system_path(tmp_path: Path) ->
     system_ctx = context_for_payload(
         tmp_path,
         write_payload("/etc/passwd", "root:x:0:0\n"),
-        system_path_prefixes=["/etc"],
+        config_overrides=GuardRuleConfigOverrides(system_path_prefixes=["/etc"]),
     )
 
     findings = rules.SystemProtectionRule().evaluate(system_ctx)

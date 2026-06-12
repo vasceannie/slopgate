@@ -10,6 +10,8 @@ LOG_DIR = Path.home() / ".config" / "slopgate" / "logs"
 JSONL_FILES = ["events.jsonl", "rules.jsonl", "results.jsonl", "subprocess.jsonl", "async/subprocess.jsonl"]
 MAX_RECORDS = {"events": 120000, "rules": 240000, "results": 120000, "subprocesses": 10000}
 TRACE_META_KEYS = ("platform_capability", "degraded_reason", "enforcement_mode", "resolved_repo_root")
+DECISIONS = ("allow", "deny", "block", "ask", "context", "warn", "info")
+DECISION_PRIORITY = ("block", "deny", "ask", "warn", "context", "info", "allow")
 
 
 def object_dict(value):
@@ -36,6 +38,44 @@ def trim_text(value, limit):
     if len(value) <= limit:
         return value
     return value[:limit] + "...[trimmed]"
+
+
+def bump_count(counts, key, amount=1):
+    label = key if isinstance(key, str) and key else "unknown"
+    counts[label] = counts.get(label, 0) + amount
+
+
+def top_counts(counts, limit):
+    return [
+        {"label": label, "count": count}
+        for label, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+    ]
+
+
+def repo_label_for_path(path):
+    if not isinstance(path, str) or not path:
+        return "unknown"
+    segments = [part for part in path.split("/") if part]
+    for marker in ("repos", "workspace-hooker"):
+        if marker in segments:
+            marker_index = segments.index(marker)
+            if marker_index + 1 < len(segments):
+                return segments[marker_index + 1]
+    if len(segments) >= 3 and segments[0] == "home":
+        return segments[2]
+    return segments[0] if segments else path
+
+
+def decision_for_findings(findings):
+    decisions = [
+        finding.get("decision")
+        for finding in findings
+        if isinstance(finding, Mapping)
+    ]
+    for decision in DECISION_PRIORITY:
+        if decision in decisions:
+            return decision
+    return "allow"
 
 
 def parse_ts(value):
@@ -197,7 +237,8 @@ def collect_snapshot():
     for fname in JSONL_FILES:
         collect_file(LOG_DIR / fname, fname, cutoff, data, seen_files, raw_counts)
     truncated = truncate_data(data)
-    return data, seen_files, raw_counts, truncated
+    summaries = summarize_snapshot(data)
+    return data, seen_files, raw_counts, truncated, summaries
 
 
 def collect_file(path, fname, cutoff, data, seen_files, raw_counts):
@@ -226,7 +267,54 @@ def truncate_data(data):
     return truncated
 
 
-data, seen_files, raw_counts, truncated = collect_snapshot()
+def summarize_snapshot(data):
+    session_ids = set()
+    repo_counts = {}
+    decision_counts = {decision: 0 for decision in DECISIONS}
+    rule_counts = {}
+    rule_decisions = {}
+    subprocess_failures = 0
+
+    for event in data["events"]:
+        session_ids.add(event.get("session_id", ""))
+        for path in event.get("candidate_paths", []):
+            bump_count(repo_counts, repo_label_for_path(path))
+
+    for rule in data["rules"]:
+        rule_id = rule.get("rule_id", "unknown-rule")
+        decision = rule.get("decision") or "context"
+        bump_count(rule_counts, rule_id)
+        per_rule = rule_decisions.setdefault(rule_id, {item: 0 for item in DECISIONS})
+        per_rule[decision] = per_rule.get(decision, 0) + 1
+
+    for result in data["results"]:
+        session_ids.add(result.get("session_id", ""))
+        decision = decision_for_findings(result.get("findings", []))
+        decision_counts[decision] = decision_counts.get(decision, 0) + 1
+
+    for subprocess in data["subprocesses"]:
+        session_ids.add(subprocess.get("session_id", ""))
+        if subprocess.get("returncode") != 0:
+            subprocess_failures += 1
+
+    top_rules = []
+    for rule_id, count in sorted(rule_counts.items(), key=lambda item: (-item[1], item[0]))[:25]:
+        top_rules.append({
+            "rule_id": rule_id,
+            "count": count,
+            "decisions": rule_decisions.get(rule_id, {}),
+        })
+
+    return {
+        "session_count": len({item for item in session_ids if item}),
+        "decision_counts": decision_counts,
+        "hottest_repos": top_counts(repo_counts, 10),
+        "top_rules": top_rules,
+        "subprocess_failures": subprocess_failures,
+    }
+
+
+data, seen_files, raw_counts, truncated, summaries = collect_snapshot()
 print(json.dumps({
     "ok": True,
     "lookback_hours": LOOKBACK_HOURS,
@@ -237,5 +325,6 @@ print(json.dumps({
     "counts_raw": raw_counts,
     "counts_published": {key: len(value) for key, value in data.items()},
     "truncated": truncated,
+    "summaries": summaries,
     "data": data,
 }, separators=(",", ":")))

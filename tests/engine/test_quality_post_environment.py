@@ -29,7 +29,9 @@ def test_post_edit_quality_missing_python_reports_environment_failure(
 
     write_config_from_defaults(tmp_path, monkeypatch, enable_missing_python)
 
-    result = evaluate_payload(post_edit_bash_payload(repo, "printf 'x = 1\\n' > app.py"))
+    result = evaluate_payload(
+        post_edit_bash_payload(repo, "printf 'x = 1\\n' > app.py")
+    )
     finding = next(
         item for item in result.findings if item.rule_id == "QUALITY-POST-001"
     )

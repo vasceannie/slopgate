@@ -18,6 +18,7 @@ import {
 	type StreamState,
 	type TraceData,
 	TraceDataContext,
+	type TraceSnapshotSummary,
 	type TraceSourceMeta,
 } from "./traceDataContext";
 import { coerceTraceRecord } from "./traceRecordValidation";
@@ -35,6 +36,7 @@ interface SnapshotResponse {
 	lookback_hours?: number;
 	loaded_at?: string;
 	truncated?: Record<string, number>;
+	summaries?: TraceSnapshotSummary;
 	data?: Partial<TraceData>;
 	error?: string;
 }
@@ -77,6 +79,13 @@ const EMPTY_TRACE_DATA: TraceData = {
 	subprocesses: [],
 };
 
+interface TraceDataKeys {
+	events: Set<string>;
+	rules: Set<string>;
+	results: Set<string>;
+	subprocesses: Set<string>;
+}
+
 function latestTimestamp(items: Array<{ timestamp?: string }>): string | null {
 	let latest: string | null = null;
 	for (const item of items) {
@@ -117,11 +126,32 @@ function recordKey(item: object): string {
 	return JSON.stringify(stableRecordValue(item));
 }
 
-function appendBoundedUnique<T extends object>(items: T[], item: T): T[] {
+function buildRecordKeySet(items: object[]): Set<string> {
+	return new Set(items.map(recordKey));
+}
+
+function buildTraceDataKeys(data: TraceData): TraceDataKeys {
+	return {
+		events: buildRecordKeySet(data.events),
+		rules: buildRecordKeySet(data.rules),
+		results: buildRecordKeySet(data.results),
+		subprocesses: buildRecordKeySet(data.subprocesses),
+	};
+}
+
+function appendBoundedUnique<T extends object>(
+	items: T[],
+	item: T,
+	knownKeys: Set<string>,
+): T[] {
 	const key = recordKey(item);
-	if (items.some((existing) => recordKey(existing) === key)) return items;
-	if (items.length >= MAX_RECORDS_PER_CATEGORY)
-		return [...items.slice(1), item];
+	if (knownKeys.has(key)) return items;
+	knownKeys.add(key);
+	if (items.length >= MAX_RECORDS_PER_CATEGORY) {
+		const [removed, ...rest] = items;
+		if (removed) knownKeys.delete(recordKey(removed));
+		return [...rest, item];
+	}
 	return [...items, item];
 }
 
@@ -179,6 +209,8 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 	const [snapshotTruncated, setSnapshotTruncated] = useState<
 		Record<string, number>
 	>({});
+	const [snapshotSummary, setSnapshotSummary] =
+		useState<TraceSnapshotSummary | null>(null);
 	const [isSnapshotLoading, setSnapshotLoading] = useState(
 		initial.sourceMode === "mock",
 	);
@@ -189,6 +221,12 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 	);
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const snapshotRequestVersionRef = useRef(0);
+	const recordKeysRef = useRef<TraceDataKeys>(buildTraceDataKeys(initial.data));
+
+	const replaceData = useCallback((nextData: TraceData) => {
+		recordKeysRef.current = buildTraceDataKeys(nextData);
+		setData(nextData);
+	}, []);
 
 	const appendRecord = useCallback(
 		(obj: Record<string, unknown>): AppendOutcome => {
@@ -198,28 +236,44 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 			if (accepted.type === "event") {
 				setData((prev: TraceData) => ({
 					...prev,
-					events: appendBoundedUnique(prev.events, accepted.record),
+					events: appendBoundedUnique(
+						prev.events,
+						accepted.record,
+						recordKeysRef.current.events,
+					),
 				}));
 				return "accepted";
 			}
 			if (accepted.type === "rule") {
 				setData((prev: TraceData) => ({
 					...prev,
-					rules: appendBoundedUnique(prev.rules, accepted.record),
+					rules: appendBoundedUnique(
+						prev.rules,
+						accepted.record,
+						recordKeysRef.current.rules,
+					),
 				}));
 				return "accepted";
 			}
 			if (accepted.type === "result") {
 				setData((prev: TraceData) => ({
 					...prev,
-					results: appendBoundedUnique(prev.results, accepted.record),
+					results: appendBoundedUnique(
+						prev.results,
+						accepted.record,
+						recordKeysRef.current.results,
+					),
 				}));
 				return "accepted";
 			}
 			if (accepted.type === "subprocess") {
 				setData((prev: TraceData) => ({
 					...prev,
-					subprocesses: appendBoundedUnique(prev.subprocesses, accepted.record),
+					subprocesses: appendBoundedUnique(
+						prev.subprocesses,
+						accepted.record,
+						recordKeysRef.current.subprocesses,
+					),
 				}));
 				return "accepted";
 			}
@@ -304,12 +358,13 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 				throw new Error(snapshot.error || `snapshot HTTP ${response.status}`);
 			}
 			const nextData = coerceSnapshotData(snapshot);
-			setData(nextData);
+			replaceData(nextData);
 			setSourceMode("streaming");
 			setSnapshotLoadedAt(snapshot.loaded_at ?? new Date().toISOString());
 			setSnapshotLookbackHours(snapshot.lookback_hours ?? hours);
 			setSnapshotError(null);
 			setSnapshotTruncated(snapshot.truncated ?? {});
+			setSnapshotSummary(snapshot.summaries ?? null);
 			setShouldConnectStream(true);
 		} catch (error) {
 			if (snapshotRequestVersionRef.current === requestVersion) {
@@ -322,7 +377,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 				setSnapshotLoading(false);
 			}
 		}
-	}, []);
+	}, [replaceData]);
 
 	useEffect(() => {
 		void refreshSnapshot(168);
@@ -344,6 +399,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 		setSnapshotLookbackHours(null);
 		setSnapshotError(null);
 		setSnapshotTruncated({});
+		setSnapshotSummary(null);
 		setSnapshotLoading(false);
 		setAcceptedStreamRecords(0);
 		setRejectedStreamRecords(0);
@@ -395,12 +451,12 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 			merged.subprocesses.sort((a, b) =>
 				a.timestamp.localeCompare(b.timestamp),
 			);
-			setData(merged);
+			replaceData(merged);
 			setSourceMode("uploaded");
 			setLastStreamEventAt(null);
 		}
 		return { accepted, rejected };
-	}, []);
+	}, [replaceData]);
 
 	const resetToMock = useCallback(() => {
 		snapshotRequestVersionRef.current += 1;
@@ -418,12 +474,13 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 		setSnapshotLookbackHours(null);
 		setSnapshotError(null);
 		setSnapshotTruncated({});
+		setSnapshotSummary(null);
 		setSnapshotLoading(false);
 		setAcceptedStreamRecords(0);
 		setRejectedStreamRecords(0);
-		setData(generateMockData());
+		replaceData(generateMockData());
 		setSourceMode("mock");
-	}, []);
+	}, [replaceData]);
 
 	const isLive = sourceMode !== "mock";
 	const latestDataAt = useMemo(() => latestTraceTimestamp(data), [data]);
@@ -440,6 +497,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 			snapshotLookbackHours,
 			snapshotError,
 			snapshotTruncated,
+			snapshotSummary,
 			isSnapshotLoading,
 			streamConnectedAt,
 			lastAcceptedStreamRecordAt,
@@ -457,6 +515,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 			snapshotError,
 			snapshotLoadedAt,
 			snapshotLookbackHours,
+			snapshotSummary,
 			snapshotTruncated,
 			streamConnectedAt,
 			totalRecords,

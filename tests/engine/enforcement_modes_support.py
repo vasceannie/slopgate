@@ -9,8 +9,6 @@ __all__ = [
 ]
 
 
-
-
 from pathlib import Path
 
 from slopgate.engine import evaluate_payload

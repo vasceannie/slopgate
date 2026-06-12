@@ -29,9 +29,7 @@ class TestEnableCodexHooksToml:
 
     def test_sets_hooks_true_when_hooks_false(self, tmp_path: Path) -> None:
         config_path = tmp_path / "config_codex_hooks_false.toml"
-        config_path.write_text(
-            "[features]\nhooks = false\n", encoding="utf-8"
-        )
+        config_path.write_text("[features]\nhooks = false\n", encoding="utf-8")
         enable_codex_hooks_toml(config_path)
         content = config_path.read_text(encoding="utf-8")
         assert "hooks = true" in content, (
@@ -40,9 +38,7 @@ class TestEnableCodexHooksToml:
 
     def test_migrates_codex_hooks_to_hooks(self, tmp_path: Path) -> None:
         config_path = tmp_path / "config_codex_legacy.toml"
-        config_path.write_text(
-            "[features]\ncodex_hooks = false\n", encoding="utf-8"
-        )
+        config_path.write_text("[features]\ncodex_hooks = false\n", encoding="utf-8")
         enable_codex_hooks_toml(config_path)
         content = config_path.read_text(encoding="utf-8")
         assert "hooks = true" in content, (
@@ -60,20 +56,14 @@ class TestEnableCodexHooksToml:
         )
         enable_codex_hooks_toml(config_path)
         content = config_path.read_text(encoding="utf-8")
-        assert "hooks = true" in content, (
-            f"should add hooks = true, got: {content!r}"
-        )
+        assert "hooks = true" in content, f"should add hooks = true, got: {content!r}"
         assert content.count("codex_hooks") == 0, (
             f"all codex_hooks entries should be removed, got: {content!r}"
         )
 
-    def test_inserts_hooks_when_features_is_last_section(
-        self, tmp_path: Path
-    ) -> None:
+    def test_inserts_hooks_when_features_is_last_section(self, tmp_path: Path) -> None:
         config_path = tmp_path / "config_codex_last_feature.toml"
-        config_path.write_text(
-            "[other]\nkey = 1\n[features]\n", encoding="utf-8"
-        )
+        config_path.write_text("[other]\nkey = 1\n[features]\n", encoding="utf-8")
         enable_codex_hooks_toml(config_path)
         content = config_path.read_text(encoding="utf-8")
         assert "hooks = true" in content, (
@@ -82,9 +72,7 @@ class TestEnableCodexHooksToml:
 
     def test_only_modifies_features_section(self, tmp_path: Path) -> None:
         config_path = tmp_path / "config_codex_hooks_before_features.toml"
-        config_path.write_text(
-            "hooks = false\n[features]\n[other]\n", encoding="utf-8"
-        )
+        config_path.write_text("hooks = false\n[features]\n[other]\n", encoding="utf-8")
         enable_codex_hooks_toml(config_path)
         content = config_path.read_text(encoding="utf-8")
         lines = content.splitlines()

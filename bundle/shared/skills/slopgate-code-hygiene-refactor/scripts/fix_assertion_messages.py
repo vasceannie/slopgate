@@ -122,29 +122,25 @@ def process_file(file_path: Path, dry_run: bool = True) -> list[tuple[int, str, 
                 # Create new line with message
                 indent = len(original_line) - len(original_line.lstrip())
                 assertion_text = ast.unparse(assert_node.test)
-                new_line = f"{' ' * indent}assert {assertion_text}, \"{msg}\""
+                new_line = f'{" " * indent}assert {assertion_text}, "{msg}"'
 
-                changes.append((assert_node.lineno, original_line.strip(), new_line.strip()))
+                changes.append(
+                    (assert_node.lineno, original_line.strip(), new_line.strip())
+                )
 
     return changes
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Add messages to bare assertions"
-    )
+    parser = argparse.ArgumentParser(description="Add messages to bare assertions")
+    parser.add_argument("file", type=Path, help="File to process")
     parser.add_argument(
-        "file", type=Path,
-        help="File to process"
+        "--dry-run",
+        action="store_true",
+        default=True,
+        help="Show changes without applying (default)",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", default=True,
-        help="Show changes without applying (default)"
-    )
-    parser.add_argument(
-        "--apply", action="store_true",
-        help="Apply changes to file"
-    )
+    parser.add_argument("--apply", action="store_true", help="Apply changes to file")
     args = parser.parse_args()
 
     if not args.file.exists():

@@ -144,9 +144,7 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
     index = build_test_integrity_index(parsed_src, parsed_tests)
 
     def fail_rebuild(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError(
-            "detector rebuilt facts already present in IntegrityIndex"
-        )
+        raise AssertionError("detector rebuilt facts already present in IntegrityIndex")
 
     _block_index_rebuild_helpers(
         monkeypatch,

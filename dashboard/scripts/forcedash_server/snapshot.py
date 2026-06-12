@@ -1,4 +1,5 @@
 """Remote trace snapshot collection."""
+
 import json
 import subprocess
 from urllib.parse import parse_qs, urlparse
@@ -20,7 +21,11 @@ TRACE_SNAPSHOT_SCRIPT = "trace_snapshot.py.txt"
 def snapshot_lookback_hours(path: str) -> int:
     parsed = urlparse(path)
     params = parse_qs(parsed.query)
-    raw = (params.get("lookback_hours") or params.get("hours") or [str(DEFAULT_LOOKBACK_HOURS)])[0]
+    raw = (
+        params.get("lookback_hours")
+        or params.get("hours")
+        or [str(DEFAULT_LOOKBACK_HOURS)]
+    )[0]
     try:
         hours = int(raw)
     except (TypeError, ValueError):
@@ -43,7 +48,9 @@ def trace_snapshot(lookback_hours: int) -> tuple[JSONDict, str | None]:
 
 def build_trace_snapshot_script(lookback_hours: int) -> str:
     script = read_remote_script(TRACE_SNAPSHOT_SCRIPT)
-    return script.replace("__LOOKBACK_HOURS__", str(lookback_hours)).replace("__SSH_HOST__", SSH_HOST)
+    return script.replace("__LOOKBACK_HOURS__", str(lookback_hours)).replace(
+        "__SSH_HOST__", SSH_HOST
+    )
 
 
 def parse_snapshot_payload(stdout: str) -> tuple[JSONDict, str | None]:

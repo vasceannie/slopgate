@@ -14,9 +14,7 @@ class TestShellCommand:
         )
 
     def test_windows_wraps_with_powershell(self) -> None:
-        result = shell_command(
-            ["C:\\Tools\\slopgate.exe", "handle"], windows=True
-        )
+        result = shell_command(["C:\\Tools\\slopgate.exe", "handle"], windows=True)
         assert result.startswith("powershell.exe"), (
             f"Expected powershell.exe wrapper, got {result}"
         )
@@ -58,7 +56,9 @@ class TestShellCommand:
 class TestHookCommand:
     def test_posix(self) -> None:
         result = hook_command(
-            "/usr/local/bin/slopgate", "handle", windows=False,
+            "/usr/local/bin/slopgate",
+            "handle",
+            windows=False,
         )
         assert "/usr/local/bin/slopgate" in result, (
             f"Expected binary path in command, got {result}"
@@ -69,7 +69,8 @@ class TestHookCommand:
 
     def test_windows_spaces(self) -> None:
         result = hook_command(
-            "C:\\Program Files\\Slopgate\\slopgate.exe", "handle",
+            "C:\\Program Files\\Slopgate\\slopgate.exe",
+            "handle",
             windows=True,
         )
         assert "powershell.exe" in result, (

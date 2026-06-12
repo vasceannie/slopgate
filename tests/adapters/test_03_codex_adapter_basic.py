@@ -51,9 +51,7 @@ class TestCodexAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "deny must set permissionDecision=deny"
         )
-        assert "GIT-001" in support.required_string(
-            spec, "permissionDecisionReason"
-        )
+        assert "GIT-001" in support.required_string(spec, "permissionDecisionReason")
 
     def test_pretool_deny_preserves_context_but_not_updated_input(self) -> None:
         adapter = CodexAdapter()

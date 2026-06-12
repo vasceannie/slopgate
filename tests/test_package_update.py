@@ -27,21 +27,20 @@ class TestPackageUpdateCommand:
 
         monkeypatch.setattr(shutil, "which", _fake_which_none)
         result = _package_update_command("slopgate")
-        assert result == [sys.executable, "-m", "pip", "install", "--upgrade", "slopgate"], (
-            f"Expected pip upgrade command, got {result}"
-        )
+        assert result == [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "slopgate",
+        ], f"Expected pip upgrade command, got {result}"
 
-    def test_uv_not_installed_uses_pip(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_uv_not_installed_uses_pip(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def _fake_which_conditional(name: str) -> str | None:
             return None if name == "uv" else "/usr/bin/other"
 
         monkeypatch.setattr(shutil, "which", _fake_which_conditional)
         result = _package_update_command("slopgate")
-        assert "pip" in result, (
-            f"Expected pip in fallback command, got {result}"
-        )
-        assert "uv" not in result, (
-            f"Expected no uv in fallback command, got {result}"
-        )
+        assert "pip" in result, f"Expected pip in fallback command, got {result}"
+        assert "uv" not in result, f"Expected no uv in fallback command, got {result}"

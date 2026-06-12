@@ -46,6 +46,9 @@ __all__ = [
     "_opencode",
     "_suite",
     "find_binary",
+    "filter_owned_hook_commands",
+    "merge_owned_hooks",
+    "remove_owned_hooks",
     "_INSTALLERS",
 ]
 from pathlib import Path
@@ -63,7 +66,12 @@ from slopgate.installer._cursor import (
     cursor_project_hooks_path,
 )
 from slopgate.installer._install_scope import INSTALL_SCOPES
-from slopgate.installer._shared import find_binary
+from slopgate.installer._shared import (
+    filter_owned_hook_commands,
+    find_binary,
+    merge_owned_hooks,
+    remove_owned_hooks,
+)
 
 install_claude = _claude.install_claude
 uninstall_claude = _claude.uninstall_claude

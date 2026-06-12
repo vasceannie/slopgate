@@ -38,47 +38,55 @@ def analyze_function(
         # Try/except blocks
         if isinstance(node, ast.Try):
             end = node.end_lineno or node.lineno
-            blocks.append(Block(
-                start_line=node.lineno,
-                end_line=end,
-                type="try_block",
-                description="Error handling block",
-                extractable=end - node.lineno > 5,
-            ))
+            blocks.append(
+                Block(
+                    start_line=node.lineno,
+                    end_line=end,
+                    type="try_block",
+                    description="Error handling block",
+                    extractable=end - node.lineno > 5,
+                )
+            )
 
         # For loops
         elif isinstance(node, (ast.For, ast.AsyncFor)):
             end = node.end_lineno or node.lineno
-            blocks.append(Block(
-                start_line=node.lineno,
-                end_line=end,
-                type="loop",
-                description=f"Loop over {ast.unparse(node.iter)[:30]}",
-                extractable=end - node.lineno > 5,
-            ))
+            blocks.append(
+                Block(
+                    start_line=node.lineno,
+                    end_line=end,
+                    type="loop",
+                    description=f"Loop over {ast.unparse(node.iter)[:30]}",
+                    extractable=end - node.lineno > 5,
+                )
+            )
 
         # If blocks
         elif isinstance(node, ast.If):
             end = node.end_lineno or node.lineno
             condition = ast.unparse(node.test)[:40]
-            blocks.append(Block(
-                start_line=node.lineno,
-                end_line=end,
-                type="conditional",
-                description=f"If {condition}",
-                extractable=end - node.lineno > 8,
-            ))
+            blocks.append(
+                Block(
+                    start_line=node.lineno,
+                    end_line=end,
+                    type="conditional",
+                    description=f"If {condition}",
+                    extractable=end - node.lineno > 8,
+                )
+            )
 
         # With blocks
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             end = node.end_lineno or node.lineno
-            blocks.append(Block(
-                start_line=node.lineno,
-                end_line=end,
-                type="context_manager",
-                description="Context manager block",
-                extractable=end - node.lineno > 10,
-            ))
+            blocks.append(
+                Block(
+                    start_line=node.lineno,
+                    end_line=end,
+                    type="context_manager",
+                    description="Context manager block",
+                    extractable=end - node.lineno > 10,
+                )
+            )
 
     return blocks
 
@@ -115,17 +123,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Analyze long functions for extraction opportunities"
     )
+    parser.add_argument("file", type=Path, help="File to analyze")
     parser.add_argument(
-        "file", type=Path,
-        help="File to analyze"
+        "--threshold", type=int, default=50, help="Line threshold for long functions"
     )
     parser.add_argument(
-        "--threshold", type=int, default=50,
-        help="Line threshold for long functions"
-    )
-    parser.add_argument(
-        "--show-code", action="store_true",
-        help="Show code preview for extractable blocks"
+        "--show-code",
+        action="store_true",
+        help="Show code preview for extractable blocks",
     )
     args = parser.parse_args()
 
@@ -145,7 +150,7 @@ def main() -> None:
 
     for func, length, blocks in results:
         async_prefix = "async " if isinstance(func, ast.AsyncFunctionDef) else ""
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"{async_prefix}def {func.name}() - {length} lines")
         print(f"  Location: {args.file}:{func.lineno}-{func.end_lineno}")
 
@@ -154,13 +159,17 @@ def main() -> None:
             print(f"\n  Extractable blocks ({len(extractable)}):")
             for block in extractable:
                 block_len = block.end_line - block.start_line + 1
-                print(f"    - Lines {block.start_line}-{block.end_line} ({block_len} lines)")
+                print(
+                    f"    - Lines {block.start_line}-{block.end_line} ({block_len} lines)"
+                )
                 print(f"      Type: {block.type}")
                 print(f"      Description: {block.description}")
 
                 if args.show_code:
-                    print(f"      Preview:")
-                    preview_lines = source_lines[block.start_line - 1 : block.start_line + 2]
+                    print("      Preview:")
+                    preview_lines = source_lines[
+                        block.start_line - 1 : block.start_line + 2
+                    ]
                     for line in preview_lines:
                         print(f"        {line}")
                     if block.end_line - block.start_line > 3:
@@ -168,7 +177,7 @@ def main() -> None:
 
         # Suggest extraction names
         if extractable:
-            print(f"\n  Suggested helper functions:")
+            print("\n  Suggested helper functions:")
             for i, block in enumerate(extractable, 1):
                 if block.type == "loop":
                     print(f"    - _process_{func.name}_items()")

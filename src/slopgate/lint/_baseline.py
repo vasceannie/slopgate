@@ -89,7 +89,7 @@ def load_baseline() -> dict[str, set[str]]:
         if not isinstance(ids, list):
             continue
         typed_ids = cast(list[object], ids)
-        result[str(rule)] = {str(item) for item in typed_ids}
+        result[rule] = {str(item) for item in typed_ids}
     return result
 
 
@@ -174,13 +174,6 @@ class BaselineSyncResult(NamedTuple):
     inherited_added: int = 0
 
 
-def _count_new_synced_ids(
-    old_baseline: dict[str, set[str]],
-    synced: dict[str, set[str]],
-) -> int:
-    return sum(len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items())
-
-
 def apply_lint_baseline_sync(
     collectors: list[tuple[str, list[Violation]]],
     old_baseline: dict[str, set[str]],
@@ -195,7 +188,9 @@ def apply_lint_baseline_sync(
         prune_only=prune_only,
         accepted_baseline=accepted_baseline,
     )
-    inherited_added = _count_new_synced_ids(old_baseline, synced)
+    inherited_added = sum(
+        len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items()
+    )
     if _baseline_rules_equal(old_baseline, synced):
         return BaselineSyncResult(stale_removed, False, inherited_added)
     save_baseline_ids(synced)

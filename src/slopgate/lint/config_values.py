@@ -22,7 +22,7 @@ def _deprecated_patterns() -> list[tuple[str, str]]:
     patterns: list[tuple[str, str]] = []
     for item in LINT_DEPRECATED_PATTERNS_DEFAULTS["patterns"]:
         if isinstance(item, tuple) and len(item) == 2:
-            patterns.append((str(item[0]), str(item[1])))
+            patterns.append((item[0], item[1]))
             continue
         text = str(item)
         patterns.append((text, text))
@@ -30,8 +30,8 @@ def _deprecated_patterns() -> list[tuple[str, str]]:
 
 
 def _path_values(root: Path) -> dict[str, object]:
-    src_root = root / str(LINT_PATH_DEFAULTS["src"])
-    tests_root = root / str(LINT_PATH_DEFAULTS["tests"])
+    src_root = root / LINT_PATH_DEFAULTS["src"]
+    tests_root = root / LINT_PATH_DEFAULTS["tests"]
     return {
         "project_root": root,
         "src_roots": (src_root,),
@@ -39,116 +39,107 @@ def _path_values(root: Path) -> dict[str, object]:
         "src_root": src_root,
         "tests_root": tests_root,
         "baseline_path": None,
-        "exclude_dirs": {str(item) for item in LINT_PATH_DEFAULTS["exclude_dirs"]},
-        "exclude_patterns": [
-            str(item) for item in LINT_PATH_DEFAULTS["exclude_patterns"]
-        ],
-        "default_scope": str(LINT_SCOPE_DEFAULTS["default"]),
+        "exclude_dirs": {item for item in LINT_PATH_DEFAULTS["exclude_dirs"]},
+        "exclude_patterns": [item for item in LINT_PATH_DEFAULTS["exclude_patterns"]],
+        "default_scope": LINT_SCOPE_DEFAULTS["default"],
     }
 
 
 def _threshold_values() -> dict[str, object]:
     return {
-        "max_complexity": int(LINT_THRESHOLD_DEFAULTS["max_complexity"]),
-        "max_params": int(LINT_THRESHOLD_DEFAULTS["max_params"]),
-        "max_method_lines": int(LINT_THRESHOLD_DEFAULTS["max_method_lines"]),
-        "max_test_lines": int(LINT_THRESHOLD_DEFAULTS["max_test_lines"]),
-        "max_module_lines_soft": int(LINT_THRESHOLD_DEFAULTS["max_module_lines_soft"]),
-        "max_module_lines_hard": int(LINT_THRESHOLD_DEFAULTS["max_module_lines_hard"]),
-        "max_nesting_depth": int(LINT_THRESHOLD_DEFAULTS["max_nesting_depth"]),
-        "max_god_class_methods": int(LINT_THRESHOLD_DEFAULTS["max_god_class_methods"]),
-        "max_god_class_lines": int(LINT_THRESHOLD_DEFAULTS["max_god_class_lines"]),
-        "max_eager_test_calls": int(LINT_THRESHOLD_DEFAULTS["max_eager_test_calls"]),
-        "max_repeated_magic_numbers": int(
-            LINT_THRESHOLD_DEFAULTS["max_repeated_magic_numbers"]
-        ),
-        "max_repeated_string_literals": int(
-            LINT_THRESHOLD_DEFAULTS["max_repeated_string_literals"]
-        ),
-        "max_scattered_helpers": int(LINT_THRESHOLD_DEFAULTS["max_scattered_helpers"]),
-        "max_duplicate_helper_signatures": int(
-            LINT_THRESHOLD_DEFAULTS["max_duplicate_helper_signatures"]
-        ),
-        "max_repeated_code_patterns": int(
-            LINT_THRESHOLD_DEFAULTS["max_repeated_code_patterns"]
-        ),
-        "min_function_body_lines": int(
-            LINT_THRESHOLD_DEFAULTS["min_function_body_lines"]
-        ),
-        "min_call_sequence_length": int(
-            LINT_THRESHOLD_DEFAULTS["min_call_sequence_length"]
-        ),
-        "max_line_length": int(LINT_THRESHOLD_DEFAULTS["max_line_length"]),
+        "max_complexity": LINT_THRESHOLD_DEFAULTS["max_complexity"],
+        "max_params": LINT_THRESHOLD_DEFAULTS["max_params"],
+        "max_method_lines": LINT_THRESHOLD_DEFAULTS["max_method_lines"],
+        "max_test_lines": LINT_THRESHOLD_DEFAULTS["max_test_lines"],
+        "max_module_lines_soft": LINT_THRESHOLD_DEFAULTS["max_module_lines_soft"],
+        "max_module_lines_hard": LINT_THRESHOLD_DEFAULTS["max_module_lines_hard"],
+        "max_nesting_depth": LINT_THRESHOLD_DEFAULTS["max_nesting_depth"],
+        "max_god_class_methods": LINT_THRESHOLD_DEFAULTS["max_god_class_methods"],
+        "max_god_class_lines": LINT_THRESHOLD_DEFAULTS["max_god_class_lines"],
+        "max_eager_test_calls": LINT_THRESHOLD_DEFAULTS["max_eager_test_calls"],
+        "max_repeated_magic_numbers": LINT_THRESHOLD_DEFAULTS[
+            "max_repeated_magic_numbers"
+        ],
+        "max_repeated_string_literals": LINT_THRESHOLD_DEFAULTS[
+            "max_repeated_string_literals"
+        ],
+        "max_scattered_helpers": LINT_THRESHOLD_DEFAULTS["max_scattered_helpers"],
+        "max_duplicate_helper_signatures": LINT_THRESHOLD_DEFAULTS[
+            "max_duplicate_helper_signatures"
+        ],
+        "max_repeated_code_patterns": LINT_THRESHOLD_DEFAULTS[
+            "max_repeated_code_patterns"
+        ],
+        "min_function_body_lines": LINT_THRESHOLD_DEFAULTS["min_function_body_lines"],
+        "min_call_sequence_length": LINT_THRESHOLD_DEFAULTS["min_call_sequence_length"],
+        "max_line_length": LINT_THRESHOLD_DEFAULTS["max_line_length"],
         "feature_envy_threshold": float(
             LINT_THRESHOLD_DEFAULTS["feature_envy_threshold"]
         ),
-        "feature_envy_min_accesses": int(
-            LINT_THRESHOLD_DEFAULTS["feature_envy_min_accesses"]
-        ),
+        "feature_envy_min_accesses": LINT_THRESHOLD_DEFAULTS[
+            "feature_envy_min_accesses"
+        ],
     }
 
 
 def _allowlist_values() -> dict[str, object]:
     return {
-        "allowed_numbers": {
-            int(item) for item in LINT_MAGIC_DEFAULTS["allowed_numbers"]
-        },
-        "allowed_strings": {
-            str(item) for item in LINT_MAGIC_DEFAULTS["allowed_strings"]
-        },
+        "allowed_numbers": {item for item in LINT_MAGIC_DEFAULTS["allowed_numbers"]},
+        "allowed_strings": {item for item in LINT_MAGIC_DEFAULTS["allowed_strings"]},
         "allowed_wrappers": {str(item) for item in LINT_WRAPPERS_DEFAULTS["allowed"]},
     }
 
 
 def _logging_values() -> dict[str, object]:
     return {
-        "logger_function": str(LINT_LOGGING_DEFAULTS["logger_function"]),
-        "logger_variable": str(LINT_LOGGING_DEFAULTS["logger_variable"]),
-        "logging_infrastructure_path": str(
-            LINT_LOGGING_DEFAULTS["infrastructure_path"]
-        ),
+        "logger_function": LINT_LOGGING_DEFAULTS["logger_function"],
+        "logger_variable": LINT_LOGGING_DEFAULTS["logger_variable"],
+        "logging_infrastructure_path": LINT_LOGGING_DEFAULTS["infrastructure_path"],
         "disallowed_logger_names": {
-            str(item) for item in LINT_LOGGING_DEFAULTS["disallowed_names"]
+            item for item in LINT_LOGGING_DEFAULTS["disallowed_names"]
         },
     }
 
 
 def _type_safety_values() -> dict[str, object]:
     return {
-        "ban_any": bool(LINT_TYPE_SAFETY_DEFAULTS["ban_any"]),
-        "ban_type_suppressions": bool(
-            LINT_TYPE_SAFETY_DEFAULTS["ban_type_suppressions"]
-        ),
+        "ban_any": LINT_TYPE_SAFETY_DEFAULTS["ban_any"],
+        "ban_type_suppressions": LINT_TYPE_SAFETY_DEFAULTS["ban_type_suppressions"],
         "suppression_patterns": tuple(
-            str(item) for item in LINT_TYPE_SAFETY_DEFAULTS["suppression_patterns"]
+            item for item in LINT_TYPE_SAFETY_DEFAULTS["suppression_patterns"]
         ),
     }
 
 
 def _exception_values() -> dict[str, object]:
     return {
-        "ban_broad_except_swallow": bool(
-            LINT_EXCEPTION_SAFETY_DEFAULTS["ban_broad_except_swallow"]
-        ),
-        "ban_silent_except": bool(LINT_EXCEPTION_SAFETY_DEFAULTS["ban_silent_except"]),
-        "ban_silent_fallback": bool(
-            LINT_EXCEPTION_SAFETY_DEFAULTS["ban_silent_fallback"]
-        ),
+        "ban_broad_except_swallow": LINT_EXCEPTION_SAFETY_DEFAULTS[
+            "ban_broad_except_swallow"
+        ],
+        "ban_silent_except": LINT_EXCEPTION_SAFETY_DEFAULTS["ban_silent_except"],
+        "ban_silent_fallback": LINT_EXCEPTION_SAFETY_DEFAULTS["ban_silent_fallback"],
+    }
+
+
+def _testing_bool_values() -> dict[str, object]:
+    return {
+        "ban_conditional_assertions": LINT_TESTING_DEFAULTS[
+            "ban_conditional_assertions"
+        ],
+        "ban_fixtures_outside_conftest": LINT_TESTING_DEFAULTS[
+            "ban_fixtures_outside_conftest"
+        ],
     }
 
 
 def _test_values() -> dict[str, object]:
-    return {
-        "max_consecutive_bare_asserts": int(
-            LINT_TESTING_DEFAULTS["max_consecutive_bare_asserts"]
-        ),
-        "ban_conditional_assertions": bool(
-            LINT_TESTING_DEFAULTS["ban_conditional_assertions"]
-        ),
-        "ban_fixtures_outside_conftest": bool(
-            LINT_TESTING_DEFAULTS["ban_fixtures_outside_conftest"]
-        ),
+    values: dict[str, object] = {
+        "max_consecutive_bare_asserts": LINT_TESTING_DEFAULTS[
+            "max_consecutive_bare_asserts"
+        ],
     }
+    values.update(_testing_bool_values())
+    return values
 
 
 def build_default_values(root: Path) -> dict[str, object]:

@@ -110,7 +110,6 @@ def test_config_discovery_helpers_use_temp_config_dir(
 
 
 def test_python_ast_helpers_expose_public_entrypoints() -> None:
-
     class DummyContext:
         event_name = "PreToolUse"
 

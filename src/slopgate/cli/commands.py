@@ -1,16 +1,16 @@
 from __future__ import annotations
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import cast
-from slopgate._types import ObjectDict, ObjectMapping, object_dict
-from slopgate.cli._claude_retry import claude_team_event_feedback
+from slopgate._types import object_dict
 from slopgate.cli._config_commands import (
     cmd_config_init,
     cmd_config_path,
     cmd_config_show,
 )
+from slopgate.cli.hook_runtime import cmd_daemon, cmd_handle, cmd_handle_async
+from slopgate.cli.io import CliInputError, string_arg
 
 __all__ = [
     "VALID_PLATFORMS",
@@ -20,6 +20,9 @@ __all__ = [
     "cmd_config_init",
     "cmd_config_path",
     "cmd_config_show",
+    "cmd_daemon",
+    "cmd_handle",
+    "cmd_handle_async",
 ]
 
 VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor")
@@ -27,40 +30,6 @@ INSTALL_TARGETS = (*VALID_PLATFORMS, "all")
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(VALID_PLATFORMS)} (default: claude)"
 )
-
-
-class CliInputError(ValueError):
-    """Clean user-facing CLI input error."""
-
-
-def _stdin_is_interactive() -> bool:
-    isatty = getattr(sys.stdin, "isatty", None)
-    return bool(isatty()) if callable(isatty) else False
-
-
-def _load_stdin_json() -> ObjectDict:
-    if _stdin_is_interactive():
-        raise CliInputError(
-            "No JSON payload on stdin. 'slopgate handle' is a hook entrypoint; pipe a harness payload, e.g. echo '{}' | slopgate handle --platform cursor"
-        )
-    raw = sys.stdin.read()
-    if not raw.strip():
-        return {}
-    try:
-        parsed = cast(object, json.loads(raw))
-    except json.JSONDecodeError as exc:
-        raise CliInputError(f"Invalid JSON on stdin: {exc.msg}") from None
-    return object_dict(parsed)
-
-
-def _report_cli_input_error(exc: CliInputError) -> int:
-    print(str(exc), file=sys.stderr)
-    return 1
-
-
-def string_arg(args: argparse.Namespace, name: str, default: str = "") -> str:
-    value = getattr(args, name, default)
-    return value if isinstance(value, str) else default
 
 
 def _bool_arg(args: argparse.Namespace, name: str, default: bool = False) -> bool:
@@ -78,44 +47,6 @@ def _project_root_arg(args: argparse.Namespace) -> Path | None:
     if not value.strip():
         return None
     return Path(value).expanduser().resolve()
-
-
-def _dump_output(output: ObjectMapping | None) -> int:
-    if output:
-        _ = sys.stdout.write(json.dumps(output, separators=(",", ":")) + "\n")
-    return 0
-
-
-def cmd_handle(args: argparse.Namespace) -> int:
-    from slopgate.engine import evaluate_payload
-
-    try:
-        payload = _load_stdin_json()
-    except CliInputError as exc:
-        return _report_cli_input_error(exc)
-    if not payload:
-        return 0
-    platform = string_arg(args, "platform", "claude")
-    result = evaluate_payload(payload, platform=platform)
-    if platform.strip().lower() == "claude":
-        feedback = claude_team_event_feedback(result)
-        if feedback:
-            _ = sys.stderr.write(feedback.rstrip() + "\n")
-            return 2
-    return _dump_output(result.output)
-
-
-def cmd_handle_async(_args: argparse.Namespace) -> int:
-    from slopgate.async_jobs import run_async_jobs
-
-    try:
-        payload = _load_stdin_json()
-    except CliInputError as exc:
-        return _report_cli_input_error(exc)
-    summary, _errors = run_async_jobs(payload)
-    if summary:
-        _ = sys.stdout.write(summary + "\n")
-    return 0
 
 
 def cmd_check(args: argparse.Namespace) -> int:

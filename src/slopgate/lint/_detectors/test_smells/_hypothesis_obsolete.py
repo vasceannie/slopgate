@@ -7,7 +7,7 @@ from slopgate.constants import MISSING_IMPORT_PREVIEW_LIMIT, METADATA_FUNCTION
 from slopgate._types import ObjectDict
 from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import ParsedFile, project_root
-from ._coverage_helpers import metadata_int
+from .coverage import metadata_int
 from ._integrity_index import IntegrityIndex, build_test_integrity_index
 from ._production_symbols import (
     HYPOTHESIS_NAME_TOKENS,

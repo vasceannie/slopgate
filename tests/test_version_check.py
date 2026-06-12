@@ -37,15 +37,15 @@ def test_fetch_latest_version_reads_valid_pypi_payload(
     payload = json.dumps({"info": {"version": "1.2.3"}}).encode()
 
     def fake_urlopen(request: object, *, timeout: int) -> _FakeResponse:
-        assert (
-            timeout == slopgate.cli._version_check._REQUEST_TIMEOUT
-        ), "expected request timeout"
-        assert isinstance(
-            request, urllib.request.Request
-        ), "expected a urllib request object"
-        assert (
-            request.full_url == slopgate.cli._version_check._PYPI_URL
-        ), "expected PyPI request URL"
+        assert timeout == slopgate.cli._version_check._REQUEST_TIMEOUT, (
+            "expected request timeout"
+        )
+        assert isinstance(request, urllib.request.Request), (
+            "expected a urllib request object"
+        )
+        assert request.full_url == slopgate.cli._version_check._PYPI_URL, (
+            "expected PyPI request URL"
+        )
         return _FakeResponse(payload)
 
     monkeypatch.setattr(
@@ -54,18 +54,18 @@ def test_fetch_latest_version_reads_valid_pypi_payload(
         fake_urlopen,
     )
 
-    assert (
-        slopgate.cli._version_check._fetch_latest_version() == "1.2.3"
-    ), "expected PyPI version"
+    assert slopgate.cli._version_check._fetch_latest_version() == "1.2.3", (
+        "expected PyPI version"
+    )
 
 
 def test_fetch_latest_version_ignores_recoverable_network_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_urlopen(_request: object, *, timeout: int) -> _FakeResponse:
-        assert (
-            timeout == slopgate.cli._version_check._REQUEST_TIMEOUT
-        ), "expected request timeout"
+        assert timeout == slopgate.cli._version_check._REQUEST_TIMEOUT, (
+            "expected request timeout"
+        )
         raise urllib.error.URLError("offline")
 
     monkeypatch.setattr(
@@ -74,9 +74,9 @@ def test_fetch_latest_version_ignores_recoverable_network_error(
         fake_urlopen,
     )
 
-    assert (
-        slopgate.cli._version_check._fetch_latest_version() is None
-    ), "expected offline check skip"
+    assert slopgate.cli._version_check._fetch_latest_version() is None, (
+        "expected offline check skip"
+    )
 
 
 @pytest.mark.parametrize(
@@ -90,9 +90,9 @@ def test_fetch_latest_version_ignores_recoverable_network_error(
 def test_version_from_payload_rejects_malformed_response(
     payload: dict[str, object],
 ) -> None:
-    assert (
-        slopgate.cli._version_check._version_from_payload(payload) is None
-    ), "expected no version"
+    assert slopgate.cli._version_check._version_from_payload(payload) is None, (
+        "expected no version"
+    )
 
 
 def test_check_version_uses_fresh_cache(
@@ -107,7 +107,9 @@ def test_check_version_uses_fresh_cache(
         encoding="utf-8",
     )
     monkeypatch.setattr(slopgate.cli._version_check, "_CACHE_PATH", cache_path)
-    monkeypatch.setattr(slopgate.cli._version_check, "_should_skip_check", lambda: False)
+    monkeypatch.setattr(
+        slopgate.cli._version_check, "_should_skip_check", lambda: False
+    )
 
     result = slopgate.cli._version_check.check_version("1.0.0")
 
@@ -117,12 +119,12 @@ def test_check_version_uses_fresh_cache(
 
 @given(version=strategies.text(min_size=1, max_size=16))
 def test_format_update_notice_suppresses_missing_or_same_latest(version: str) -> None:
-    assert slopgate.cli._version_check.format_update_notice(
-        version, None
-    ) is None, "no latest"
-    assert slopgate.cli._version_check.format_update_notice(
-        version, version
-    ) is None, "same version"
+    assert slopgate.cli._version_check.format_update_notice(version, None) is None, (
+        "no latest"
+    )
+    assert slopgate.cli._version_check.format_update_notice(version, version) is None, (
+        "same version"
+    )
 
 
 @given(

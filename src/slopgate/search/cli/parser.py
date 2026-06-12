@@ -5,13 +5,14 @@ import argparse
 from collections.abc import Iterable
 from typing import cast
 from slopgate._argparse_types import SubparserRegistry
-from slopgate.search._cli_command_specs import (
+from slopgate.search.cli.command_specs import (
     ArgumentSpec,
     CommandFunc,
     CommandSpec,
     command_specs,
     init_argument_specs,
 )
+
 _SEARCH_DESCRIPTION = "Semantic code search via islands-ollama."
 SEARCH_SUBCOMMANDS = (
     "init",
@@ -57,7 +58,7 @@ def _create_search_root(
 
 def _register_all_subcommands(sub: SubparserRegistry) -> None:
     from slopgate.search import cli
-    from slopgate.search._cli_command_specs import SearchCommands
+    from slopgate.search.cli.command_specs import SearchCommands
 
     commands = cast(SearchCommands, cli)
     _register_init_subcommand(sub, commands.cmd_init)

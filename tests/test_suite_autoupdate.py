@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 import slopgate.installer._suite
-import slopgate.installer._suite_autoupdate
+from slopgate.installer.suite import autoupdate
 from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
 from slopgate.cli.parsers import build_parser
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
@@ -24,12 +24,12 @@ def _patch_linux_installer_config_dirs(
 
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
     monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "linux")
-    monkeypatch.setattr(slopgate.installer._suite, "user_config_dir", fake_user_config_dir)
+    monkeypatch.setattr(autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(autoupdate.sys, "platform", "linux")
     monkeypatch.setattr(
-        slopgate.installer._suite_autoupdate, "user_config_dir", fake_user_config_dir
+        slopgate.installer._suite, "user_config_dir", fake_user_config_dir
     )
+    monkeypatch.setattr(autoupdate, "user_config_dir", fake_user_config_dir)
     return config_home
 
 
@@ -288,8 +288,8 @@ def macos_autoupdate_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
     monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "darwin")
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite_autoupdate.sys, "platform", "darwin")
+    monkeypatch.setattr(autoupdate, "is_windows", lambda: False)
+    monkeypatch.setattr(autoupdate.sys, "platform", "darwin")
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
     )

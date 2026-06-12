@@ -10,7 +10,7 @@ from slopgate.installer._shared import (
     merge_owned_hooks,
 )
 from slopgate.installer._suite import SuiteUpdateOptions, update_suite
-from slopgate.installer._suite_autoupdate import (
+from slopgate.installer.suite import (
     install_autoupdate,
     uninstall_autoupdate,
 )

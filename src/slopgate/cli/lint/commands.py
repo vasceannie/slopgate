@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 import os
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from slopgate.cli.lint.git_base_debt import scan_git_base_debt
 from slopgate.cli.lint.report import (
     BASELINE_DISABLED_MESSAGE,
     LintGateMode,
@@ -16,140 +15,6 @@ from slopgate.cli.lint.report import (
     print_lint_header,
 )
 from slopgate.lint._baseline import Violation
-
-
-@dataclass(frozen=True, slots=True)
-class _GitBaseDebt:
-    ref_name: str
-    base_sha: str
-    rules: dict[str, set[str]]
-
-    @property
-    def inherited_count(self) -> int:
-        return sum((len(ids) for ids in self.rules.values()))
-
-    @property
-    def note(self) -> str:
-        return f"{self.ref_name} @ {self.base_sha[:12]} ({self.inherited_count} inherited id(s))"
-
-
-def _run_git(root: Path, *args: str) -> str | None:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(root), *args],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if completed.returncode != 0:
-        return None
-    return _stripped_output(completed.stdout)
-
-
-def _stripped_output(output: str) -> str | None:
-    stripped = output.strip()
-    if not stripped:
-        return None
-    return stripped
-
-
-def _candidate_base_refs(root: Path) -> list[str]:
-    candidates: list[str] = []
-    explicit = os.environ.get("SLOPGATE_LINT_BASE_REF")
-    if explicit:
-        candidates.append(explicit)
-    upstream = _run_git(
-        root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
-    )
-    if upstream:
-        candidates.append(upstream)
-    candidates.extend(["origin/main", "origin/master", "main", "master"])
-    unique: list[str] = []
-    for candidate in candidates:
-        if candidate not in unique:
-            unique.append(candidate)
-    return unique
-
-
-def _is_current_branch_ref(ref: str, current_branch: str | None) -> bool:
-    if current_branch is None or current_branch == "HEAD":
-        return False
-    return ref in {current_branch, f"refs/heads/{current_branch}"}
-
-
-def _discover_git_base(root: Path) -> tuple[str, str] | None:
-    head = _run_git(root, "rev-parse", "--verify", "HEAD^{commit}")
-    if head is None:
-        return None
-    current_branch = _run_git(root, "rev-parse", "--abbrev-ref", "HEAD")
-    for ref in _candidate_base_refs(root):
-        if _run_git(root, "rev-parse", "--verify", f"{ref}^{{commit}}") is None:
-            continue
-        base_sha = _run_git(root, "merge-base", "HEAD", ref)
-        if base_sha and (
-            base_sha != head or not _is_current_branch_ref(ref, current_branch)
-        ):
-            return (ref, base_sha)
-    return None
-
-
-def _extract_git_archive(root: Path, base_sha: str, destination: Path) -> bool:
-    git_process = subprocess.Popen(
-        ["git", "-C", str(root), "archive", "--format=tar", base_sha],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
-    if git_process.stdout is None:
-        _ = git_process.wait(timeout=10)
-        return False
-    try:
-        extract = subprocess.run(
-            ["tar", "-xf", "-", "-C", str(destination)],
-            check=False,
-            stdin=git_process.stdout,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        git_process.kill()
-        return False
-    finally:
-        git_process.stdout.close()
-    return git_process.wait(timeout=10) == 0 and extract.returncode == 0
-
-
-def _collector_ids_by_rule(
-    collectors: list[tuple[str, list[Violation]]],
-) -> dict[str, set[str]]:
-    return {
-        rule: {violation.stable_id for violation in violations}
-        for rule, violations in collectors
-        if violations
-    }
-
-
-def _scan_git_base_debt(project_root: Path) -> _GitBaseDebt | None:
-    from slopgate.lint._collectors import run_all_collectors
-
-    discovered = _discover_git_base(project_root)
-    if discovered is None:
-        return None
-    ref_name, base_sha = discovered
-    with tempfile.TemporaryDirectory(prefix="slopgate-git-base-") as tmpdir:
-        archive_root = Path(tmpdir)
-        if not _extract_git_archive(project_root, base_sha, archive_root):
-            return None
-        files = _configured_lint_files(archive_root, force_all_scope=True)
-        collectors = run_all_collectors(files.src_files, files.test_files)
-    rules = _collector_ids_by_rule(collectors)
-    if not rules:
-        return None
-    return _GitBaseDebt(ref_name=ref_name, base_sha=base_sha, rules=rules)
 
 
 def discover_project_root(start: Path) -> Path:
@@ -199,12 +64,14 @@ def _lint_scan(
     files = _configured_lint_files(root, force_all_scope=True)
     baseline = load_baseline()
     collectors = run_all_collectors(files.src_files, files.test_files)
-    git_base_debt = (
-        _scan_git_base_debt(files.cfg.project_root)
-        if gate == "new" and files.cfg.enable_git_base_debt
-        else None
-    )
-    files = _configured_lint_files(files.cfg.project_root, force_all_scope=True)
+    git_base_debt = None
+    if gate == "new" and files.cfg.enable_git_base_debt:
+        from slopgate.lint._config import set_config
+
+        git_base_debt = scan_git_base_debt(
+            files.cfg.project_root, configured_lint_files=_configured_lint_files
+        )
+        set_config(files.cfg)
     print_lint_header(
         LintHeader(
             lint_version=__version__,
@@ -230,7 +97,7 @@ class _LintScanCommand:
 
     def __call__(self, root: Path, *, details: bool = False) -> int:
         project_root = discover_project_root(root)
-        scan_details = bool(details)
+        scan_details = details
         return _lint_scan(
             project_root,
             gate=self.gate,

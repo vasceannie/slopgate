@@ -1,10 +1,12 @@
 """Detectors for code duplication."""
 
 from __future__ import annotations
+
 import ast
 from collections.abc import Set
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
+
 from slopgate.constants import METADATA_PATH
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
@@ -17,9 +19,10 @@ from slopgate.quality.constant_index import (
     suggest_constant_name,
 )
 
+from .semantic import is_docstring_node
+
 if TYPE_CHECKING:
     from slopgate.lint._config import QualityConfig
-from ._semantic import is_docstring_node
 
 _MAX_EXISTING_LOCATION_PREVIEW = 12
 _LiteralValue = TypeVar("_LiteralValue", int, float, str)
@@ -91,7 +94,11 @@ def string_literal_metadata(
         METADATA_PATH: relative,
         "line": lineno,
     }
-    suffix = f"; import existing constant {constant_match.name} from {relative}:{lineno}; do not duplicate it or hide the literal with string fragments"
+    guidance = "do not duplicate it or hide the literal with string fragments"
+    suffix = (
+        f"; import existing constant {constant_match.name} "
+        f"from {relative}:{lineno}; {guidance}"
+    )
     return ({"already_defined": already_defined}, suffix)
 
 
@@ -136,7 +143,10 @@ def magic_number_violation(
         rule="repeated-magic-number",
         relative_path="<project>",
         identifier=repr(value),
-        detail=f"appears in {len(files_seen)} files (max: {max_files}){_existing_location_detail_suffix(occurrences)}",
+        detail=(
+            f"appears in {len(files_seen)} files (max: {max_files})"
+            f"{_existing_location_detail_suffix(occurrences)}"
+        ),
         metadata=_existing_location_metadata(occurrences),
     )
 
@@ -156,11 +166,16 @@ def string_literal_violation(
         value, constant_index, cfg.project_root
     )
     metadata.update(constant_metadata)
+    detail = (
+        f"appears in {len(files_seen)} files (max: {max_files})"
+        f"{_existing_location_detail_suffix(occurrences)}"
+        f"{detail_suffix}"
+    )
     return Violation(
         rule="repeated-string-literal",
         relative_path="<project>",
         identifier=repr(value)[:40],
-        detail=f"appears in {len(files_seen)} files (max: {max_files}){_existing_location_detail_suffix(occurrences)}{detail_suffix}",
+        detail=detail,
         metadata=metadata,
     )
 

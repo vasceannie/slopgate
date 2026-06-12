@@ -158,9 +158,7 @@ class TestInlinePayloadDenies:
         nested = tmp_path / "a" / "b" / "c" / "d"
         nested.mkdir(parents=True)
         escape_target = os.path.relpath("/etc/passwd", nested.resolve())
-        result = evaluate_payload(
-            pretool_bash(f"cat {escape_target}", cwd=str(nested))
-        )
+        result = evaluate_payload(pretool_bash(f"cat {escape_target}", cwd=str(nested)))
         assert_denied_by(result, "GLOBAL-BUILTIN-SYSTEM-PROTECTION")
         assert "GLOBAL-BUILTIN-SYSTEM-PROTECTION" in finding_ids(result), (
             "relative escapes to protected system paths should remain denied"

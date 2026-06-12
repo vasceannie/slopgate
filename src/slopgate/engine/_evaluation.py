@@ -98,7 +98,7 @@ def _fallback_command(tool_name: str, tool_input: dict[str, object]) -> str | No
 def _extract_command(ctx: HookContext) -> str | None:
     command = ctx.payload.shell_command
     if command:
-        return str(command)
+        return command
     tool_input = ctx.payload.tool_input
     if not tool_input:
         return None

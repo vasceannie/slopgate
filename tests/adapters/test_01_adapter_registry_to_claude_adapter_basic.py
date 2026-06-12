@@ -68,9 +68,7 @@ class TestClaudeAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "PreToolUse deny must set permissionDecision=deny"
         )
-        assert "GIT-001" in support.required_string(
-            spec, "permissionDecisionReason"
-        )
+        assert "GIT-001" in support.required_string(spec, "permissionDecisionReason")
 
     def test_permission_request_deny(self) -> None:
         adapter = ClaudeAdapter()
@@ -187,9 +185,7 @@ class TestClaudeAdapterBasic:
         assert spec["permissionDecision"] == "deny", (
             "block must map to deny for PreToolUse"
         )
-        assert "SYS-001" in support.required_string(
-            spec, "permissionDecisionReason"
-        )
+        assert "SYS-001" in support.required_string(spec, "permissionDecisionReason")
 
     def test_pretool_deny_with_context_and_updated_input(self) -> None:
         """All three fields (decision, context, updatedInput) in one output."""

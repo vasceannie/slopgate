@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { RuleFinding } from "@/types/slopgate";
+import type { HookEvent, HookResult, RuleFinding, SubprocessRun } from "@/types/slopgate";
 import {
+	buildTraceSessionIndexes,
 	streamSchemaValidationWarning,
 	summarizeTopRules,
 } from "./useTraceData";
@@ -99,5 +100,77 @@ describe("stream schema validation warning", () => {
 		expect(streamSchemaValidationWarning(2, 0)).toBe(
 			"2 streamed records failed dashboard schema validation.",
 		);
+	});
+});
+
+describe("trace session indexes", () => {
+	it("centralizes session, repo, and decision indexes in one pass", () => {
+		const events: HookEvent[] = [
+			{
+				timestamp: "2026-05-27T12:00:00.000Z",
+				platform: "codex",
+				event_name: "PreToolUse",
+				session_id: "session-a",
+				tool_name: "Bash",
+				candidate_paths: [
+					"/home/trav/repos/slopgate/src/a.py",
+					"/home/trav/repos/slopgate/src/a.py",
+				],
+				languages: ["python"],
+			},
+		];
+		const rules = [finding("PY-CODE-013", "deny")];
+		rules[0].session_id = "session-a";
+		const results: HookResult[] = [
+			{
+				timestamp: "2026-05-27T12:00:01.000Z",
+				platform: "codex",
+				event_name: "PostToolUse",
+				session_id: "session-a",
+				tool_name: "Bash",
+				findings: [
+					{
+						rule_id: "PY-CODE-013",
+						severity: "MEDIUM",
+						decision: "deny",
+						message: "blocked",
+					},
+				],
+				errors: null,
+				output: null,
+			},
+		];
+		const subprocesses: SubprocessRun[] = [
+			{
+				timestamp: "2026-05-27T12:00:02.000Z",
+				event_name: "PostToolUse",
+				session_id: "session-a",
+				command: "pytest",
+				cwd: "/home/trav/repos/slopgate",
+				returncode: 0,
+				stdout: "",
+				stderr: "",
+				duration_ms: 25,
+			},
+		];
+
+		const indexes = buildTraceSessionIndexes(
+			events,
+			rules,
+			results,
+			subprocesses,
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "session-a",
+			pathCount: 1,
+			finalOutcome: "deny",
+			eventCount: 1,
+		});
+		expect(indexes.sessions[0].subprocesses).toHaveLength(1);
+		expect(indexes.sessionPathCounts.get("session-a")).toBe(1);
+		expect(indexes.sessionDecisions.get("session-a")).toEqual(["deny"]);
+		expect(indexes.hottestRepos).toEqual([{ repo: "slopgate", count: 2 }]);
 	});
 });

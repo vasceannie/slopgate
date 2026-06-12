@@ -8,7 +8,13 @@ import types
 from pathlib import Path
 from typing import cast
 
-from slopgate._types import ObjectDict, is_object_dict, object_dict, object_list, string_value
+from slopgate._types import (
+    ObjectDict,
+    is_object_dict,
+    object_dict,
+    object_list,
+    string_value,
+)
 from slopgate.adapters.base import PlatformAdapter
 from slopgate.adapters.claude import ClaudeAdapter
 from slopgate.adapters.codex import CodexAdapter

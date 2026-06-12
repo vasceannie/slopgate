@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from slopgate.installer._suite_autoupdate_types import (
+from slopgate.installer.suite.autoupdate_types import (
     AUTOUPDATE_MARKER,
     SchedulerPlan,
     WINDOWS_TASK_NAME,

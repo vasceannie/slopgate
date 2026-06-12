@@ -3,9 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_FORBIDDEN_CORE_IMPORT = re.compile(
-    r"slopgate\.(rules|engine|enrichment|lint)\b"
-)
+_FORBIDDEN_CORE_IMPORT = re.compile(r"slopgate\.(rules|engine|enrichment|lint)\b")
 
 
 def _search_boundary_output() -> str:

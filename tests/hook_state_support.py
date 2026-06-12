@@ -45,8 +45,6 @@ __all__ = [
 ]
 
 
-
-
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -262,18 +260,37 @@ def repeat_tracking_repair_sequence(cwd: Path) -> tuple[EngineResult, EngineResu
     )
     return repaired, repeated_after_repair
 
-from tests.hook_state_subprocess_support import (
-    _SubprocessFinding,
-    _SubprocessResult,
-    _normalize_subprocess_result,
-    _python_subprocess_env,
-    _start_full_read_record_subprocess,
-    assert_loop_steering_metadata,
-    assert_repeat_counts,
-    collect_process_failures,
-    finding,
-    missing_full_read_records,
-    require_finding,
-    run_payload_in_subprocess,
-    start_full_read_record_processes,
+
+_subprocess_support = __import__(
+    "tests.hook_state_subprocess_support",
+    fromlist=[
+        "_SubprocessFinding",
+        "_SubprocessResult",
+        "_normalize_subprocess_result",
+        "_python_subprocess_env",
+        "_start_full_read_record_subprocess",
+        "assert_loop_steering_metadata",
+        "assert_repeat_counts",
+        "collect_process_failures",
+        "finding",
+        "missing_full_read_records",
+        "require_finding",
+        "run_payload_in_subprocess",
+        "start_full_read_record_processes",
+    ],
 )
+_SubprocessFinding = _subprocess_support._SubprocessFinding
+_SubprocessResult = _subprocess_support._SubprocessResult
+_normalize_subprocess_result = _subprocess_support._normalize_subprocess_result
+_python_subprocess_env = _subprocess_support._python_subprocess_env
+_start_full_read_record_subprocess = (
+    _subprocess_support._start_full_read_record_subprocess
+)
+assert_loop_steering_metadata = _subprocess_support.assert_loop_steering_metadata
+assert_repeat_counts = _subprocess_support.assert_repeat_counts
+collect_process_failures = _subprocess_support.collect_process_failures
+finding = _subprocess_support.finding
+missing_full_read_records = _subprocess_support.missing_full_read_records
+require_finding = _subprocess_support.require_finding
+run_payload_in_subprocess = _subprocess_support.run_payload_in_subprocess
+start_full_read_record_processes = _subprocess_support.start_full_read_record_processes

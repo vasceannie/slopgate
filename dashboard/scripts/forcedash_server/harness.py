@@ -1,4 +1,5 @@
 """Remote harness installation status projection."""
+
 import json
 import subprocess
 

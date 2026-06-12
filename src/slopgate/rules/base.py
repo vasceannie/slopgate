@@ -29,7 +29,7 @@ class Rule(ABC):
 
 def is_rule_enabled(ctx: HookContext, rule_id: str, default: bool = True) -> bool:
     value = ctx.config.enabled_rules.get(rule_id)
-    return default if value is None else bool(value)
+    return default if value is None else value
 
 
 def join_messages(findings: Iterable[RuleFinding]) -> str:

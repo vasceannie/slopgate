@@ -9,7 +9,7 @@ from slopgate.constants import (
 )
 from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import ParsedFile
-from ._coverage_helpers import (
+from .coverage import (
     CoverageInputs,
     coverage_violation,
     metadata_int,

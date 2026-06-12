@@ -76,12 +76,10 @@ def main() -> None:
         description="Suggest renames for duplicate test names"
     )
     parser.add_argument(
-        "--path", type=Path, default=Path("tests"),
-        help="Root path to search"
+        "--path", type=Path, default=Path("tests"), help="Root path to search"
     )
     parser.add_argument(
-        "--output-script", action="store_true",
-        help="Output as sed/rename script"
+        "--output-script", action="store_true", help="Output as sed/rename script"
     )
     args = parser.parse_args()
 
@@ -97,10 +95,7 @@ def main() -> None:
             test_locations[name].append((f, lineno))
 
     # Find duplicates
-    duplicates = {
-        name: locs for name, locs in test_locations.items()
-        if len(locs) > 1
-    }
+    duplicates = {name: locs for name, locs in test_locations.items() if len(locs) > 1}
 
     if not duplicates:
         print("No duplicate test names found.")

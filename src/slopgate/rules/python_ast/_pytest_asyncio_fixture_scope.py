@@ -36,9 +36,7 @@ def is_pytest_path(path_value: str) -> bool:
     )
 
 
-def unknown_fixture_scope_message(
-    target: FixtureCheckTarget, scope: str | None
-) -> str:
+def unknown_fixture_scope_message(target: FixtureCheckTarget, scope: str | None) -> str:
     return (
         f"Unknown pytest-asyncio fixture scope `{scope}` on async fixture "
         f"`{target.node.name}` in `{target.path_value}`. Valid fixture `scope` "
@@ -94,13 +92,9 @@ def fixture_scope_state(
 ) -> FixtureScopeState:
     node = target.node
     fixture_name = fixture_decorator_name(node, target.aliases)
-    scope = (
-        string_keyword(target.call, "scope") if target.call is not None else None
-    )
+    scope = string_keyword(target.call, "scope") if target.call is not None else None
     loop_scope = (
-        string_keyword(target.call, "loop_scope")
-        if target.call is not None
-        else None
+        string_keyword(target.call, "loop_scope") if target.call is not None else None
     )
     configured_loop_scope = pytest_asyncio_default_fixture_loop_scope(ctx)
     return FixtureScopeState(

@@ -147,7 +147,9 @@ def analyze_conftest(file_path: Path) -> list[FixtureInfo]:
     return fixtures
 
 
-def find_fixture_usage(test_file: Path, fixture_names: set[str]) -> dict[str, list[str]]:
+def find_fixture_usage(
+    test_file: Path, fixture_names: set[str]
+) -> dict[str, list[str]]:
     """Find which fixtures are used in a test file."""
     try:
         source = test_file.read_text()
@@ -209,7 +211,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Discover and analyze pytest fixtures")
     parser.add_argument("directory", type=Path, help="Directory to search")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
-    parser.add_argument("--with-usage", action="store_true", help="Include usage analysis")
+    parser.add_argument(
+        "--with-usage", action="store_true", help="Include usage analysis"
+    )
     args = parser.parse_args()
 
     conftest_files = find_conftest_files(args.directory)
@@ -262,11 +266,13 @@ def main() -> None:
                 }
                 for name, u in usage_map.items()
             }
-            output["scope_suggestions"] = suggest_scope_improvements(all_fixtures, usage_map)
+            output["scope_suggestions"] = suggest_scope_improvements(
+                all_fixtures, usage_map
+            )
 
         print(json.dumps(output, indent=2))
     else:
-        print(f"\n=== Fixture Discovery Summary ===")
+        print("\n=== Fixture Discovery Summary ===")
         print(f"Conftest files found: {len(conftest_files)}")
         print(f"Total fixtures: {len(all_fixtures)}")
 
@@ -277,7 +283,7 @@ def main() -> None:
                 by_scope[f.scope] = []
             by_scope[f.scope].append(f)
 
-        print(f"\n=== Fixtures by Scope ===")
+        print("\n=== Fixtures by Scope ===")
         for scope in ["function", "class", "module", "session"]:
             if scope in by_scope:
                 print(f"\n{scope.upper()} scope ({len(by_scope[scope])}):")
@@ -288,7 +294,7 @@ def main() -> None:
                     print(f"  ... and {len(by_scope[scope]) - 10} more")
 
         if duplicates:
-            print(f"\n=== Duplicate Fixture Names (potential conflicts) ===")
+            print("\n=== Duplicate Fixture Names (potential conflicts) ===")
             for name, locations in duplicates.items():
                 print(f"\n{name}:")
                 for loc in locations:
@@ -297,14 +303,16 @@ def main() -> None:
         if args.with_usage:
             suggestions = suggest_scope_improvements(all_fixtures, usage_map)
             if suggestions:
-                print(f"\n=== Scope Optimization Suggestions ===")
+                print("\n=== Scope Optimization Suggestions ===")
                 for sug in suggestions:
                     print(f"  - {sug}")
 
             # Show unused fixtures
-            unused = [f for f in all_fixtures if f.name not in usage_map and not f.autouse]
+            unused = [
+                f for f in all_fixtures if f.name not in usage_map and not f.autouse
+            ]
             if unused:
-                print(f"\n=== Potentially Unused Fixtures ===")
+                print("\n=== Potentially Unused Fixtures ===")
                 for f in unused[:10]:
                     print(f"  - {f.name} ({f.file_path})")
 

@@ -120,14 +120,14 @@ def _build_add_args(repo: str, extra: dict[str, str]) -> list[str]:
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Write wrapper and islands configs."""
-    from slopgate.search._cli_init import cmd_init
+    from slopgate.search.cli.init import cmd_init
 
     return cmd_init(args)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Check runtime config and endpoint reachability."""
-    from slopgate.search._cli_doctor import cmd_doctor
+    from slopgate.search.cli.doctor import cmd_doctor
 
     return cmd_doctor(args)
 
@@ -274,6 +274,6 @@ def build_search_parser(
     subparsers: SubparserRegistry | None = None,
 ) -> argparse.ArgumentParser:
     """Build the ``search`` subcommand parser."""
-    from slopgate.search._cli_parser import build_search_parser
+    from slopgate.search.cli.parser import build_search_parser
 
     return build_search_parser(subparsers)

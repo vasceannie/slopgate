@@ -148,7 +148,9 @@ def test_quality_lint_rendering_filters_virtualenv_and_content_sentinel_paths(
 def test_codex_quality_lint_block_renders_decision_and_hook_context(
     tmp_path: Path,
 ) -> None:
-    output = _render_posttool(tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="codex")
+    output = _render_posttool(
+        tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="codex"
+    )
     reason = support.output_string(output, "reason")
     context = _hook_additional_context(output)
     assert "QUALITY-LINT-001" in reason
@@ -171,7 +173,9 @@ def test_cursor_quality_lint_block_renders_top_level_additional_context(
     (tmp_path / "src" / "session.py").write_text("x = 1\n", encoding="utf-8")
     result = evaluate_payload(payload, platform="cursor")
     assert result.output is None or "permission" not in result.output
-    output = _render_posttool(tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="cursor")
+    output = _render_posttool(
+        tmp_path, [deepcopy(QUALITY_LINT_FINDING)], platform="cursor"
+    )
     context = support.required_string(output, "additional_context")
     assert "QUALITY-LINT-001" in context
     _assert_quality_lint_response_names_uncovered_surface(context, context)

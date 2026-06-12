@@ -32,8 +32,12 @@ def parse_slopgate_lint(text: str) -> dict:
     collectors = []
     for m in re.finditer(r"^\s*✓\s+(\S+)\s+(\d+)\s+total", text, re.MULTILINE):
         collectors.append({"name": m.group(1), "total": int(m.group(2)), "new": 0})
-    for m in re.finditer(r"^\s*✗\s+(\S+)\s+(\d+)\s+total,\s+(\d+)\s+NEW", text, re.MULTILINE):
-        collectors.append({"name": m.group(1), "total": int(m.group(2)), "new": int(m.group(3))})
+    for m in re.finditer(
+        r"^\s*✗\s+(\S+)\s+(\d+)\s+total,\s+(\d+)\s+NEW", text, re.MULTILINE
+    ):
+        collectors.append(
+            {"name": m.group(1), "total": int(m.group(2)), "new": int(m.group(3))}
+        )
 
     # Parse individual findings
     findings = []
@@ -42,7 +46,10 @@ def parse_slopgate_lint(text: str) -> dict:
         if not block.strip():
             continue
         block_lines = block.splitlines()
-        status_match = re.match(r"^\s*\[(NEW|BASELINE|FIXED)\]\s+(\S+)", block_lines[0] if block_lines else "")
+        status_match = re.match(
+            r"^\s*\[(NEW|BASELINE|FIXED)\]\s+(\S+)",
+            block_lines[0] if block_lines else "",
+        )
         if not status_match:
             continue
         status = status_match.group(1)
@@ -62,7 +69,9 @@ def parse_slopgate_lint(text: str) -> dict:
             "collectors": collectors,
             "total_findings": len(findings),
             "new_findings": len([f for f in findings if f["status"] == "NEW"]),
-            "baseline_findings": len([f for f in findings if f["status"] == "BASELINE"]),
+            "baseline_findings": len(
+                [f for f in findings if f["status"] == "BASELINE"]
+            ),
             "fixed_findings": len([f for f in findings if f["status"] == "FIXED"]),
         },
         "findings": findings,
@@ -70,7 +79,9 @@ def parse_slopgate_lint(text: str) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Parse slopgate lint check --details output")
+    parser = argparse.ArgumentParser(
+        description="Parse slopgate lint check --details output"
+    )
     parser.add_argument("--input", "-i", help="Input file (default: stdin)")
     parser.add_argument("--output", "-o", help="Output JSON file (default: stdout)")
     args = parser.parse_args()

@@ -80,3 +80,13 @@ class TestTraceWriterAppend:
         tw.event({"n": 2})
         lines = (tmp_path / "events.jsonl").read_text().strip().splitlines()
         assert len(lines) == 2, "multiple appends must produce multiple lines"
+
+    def test_buffered_event_waits_for_flush(self, tmp_path: Path) -> None:
+        tw = TraceWriter(tmp_path, buffered=True, flush_threshold=3)
+        tw.event({"event_name": "PreToolUse", "tool_name": "Bash"})
+        assert not (tmp_path / "events.jsonl").exists(), (
+            "buffered traces must not write before flush threshold"
+        )
+        tw.flush()
+        record = json.loads((tmp_path / "events.jsonl").read_text().strip())
+        assert record["event_name"] == "PreToolUse", "flush must persist event payload"

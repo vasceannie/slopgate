@@ -2,8 +2,8 @@ from __future__ import annotations
 
 __all__ = [
     "Path",
-    "_cli_doctor",
-    "_cli_init",
+    "doctor",
+    "init",
     "SearchConfig",
     "_stub_doctor_runtime",
     "_capture_init_writes",
@@ -11,14 +11,12 @@ __all__ = [
 ]
 
 
-
-
 import argparse
 from pathlib import Path
 
 import pytest
 
-from slopgate.search import _cli_doctor, _cli_init
+from slopgate.search.cli import doctor, init
 from slopgate.search.config import SearchConfig
 
 
@@ -46,10 +44,10 @@ def _stub_doctor_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
         return ["text-embedding-3-small", "chat-model"]
 
     monkeypatch.setenv("ISX_TEST_KEY", "set-but-redacted")
-    monkeypatch.setattr(_cli_doctor, "load_config", fake_load_config)
-    monkeypatch.setattr(_cli_doctor, "islands_binary", fake_islands_binary)
-    monkeypatch.setattr(_cli_doctor, "runtime_env", fake_runtime_env)
-    monkeypatch.setattr(_cli_doctor, "fetch_runtime_models", fake_fetch_runtime_models)
+    monkeypatch.setattr(doctor, "load_config", fake_load_config)
+    monkeypatch.setattr(doctor, "islands_binary", fake_islands_binary)
+    monkeypatch.setattr(doctor, "runtime_env", fake_runtime_env)
+    monkeypatch.setattr(doctor, "fetch_runtime_models", fake_fetch_runtime_models)
 
 
 def _capture_init_writes(
@@ -65,9 +63,9 @@ def _capture_init_writes(
     def fake_write_islands_config(path: Path, model: str) -> None:
         islands_paths.append((path, model))
 
-    monkeypatch.setattr(_cli_init, "APP_CONFIG", app_config)
-    monkeypatch.setattr(_cli_init, "save_config", fake_save_config)
-    monkeypatch.setattr(_cli_init, "write_islands_config", fake_write_islands_config)
+    monkeypatch.setattr(init, "APP_CONFIG", app_config)
+    monkeypatch.setattr(init, "save_config", fake_save_config)
+    monkeypatch.setattr(init, "write_islands_config", fake_write_islands_config)
     return saved, islands_paths
 
 

@@ -113,7 +113,9 @@ def analyze_test_function(
         visitor.visit(node)
 
     analysis.assertion_count = len(visitor.assertions)
-    analysis.assertions_without_msg = sum(1 for _, has_msg in visitor.assertions if not has_msg)
+    analysis.assertions_without_msg = sum(
+        1 for _, has_msg in visitor.assertions if not has_msg
+    )
     analysis.has_loop = visitor.has_loop
     analysis.has_conditional = visitor.has_conditional
 
@@ -121,7 +123,9 @@ def analyze_test_function(
     if visitor.has_loop:
         analysis.issues.append("Contains loop - use parametrize instead")
     if visitor.has_conditional:
-        analysis.issues.append("Contains conditional - split into separate tests or parametrize")
+        analysis.issues.append(
+            "Contains conditional - split into separate tests or parametrize"
+        )
     if analysis.assertions_without_msg > 0:
         analysis.issues.append(
             f"{analysis.assertions_without_msg} assertion(s) missing descriptive message"
@@ -193,10 +197,14 @@ def find_similar_tests(analyses: list[TestAnalysis]) -> dict[str, list[str]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze tests for extension opportunities")
+    parser = argparse.ArgumentParser(
+        description="Analyze tests for extension opportunities"
+    )
     parser.add_argument("directory", type=Path, help="Directory to search for tests")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
-    parser.add_argument("--issues-only", action="store_true", help="Only show tests with issues")
+    parser.add_argument(
+        "--issues-only", action="store_true", help="Only show tests with issues"
+    )
     args = parser.parse_args()
 
     test_files = find_test_files(args.directory)
@@ -229,19 +237,23 @@ def main() -> None:
                 "total_tests": len(all_analyses),
                 "tests_with_issues": sum(1 for a in all_analyses if a.issues),
                 "tests_with_loops": sum(1 for a in all_analyses if a.has_loop),
-                "tests_with_conditionals": sum(1 for a in all_analyses if a.has_conditional),
+                "tests_with_conditionals": sum(
+                    1 for a in all_analyses if a.has_conditional
+                ),
                 "parametrized_tests": sum(1 for a in all_analyses if a.has_parametrize),
             },
         }
         print(json.dumps(output, indent=2))
     else:
-        print(f"\n=== Test Analysis Summary ===")
+        print("\n=== Test Analysis Summary ===")
         print(f"Total tests found: {len(all_analyses)}")
         print(f"Tests with issues: {sum(1 for a in all_analyses if a.issues)}")
-        print(f"Already parametrized: {sum(1 for a in all_analyses if a.has_parametrize)}")
+        print(
+            f"Already parametrized: {sum(1 for a in all_analyses if a.has_parametrize)}"
+        )
 
         if similar_groups:
-            print(f"\n=== Similar Test Groups (consolidation candidates) ===")
+            print("\n=== Similar Test Groups (consolidation candidates) ===")
             for pattern, tests in similar_groups.items():
                 print(f"\n{pattern} ({len(tests)} tests):")
                 for t in tests[:5]:
@@ -251,9 +263,11 @@ def main() -> None:
 
         issues_found = [a for a in all_analyses if a.issues]
         if issues_found:
-            print(f"\n=== Tests with Issues ===")
+            print("\n=== Tests with Issues ===")
             for analysis in issues_found[:20]:
-                print(f"\n{analysis.file_path}:{analysis.line_number} - {analysis.test_name}")
+                print(
+                    f"\n{analysis.file_path}:{analysis.line_number} - {analysis.test_name}"
+                )
                 for issue in analysis.issues:
                     print(f"  - {issue}")
                 for opp in analysis.opportunities:

@@ -1,4 +1,5 @@
 """Shared JSON coercion helpers."""
+
 from collections.abc import Mapping
 
 JSONDict = dict[str, object]

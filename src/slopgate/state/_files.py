@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from time import time
@@ -19,7 +19,7 @@ class StateFileMixin:
     _lock_path: Path
 
     @contextmanager
-    def _locked_state(self) -> Iterator[None]:
+    def _locked_state(self) -> Generator[None]:
         with self._lock_path.open("a+", encoding="utf-8") as handle:
             self._acquire_lock(handle)
             try:

@@ -13,6 +13,18 @@ export interface TraceData {
 	subprocesses: SubprocessRun[];
 }
 
+export interface TraceSnapshotSummary {
+	session_count?: number;
+	decision_counts?: Record<string, number>;
+	hottest_repos?: Array<{ label: string; count: number }>;
+	top_rules?: Array<{
+		rule_id: string;
+		count: number;
+		decisions?: Record<string, number>;
+	}>;
+	subprocess_failures?: number;
+}
+
 export type SourceMode = "mock" | "baked" | "uploaded" | "streaming";
 export type StreamState = "idle" | "connecting" | "live" | "retrying";
 
@@ -23,6 +35,7 @@ export interface TraceSourceMeta {
 	snapshotLookbackHours: number | null;
 	snapshotError: string | null;
 	snapshotTruncated: Record<string, number>;
+	snapshotSummary: TraceSnapshotSummary | null;
 	isSnapshotLoading: boolean;
 	streamConnectedAt: number | null;
 	lastAcceptedStreamRecordAt: string | null;

@@ -9,13 +9,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from slopgate.cli.commands import VALID_PLATFORMS
-from slopgate.installer import _suite_autoupdate
-from slopgate.installer._suite_autoupdate import (
+from slopgate.installer.suite import autoupdate
+from slopgate.installer.suite import (
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DEFAULT_UPDATE_SOURCE,
     SchedulerPlan,
 )
-from slopgate.installer._suite_autoupdate_types import AUTOUPDATE_MARKER
+from slopgate.installer.suite import AUTOUPDATE_MARKER
 from slopgate.installer._shared import find_binary, shell_command
 
 __all__ = ["AUTOUPDATE_MARKER"]
@@ -114,10 +114,10 @@ def _package_update_command(source: str) -> list[str]:
 
 def _sync_autoupdate_facade_dependencies() -> None:
     """Keep legacy monkeypatch points on this facade effective for scheduler helpers."""
-    _suite_autoupdate.find_binary = find_binary
-    _suite_autoupdate.is_windows = is_windows
-    _suite_autoupdate.user_config_dir = user_config_dir
-    _suite_autoupdate.user_data_dir = user_data_dir
+    autoupdate.find_binary = find_binary
+    autoupdate.is_windows = is_windows
+    autoupdate.user_config_dir = user_config_dir
+    autoupdate.user_data_dir = user_data_dir
 
 
 def build_scheduler_plan(
@@ -128,7 +128,7 @@ def build_scheduler_plan(
 ) -> SchedulerPlan:
     """Build the native scheduler artifact for the current OS."""
     _sync_autoupdate_facade_dependencies()
-    return _suite_autoupdate.build_scheduler_plan(
+    return autoupdate.build_scheduler_plan(
         source, include_missing=include_missing, interval_minutes=interval_minutes
     )
 
@@ -142,7 +142,7 @@ def install_autoupdate(
 ) -> int:
     """Install the current OS's periodic suite updater."""
     _sync_autoupdate_facade_dependencies()
-    return _suite_autoupdate.install_autoupdate(
+    return autoupdate.install_autoupdate(
         dry_run=dry_run,
         source=source,
         include_missing=include_missing,
@@ -153,7 +153,7 @@ def install_autoupdate(
 def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     """Remove the current OS's periodic suite updater without touching unknown files."""
     _sync_autoupdate_facade_dependencies()
-    return _suite_autoupdate.uninstall_autoupdate(dry_run=dry_run)
+    return autoupdate.uninstall_autoupdate(dry_run=dry_run)
 
 
 def install_suite(options: SuiteInstallOptions | None = None) -> int:

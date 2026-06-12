@@ -68,10 +68,8 @@ def resolve_baseline_path(project_root: Path) -> Path | None:
 
 def apply_paths_overrides(values: dict[str, object], project_root: Path) -> None:
     """Merge ``[paths]`` and ``[scope]`` from slopgate.toml into lint config values."""
-    src_roots = resolve_root_paths(project_root, "src", str(LINT_PATH_DEFAULTS["src"]))
-    test_roots = resolve_root_paths(
-        project_root, "tests", str(LINT_PATH_DEFAULTS["tests"])
-    )
+    src_roots = resolve_root_paths(project_root, "src", LINT_PATH_DEFAULTS["src"])
+    test_roots = resolve_root_paths(project_root, "tests", LINT_PATH_DEFAULTS["tests"])
     values["src_roots"] = src_roots
     values["test_roots"] = test_roots
     values["src_root"] = src_roots[0]
@@ -79,12 +77,10 @@ def apply_paths_overrides(values: dict[str, object], project_root: Path) -> None
 
     paths = _paths_section(project_root)
     if "exclude_dirs" in paths:
-        values["exclude_dirs"] = {
-            str(item) for item in string_list(paths["exclude_dirs"])
-        }
+        values["exclude_dirs"] = {item for item in string_list(paths["exclude_dirs"])}
     if "exclude_patterns" in paths:
         values["exclude_patterns"] = [
-            str(item) for item in string_list(paths["exclude_patterns"])
+            item for item in string_list(paths["exclude_patterns"])
         ]
 
     raw_toml = load_toml(project_root)

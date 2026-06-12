@@ -1,4 +1,5 @@
 """Runtime settings for the ForceDash canvas server."""
+
 from pathlib import Path
 import os
 

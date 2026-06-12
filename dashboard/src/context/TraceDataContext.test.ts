@@ -264,6 +264,15 @@ function SourceStateProbe() {
 	);
 }
 
+function SnapshotSummaryProbe() {
+	const { sourceMeta } = useTraceDataSource();
+	return createElement(
+		"div",
+		{ "data-testid": "snapshot-summary" },
+		JSON.stringify(sourceMeta.snapshotSummary ?? null),
+	);
+}
+
 function SourceActionProbe() {
 	const { data, ingestFiles, resetToMock, sourceMode, sourceMeta } =
 		useTraceDataSource();
@@ -355,6 +364,26 @@ describe("TraceDataProvider stream de-duplication", () => {
 		);
 	});
 
+	it("ignores exact duplicate stream records", async () => {
+		render(
+			createElement(TraceDataProvider, null, createElement(RuleCountProbe)),
+		);
+
+		await waitFor(() =>
+			expect(MockEventSource.instances.length).toBeGreaterThan(0),
+		);
+		const stream = MockEventSource.instances[0];
+		const duplicate = streamRule("same finding", { path: "src/a.py" });
+		act(() => {
+			stream.emit(duplicate);
+			stream.emit(duplicate);
+		});
+
+		await waitFor(() =>
+			expect(screen.getByTestId("rule-count")).toHaveTextContent("1"),
+		);
+	});
+
 	it("ignores non-trace stream JSON without counting schema failures", async () => {
 		render(
 			createElement(TraceDataProvider, null, createElement(SourceStateProbe)),
@@ -436,6 +465,42 @@ describe("TraceDataProvider initial snapshot loading", () => {
 			expect(screen.getByTestId("source-state")).toHaveTextContent(
 				"streaming:false:1:0:0",
 			),
+		);
+	});
+
+	it("stores server-side snapshot summaries in source metadata", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					...EMPTY_TRACE_RESPONSE,
+					summaries: {
+						session_count: 3,
+						decision_counts: { block: 1, allow: 2 },
+						hottest_repos: [{ label: "slopgate", count: 4 }],
+						top_rules: [{ rule_id: "PY-CODE-018", count: 1 }],
+						subprocess_failures: 2,
+					},
+				}),
+			})),
+		);
+
+		render(
+			createElement(
+				TraceDataProvider,
+				null,
+				createElement(SnapshotSummaryProbe),
+			),
+		);
+
+		await waitFor(() =>
+			expect(screen.getByTestId("snapshot-summary")).toHaveTextContent(
+				'"session_count":3',
+			),
+		);
+		expect(screen.getByTestId("snapshot-summary")).toHaveTextContent(
+			'"subprocess_failures":2',
 		);
 	});
 

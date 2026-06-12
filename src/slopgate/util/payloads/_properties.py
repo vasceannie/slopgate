@@ -6,10 +6,11 @@ from pathlib import Path
 from slopgate._types import ObjectDict, object_dict
 from slopgate.constants import SESSION_ID
 from slopgate.models import ContentTarget, RuntimeConfig
+from slopgate.util import logger
 
 from ._basic import detect_language, first_present, shell_kind_for_tool
 from ._shell import shell_command_paths
-from ._targets import (
+from .targets import (
     direct_candidate_paths,
     multi_edit_candidate_paths,
     multi_edit_content_targets,
@@ -22,6 +23,8 @@ from ._targets import (
     unique_paths,
 )
 
+UNSET_LOG_VALUE = "unset"
+
 
 class _CoreHookPayloadProperties:
     payload: ObjectDict
@@ -29,7 +32,14 @@ class _CoreHookPayloadProperties:
 
     @cached_property
     def event_name(self) -> str:
-        return str(self.payload.get("hook_event_name", "")).strip()
+        event_name = str(self.payload.get("hook_event_name", "")).strip()
+        logger.info(
+            "hook payload event resolved",
+            event_name=event_name or UNSET_LOG_VALUE,
+            tool_name=self.tool_name or UNSET_LOG_VALUE,
+            session_id=self.session_id or UNSET_LOG_VALUE,
+        )
+        return event_name
 
     @cached_property
     def tool_name(self) -> str:
@@ -60,7 +70,7 @@ class _CoreHookPayloadProperties:
     @cached_property
     def user_prompt(self) -> str:
         value = self.payload.get("prompt")
-        return str(value) if isinstance(value, str) else ""
+        return value if isinstance(value, str) else ""
 
 
 class _ShellHookPayloadProperties(_CoreHookPayloadProperties):

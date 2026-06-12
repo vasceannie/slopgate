@@ -1,7 +1,4 @@
-import { ResponsiveBar } from "@nivo/bar";
-import { ResponsivePie } from "@nivo/pie";
 import { useState } from "react";
-import { NIVO_DARK_THEME } from "@/lib/chartTheme";
 
 interface CommandStats {
 	command: string;
@@ -18,13 +15,15 @@ interface Props {
 	byCommand: CommandStats[];
 }
 
+const RUNTIME_BAR_MAX_WIDTH_PERCENT = 100;
+const PASS_COLOR = "hsl(142, 50%, 45%)";
+const FAIL_COLOR = "hsl(0, 72%, 51%)";
+
 export function AsyncJobs({ passCount, failCount, byCommand }: Props) {
 	const [expandedCmd, setExpandedCmd] = useState<string | null>(null);
 
-	const pieData = [
-		{ id: "Pass", value: passCount, color: "hsl(142, 50%, 45%)" },
-		{ id: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
-	];
+	const totalJobs = passCount + failCount;
+	const passPercent = totalJobs ? Math.round((passCount / totalJobs) * 100) : 0;
 
 	const runtimeData = byCommand
 		.sort((a, b) => b.medianRuntime - a.medianRuntime)
@@ -33,6 +32,7 @@ export function AsyncJobs({ passCount, failCount, byCommand }: Props) {
 			command: c.command.length > 20 ? `${c.command.slice(0, 18)}…` : c.command,
 			runtime: Math.round(c.medianRuntime),
 		}));
+	const maxRuntime = Math.max(...runtimeData.map((row) => row.runtime), 1);
 
 	const noisy = [...byCommand]
 		.filter((c) => c.fail > 0)
@@ -51,17 +51,25 @@ export function AsyncJobs({ passCount, failCount, byCommand }: Props) {
 						Pass / Fail
 					</h4>
 					<div className="h-[150px]">
-						<ResponsivePie
-							data={pieData}
-							margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-							innerRadius={0.6}
-							colors={({ data }) => data.color}
-							borderWidth={1}
-							borderColor="hsl(220, 15%, 15%)"
-							enableArcLinkLabels={false}
-							arcLabelsTextColor="hsl(210, 20%, 95%)"
-							theme={NIVO_DARK_THEME}
-						/>
+						<div className="flex h-full items-center justify-center gap-4">
+							<div
+								className="grid h-24 w-24 place-items-center rounded-full"
+								style={{
+									background: `conic-gradient(${PASS_COLOR} 0 ${passPercent}%, ${FAIL_COLOR} ${passPercent}% 100%)`,
+								}}
+								title={`${passCount} passed, ${failCount} failed`}
+							>
+								<div className="grid h-14 w-14 place-items-center rounded-full bg-card text-center">
+									<span className="font-mono text-sm font-semibold">
+										{passPercent}%
+									</span>
+								</div>
+							</div>
+							<div className="space-y-2 text-[10px] text-muted-foreground">
+								<LegendItem color={PASS_COLOR} label="Pass" value={passCount} />
+								<LegendItem color={FAIL_COLOR} label="Fail" value={failCount} />
+							</div>
+						</div>
 					</div>
 				</div>
 
@@ -69,22 +77,38 @@ export function AsyncJobs({ passCount, failCount, byCommand }: Props) {
 					<h4 className="text-[10px] text-muted-foreground uppercase mb-1 text-center">
 						Median Runtime (ms)
 					</h4>
-					<div className="h-[150px]">
-						<ResponsiveBar
-							data={runtimeData}
-							keys={["runtime"]}
-							indexBy="command"
-							layout="horizontal"
-							margin={{ top: 5, right: 30, bottom: 5, left: 130 }}
-							padding={0.3}
-							colors="hsl(217, 91%, 60%)"
-							enableLabel
-							labelTextColor="hsl(210, 20%, 95%)"
-							enableGridY={false}
-							axisBottom={null}
-							axisLeft={{ tickSize: 0, tickPadding: 8 }}
-							theme={NIVO_DARK_THEME}
-						/>
+					<div className="flex h-[150px] flex-col justify-center gap-1.5">
+						{runtimeData.map((row) => (
+							<div
+								key={row.command}
+								className="grid grid-cols-[minmax(0,1fr)_minmax(80px,1.8fr)_42px] items-center gap-2 text-[10px]"
+								title={`${row.command}: ${row.runtime}ms median`}
+							>
+								<span className="truncate font-mono text-muted-foreground">
+									{row.command}
+								</span>
+								<div className="h-2 rounded-sm bg-muted/40">
+									<div
+										className="h-full rounded-sm bg-primary"
+										style={{
+											width: `${Math.max(
+												1,
+												(row.runtime / maxRuntime) *
+													RUNTIME_BAR_MAX_WIDTH_PERCENT,
+											)}%`,
+										}}
+									/>
+								</div>
+								<span className="text-right font-mono text-foreground">
+									{row.runtime}
+								</span>
+							</div>
+						))}
+						{runtimeData.length === 0 && (
+							<div className="text-center text-xs text-muted-foreground">
+								No async runtime data
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
@@ -125,6 +149,27 @@ export function AsyncJobs({ passCount, failCount, byCommand }: Props) {
 					)}
 				</div>
 			</div>
+		</div>
+	);
+}
+
+function LegendItem({
+	color,
+	label,
+	value,
+}: {
+	color: string;
+	label: string;
+	value: number;
+}) {
+	return (
+		<div className="flex items-center gap-2">
+			<span
+				className="h-2 w-2 rounded-full"
+				style={{ backgroundColor: color }}
+			/>
+			<span className="min-w-8">{label}</span>
+			<span className="font-mono text-foreground">{value}</span>
 		</div>
 	);
 }

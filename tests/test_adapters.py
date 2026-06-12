@@ -15,20 +15,20 @@ from collections.abc import Callable
 import json
 from pathlib import Path
 from typing import cast
-import slopgate.engine
 import pytest
-
-engine_module = slopgate.engine
-from tests import support
 from slopgate._types import ObjectDict, object_dict, string_value
-from slopgate.adapters import get_adapter, ADAPTERS
+from slopgate.adapters import ADAPTERS, get_adapter
 from slopgate.adapters.base import PlatformAdapter
 from slopgate.adapters.claude import ClaudeAdapter
 from slopgate.adapters.codex import CodexAdapter
 from slopgate.adapters.cursor import CursorAdapter
 from slopgate.adapters.opencode import OpenCodeAdapter
+import slopgate.engine
 from slopgate.engine import evaluate_payload
 from slopgate.models import RuleFinding, Severity
+from tests import support
+
+engine_module = slopgate.engine
 
 FIXTURES_DIR = support.BUNDLE_ROOT / "fixtures"
 _RESOURCES_DIR = support.BUNDLE_ROOT / "src" / "slopgate" / "resources"

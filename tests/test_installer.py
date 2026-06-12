@@ -1,6 +1,8 @@
 from __future__ import annotations
+
+from dataclasses import dataclass
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 import tomli
 from pytest import CaptureFixture, MonkeyPatch
@@ -14,11 +16,12 @@ from slopgate._types import (
     string_value,
 )
 
-HookBlockBuilder = Callable[[str], ObjectDict]
 
-
-def hook_builder(name: str) -> HookBlockBuilder:
-    return getattr(slopgate.installer, name)
+@dataclass(frozen=True, slots=True)
+class InstallDryRunCase:
+    platform: str
+    binary: str | None = "slopgate"
+    windows: bool = False
 
 
 def _assert_canonical_codex_hooks_feature(config: ObjectDict) -> None:
@@ -28,22 +31,18 @@ def _assert_canonical_codex_hooks_feature(config: ObjectDict) -> None:
 
 
 def dry_run_install_json(
-    platform: str,
+    case: InstallDryRunCase,
     capsys: CaptureFixture[str],
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
-    *,
-    binary: str | None = "slopgate",
-    windows: bool = False,
 ) -> ObjectDict:
-
     def which(name: str) -> str | None:
-        return binary if name == "slopgate" else None
+        return case.binary if name == "slopgate" else None
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: windows)
+    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: case.windows)
     monkeypatch.setattr(slopgate.installer._shared.shutil, "which", which)
-    assert slopgate.installer.install_platform(platform, dry_run=True) == 0
+    assert slopgate.installer.install_platform(case.platform, dry_run=True) == 0
     output = capsys.readouterr().out
     return object_dict(json.loads(output[output.index("{") :]))
 
@@ -78,23 +77,9 @@ def hook_commands(hooks: ObjectDict, event_name: str = "PreToolUse") -> list[str
     return commands
 
 
-def count_slopgate_hook_commands(commands: list[str], *fragments: str) -> int:
-    return sum(
-        1
-        for command in commands
-        if slopgate.installer._shared.command_is_slopgate_hook(command)
-        and (not fragments or all(fragment in command for fragment in fragments))
-    )
-
-
-def expected_hook_command(binary: str, *args: str) -> str:
-    return slopgate.installer._shared.hook_command(binary, *args)
-
-
 def command_includes_slopgate_handle(command: str, *fragments: str) -> bool:
-    return (
-        slopgate.installer._shared.command_is_slopgate_hook(command)
-        and all(fragment in command for fragment in fragments)
+    return slopgate.installer._shared.command_is_slopgate_hook(command) and all(
+        fragment in command for fragment in fragments
     )
 
 
@@ -150,7 +135,7 @@ def _codex_install_artifact_summary(root: Path) -> dict[str, object]:
 
 def test_codex_hooks_cover_current_tool_events() -> None:
     summary = _codex_hook_coverage_summary(
-        hook_builder("codex_hooks_block")("slopgate")
+        object_dict(slopgate.installer.codex_hooks_block("slopgate"))
     )
     assert summary == {
         "missing_tools_by_matcher": {
@@ -165,12 +150,17 @@ def test_codex_hooks_cover_current_tool_events() -> None:
 def test_codex_hooks_are_bash_only(
     capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    data = dry_run_install_json("codex", capsys, monkeypatch, tmp_path)
+    data = dry_run_install_json(
+        InstallDryRunCase(platform="codex"), capsys, monkeypatch, tmp_path
+    )
     hooks = object_dict(data.get("hooks"))
     commands = list(all_hook_commands(hooks))
     assert (
         bool(commands),
-        all((command.startswith("slopgate ") for command in commands)),
+        all(
+            slopgate.installer._shared.command_is_slopgate_hook(command)
+            for command in commands
+        ),
         all((" handle" in command for command in commands)),
         all(("powershell.exe" not in command for command in commands)),
     ) == (True, True, True, True)
@@ -320,21 +310,6 @@ def existing_codex_hooks() -> ObjectDict:
             ]
         }
     }
-
-
-def install_with_existing_hooks(
-    tmp_path: Path,
-    monkeypatch: MonkeyPatch,
-    harness_dir: str,
-    file_name: str,
-    existing_hooks: ObjectDict,
-) -> Path:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(slopgate.installer._shared, "find_binary", lambda: "slopgate")
-    hooks_path = tmp_path / harness_dir / file_name
-    hooks_path.parent.mkdir(parents=True)
-    hooks_path.write_text(json.dumps(existing_hooks), encoding="utf-8")
-    return hooks_path
 
 
 def installed_hook_commands(hooks_path: Path) -> list[str]:

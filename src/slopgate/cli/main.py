@@ -39,7 +39,7 @@ def _string_list_attr(args: argparse.Namespace, name: str) -> list[str] | None:
 
 
 def _search_subcommands() -> set[str]:
-    from slopgate.search._cli_parser import SEARCH_SUBCOMMANDS
+    from slopgate.search.cli.parser import SEARCH_SUBCOMMANDS
 
     return set(SEARCH_SUBCOMMANDS)
 
@@ -101,6 +101,14 @@ def _run_default_search_query(args: argparse.Namespace) -> int | None:
 
 
 def _dispatch_search(args: argparse.Namespace) -> int:
+    from slopgate.util import logger
+
+    logger.info(
+        "cli search dispatch",
+        event_name="search",
+        service="slopgate.search.cli",
+        search_command=getattr(args, "search_command", "unset"),
+    )
     result = _run_search_command(args)
     if result is not None:
         return result

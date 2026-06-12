@@ -13,10 +13,10 @@ from ..wrappers import call_name
 
 if TYPE_CHECKING:
     pass
-from ._semantic import (
+from .semantic import (
     FUNC_TYPES,
     canonicalize_import_block,
-    emit_group_violations,
+    build_group_violations,
     end_lineno,
     normalize_ast,
     skip_docstring,
@@ -112,7 +112,7 @@ def detect_duplicate_call_sequences(
             seq = extract_call_sequence(node)
             if len(seq) >= min_len:
                 groups[seq].append((pf.rel, node.name, node.lineno))
-    return emit_group_violations(
+    return build_group_violations(
         "duplicate-call-sequence",
         groups,
         lambda seq, others: (

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from hypothesis import given, strategies
 
+from slopgate.config import load_config
 from slopgate.config._discovery import config_dir, detect_root, resolve_config_path
 from slopgate.config._repo import (
     ensure_worktree_enrollment,
@@ -138,6 +140,63 @@ def test_resolve_repo_root_returns_none_outside_enrolled_repo(tmp_path: Path) ->
     outside.mkdir()
 
     assert resolve_repo_root(outside) is None
+
+
+def test_resolve_repo_root_cache_refreshes_when_marker_changes(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "cached-repo"
+    repo.mkdir()
+
+    first_result = resolve_repo_root(repo)
+    assert first_result is None, "Expected no enrolled repo before marker creation"
+
+    marker = repo / "slopgate.toml"
+    marker.write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+
+    second_result = resolve_repo_root(repo)
+    assert second_result == repo, "Expected cache refresh after marker creation"
+
+    marker.unlink()
+
+    third_result = resolve_repo_root(repo)
+    assert third_result is None, "Expected cache refresh after marker removal"
+
+
+def test_load_config_cache_refreshes_when_config_file_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("SLOPGATE_CONFIG", str(config_path))
+
+    config_path.write_text(
+        json.dumps({"protected_paths": ["cache-v1"]}), encoding="utf-8"
+    )
+    first_config = load_config(
+        root=tmp_path,
+        repo_root=tmp_path,
+        ensure_enrollment=False,
+        ensure_trace=False,
+    )
+    assert first_config.protected_paths == ["cache-v1"], (
+        "Expected first config read to use the initial JSON payload"
+    )
+
+    config_path.write_text(
+        json.dumps({"protected_paths": ["cache-v2", "cache-v2-extra"]}),
+        encoding="utf-8",
+    )
+    second_config = load_config(
+        root=tmp_path,
+        repo_root=tmp_path,
+        ensure_enrollment=False,
+        ensure_trace=False,
+    )
+    assert second_config.protected_paths == [
+        "cache-v2",
+        "cache-v2-extra",
+    ], "Expected cached raw config to refresh after file metadata changed"
 
 
 def test_is_repo_enrolled_true_when_quality_gate_present(tmp_path: Path) -> None:

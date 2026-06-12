@@ -6,7 +6,13 @@ import pytest
 
 from slopgate.engine import evaluate_payload
 from slopgate.rules.error_rules import BashFailureReinforcementRule, BashOutputErrorRule
-from tests.support import BUNDLE_ROOT, SKIP_UNIX_ONLY, finding_ids, hook_output, required_string
+from tests.support import (
+    BUNDLE_ROOT,
+    SKIP_UNIX_ONLY,
+    finding_ids,
+    hook_output,
+    required_string,
+)
 
 
 class TestBashOutputError:

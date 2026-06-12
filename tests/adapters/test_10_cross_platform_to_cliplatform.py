@@ -35,9 +35,9 @@ class TestCrossPlatform:
         """Claude and Codex both use hookSpecificOutput.permissionDecision."""
         claude_spec = self._permission_spec_for_platform("claude")
         codex_spec = self._permission_spec_for_platform("codex")
-        assert (
-            support.output_string(claude_spec, "permissionDecision") == "deny"
-        ), "Claude should deny"
+        assert support.output_string(claude_spec, "permissionDecision") == "deny", (
+            "Claude should deny"
+        )
         assert support.output_string(codex_spec, "permissionDecision") == "deny", (
             "Codex should deny"
         )

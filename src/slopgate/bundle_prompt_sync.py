@@ -116,7 +116,9 @@ def update_managed_block(
 
     block = f"{start}\n{managed_content.rstrip()}\n{end}\n"
     if bounds is None:
-        separator = "" if not original else "\n\n" if original.endswith("\n") else "\n\n"
+        separator = (
+            "" if not original else "\n\n" if original.endswith("\n") else "\n\n"
+        )
         return f"{original}{separator}{block}"
 
     start_index, suffix_start = bounds
@@ -149,7 +151,9 @@ def _user_prompt_targets(platform: PromptPlatform) -> tuple[Path, ...]:
     raise ValueError(f"unsupported platform: {platform}")
 
 
-def _project_prompt_targets(platform: PromptPlatform, project_root: Path) -> tuple[Path, ...]:
+def _project_prompt_targets(
+    platform: PromptPlatform, project_root: Path
+) -> tuple[Path, ...]:
     if platform == PLATFORM_CLAUDE:
         return (project_root / "CLAUDE.md",)
     if platform in {PLATFORM_OPENCODE, PLATFORM_CODEX, PLATFORM_CURSOR}:
@@ -157,10 +161,14 @@ def _project_prompt_targets(platform: PromptPlatform, project_root: Path) -> tup
     raise ValueError(f"unsupported platform: {platform}")
 
 
-def _requested_platforms(platforms: tuple[str, ...] | list[str] | None) -> tuple[PromptPlatform, ...]:
+def _requested_platforms(
+    platforms: tuple[str, ...] | list[str] | None,
+) -> tuple[PromptPlatform, ...]:
     if not platforms or "all" in platforms:
         return VALID_PROMPT_PLATFORMS
-    invalid = [platform for platform in platforms if platform not in VALID_PROMPT_PLATFORMS]
+    invalid = [
+        platform for platform in platforms if platform not in VALID_PROMPT_PLATFORMS
+    ]
     if invalid:
         raise ValueError(f"unsupported platform(s): {', '.join(invalid)}")
     requested: list[PromptPlatform] = []

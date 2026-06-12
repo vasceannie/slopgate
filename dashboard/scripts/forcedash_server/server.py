@@ -1,4 +1,5 @@
 """HTTP server and API routing for ForceDash."""
+
 from collections.abc import Mapping
 import http.server
 import json
@@ -151,13 +152,17 @@ def send_config(handler: ForceDashHandler) -> None:
 
 def send_health(handler: ForceDashHandler) -> None:
     _, err = read_config()
-    handler._json({"ok": True, "ssh_host": SSH_HOST, "ssh_ok": err is None, "ssh_error": err})
+    handler._json(
+        {"ok": True, "ssh_host": SSH_HOST, "ssh_ok": err is None, "ssh_error": err}
+    )
 
 
 def send_harness_status(handler: ForceDashHandler) -> None:
     status, err = harness_status()
     if err is not None:
-        handler._json({"ok": False, "ssh_host": SSH_HOST, "error": err}, HTTP_BAD_GATEWAY)
+        handler._json(
+            {"ok": False, "ssh_host": SSH_HOST, "error": err}, HTTP_BAD_GATEWAY
+        )
         return
     status["ssh_host"] = SSH_HOST
     handler._json(status)
@@ -166,12 +171,16 @@ def send_harness_status(handler: ForceDashHandler) -> None:
 def send_snapshot(handler: ForceDashHandler) -> None:
     snapshot, err = trace_snapshot(snapshot_lookback_hours(handler.path))
     if err is not None:
-        handler._json({"ok": False, "ssh_host": SSH_HOST, "error": err}, HTTP_BAD_GATEWAY)
+        handler._json(
+            {"ok": False, "ssh_host": SSH_HOST, "error": err}, HTTP_BAD_GATEWAY
+        )
         return
     handler._json(snapshot)
 
 
-def read_patch_payload(handler: ForceDashHandler) -> tuple[dict[str, object], str | None]:
+def read_patch_payload(
+    handler: ForceDashHandler,
+) -> tuple[dict[str, object], str | None]:
     try:
         length = int(handler.headers.get("Content-Length", 0))
         payload: object = json.loads(handler.rfile.read(length))
@@ -186,7 +195,9 @@ def read_patch_payload(handler: ForceDashHandler) -> tuple[dict[str, object], st
 def update_config(handler: ForceDashHandler, patch: dict[str, object]) -> None:
     live, err = read_config()
     if err is not None:
-        handler._json({"error": f"Could not read config before write: {err}"}, HTTP_BAD_GATEWAY)
+        handler._json(
+            {"error": f"Could not read config before write: {err}"}, HTTP_BAD_GATEWAY
+        )
         return
     write_error = write_config(apply_config_patch(live, patch))
     if write_error is not None:
@@ -201,7 +212,10 @@ def main() -> None:
         sys.exit(1)
     server = http.server.ThreadingHTTPServer((BIND, PORT), ForceDashHandler)
     print(f"ForceDash  http://{BIND}:{PORT}/", file=sys.stderr, flush=True)
-    print(f"Config API http://{BIND}:{PORT}/api/config  (SSH -> {SSH_HOST}:{CONFIG_PATH})", file=sys.stderr)
+    print(
+        f"Config API http://{BIND}:{PORT}/api/config  (SSH -> {SSH_HOST}:{CONFIG_PATH})",
+        file=sys.stderr,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

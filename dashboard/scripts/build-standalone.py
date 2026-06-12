@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a standalone ForceDash HTML with slopgate trace data pre-baked."""
+
 import sys
 from pathlib import Path
 

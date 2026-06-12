@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.util import warning
@@ -10,6 +11,32 @@ from ._io import load_toml, slopgate_path, slopgate_template, write_slopgate
 
 # Sentinel filenames that disable the quality gate for a repo.
 DISABLE_SENTINELS = (".noslopgate", ".no-slop-gate")
+MISSING_FILE_MTIME_NS = -1
+MISSING_FILE_SIZE = -1
+
+MarkerSignature = tuple[tuple[Path, int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _RepoRootCacheEntry:
+    signature: MarkerSignature
+    repo_root: Path | None
+
+
+_repo_root_cache: dict[Path, _RepoRootCacheEntry] = {}
+
+
+def _marker_signature(candidates: tuple[Path, ...]) -> MarkerSignature:
+    signature: list[tuple[Path, int, int]] = []
+    for candidate in candidates:
+        marker = candidate / "slopgate.toml"
+        try:
+            stat = marker.stat()
+        except FileNotFoundError:
+            signature.append((candidate, MISSING_FILE_MTIME_NS, MISSING_FILE_SIZE))
+        else:
+            signature.append((candidate, stat.st_mtime_ns, stat.st_size))
+    return tuple(signature)
 
 
 def git_output(
@@ -151,10 +178,20 @@ def enroll_repo(
 def resolve_repo_root(start: Path | None = None) -> Path | None:
     """Resolve enrolled repo root by walking ancestors from *start*."""
     path = (start or Path.cwd()).resolve()
-    for candidate in (path, *path.parents):
-        if (candidate / "slopgate.toml").exists():
-            return candidate
-    return None
+    base = path if path.is_dir() else path.parent
+    candidates = (base, *base.parents)
+    signature = _marker_signature(candidates)
+    cached = _repo_root_cache.get(base)
+    if cached is not None and cached.signature == signature:
+        return cached.repo_root
+
+    repo_root: Path | None = None
+    for candidate, _mtime_ns, size in signature:
+        if size != MISSING_FILE_SIZE:
+            repo_root = candidate
+            break
+    _repo_root_cache[base] = _RepoRootCacheEntry(signature, repo_root)
+    return repo_root
 
 
 def is_repo_enrolled(repo_root: Path | None = None) -> bool:

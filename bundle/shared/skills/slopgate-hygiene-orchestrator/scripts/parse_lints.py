@@ -36,7 +36,9 @@ class UnifiedOutput:
     total_warnings: int = 0
     issues: list[LintIssue] = field(default_factory=list)
     by_file: dict[str, list[int]] = field(default_factory=dict)  # file -> issue indices
-    by_category: dict[str, list[int]] = field(default_factory=dict)  # category -> issue indices
+    by_category: dict[str, list[int]] = field(
+        default_factory=dict
+    )  # category -> issue indices
 
 
 def parse_pyrefly(content: str) -> list[LintIssue]:
@@ -167,10 +169,14 @@ def parse_clippy_json(content: str) -> list[LintIssue]:
                 line=primary.get("line_start", 1),
                 column=primary.get("column_start", 1),
                 severity=level,
-                code=msg.get("code", {}).get("code", "unknown") if msg.get("code") else "unknown",
+                code=msg.get("code", {}).get("code", "unknown")
+                if msg.get("code")
+                else "unknown",
                 message=msg.get("message", ""),
                 source="clippy",
-                category=categorize_rust_issue(msg.get("code", {}).get("code", "") if msg.get("code") else ""),
+                category=categorize_rust_issue(
+                    msg.get("code", {}).get("code", "") if msg.get("code") else ""
+                ),
             )
         )
 
@@ -179,7 +185,13 @@ def parse_clippy_json(content: str) -> list[LintIssue]:
 
 def categorize_python_issue(code: str) -> str:
     """Categorize Python lint codes into groups."""
-    type_issues = {"unbound-name", "missing-attribute", "bad-argument-type", "not-iterable", "type-mismatch"}
+    type_issues = {
+        "unbound-name",
+        "missing-attribute",
+        "bad-argument-type",
+        "not-iterable",
+        "type-mismatch",
+    }
     import_issues = {"untyped-import", "import-error", "missing-import"}
     none_safety = {"none-return", "optional-member-access", "possibly-undefined"}
 
@@ -212,7 +224,9 @@ def categorize_rust_issue(code: str) -> str:
     return "general"
 
 
-def build_indices(issues: list[LintIssue]) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+def build_indices(
+    issues: list[LintIssue],
+) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
     """Build file and category indices for issues."""
     by_file: dict[str, list[int]] = {}
     by_category: dict[str, list[int]] = {}
@@ -262,10 +276,14 @@ def parse_directory(hygiene_dir: Path) -> UnifiedOutput:
 
 def main() -> int:
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Parse lint outputs into unified format")
+    parser = argparse.ArgumentParser(
+        description="Parse lint outputs into unified format"
+    )
     parser.add_argument("hygiene_dir", type=Path, help="Path to .hygeine/ directory")
     parser.add_argument("--output", "-o", type=Path, help="Output JSON file path")
-    parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
+    parser.add_argument(
+        "--pretty", action="store_true", help="Pretty-print JSON output"
+    )
 
     args = parser.parse_args()
 

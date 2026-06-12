@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import cast
 from hypothesis import given
 from hypothesis import strategies
-from slopgate._types import object_list
+import slopgate.lint._baseline
+from slopgate._types import object_dict, object_list
 from slopgate.cli.lint import lint_check, lint_freeze
-from slopgate.lint._baseline import Violation, compute_synced_baseline_rules
 from tests.lint_paths_support import (
     freeze_rules_payload,
     seed_freeze_repo,
@@ -86,15 +86,39 @@ def _baseline_rule_value(tmp_path: Path, rule_name: str) -> object:
     return cast(dict[object, object], rules_obj).get(rule_name)
 
 
+def _single_git_base_cache_file(tmp_path: Path) -> Path:
+    cache_files = sorted((tmp_path / ".slopgate/cache/git-base-debt").glob("*.json"))
+    assert len(cache_files) == 1, "Expected one git-base debt cache entry"
+    return cache_files[0]
+
+
+def _cached_git_base_rule_ids(tmp_path: Path) -> list[str]:
+    cache_file = _single_git_base_cache_file(tmp_path)
+    cache_payload = object_dict(json.loads(cache_file.read_text(encoding="utf-8")))
+    rules = object_dict(cache_payload.get("rules"))
+    return [
+        item
+        for ids in rules.values()
+        for item in object_list(ids)
+        if isinstance(item, str)
+    ]
+
+
 def test_compute_synced_prune_only_drops_stale_ids() -> None:
     collectors = [
         (
             "demo-rule",
-            [Violation(rule="demo-rule", relative_path="a.py", identifier="keep")],
+            [
+                slopgate.lint._baseline.Violation(
+                    rule="demo-rule", relative_path="a.py", identifier="keep"
+                )
+            ],
         )
     ]
     old = {"demo-rule": {"demo-rule|a.py|keep", "demo-rule|a.py|stale"}}
-    synced, removed = compute_synced_baseline_rules(collectors, old, prune_only=True)
+    synced, removed = slopgate.lint._baseline.compute_synced_baseline_rules(
+        collectors, old, prune_only=True
+    )
     assert removed == 1
     assert synced == {"demo-rule": {"demo-rule|a.py|keep"}}
 
@@ -103,10 +127,16 @@ def test_compute_synced_full_mirror_includes_current() -> None:
     collectors = [
         (
             "demo-rule",
-            [Violation(rule="demo-rule", relative_path="b.py", identifier="new-hit")],
+            [
+                slopgate.lint._baseline.Violation(
+                    rule="demo-rule", relative_path="b.py", identifier="new-hit"
+                )
+            ],
         )
     ]
-    synced, removed = compute_synced_baseline_rules(collectors, {}, prune_only=False)
+    synced, removed = slopgate.lint._baseline.compute_synced_baseline_rules(
+        collectors, {}, prune_only=False
+    )
     assert removed == 0
     assert synced == {"demo-rule": {"demo-rule|b.py|new-hit"}}
 
@@ -120,7 +150,6 @@ _ID_SETS = strategies.sets(
 def test_compute_synced_prune_only_keeps_only_current_accepted_debt(
     old_ids: set[str], current_ids: set[str], accepted_ids: set[str]
 ) -> None:
-
     def stable_id(identifier: str) -> str:
         return f"demo-rule|demo.py|{identifier}"
 
@@ -128,14 +157,14 @@ def test_compute_synced_prune_only_keeps_only_current_accepted_debt(
         (
             "demo-rule",
             [
-                Violation("demo-rule", "demo.py", identifier)
+                slopgate.lint._baseline.Violation("demo-rule", "demo.py", identifier)
                 for identifier in sorted(current_ids)
             ],
         )
     ]
     old = {"demo-rule": {stable_id(item) for item in old_ids}}
     accepted = {"demo-rule": {stable_id(item) for item in accepted_ids}}
-    synced, removed = compute_synced_baseline_rules(
+    synced, removed = slopgate.lint._baseline.compute_synced_baseline_rules(
         collectors, old, prune_only=True, accepted_baseline=accepted
     )
     expected = {stable_id(item) for item in (old_ids | accepted_ids) & current_ids}
@@ -178,3 +207,17 @@ def test_lint_check_persists_only_git_base_debt_when_branch_adds_new_finding(
     recorded_ids = _recorded_rule_ids(tmp_path)
     assert any(("src/base_debt.py" in item for item in recorded_ids))
     assert not any(("src/branch_debt.py" in item for item in recorded_ids))
+
+
+def test_lint_check_writes_git_base_debt_cache_for_repeated_checks(
+    tmp_path: Path,
+) -> None:
+    _seed_git_base_debt_repo(tmp_path)
+    assert lint_check(tmp_path) == 0
+    assert any(
+        ("src/base_debt.py" in item for item in _cached_git_base_rule_ids(tmp_path))
+    )
+    cache_file = _single_git_base_cache_file(tmp_path)
+    before_payload = cache_file.read_text(encoding="utf-8")
+    assert lint_check(tmp_path) == 0
+    assert cache_file.read_text(encoding="utf-8") == before_payload

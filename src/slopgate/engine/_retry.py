@@ -22,6 +22,7 @@ from ._hints import (
 )
 from ._hints.import_aliases import compress_repeated_import_alias_examples
 
+
 def _normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
     raw_path = Path(path_value)
     if raw_path.is_absolute():

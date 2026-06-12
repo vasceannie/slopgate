@@ -49,14 +49,20 @@ def find_constant_assignments(
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     # Check if it looks like a constant (UPPER_CASE)
-                    if target.id.isupper() or target.id.startswith("_") and target.id[1:].isupper():
+                    if (
+                        target.id.isupper()
+                        or target.id.startswith("_")
+                        and target.id[1:].isupper()
+                    ):
                         if isinstance(node.value, ast.Constant):
-                            constants.append((
-                                target.id,
-                                node.value.value,
-                                node.lineno,
-                                str(file_path),
-                            ))
+                            constants.append(
+                                (
+                                    target.id,
+                                    node.value.value,
+                                    node.lineno,
+                                    str(file_path),
+                                )
+                            )
 
     return constants
 
@@ -89,12 +95,14 @@ def find_final_annotations(
                 value = None
                 if isinstance(node.value, ast.Constant):
                     value = node.value.value
-                finals.append((
-                    node.target.id,
-                    value,
-                    node.lineno,
-                    str(file_path),
-                ))
+                finals.append(
+                    (
+                        node.target.id,
+                        value,
+                        node.lineno,
+                        str(file_path),
+                    )
+                )
 
     return finals
 
@@ -121,7 +129,10 @@ def search_constants(
     for name, const_value, lineno, filepath in all_constants:
         if value is not None:
             # Exact string match on name or value
-            if value.lower() in name.lower() or str(const_value).lower() == value.lower():
+            if (
+                value.lower() in name.lower()
+                or str(const_value).lower() == value.lower()
+            ):
                 matches.append((name, const_value, lineno, filepath))
         elif pattern is not None:
             # Regex match on name
@@ -151,35 +162,24 @@ def search_constants(
     for filepath, consts in sorted(by_file.items()):
         print(f"{filepath}:")
         for name, const_value, lineno in sorted(consts, key=lambda x: x[2]):
-            value_repr = repr(const_value) if isinstance(const_value, str) else const_value
+            value_repr = (
+                repr(const_value) if isinstance(const_value, str) else const_value
+            )
             print(f"  L{lineno}: {name} = {value_repr}")
         print()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Search for existing constants"
-    )
+    parser = argparse.ArgumentParser(description="Search for existing constants")
+    parser.add_argument("value", nargs="?", help="Value or name to search for")
     parser.add_argument(
-        "value", nargs="?",
-        help="Value or name to search for"
+        "--pattern", type=str, help="Regex pattern to match constant names"
     )
+    parser.add_argument("--numeric", type=float, help="Numeric value to search for")
     parser.add_argument(
-        "--pattern", type=str,
-        help="Regex pattern to match constant names"
+        "--path", type=Path, default=Path("src/noteflow"), help="Root path to search"
     )
-    parser.add_argument(
-        "--numeric", type=float,
-        help="Numeric value to search for"
-    )
-    parser.add_argument(
-        "--path", type=Path, default=Path("src/noteflow"),
-        help="Root path to search"
-    )
-    parser.add_argument(
-        "--list-all", action="store_true",
-        help="List all constants"
-    )
+    parser.add_argument("--list-all", action="store_true", help="List all constants")
     args = parser.parse_args()
 
     if not args.path.exists():

@@ -74,9 +74,11 @@ def is_safe_read_shell_command(
         return False
     if reject_find_mutation and find_command_has_mutation(shell_tokens(lowered)):
         return False
-    return _is_readonly_sed_command(command) or any(
-        command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS
-    ) or any(
-        command_has_word(lowered, verb)
-        for verb in ("get-content", "select-string", "test-path")
+    return (
+        _is_readonly_sed_command(command)
+        or any(command_has_word(lowered, verb) for verb in SAFE_READ_SHELL_VERBS)
+        or any(
+            command_has_word(lowered, verb)
+            for verb in ("get-content", "select-string", "test-path")
+        )
     )

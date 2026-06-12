@@ -1,14 +1,9 @@
 import { Filter, LoaderCircle, Settings2, Terminal, X } from "lucide-react";
-import { memo, useCallback, useState } from "react";
-import { AsyncJobs } from "@/components/dashboard/AsyncJobs";
+import { lazy, memo, Suspense, useCallback, useState } from "react";
+import type { ReactNode } from "react";
 import { DecisionFunnel } from "@/components/dashboard/DecisionFunnel";
-import { DriftTuning } from "@/components/dashboard/DriftTuning";
-import { FalsePositiveAnalysis } from "@/components/dashboard/FalsePositiveAnalysis";
 import { FileDropZone } from "@/components/dashboard/FileDropZone";
-import { PathExplorer } from "@/components/dashboard/PathExplorer";
 import { PostureStrip } from "@/components/dashboard/PostureStrip";
-import { RuleManager } from "@/components/dashboard/RuleManager";
-import { SessionExplorer } from "@/components/dashboard/SessionExplorer";
 import { TimeWindowSelector } from "@/components/dashboard/TimeWindowSelector";
 import { TopRules } from "@/components/dashboard/TopRules";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,9 +14,53 @@ import type { FilterState } from "@/types/slopgate";
 const MemoPostureStrip = memo(PostureStrip);
 const MemoDecisionFunnel = memo(DecisionFunnel);
 const MemoTopRules = TopRules;
-const MemoAsyncJobs = memo(AsyncJobs);
-const MemoDriftTuning = memo(DriftTuning);
 // SessionExplorer, FalsePositiveAnalysis, PathExplorer already use memo internally — no double wrapping
+
+const LazyAsyncJobs = lazy(() =>
+	import("@/components/dashboard/AsyncJobs").then((module) => ({
+		default: module.AsyncJobs,
+	})),
+);
+const LazyDriftTuning = lazy(() =>
+	import("@/components/dashboard/DriftTuning").then((module) => ({
+		default: module.DriftTuning,
+	})),
+);
+const LazyFalsePositiveAnalysis = lazy(() =>
+	import("@/components/dashboard/FalsePositiveAnalysis").then((module) => ({
+		default: module.FalsePositiveAnalysis,
+	})),
+);
+const LazyPathExplorer = lazy(() =>
+	import("@/components/dashboard/PathExplorer").then((module) => ({
+		default: module.PathExplorer,
+	})),
+);
+const LazyRuleManager = lazy(() =>
+	import("@/components/dashboard/RuleManager").then((module) => ({
+		default: module.RuleManager,
+	})),
+);
+const LazySessionExplorer = lazy(() =>
+	import("@/components/dashboard/SessionExplorer").then((module) => ({
+		default: module.SessionExplorer,
+	})),
+);
+
+function DashboardTabLoadingPlaceholder() {
+	return (
+		<div className="flex min-h-[320px] items-center justify-center rounded-md border border-border bg-card/30 p-3 text-xs text-muted-foreground">
+			<LoaderCircle className="mr-2 h-4 w-4 animate-spin text-primary" />
+			Loading panel…
+		</div>
+	);
+}
+
+function LazyTab({ children }: { children: ReactNode }) {
+	return (
+		<Suspense fallback={<DashboardTabLoadingPlaceholder />}>{children}</Suspense>
+	);
+}
 
 function OverviewLoadingPlaceholder() {
 	return (
@@ -182,35 +221,48 @@ export default function Dashboard() {
 					</TabsContent>
 
 					<TabsContent value="fp-analysis" className="mt-4">
-						<FalsePositiveAnalysis rules={data.rules} results={data.results} />
+						<LazyTab>
+							<LazyFalsePositiveAnalysis
+								rules={data.rules}
+								results={data.results}
+							/>
+						</LazyTab>
 					</TabsContent>
 
 					<TabsContent value="paths" className="mt-4">
-						<PathExplorer
-							events={data.unfilteredEvents}
-							rules={data.unfilteredRules}
-							onPathFilter={handlePathFilter}
-							activePathFilter={filters.pathFilter}
-						/>
+						<LazyTab>
+							<LazyPathExplorer
+								events={data.unfilteredEvents}
+								rules={data.unfilteredRules}
+								onPathFilter={handlePathFilter}
+								activePathFilter={filters.pathFilter}
+							/>
+						</LazyTab>
 					</TabsContent>
 
 					<TabsContent value="sessions" className="mt-4">
-						<SessionExplorer sessions={data.sessions} />
+						<LazyTab>
+							<LazySessionExplorer sessions={data.sessions} />
+						</LazyTab>
 					</TabsContent>
 
 					<TabsContent value="ops" className="mt-4">
-						<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-							<MemoAsyncJobs {...data.async} />
-							<MemoDriftTuning
-								config={data.drift.config}
-								hottestRepos={data.drift.hottestRepos}
-								operationalContext={data.drift.operationalContext}
-							/>
-						</div>
+						<LazyTab>
+							<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+								<LazyAsyncJobs {...data.async} />
+								<LazyDriftTuning
+									config={data.drift.config}
+									hottestRepos={data.drift.hottestRepos}
+									operationalContext={data.drift.operationalContext}
+								/>
+							</div>
+						</LazyTab>
 					</TabsContent>
 
 					<TabsContent value="rules" className="mt-4">
-						<RuleManager fireCounts={data.fireCounts} />
+						<LazyTab>
+							<LazyRuleManager fireCounts={data.fireCounts} />
+						</LazyTab>
 					</TabsContent>
 				</Tabs>
 			</div>

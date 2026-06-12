@@ -66,10 +66,25 @@ def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Update hygiene tracking file")
     parser.add_argument("hygiene_dir", type=Path, help="Path to .hygeine/ directory")
-    parser.add_argument("--increment", action="store_true", help="Increment iteration counter")
-    parser.add_argument("--complete-file", type=str, action="append", help="Mark file as completed")
-    parser.add_argument("--block-file", type=str, nargs=2, metavar=("FILE", "REASON"), action="append", help="Block a file with reason")
-    parser.add_argument("--init", action="store_true", help="Initialize tracking with current counts as initial")
+    parser.add_argument(
+        "--increment", action="store_true", help="Increment iteration counter"
+    )
+    parser.add_argument(
+        "--complete-file", type=str, action="append", help="Mark file as completed"
+    )
+    parser.add_argument(
+        "--block-file",
+        type=str,
+        nargs=2,
+        metavar=("FILE", "REASON"),
+        action="append",
+        help="Block a file with reason",
+    )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Initialize tracking with current counts as initial",
+    )
 
     args = parser.parse_args()
 

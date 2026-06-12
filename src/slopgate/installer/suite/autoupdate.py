@@ -13,12 +13,12 @@ from slopgate.installer._shared import (
     find_binary,
     shell_command,
 )
-from slopgate.installer._suite_autoupdate_types import (
+from slopgate.installer.suite.autoupdate_types import (
     AUTOUPDATE_MARKER,
     SchedulerPlan,
     WINDOWS_TASK_NAME,
 )
-from slopgate.installer._suite_autoupdate_windows import (
+from slopgate.installer.suite.autoupdate_windows import (
     prepare_windows_task_replacement,
     remove_windows_task_by_name,
     scheduler_file_is_owned,
@@ -124,17 +124,6 @@ def _macos_launchd_plan(
     )
 
 
-def _windows_task_plan(
-    source: str, *, include_missing: bool, interval_minutes: int
-) -> SchedulerPlan:
-    return SchedulerPlan(
-        "windows-schtasks",
-        Path.home() / ".slopgate" / "auto-update.task",
-        f"# {AUTOUPDATE_MARKER}\n# Windows auto-updater removed; use `slopgate update` manually.\n",
-        None,
-    )
-
-
 def build_scheduler_plan(
     source: str = DEFAULT_UPDATE_SOURCE,
     *,
@@ -144,8 +133,11 @@ def build_scheduler_plan(
     """Build the native scheduler artifact for the current OS."""
     _validate_update_source(source)
     if is_windows():
-        return _windows_task_plan(
-            source, include_missing=include_missing, interval_minutes=interval_minutes
+        return SchedulerPlan(
+            "windows-schtasks",
+            Path.home() / ".slopgate" / "auto-update.task",
+            f"# {AUTOUPDATE_MARKER}\n# Windows auto-updater removed; use `slopgate update` manually.\n",
+            None,
         )
     if sys.platform == "darwin":
         return _macos_launchd_plan(
@@ -189,6 +181,13 @@ def _scheduler_disable_command(plan: SchedulerPlan) -> list[str] | None:
     if plan.kind == "windows-schtasks":
         return ["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK_NAME]
     return None
+
+
+def _remove_orphan_windows_task(
+    plan: SchedulerPlan, existing_paths: list[Path], *, dry_run: bool
+) -> None:
+    if plan.kind == "windows-schtasks" and not existing_paths:
+        remove_windows_task_by_name(dry_run=dry_run)
 
 
 def install_autoupdate(
@@ -239,9 +238,7 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     ]
     print(f"Auto-update scheduler: {plan.kind}")
 
-    # Windows: delete orphan task by name when no marker file exists
-    if plan.kind == "windows-schtasks" and not existing_paths:
-        remove_windows_task_by_name(dry_run=dry_run)
+    _remove_orphan_windows_task(plan, existing_paths, dry_run=dry_run)
 
     if not existing_paths:
         print("No Slopgate auto-update scheduler files found.")

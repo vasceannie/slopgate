@@ -41,12 +41,12 @@ def coverage_rel_path(path_text: str) -> str | None:
 def coverage_percent_from_summary(summary: dict[str, object]) -> int | None:
     percent_obj = summary.get("percent_covered")
     if isinstance(percent_obj, (int, float)):
-        return int(round(percent_obj))
+        return round(percent_obj)
     display_obj = summary.get("percent_covered_display")
     if not isinstance(display_obj, str):
         return None
     try:
-        return int(round(float(display_obj.rstrip("%"))))
+        return round(float(display_obj.rstrip("%")))
     except ValueError:
         return None
 
@@ -120,7 +120,7 @@ def coverage_percent_from_xml_file(path: Path) -> dict[str, int]:
             continue
         line_rate = class_node.attrib.get("line-rate")
         try:
-            percent = int(round(float(line_rate or "0") * 100))
+            percent = round(float(line_rate or "0") * 100)
         except ValueError:
             continue
         for rel in rel_paths:
@@ -157,7 +157,7 @@ class CoverageInputs:
 
     @property
     def static_coverage(self) -> int:
-        return int(round(100 * len(self.referenced) / len(self.symbols)))
+        return round(100 * len(self.referenced) / len(self.symbols))
 
 
 def runtime_coverage_violation(inputs: CoverageInputs) -> Violation | None:

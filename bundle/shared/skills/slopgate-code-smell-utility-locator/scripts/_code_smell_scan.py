@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Shared AST scanning helpers for code-smell utility locator scripts."""
+
 from __future__ import annotations
 
 import ast
@@ -42,8 +43,13 @@ SECRETISH_NAMES = {
 }
 PY_SUFFIXES = {".py"}
 TS_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
-HELPER_RE = re.compile(r"(^|_)(help|util|common|shared|normalize|parse|format|extract|resolve|load|coerce|convert)(_|$)", re.I)
-BUILDER_RE = re.compile(r"(^|_)(build|builder|make|create|assemble|compose|from)(_|$)", re.I)
+HELPER_RE = re.compile(
+    r"(^|_)(help|util|common|shared|normalize|parse|format|extract|resolve|load|coerce|convert)(_|$)",
+    re.I,
+)
+BUILDER_RE = re.compile(
+    r"(^|_)(build|builder|make|create|assemble|compose|from)(_|$)", re.I
+)
 FACTORY_RE = re.compile(r"(^|_)(factory|create|make|new)(_|$)", re.I)
 CONFIG_RE = re.compile(r"(^|_)(config|settings|options|params|preferences)(_|$)", re.I)
 FACADE_RE = re.compile(r"(^|_)(facade|api|client|service|gateway|adapter)(_|$)", re.I)
@@ -76,7 +82,9 @@ class FunctionRecord:
 
 def is_secretish(path: Path) -> bool:
     lowered = {part.lower() for part in path.parts}
-    return bool(lowered & SECRETISH_NAMES) or any("secret" in part or "token" in part for part in lowered)
+    return bool(lowered & SECRETISH_NAMES) or any(
+        "secret" in part or "token" in part for part in lowered
+    )
 
 
 def iter_source_files(root: Path, include_tests: bool = True) -> Iterable[Path]:
@@ -91,7 +99,9 @@ def iter_source_files(root: Path, include_tests: bool = True) -> Iterable[Path]:
         rel_parts = path.relative_to(root).parts
         if any(part in SKIP_DIRS for part in rel_parts):
             continue
-        if not include_tests and any(part in {"tests", "test", "spec"} for part in rel_parts):
+        if not include_tests and any(
+            part in {"tests", "test", "spec"} for part in rel_parts
+        ):
             continue
         if is_secretish(path):
             continue
@@ -117,7 +127,9 @@ def decorator_name(node: ast.AST) -> str:
     return ""
 
 
-def function_signature(node: ast.FunctionDef | ast.AsyncFunctionDef, qualname: str | None = None) -> str:
+def function_signature(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, qualname: str | None = None
+) -> str:
     prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
     name = qualname or node.name
     try:
@@ -171,12 +183,19 @@ def call_target(node: ast.AST) -> str | None:
 
 def significant_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
     body = list(node.body)
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+    if (
+        body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
         body = body[1:]
     return body
 
 
-def normalized_body_hash(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, int]:
+def normalized_body_hash(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str, int]:
     body = significant_body(node)
     module = ast.Module(body=body, type_ignores=[])
     normalized = ast.dump(module, include_attributes=False)
@@ -184,7 +203,9 @@ def normalized_body_hash(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[
     return digest, len(body)
 
 
-def is_thin_wrapper(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[bool, str | None]:
+def is_thin_wrapper(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[bool, str | None]:
     if node.name.startswith("visit_"):
         return False, None
     body = significant_body(node)
@@ -207,14 +228,20 @@ def param_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     return params - {"self", "cls"}
 
 
-def feature_envy(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str | None, float]:
+def feature_envy(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str | None, float]:
     params = param_names(node)
     if not params:
         return None, 0.0
     counts: dict[str, int] = {}
     total = 0
     for child in ast.walk(node):
-        if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name) and child.value.id in params:
+        if (
+            isinstance(child, ast.Attribute)
+            and isinstance(child.value, ast.Name)
+            and child.value.id in params
+        ):
             counts[child.value.id] = counts.get(child.value.id, 0) + 1
             total += 1
     if total < 5 or not counts:
@@ -267,9 +294,16 @@ def scan_python(path: Path, root: Path) -> tuple[list[Item], list[FunctionRecord
             decos = {decorator_name(d) for d in node.decorator_list}
             bases = {target_name(b) for b in node.bases}
             local_categories = categories_for_name(node.name, path, "class")
-            if any("dataclass" in d or d in {"define", "attrs.define", "attr.s"} for d in decos):
+            if any(
+                "dataclass" in d or d in {"define", "attrs.define", "attr.s"}
+                for d in decos
+            ):
                 local_categories.append(("dataclasses", "dataclass/attrs decorator"))
-            if any(base.endswith(("BaseModel", "BaseSettings")) or base in {"TypedDict", "Protocol"} for base in bases):
+            if any(
+                base.endswith(("BaseModel", "BaseSettings"))
+                or base in {"TypedDict", "Protocol"}
+                for base in bases
+            ):
                 local_categories.append(("dataclasses", "schema/model-like base class"))
             if node.name.endswith(("Config", "Settings", "Options")):
                 local_categories.append(("configs", "config/settings class name"))
@@ -288,12 +322,28 @@ def scan_python(path: Path, root: Path) -> tuple[list[Item], list[FunctionRecord
         def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
             qualname = self.qual(node.name)
             sig = function_signature(node, qualname)
-            for category, reason in dict(categories_for_name(node.name, path, "function")).items():
+            for category, reason in dict(
+                categories_for_name(node.name, path, "function")
+            ).items():
                 items.append(Item(category, rel, node.lineno, qualname, sig, reason))
             body_hash, body_size = normalized_body_hash(node)
             wrapper, wrapper_target = is_thin_wrapper(node)
             envy_target, envy_ratio = feature_envy(node)
-            funcs.append(FunctionRecord(rel, node.lineno, node.name, qualname, sig, body_hash, body_size, wrapper, wrapper_target, envy_target, envy_ratio))
+            funcs.append(
+                FunctionRecord(
+                    rel,
+                    node.lineno,
+                    node.name,
+                    qualname,
+                    sig,
+                    body_hash,
+                    body_size,
+                    wrapper,
+                    wrapper_target,
+                    envy_target,
+                    envy_ratio,
+                )
+            )
             self.stack.append(node.name)
             self.generic_visit(node)
             self.stack.pop()
@@ -308,13 +358,36 @@ def scan_python(path: Path, root: Path) -> tuple[list[Item], list[FunctionRecord
             for target in targets:
                 name = target_name(target)
                 if name and name.split(".")[-1].isupper():
-                    for category, reason in dict(categories_for_name(name, path, "constant")).items():
-                        items.append(Item(category, rel, getattr(stmt, "lineno", 1), name, name, reason))
-        if isinstance(stmt, (ast.Import, ast.ImportFrom)) and path.name == "__init__.py":
+                    for category, reason in dict(
+                        categories_for_name(name, path, "constant")
+                    ).items():
+                        items.append(
+                            Item(
+                                category,
+                                rel,
+                                getattr(stmt, "lineno", 1),
+                                name,
+                                name,
+                                reason,
+                            )
+                        )
+        if (
+            isinstance(stmt, (ast.Import, ast.ImportFrom))
+            and path.name == "__init__.py"
+        ):
             imported = ", ".join(alias.asname or alias.name for alias in stmt.names[:6])
             if len(stmt.names) > 6:
                 imported += ", ..."
-            items.append(Item("facades", rel, stmt.lineno, imported, imported, "package re-export/import surface"))
+            items.append(
+                Item(
+                    "facades",
+                    rel,
+                    stmt.lineno,
+                    imported,
+                    imported,
+                    "package re-export/import surface",
+                )
+            )
     Visitor().visit(tree)
     return items, funcs
 
@@ -328,10 +401,28 @@ def scan_text_like(path: Path, root: Path) -> list[Item]:
         return items
     patterns = [
         ("constants", re.compile(r"^\s*export\s+const\s+([A-Z][A-Z0-9_]+)\b")),
-        ("builders", re.compile(r"^\s*export\s+(?:async\s+)?function\s+((?:build|make|create|assemble)[A-Za-z0-9_]*)\s*\(([^)]*)\)")),
-        ("factories", re.compile(r"^\s*export\s+(?:async\s+)?function\s+([A-Za-z0-9_]*(?:Factory|factory|create|make)[A-Za-z0-9_]*)\s*\(([^)]*)\)")),
-        ("dataclasses", re.compile(r"^\s*export\s+(?:interface|type)\s+([A-Za-z0-9_]+)\b")),
-        ("configs", re.compile(r"^\s*export\s+(?:interface|type|const|class)\s+([A-Za-z0-9_]*(?:Config|Settings|Options)[A-Za-z0-9_]*)\b")),
+        (
+            "builders",
+            re.compile(
+                r"^\s*export\s+(?:async\s+)?function\s+((?:build|make|create|assemble)[A-Za-z0-9_]*)\s*\(([^)]*)\)"
+            ),
+        ),
+        (
+            "factories",
+            re.compile(
+                r"^\s*export\s+(?:async\s+)?function\s+([A-Za-z0-9_]*(?:Factory|factory|create|make)[A-Za-z0-9_]*)\s*\(([^)]*)\)"
+            ),
+        ),
+        (
+            "dataclasses",
+            re.compile(r"^\s*export\s+(?:interface|type)\s+([A-Za-z0-9_]+)\b"),
+        ),
+        (
+            "configs",
+            re.compile(
+                r"^\s*export\s+(?:interface|type|const|class)\s+([A-Za-z0-9_]*(?:Config|Settings|Options)[A-Za-z0-9_]*)\b"
+            ),
+        ),
     ]
     for idx, line in enumerate(lines, start=1):
         for category, pattern in patterns:
@@ -344,7 +435,9 @@ def scan_text_like(path: Path, root: Path) -> list[Item]:
     return items
 
 
-def scan(root: Path, include_tests: bool = True) -> tuple[list[Item], list[FunctionRecord]]:
+def scan(
+    root: Path, include_tests: bool = True
+) -> tuple[list[Item], list[FunctionRecord]]:
     items: list[Item] = []
     funcs: list[FunctionRecord] = []
     for path in iter_source_files(root, include_tests=include_tests):

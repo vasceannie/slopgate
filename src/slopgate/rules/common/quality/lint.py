@@ -151,8 +151,7 @@ def python_lint_targets(ctx: HookContext) -> list[str]:
     return [
         path
         for path in ctx.candidate_paths
-        if path.lower().endswith(".py")
-        and not is_third_party_or_virtualenv_path(path)
+        if path.lower().endswith(".py") and not is_third_party_or_virtualenv_path(path)
     ]
 
 
@@ -213,7 +212,9 @@ class PostEditLintRule(Rule):
                 decision=BLOCK
                 if ctx.config.post_edit_quality_block_on_failure
                 else None,
-                message=message if ctx.config.post_edit_quality_block_on_failure else None,
+                message=message
+                if ctx.config.post_edit_quality_block_on_failure
+                else None,
                 additional_context=None
                 if ctx.config.post_edit_quality_block_on_failure
                 else message,

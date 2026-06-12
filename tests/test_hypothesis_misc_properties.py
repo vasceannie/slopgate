@@ -1,41 +1,52 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from hypothesis import given, strategies
 
-from slopgate.engine._render import render_output
-from slopgate.enrichment.fixtures import discover_fixtures, find_parametrize_examples
-from slopgate.installer._shared import (
-    filter_owned_hook_commands,
-    merge_owned_hooks,
-    remove_owned_hooks,
-)
 from slopgate.rules import build_always_on_rules
-from slopgate.rules.common._shell_safe_read import is_safe_read_shell_command
-from slopgate.rules.python_ast._helpers import parse_module
-from slopgate.engine._retry import apply_loop_aware_steering
-from slopgate.lint._detectors.duplicates._blocks import collect_block_windows
-from slopgate.rules.common._sensitive_system_git import compile_sensitive_patterns
-from slopgate.cli.lint_report import (
-    tally_rule,
-    print_lint_summary,
-    TallyInput,
-    LintRunTotals,
-)
-from slopgate.config._coerce import command_map
-from slopgate.lint._detectors.test_smells._basic_detection import max_bare_assert_run
-from slopgate.rules.base import is_rule_enabled
-from slopgate.rules.python_ast._rules._source_parse import (
-    parse_health_failure,
-    parse_strict,
-    parsed_functions,
-    parsed_nodes,
-)
-
 from tests.test_enrichment_public_api import context_for_source
 
+_render = importlib.import_module("slopgate.engine._render")
+_fixtures = importlib.import_module("slopgate.enrichment.fixtures")
+_installer = importlib.import_module("slopgate.installer")
+_shell_safe_read = importlib.import_module("slopgate.rules.common._shell_safe_read")
+_python_ast_helpers = importlib.import_module("slopgate.rules.python_ast._helpers")
+_retry = importlib.import_module("slopgate.engine._retry")
+_duplicate_blocks = importlib.import_module(
+    "slopgate.lint._detectors.duplicates.blocks"
+)
+_sensitive_git = importlib.import_module("slopgate.rules.common._sensitive_system_git")
+_lint_report = importlib.import_module("slopgate.cli.lint_report")
+_config_coerce = importlib.import_module("slopgate.config._coerce")
+_test_smells = importlib.import_module("slopgate.lint._detectors.test_smells")
+_rules_base = importlib.import_module("slopgate.rules.base")
+_python_ast_rules = importlib.import_module("slopgate.rules.python_ast._rules")
+
+render_output = _render.render_output
+discover_fixtures = _fixtures.discover_fixtures
+find_parametrize_examples = _fixtures.find_parametrize_examples
+filter_owned_hook_commands = _installer.filter_owned_hook_commands
+merge_owned_hooks = _installer.merge_owned_hooks
+remove_owned_hooks = _installer.remove_owned_hooks
+is_safe_read_shell_command = _shell_safe_read.is_safe_read_shell_command
+parse_module = _python_ast_helpers.parse_module
+apply_loop_aware_steering = _retry.apply_loop_aware_steering
+collect_block_windows = _duplicate_blocks.collect_block_windows
+compile_sensitive_patterns = _sensitive_git.compile_sensitive_patterns
+tally_rule = _lint_report.tally_rule
+print_lint_summary = _lint_report.print_lint_summary
+TallyInput = _lint_report.TallyInput
+LintRunTotals = _lint_report.LintRunTotals
+command_map = _config_coerce.command_map
+max_bare_assert_run = _test_smells.max_bare_assert_run
+is_rule_enabled = _rules_base.is_rule_enabled
+parse_health_failure = _python_ast_rules.parse_health_failure
+parse_strict = _python_ast_rules.parse_strict
+parsed_functions = _python_ast_rules.parsed_functions
+parsed_nodes = _python_ast_rules.parsed_nodes
 _SHORT_CMD = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 /-_.",
     max_size=40,
@@ -91,9 +102,10 @@ def test_is_safe_read_shell_command_returns_bool_property(command: str) -> None:
 
 @given(strategies.just(None))
 def test_build_always_on_rules_returns_rule_list_property(_: None) -> None:
-    from unittest.mock import MagicMock
-
-    rules = build_always_on_rules(MagicMock())
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        ctx = context_for_source(root, "value = 1\n")
+        rules = build_always_on_rules(ctx)
     assert isinstance(rules, list)
     assert all(hasattr(rule, "rule_id") for rule in rules)
 

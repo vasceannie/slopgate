@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Summarize repeated slopgate code-smell hook activations without dumping raw logs."""
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,17 @@ CODE_SMELL_RULES = {
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--logs", default="/home/trav/.config/slopgate/logs", help="slopgate log directory")
-    parser.add_argument("--threshold", type=int, default=2, help="Minimum same rule/path count to report")
+    parser.add_argument(
+        "--logs",
+        default="/home/trav/.config/slopgate/logs",
+        help="slopgate log directory",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=2,
+        help="Minimum same rule/path count to report",
+    )
     parser.add_argument("--limit", type=int, default=40, help="Maximum rows to print")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     return parser.parse_args(argv)
@@ -77,20 +87,27 @@ def summarize(logs: Path, threshold: int) -> list[dict[str, object]]:
             path = pick_path(record)
             key = (rule_id, path)
             counts[key] += 1
-            decision = record.get("decision") or record.get("outcome") or record.get("severity") or "unknown"
+            decision = (
+                record.get("decision")
+                or record.get("outcome")
+                or record.get("severity")
+                or "unknown"
+            )
             if isinstance(decision, str):
                 decisions[key][decision] += 1
     rows: list[dict[str, object]] = []
     for (rule_id, path), count in counts.most_common():
         if count < threshold:
             continue
-        rows.append({
-            "rule_id": rule_id,
-            "path": path,
-            "count": count,
-            "decisions": dict(decisions[(rule_id, path)]),
-            "recommended_skill": "code-smell-utility-locator",
-        })
+        rows.append(
+            {
+                "rule_id": rule_id,
+                "path": path,
+                "count": count,
+                "decisions": dict(decisions[(rule_id, path)]),
+                "recommended_skill": "code-smell-utility-locator",
+            }
+        )
     return rows
 
 
@@ -102,8 +119,12 @@ def main(argv: list[str]) -> int:
         return 0
     print(f"repeated slopgate code-smell activations: {len(rows)} row(s)")
     for row in rows:
-        print(f"- {row['rule_id']} {row['path']} count={row['count']} decisions={row['decisions']}")
-        print("  next: load code-smell-utility-locator; run utility_inventory.py and code_smell_radar.py before retrying")
+        print(
+            f"- {row['rule_id']} {row['path']} count={row['count']} decisions={row['decisions']}"
+        )
+        print(
+            "  next: load code-smell-utility-locator; run utility_inventory.py and code_smell_radar.py before retrying"
+        )
     return 0
 
 

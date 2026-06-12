@@ -175,20 +175,15 @@ def find_similar(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Find similar or duplicate functions"
+    parser = argparse.ArgumentParser(description="Find similar or duplicate functions")
+    parser.add_argument(
+        "--path", type=Path, default=Path("src/noteflow"), help="Root path to search"
     )
     parser.add_argument(
-        "--path", type=Path, default=Path("src/noteflow"),
-        help="Root path to search"
+        "--threshold", type=float, default=0.8, help="Similarity threshold (0.0-1.0)"
     )
     parser.add_argument(
-        "--threshold", type=float, default=0.8,
-        help="Similarity threshold (0.0-1.0)"
-    )
-    parser.add_argument(
-        "--include-tests", action="store_true",
-        help="Include test files in search"
+        "--include-tests", action="store_true", help="Include test files in search"
     )
     args = parser.parse_args()
 
@@ -221,7 +216,9 @@ def main() -> None:
             print(f"\nDuplicate group (hash: {hash_val[:8]}...):")
             for f in funcs:
                 print(f"  - {f.name} at {f.location}")
-                print(f"    Lines: {f.lineno}-{f.end_lineno} ({f.end_lineno - f.lineno + 1} lines)")
+                print(
+                    f"    Lines: {f.lineno}-{f.end_lineno} ({f.end_lineno - f.lineno + 1} lines)"
+                )
     else:
         print("No exact duplicates found.\n")
 

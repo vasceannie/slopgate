@@ -111,17 +111,18 @@ def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
     return _RepoQualityGateSettings(
         thresholds=object_dict(toml_data.get("thresholds", {})),
         enabled_rules={
-            str(key): bool(value)
+            key: bool(value)
             for key, value in object_dict(toml_data.get("enabled_rules", {})).items()
         },
         post_edit_quality=object_dict(toml_data.get("post_edit_quality", {})),
         async_jobs=object_dict(toml_data.get("async_jobs", {})),
         disabled_rules=string_list(qg_section.get("disabled_rules", [])),
         severity_overrides={
-            str(key): str(value)
+            key: value
             for key, value in object_dict(
                 qg_section.get("severity_overrides", {})
             ).items()
+            if isinstance(value, str)
         },
     )
 
@@ -130,7 +131,7 @@ def _enabled_rule_settings(
     raw: dict[str, object], repo_settings: _RepoQualityGateSettings
 ) -> dict[str, bool]:
     enabled_rules = {
-        str(key): bool(value)
+        key: bool(value)
         for key, value in object_dict(raw.get("enabled_rules", {})).items()
     }
     enabled_rules.update(repo_settings.enabled_rules)
@@ -181,23 +182,21 @@ def _async_job_settings(
     )
 
 
-def _runtime_default_int(key: str) -> int:
-    return int(RUNTIME_POLICY_DEFAULTS[key])
-
-
-def _threshold_int(thresholds: dict[str, object], key: str) -> int:
-    return int_value(thresholds.get(key), _runtime_default_int(key))
-
-
-def _threshold_float(thresholds: dict[str, object], key: str) -> float:
-    return float_value(thresholds.get(key), float(RUNTIME_POLICY_DEFAULTS[key]))
-
-
 @dataclass(frozen=True, slots=True)
 class _PythonAstThresholdKeys:
     threshold: str
     python_ast: str
     default: str
+
+
+def _runtime_policy_int_threshold(thresholds: dict[str, object], key: str) -> int:
+    default = int(RUNTIME_POLICY_DEFAULTS[key])
+    return int_value(thresholds.get(key), default)
+
+
+def _runtime_policy_float_threshold(thresholds: dict[str, object], key: str) -> float:
+    default = float(RUNTIME_POLICY_DEFAULTS[key])
+    return float_value(thresholds.get(key), default)
 
 
 def _python_ast_threshold_int(
@@ -209,7 +208,7 @@ def _python_ast_threshold_int(
         keys.threshold,
         python_ast.get(keys.python_ast, RUNTIME_POLICY_DEFAULTS[keys.default]),
     )
-    return int_value(value, _runtime_default_int(keys.default))
+    return int_value(value, int(RUNTIME_POLICY_DEFAULTS[keys.default]))
 
 
 def _python_runtime_settings(
@@ -220,7 +219,8 @@ def _python_runtime_settings(
     return _PythonRuntimeSettings(
         ast_enabled=bool_value(python_ast.get("enabled"), True),
         max_parse_chars=int_value(
-            python_ast.get("max_parse_chars"), _runtime_default_int("max_parse_chars")
+            python_ast.get("max_parse_chars"),
+            int(RUNTIME_POLICY_DEFAULTS["max_parse_chars"]),
         ),
         long_method_lines=_python_ast_threshold_int(
             thresholds,
@@ -236,15 +236,23 @@ def _python_runtime_settings(
                 "max_params", "long_parameter_limit", "long_parameter_limit"
             ),
         ),
-        max_complexity=_threshold_int(thresholds, "max_complexity"),
-        max_nesting_depth=_threshold_int(thresholds, "max_nesting_depth"),
-        max_god_class_methods=_threshold_int(thresholds, "max_god_class_methods"),
-        max_line_length=_threshold_int(thresholds, "max_line_length"),
-        feature_envy_threshold=_threshold_float(thresholds, "feature_envy_threshold"),
-        feature_envy_min_accesses=_threshold_int(
+        max_complexity=_runtime_policy_int_threshold(thresholds, "max_complexity"),
+        max_nesting_depth=_runtime_policy_int_threshold(
+            thresholds, "max_nesting_depth"
+        ),
+        max_god_class_methods=_runtime_policy_int_threshold(
+            thresholds, "max_god_class_methods"
+        ),
+        max_line_length=_runtime_policy_int_threshold(thresholds, "max_line_length"),
+        feature_envy_threshold=_runtime_policy_float_threshold(
+            thresholds, "feature_envy_threshold"
+        ),
+        feature_envy_min_accesses=_runtime_policy_int_threshold(
             thresholds, "feature_envy_min_accesses"
         ),
-        import_fanout_limit=_threshold_int(thresholds, "import_fanout_limit"),
+        import_fanout_limit=_runtime_policy_int_threshold(
+            thresholds, "import_fanout_limit"
+        ),
     )
 
 

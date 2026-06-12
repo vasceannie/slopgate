@@ -1,9 +1,15 @@
 """Remote slopgate config read, patch, and write operations."""
+
 import json
 import subprocess
 
 from forcedash_server.remote import run_remote_python
-from forcedash_server.types import JSONDict, coerce_bool_dict, coerce_object_dict, coerce_str_list
+from forcedash_server.types import (
+    JSONDict,
+    coerce_bool_dict,
+    coerce_object_dict,
+    coerce_str_list,
+)
 
 READ_CONFIG_SCRIPT = (
     "from pathlib import Path\n"

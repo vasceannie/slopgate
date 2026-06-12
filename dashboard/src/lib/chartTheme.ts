@@ -1,26 +1,6 @@
 import type { Decision, FlagTarget, Severity } from "@/types/slopgate";
 
-// Shared Nivo theme for all dark-terminal charts
-export const NIVO_DARK_THEME = {
-	text: {
-		fill: "hsl(215, 12%, 50%)",
-		fontFamily: "JetBrains Mono",
-		fontSize: 9,
-	},
-	grid: { line: { stroke: "hsl(220, 15%, 15%)" } },
-	crosshair: { line: { stroke: "hsl(142, 50%, 45%)", strokeWidth: 1 } },
-	tooltip: {
-		container: {
-			background: "hsl(220, 25%, 7%)",
-			border: "1px solid hsl(220, 15%, 15%)",
-			color: "hsl(210, 20%, 82%)",
-			fontFamily: "JetBrains Mono",
-			fontSize: 10,
-		},
-	},
-} as const;
-
-// Decision → HSL color string (for Nivo `colors` prop)
+// Decision → HSL color string
 export const DECISION_COLORS: Record<Decision, string> = {
 	allow: "hsl(142, 50%, 45%)",
 	deny: "hsl(0, 72%, 51%)",

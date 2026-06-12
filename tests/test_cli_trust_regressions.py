@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shlex
 import sys
 from pathlib import Path
 import pytest
 from slopgate._types import ObjectDict, object_dict, object_list
 import slopgate.installer
 import slopgate.installer._shared
+from slopgate.installer.hook_proxy import HOOK_PROXY_MARKER
 import slopgate.search.cli
 from slopgate.cli.commands import (
     cmd_check,
@@ -194,20 +196,29 @@ def _first_command(hooks: ObjectDict, event_name: str) -> str:
     return command
 
 
-def test_installer_hook_commands_quote_binary_paths_with_spaces(
+def test_claude_installer_hook_command_quotes_binary_path_with_spaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: False)
     binary = "/tmp/Slopgate Bin/slopgate"
-    assert (
-        _first_command(
-            object_dict(slopgate.installer.claude_hooks_block(binary)), "PreToolUse"
-        )
-        == "'/tmp/Slopgate Bin/slopgate' handle"
+    command = _first_command(
+        object_dict(slopgate.installer.claude_hooks_block(binary)), "PreToolUse"
     )
-    assert (
-        _first_command(
-            object_dict(slopgate.installer.codex_hooks_block(binary)), "PreToolUse"
-        )
-        == "'/tmp/Slopgate Bin/slopgate' handle --platform codex"
+
+    assert slopgate.installer._shared.command_is_slopgate_hook(command)
+    assert HOOK_PROXY_MARKER in command
+    assert shlex.join([binary, "handle"]) in command
+
+
+def test_codex_installer_hook_command_quotes_binary_path_with_spaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: False)
+    binary = "/tmp/Slopgate Bin/slopgate"
+    command = _first_command(
+        object_dict(slopgate.installer.codex_hooks_block(binary)), "PreToolUse"
     )
+
+    assert slopgate.installer._shared.command_is_slopgate_hook(command)
+    assert HOOK_PROXY_MARKER in command
+    assert shlex.join([binary, "handle", "--platform", "codex"]) in command

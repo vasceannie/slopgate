@@ -156,6 +156,51 @@ def _windows_autoupdate_context(
     return tmp_path / ".slopgate" / "auto-update.task"
 
 
+def _windows_orphan_install_snapshot(
+    script: Path, run_commands: list[list[str]]
+) -> dict[str, object]:
+    return {
+        "status": slopgate.installer._suite.install_autoupdate(dry_run=False),
+        "run_commands": run_commands,
+        "script_exists": script.exists(),
+        "marker_written": slopgate.installer._suite.AUTOUPDATE_MARKER
+        in script.read_text(encoding="utf-8"),
+    }
+
+
+def _windows_owned_marker_install_snapshot(
+    run_commands: list[list[str]],
+) -> dict[str, object]:
+    return {
+        "status": slopgate.installer._suite.install_autoupdate(dry_run=False),
+        "run_commands": run_commands,
+    }
+
+
+def _write_owned_windows_autoupdate_script(script: Path) -> None:
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        f"# {slopgate.installer._suite.AUTOUPDATE_MARKER}\nold script\n",
+        encoding="utf-8",
+    )
+
+
+def _record_existing_windows_task(
+    monkeypatch: pytest.MonkeyPatch, run_commands: list[list[str]]
+) -> None:
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        run_commands.append(command)
+        if command[:2] == ["schtasks", "/Query"]:
+            return subprocess.CompletedProcess(command, 0, stdout="<Task>exists</Task>")
+        if command[:2] == ["schtasks", "/Delete"]:
+            return subprocess.CompletedProcess(command, 0)
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
+
+
 @SKIP_WINDOWS_ONLY
 def test_windows_autoupdate_uninstall_refuses_unrecognized_script(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -189,15 +234,15 @@ def test_windows_autoupdate_install_removes_orphan_task_and_writes_marker(
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
-    assert slopgate.installer._suite.install_autoupdate(dry_run=False) == 0
-    assert run_commands == [
-        ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
-        ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
-    ]
-    assert script.exists()
-    assert (
-        slopgate.installer._suite.AUTOUPDATE_MARKER in script.read_text(encoding="utf-8")
-    )
+    assert _windows_orphan_install_snapshot(script, run_commands) == {
+        "status": 0,
+        "run_commands": [
+            ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
+            ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
+        ],
+        "script_exists": True,
+        "marker_written": True,
+    }, "Expected orphan Windows task install to delete task and write marker"
 
 
 @SKIP_WINDOWS_ONLY
@@ -206,31 +251,17 @@ def test_windows_autoupdate_install_removes_existing_task_then_writes_owned_mark
 ) -> None:
     """install_autoupdate deletes the scheduled task by name and writes the marker."""
     script = _windows_autoupdate_context(tmp_path, monkeypatch)
-    script.parent.mkdir(parents=True)
-    script.write_text(
-        f"# {slopgate.installer._suite.AUTOUPDATE_MARKER}\nold script\n",
-        encoding="utf-8",
-    )
     run_commands: list[list[str]] = []
+    _write_owned_windows_autoupdate_script(script)
+    _record_existing_windows_task(monkeypatch, run_commands)
 
-    def fake_run(
-        command: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
-        run_commands.append(command)
-        if command[:2] == ["schtasks", "/Query"]:
-            return slopgate.installer._suite.subprocess.CompletedProcess(
-                command, 0, stdout="<Task>exists</Task>"
-            )
-        if command[:2] == ["schtasks", "/Delete"]:
-            return slopgate.installer._suite.subprocess.CompletedProcess(command, 0)
-        raise AssertionError(f"unexpected command: {command}")
-
-    monkeypatch.setattr(slopgate.installer._suite.subprocess, "run", fake_run)
-    assert slopgate.installer._suite.install_autoupdate(dry_run=False) == 0
-    assert run_commands == [
-        ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
-        ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
-    ]
+    assert _windows_owned_marker_install_snapshot(run_commands) == {
+        "status": 0,
+        "run_commands": [
+            ["schtasks", "/Query", "/TN", "Slopgate Auto Update"],
+            ["schtasks", "/Delete", "/F", "/TN", "Slopgate Auto Update"],
+        ],
+    }, "Expected owned Windows marker install to replace scheduled task"
 
 
 def _macos_uninstall_backup_snapshot(

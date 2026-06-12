@@ -4,31 +4,33 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib
 from pathlib import Path
 
-from slopgate.cli._lint_commands import discover_project_root
-from slopgate.cli.parsers import (
-    add_details_argument,
-    add_dry_run_argument,
-    add_optional_path_argument,
-)
-from slopgate.config._coerce import command_map
-from slopgate.lint._detectors.test_smells._assertion_core import (
-    call_tail,
-    expr_preview,
-    iter_tests,
-)
-from slopgate.lint._detectors.test_smells._basic_detection import max_bare_assert_run
-from slopgate.rules.python_ast._rules._source_parse import (
-    line_count,
-    parse_health_failure,
-    parse_strict,
-    parsed_functions,
-    parsed_nodes,
-    python_ast_rule_is_disabled,
-    resolve_python_path,
-)
 from tests.test_enrichment_public_api import context_for_source
+
+_cli_lint = importlib.import_module("slopgate.cli.lint")
+_cli_parsers = importlib.import_module("slopgate.cli.parsers")
+_config_coerce = importlib.import_module("slopgate.config._coerce")
+_test_smells = importlib.import_module("slopgate.lint._detectors.test_smells")
+_python_ast_rules = importlib.import_module("slopgate.rules.python_ast._rules")
+
+discover_project_root = _cli_lint.discover_project_root
+add_details_argument = _cli_parsers.add_details_argument
+add_dry_run_argument = _cli_parsers.add_dry_run_argument
+add_optional_path_argument = _cli_parsers.add_optional_path_argument
+command_map = _config_coerce.command_map
+call_tail = _test_smells.call_tail
+expr_preview = _test_smells.expr_preview
+iter_tests = _test_smells.iter_tests
+max_bare_assert_run = _test_smells.max_bare_assert_run
+line_count = _python_ast_rules.line_count
+parse_health_failure = _python_ast_rules.parse_health_failure
+parse_strict = _python_ast_rules.parse_strict
+parsed_functions = _python_ast_rules.parsed_functions
+parsed_nodes = _python_ast_rules.parsed_nodes
+python_ast_rule_is_disabled = _python_ast_rules.python_ast_rule_is_disabled
+resolve_python_path = _python_ast_rules.resolve_python_path
 
 
 def test_assertion_core_seam_pipeline_extracts_test_calls() -> None:

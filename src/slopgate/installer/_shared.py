@@ -13,7 +13,9 @@ from pathlib import Path, PureWindowsPath
 from typing import cast
 
 from slopgate._types import object_dict, object_list
-from slopgate.constants import METADATA_COMMAND
+from slopgate.constants import METADATA_COMMAND, PLATFORM_CLAUDE
+from slopgate.installer.hook_proxy import HOOK_PROXY_MARKER, posix_daemon_proxy_command
+from slopgate.util import logger
 from slopgate.util.platform import is_windows
 
 HOOK_TYPE_COMMAND = METADATA_COMMAND
@@ -57,7 +59,20 @@ def shell_command(argv: list[str], *, windows: bool | None = None) -> str:
 
 
 def hook_command(binary: str, *args: str, windows: bool | None = None) -> str:
-    return shell_command([*base_invocation(binary), *args], windows=windows)
+    fallback_argv = [*base_invocation(binary), *args]
+    use_windows = is_windows() if windows is None else windows
+    if use_windows:
+        return shell_command(fallback_argv, windows=True)
+    return posix_daemon_proxy_command(
+        fallback_argv, _platform_from_hook_args(args), shell_command
+    )
+
+
+def _platform_from_hook_args(args: tuple[str, ...]) -> str:
+    for index, token in enumerate(args):
+        if token == "--platform" and index + 1 < len(args):
+            return args[index + 1]
+    return PLATFORM_CLAUDE
 
 
 def _command_basename(token: str) -> str:
@@ -96,6 +111,11 @@ def _executable_is_python(token: str) -> bool:
 
 
 def _argv_invokes_slopgate_handle(argv: list[str]) -> bool:
+    logger.info(
+        "installer hook argv inspect",
+        argc=len(argv),
+        command=_command_basename(argv[0]) if argv else "",
+    )
     if len(argv) >= 2 and _executable_is_slopgate(argv[0]):
         return argv[1] == "handle"
     if len(argv) >= 2 and _executable_is_legacy_slopgate(argv[0]):
@@ -129,11 +149,19 @@ def command_is_slopgate_hook(command: object) -> bool:
         argv = shlex.split(command)
     except ValueError:
         return False
-    if _argv_invokes_slopgate_handle(argv):
+    if _argv_invokes_slopgate_handle(argv) or _argv_invokes_daemon_proxy(argv):
         return True
     if not argv or _command_basename(argv[0]) not in {"powershell.exe", "powershell"}:
         return False
     return _argv_invokes_slopgate_handle(_powershell_command_argv(argv))
+
+
+def _argv_invokes_daemon_proxy(argv: list[str]) -> bool:
+    if len(argv) < 3:
+        return False
+    if _command_basename(argv[0]) not in {"sh", "bash"}:
+        return False
+    return argv[1] == "-c" and HOOK_PROXY_MARKER in argv[2]
 
 
 def filter_owned_hook_commands(entry: object) -> dict[str, object] | None:

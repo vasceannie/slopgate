@@ -34,7 +34,7 @@ def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
     template = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     rendered = _opencode.render_opencode_plugin(template, binary)
     assert (
-        f'Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : {json.dumps([binary])}'
+        f"Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : {json.dumps([binary])}"
         in rendered
     )
     assert '"__SLOPGATE_BIN__"' not in rendered

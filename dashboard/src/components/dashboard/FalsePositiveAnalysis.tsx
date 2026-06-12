@@ -1,9 +1,7 @@
-import { ResponsiveBar } from "@nivo/bar";
-import { ResponsivePie } from "@nivo/pie";
 import { AlertTriangle, Eye, Flag, ShieldCheck, ShieldX } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
+import type { ElementType } from "react";
 import { resolveDecision } from "@/hooks/useTraceData";
-import { NIVO_DARK_THEME } from "@/lib/chartTheme";
 import { getRuleDescription } from "@/lib/ruleDescriptions";
 import { cn } from "@/lib/utils";
 import type {
@@ -131,6 +129,7 @@ function computeFPFNSignals(
 }
 
 const TABLE_DEFAULT_LIMIT = 10;
+const BAR_MAX_WIDTH_PERCENT = 100;
 
 export function FalsePositiveAnalysis({ rules, results }: Props) {
 	const [tab, setTab] = useState<TabView>("fp");
@@ -159,6 +158,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 				: allActive.slice(0, TABLE_DEFAULT_LIMIT);
 			const barData = active.map((s) => ({
 				rule: s.rule_id.length > 22 ? `${s.rule_id.slice(0, 20)}…` : s.rule_id,
+				fullRule: s.rule_id,
 				score: Math.round(
 					tab === "fp"
 						? s.fpScore
@@ -196,6 +196,25 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 			},
 		],
 		[highFPCount, highFNCount, noisyCount, signals.length],
+	);
+	const maxBarScore = Math.max(...barData.map((row) => row.score), 1);
+	const summaryTotal = Math.max(
+		summaryPie.reduce((sum, item) => sum + item.value, 0),
+		1,
+	);
+	const summaryStops = summaryPie.reduce(
+		(acc, item) => {
+			const start = acc.cursor;
+			const end = start + (item.value / summaryTotal) * 100;
+			return {
+				cursor: end,
+				stops: [
+					...acc.stops,
+					`${item.color} ${start.toFixed(2)}% ${end.toFixed(2)}%`,
+				],
+			};
+		},
+		{ cursor: 0, stops: [] as string[] },
 	);
 
 	return (
@@ -263,37 +282,40 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 			<div className="grid grid-cols-5 gap-3">
 				<div className="col-span-3 h-[260px] border border-border rounded-md bg-card/30 p-2">
 					{barData.length > 0 ? (
-						<ResponsiveBar
-							data={barData}
-							keys={["score"]}
-							indexBy="rule"
-							layout="horizontal"
-							margin={{ top: 5, right: 30, bottom: 5, left: 160 }}
-							padding={0.3}
-							colors={
-								tab === "fp"
-									? "hsl(38, 92%, 50%)"
-									: tab === "fn"
-										? "hsl(0, 85%, 60%)"
-										: "hsl(300, 70%, 55%)"
-							}
-							borderWidth={0}
-							enableLabel={true}
-							labelTextColor="hsl(210, 20%, 95%)"
-							enableGridY={false}
-							axisLeft={{ tickSize: 0, tickPadding: 8 }}
-							axisBottom={null}
-							tooltip={({ data }) => (
-								<div className="bg-card border border-border rounded px-3 py-2 text-xs font-mono">
-									<div className="font-semibold">{data.rule}</div>
-									<div className="text-muted-foreground">
-										Score: {data.score} · Findings: {data.findings} · Blocks:{" "}
-										{data.blocks} · Warns: {data.warns}
+						<div className="flex h-full flex-col justify-center gap-2">
+							{barData.map((row) => (
+								<div
+									key={row.fullRule}
+									className="grid grid-cols-[150px_minmax(0,1fr)_38px] items-center gap-2 text-[10px]"
+									title={`${row.fullRule}: score ${row.score}, findings ${row.findings}, blocks ${row.blocks}, warns ${row.warns}`}
+								>
+									<span className="truncate font-mono text-muted-foreground">
+										{row.rule}
+									</span>
+									<div className="h-3 rounded-sm bg-muted/40">
+										<div
+											className={cn(
+												"h-full rounded-sm",
+												tab === "fp"
+													? "bg-signal-ask"
+													: tab === "fn"
+														? "bg-signal-block"
+														: "bg-signal-error",
+											)}
+											style={{
+												width: `${Math.max(
+													1,
+													(row.score / maxBarScore) * BAR_MAX_WIDTH_PERCENT,
+												)}%`,
+											}}
+										/>
 									</div>
+									<span className="text-right font-mono text-foreground">
+										{row.score}
+									</span>
 								</div>
-							)}
-							theme={NIVO_DARK_THEME}
-						/>
+							))}
+						</div>
 					) : (
 						<div className="flex items-center justify-center h-full text-muted-foreground text-xs">
 							Not enough data for analysis
@@ -305,32 +327,40 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 					<h4 className="text-[10px] text-muted-foreground uppercase mb-1 text-center">
 						Rule Health
 					</h4>
-					<ResponsivePie
-						data={summaryPie}
-						margin={{ top: 5, right: 80, bottom: 10, left: 5 }}
-						innerRadius={0.55}
-						padAngle={2}
-						cornerRadius={3}
-						colors={({ data }) => data.color}
-						borderWidth={1}
-						borderColor="hsl(220, 15%, 15%)"
-						enableArcLinkLabels={false}
-						arcLabelsTextColor="hsl(210, 20%, 95%)"
-						arcLabelsSkipAngle={20}
-						legends={[
-							{
-								anchor: "right",
-								direction: "column",
-								translateX: 75,
-								itemWidth: 65,
-								itemHeight: 18,
-								itemTextColor: "hsl(215, 12%, 50%)",
-								symbolSize: 8,
-								symbolShape: "circle",
-							},
-						]}
-						theme={NIVO_DARK_THEME}
-					/>
+					<div className="grid h-[calc(100%-1rem)] grid-cols-[minmax(0,1fr)_88px] items-center gap-3">
+						<div className="grid place-items-center">
+							<div
+								className="grid h-32 w-32 place-items-center rounded-full"
+								style={{
+									background: `conic-gradient(${summaryStops.stops.join(", ")})`,
+								}}
+								title={summaryPie
+									.map((item) => `${item.id}: ${item.value}`)
+									.join(", ")}
+							>
+								<div className="grid h-16 w-16 place-items-center rounded-full bg-card text-center">
+									<span className="font-mono text-sm font-semibold">
+										{signals.length}
+									</span>
+								</div>
+							</div>
+						</div>
+						<div className="space-y-2 text-[10px] text-muted-foreground">
+							{summaryPie.map((item) => (
+								<div
+									key={item.id}
+									className="grid grid-cols-[8px_1fr_auto] items-center gap-1.5"
+								>
+									<span
+										className="h-2 w-2 rounded-full"
+										style={{ backgroundColor: item.color }}
+									/>
+									<span>{item.id}</span>
+									<span className="font-mono text-foreground">{item.value}</span>
+								</div>
+							))}
+						</div>
+					</div>
 				</div>
 			</div>
 
@@ -449,7 +479,7 @@ const SummaryCard = memo(function SummaryCard({
 	value,
 	color,
 }: {
-	icon: React.ElementType;
+	icon: ElementType;
 	label: string;
 	value: number;
 	color: string;

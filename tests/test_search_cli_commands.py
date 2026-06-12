@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from slopgate.search import _cli_doctor, _cli_init, cli
-from slopgate.search._cli_parser import build_search_parser
+from slopgate.search import cli
+from slopgate.search.cli import doctor, init
+from slopgate.search.cli.parser import build_search_parser
 from slopgate.search.cli import (
     cmd_add,
     cmd_list,
@@ -40,7 +41,7 @@ def test_cmd_doctor_reports_config_and_runtime_status(
 ) -> None:
     _stub_doctor_runtime(monkeypatch)
 
-    assert _cli_doctor.cmd_doctor(argparse.Namespace()) == 0
+    assert doctor.cmd_doctor(argparse.Namespace()) == 0
     output = capsys.readouterr().out
     expected_markers = (
         "Provider:       litellm",
@@ -61,7 +62,7 @@ def test_cmd_init_writes_config_and_islands_scaffold_without_prompt(
     saved, islands_paths = _capture_init_writes(
         monkeypatch, tmp_path / "isx/config.json"
     )
-    result = _cli_init.cmd_init(_init_namespace_without_prompt(islands_config))
+    result = init.cmd_init(_init_namespace_without_prompt(islands_config))
     output = capsys.readouterr().out
 
     assert {
@@ -85,6 +86,7 @@ def _stub_load_config(monkeypatch: pytest.MonkeyPatch) -> SearchConfig:
         "provider": "ollama",
         "base_url": "http://localhost:11434",
         "model": "nomic-embed-text",
+        "islands_config": "/tmp/islands.yaml",
     }
 
     def fake_load_config() -> SearchConfig:
@@ -132,33 +134,50 @@ def test_cmd_models_lists_embedding_models(
     assert "nomic-embed-text" in output
 
 
-def test_cmd_use_updates_model(
+def _stub_model_update_runtime(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _stub_load_config(monkeypatch)
+) -> list[dict[str, object]]:
+    saved: list[dict[str, object]] = []
 
     def fake_fetch_runtime_models(_cfg: SearchConfig) -> list[str]:
         return ["nomic-embed-text"]
 
-    saved: list[tuple[SearchConfig, str]] = []
-
     def fake_save_runtime_model(cfg: SearchConfig, model: str) -> None:
-        saved.append((cfg, model))
+        next_model = model.strip()
+        previous_model = cfg.get("model")
+        saved.append(
+            {
+                "previous": previous_model,
+                "next": next_model,
+                "changed": previous_model != next_model,
+            }
+        )
 
     def fake_current_islands_config_path(_cfg: SearchConfig) -> Path:
-        return Path("/tmp/islands.yaml")
+        raw_path = _cfg.get("islands_config")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise AssertionError("Expected islands_config path in test config")
+        return Path(raw_path)
 
     monkeypatch.setattr(cli, "fetch_runtime_models", fake_fetch_runtime_models)
     monkeypatch.setattr(cli, "save_runtime_model", fake_save_runtime_model)
     monkeypatch.setattr(
         cli, "current_islands_config_path", fake_current_islands_config_path
     )
+    return saved
+
+
+def test_cmd_use_updates_model(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _stub_load_config(monkeypatch)
+    saved = _stub_model_update_runtime(monkeypatch)
 
     result = cmd_use(argparse.Namespace(model="nomic-embed-text", force=False))
 
     assert result == 0
-    assert saved[0][1] == "nomic-embed-text"
+    assert saved[0]["next"] == "nomic-embed-text"
 
 
 def test_cmd_list_prints_no_indexes_message(
@@ -214,7 +233,6 @@ def test_cmd_add_invokes_run_islands_with_add_args(
 def test_cmd_search_invokes_run_islands_with_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
 
@@ -243,7 +261,6 @@ def test_cmd_remove_raises_when_index_not_found(
 def test_cmd_sync_delegates_to_run_islands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
     _stub_load_config(monkeypatch)
     calls = _stub_run_islands(monkeypatch)
 

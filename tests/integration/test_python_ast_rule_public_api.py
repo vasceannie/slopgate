@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from tests.test_enrichment_public_api import context_for_source
 from slopgate.context import HookContext
 from slopgate.rules.python_ast._rules import (
     PythonAstHealthRule,
@@ -25,17 +24,27 @@ from slopgate.rules.python_ast._rules import (
     PythonThinWrapperRule,
 )
 
+from tests.integration.config_override_support import (
+    AstRuleConfigOverrides,
+    apply_ast_rule_config_overrides,
+)
+from tests.test_enrichment_public_api import context_for_source
+
 
 def context_with_limits(
     tmp_path: Path,
     source: str,
     path: str = "sample.py",
-    **overrides: object,
+    config_overrides: AstRuleConfigOverrides | None = None,
 ) -> HookContext:
     ctx = context_for_source(tmp_path, source, path=path)
     ctx.payload.payload["hook_event_name"] = "PreToolUse"
     ctx.payload.payload["tool_name"] = "Edit"
-    return replace(ctx, config=replace(ctx.config, **overrides))
+    if config_overrides is None:
+        return ctx
+    return replace(
+        ctx, config=apply_ast_rule_config_overrides(ctx.config, config_overrides)
+    )
 
 
 def test_broad_and_silent_exception_rules_report_distinct_findings(
@@ -67,7 +76,7 @@ def silent_boundary() -> None:
     ]
 
 
-def test_complexity_and_dead_code_rules_report_target_functions(
+def test_complexity_rule_reports_target_function(
     tmp_path: Path,
 ) -> None:
     source = """
@@ -77,21 +86,34 @@ def complicated(value: int) -> int:
     if value > 5:
         return 5
     return value
+""".lstrip()
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_max_complexity=2),
+    )
 
+    findings = PythonCyclomaticComplexityRule().evaluate(ctx)
+
+    assert [(item.rule_id, item.metadata.get("function")) for item in findings] == [
+        ("PY-CODE-015", "complicated")
+    ]
+
+
+def test_dead_code_rule_reports_unreachable_function(
+    tmp_path: Path,
+) -> None:
+    source = """
 def unreachable() -> int:
     return 1
     value = 2
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_max_complexity=2)
+    ctx = context_with_limits(tmp_path, source)
 
-    findings = [
-        *PythonCyclomaticComplexityRule().evaluate(ctx),
-        *PythonDeadCodeRule().evaluate(ctx),
-    ]
+    findings = PythonDeadCodeRule().evaluate(ctx)
 
     assert [(item.rule_id, item.metadata.get("function")) for item in findings] == [
-        ("PY-CODE-015", "complicated"),
-        ("PY-CODE-016", "unreachable"),
+        ("PY-CODE-016", "unreachable")
     ]
 
 
@@ -103,7 +125,11 @@ def too_long() -> None:
     step_three = 3
     print(step_one, step_two, step_three)
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_long_method_lines=3)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_long_method_lines=3),
+    )
 
     findings = PythonLongMethodRule().evaluate(ctx)
 
@@ -117,7 +143,11 @@ def test_long_parameter_rule_reports_function_signature(tmp_path: Path) -> None:
 def too_many(a: int, b: int, c: int) -> int:
     return a + b + c
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_long_parameter_limit=2)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_long_parameter_limit=2),
+    )
 
     findings = PythonLongParameterRule().evaluate(ctx)
 
@@ -133,7 +163,11 @@ def nested(flag: bool) -> None:
         if flag:
             print(flag)
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_max_nesting_depth=1)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_max_nesting_depth=1),
+    )
 
     findings = PythonDeepNestingRule().evaluate(ctx)
 
@@ -148,7 +182,11 @@ def test_long_line_rule_reports_executable_line(tmp_path: Path) -> None:
 def long_expression() -> None:
     {long_line}
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_max_line_length=40)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_max_line_length=40),
+    )
 
     findings = PythonLongLineRule().evaluate(ctx)
 
@@ -169,7 +207,11 @@ def extract_profile() -> tuple[str, str, str, str, str, str]:
         account.owner,
     )
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_feature_envy_min_accesses=3)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_feature_envy_min_accesses=3),
+    )
 
     findings = PythonFeatureEnvyRule().evaluate(ctx)
 
@@ -178,26 +220,37 @@ def extract_profile() -> tuple[str, str, str, str, str, str]:
     ] == [("PY-CODE-012", "account")]
 
 
-def test_wrapper_and_god_class_rules_report_structural_smells(tmp_path: Path) -> None:
+def test_thin_wrapper_rule_reports_structural_smell(tmp_path: Path) -> None:
     source = """
 def wrapper(value: str) -> str:
     return wrapped(value)
+""".lstrip()
+    ctx = context_with_limits(tmp_path, source)
 
+    findings = PythonThinWrapperRule().evaluate(ctx)
+
+    assert [(item.rule_id, item.metadata.get("function")) for item in findings] == [
+        ("PY-CODE-013", "wrapper")
+    ]
+
+
+def test_god_class_rule_reports_structural_smell(tmp_path: Path) -> None:
+    source = """
 class LargeService:
     def one(self): pass
     def two(self): pass
     def three(self): pass
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_max_god_class_methods=2)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_max_god_class_methods=2),
+    )
 
-    findings = [
-        *PythonThinWrapperRule().evaluate(ctx),
-        *PythonGodClassRule().evaluate(ctx),
-    ]
+    findings = PythonGodClassRule().evaluate(ctx)
 
     assert [(item.rule_id, item.metadata.get("function")) for item in findings] == [
-        ("PY-CODE-013", "wrapper"),
-        ("PY-CODE-014", None),
+        ("PY-CODE-014", None)
     ]
 
 
@@ -215,7 +268,11 @@ def test_import_fanout_rule_reports_excess_from_imports(tmp_path: Path) -> None:
     source = """
 from service import item_alpha, item_beta, item_gamma
 """.lstrip()
-    ctx = context_with_limits(tmp_path, source, python_import_fanout_limit=2)
+    ctx = context_with_limits(
+        tmp_path,
+        source,
+        config_overrides=AstRuleConfigOverrides(python_import_fanout_limit=2),
+    )
 
     findings = PythonImportFanoutRule().evaluate(ctx)
 

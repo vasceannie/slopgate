@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.models import RuntimeConfig
@@ -8,6 +9,44 @@ from ._discovery import detect_root, resolve_config_path
 from ._io import load_json
 from ._repo import ensure_worktree_enrollment, resolve_repo_root
 from ._settings import merge_config, ensure_trace_directories
+
+MISSING_CONFIG_MTIME_NS = -1
+MISSING_CONFIG_SIZE = -1
+
+
+@dataclass(frozen=True, slots=True)
+class _ConfigFileSignature:
+    path: Path
+    mtime_ns: int
+    size: int
+
+
+@dataclass(frozen=True, slots=True)
+class _RawConfigCacheEntry:
+    signature: _ConfigFileSignature
+    raw: dict[str, object]
+
+
+_raw_config_cache: dict[Path, _RawConfigCacheEntry] = {}
+
+
+def _config_file_signature(path: Path) -> _ConfigFileSignature:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return _ConfigFileSignature(path, MISSING_CONFIG_MTIME_NS, MISSING_CONFIG_SIZE)
+    return _ConfigFileSignature(path, stat.st_mtime_ns, stat.st_size)
+
+
+def _load_raw_config(config_path: Path) -> dict[str, object]:
+    signature = _config_file_signature(config_path)
+    cached = _raw_config_cache.get(config_path)
+    if cached is not None and cached.signature == signature:
+        return dict(cached.raw)
+
+    raw = load_json(config_path)
+    _raw_config_cache[config_path] = _RawConfigCacheEntry(signature, dict(raw))
+    return raw
 
 
 def load_config(
@@ -24,7 +63,7 @@ def load_config(
     """
     actual_root = (root or detect_root()).resolve()
     config_path = resolve_config_path()
-    raw = load_json(config_path)
+    raw = _load_raw_config(config_path)
     enrollment_root = (
         ensure_worktree_enrollment(repo_root) if ensure_enrollment else None
     )

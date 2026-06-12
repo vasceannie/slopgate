@@ -92,10 +92,3 @@
 .glow-blue {
 	box-shadow: 0 0 12px -3px hsl(var(--signal-warn) / 0.3);
 }
-
-/* Nivo chart dark theme overrides */
-.nivo-chart text {
-	fill: hsl(215 12% 50%);
-	font-family: "JetBrains Mono", monospace;
-	font-size: 10px;
-}

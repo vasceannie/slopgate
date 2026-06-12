@@ -21,7 +21,13 @@ class SlopgateConfig(TypedDict):
     skip_paths: list[str]
 
 
-JSONL_FILES = ["events.jsonl", "rules.jsonl", "results.jsonl", "subprocess.jsonl", "async/subprocess.jsonl"]
+JSONL_FILES = [
+    "events.jsonl",
+    "rules.jsonl",
+    "results.jsonl",
+    "subprocess.jsonl",
+    "async/subprocess.jsonl",
+]
 DEFAULT_REMOTE_LOGS = "~/.config/slopgate/logs"
 DEFAULT_LOOKBACK_HOURS = 24
 MAX_RECORDS_PER_CATEGORY: dict[Category, int] = {
@@ -123,7 +129,9 @@ def _format_res(obj: Mapping[str, object]) -> JSONDict:
                     "severity": finding.get("severity", "LOW"),
                     "decision": finding.get("decision"),
                     "message": _trim_text(finding.get("message"), 180),
-                    "additional_context": _trim_text(finding.get("additional_context"), 180),
+                    "additional_context": _trim_text(
+                        finding.get("additional_context"), 180
+                    ),
                     **_trace_metadata(finding),
                 }
             )

@@ -92,6 +92,4 @@ def test_read_only_command_skipped() -> None:
 def test_clean_output_no_trigger() -> None:
     payload = _post_bash("npm build", "Build completed successfully.")
     result = evaluate_payload(payload)
-    assert "ERRORS-BASH-001" not in finding_ids(result), (
-        "clean output must not trigger"
-    )
+    assert "ERRORS-BASH-001" not in finding_ids(result), "clean output must not trigger"

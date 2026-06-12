@@ -5,6 +5,8 @@ Absorbed from the standalone quality-gate tool.
 
 from __future__ import annotations
 
+from slopgate import __version__
+
 __all__ = [
     "BaselineResult",
     "BaselineSyncResult",
@@ -18,17 +20,20 @@ __all__ = [
     "find_source_files",
     "find_test_files",
     "get_config",
+    "ensure_parsed",
     "load_baseline",
     "load_config",
+    "parse_file",
+    "parse_files",
+    "ParsedFile",
     "relative_path",
     "reset_config",
     "safe_parse",
     "save_baseline",
     "save_baseline_ids",
     "set_config",
+    "__version__",
 ]
-
-__version__ = "0.1.1"
 
 from slopgate.lint._baseline import (
     BaselineResult,
@@ -50,9 +55,13 @@ from slopgate.lint._config import (
     set_config,
 )
 from slopgate.lint._helpers import (
+    ParsedFile,
+    ensure_parsed,
     find_all_python_files,
     find_source_files,
     find_test_files,
+    parse_file,
+    parse_files,
     relative_path,
     safe_parse,
 )
@@ -70,12 +79,17 @@ __all__ = [
     "find_source_files",
     "find_test_files",
     "get_config",
+    "ensure_parsed",
     "load_baseline",
     "load_config",
+    "parse_file",
+    "parse_files",
+    "ParsedFile",
     "relative_path",
     "reset_config",
     "safe_parse",
     "save_baseline",
     "save_baseline_ids",
     "set_config",
+    "__version__",
 ]

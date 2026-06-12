@@ -102,7 +102,7 @@ def _print_denied_rules(stats: Mapping[str, object]) -> None:
 def _print_denied_files(stats: Mapping[str, object]) -> None:
     print("\n--- Top Denied Files ---")
     for path, count in _pairs(stats, "top_files_denied"):
-        short = str(path).replace(str(Path.home()), "~")
+        short = path.replace(str(Path.home()), "~")
         print(f"  {count:4,}  {short}")
 
 

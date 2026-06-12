@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Find code-smell evidence that should trigger utility reuse/consolidation."""
+
 from __future__ import annotations
 
 import argparse
@@ -49,8 +50,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Repository root or subdirectory to scan",
     )
     parser.add_argument("--format", choices=("text", "json"), default="text")
-    parser.add_argument("--limit", type=int, default=160, help="Maximum smell records to print")
-    parser.add_argument("--no-tests", action="store_true", help="Skip tests/spec directories")
+    parser.add_argument(
+        "--limit", type=int, default=160, help="Maximum smell records to print"
+    )
+    parser.add_argument(
+        "--no-tests", action="store_true", help="Skip tests/spec directories"
+    )
     parser.add_argument(
         "--min-duplicate-size",
         type=int,
@@ -137,11 +142,7 @@ def _duplicate_signature_smells(funcs: list[FunctionRecord]) -> list[Smell]:
     smells: list[Smell] = []
     for group in by_sig_tail.values():
         paths = {func.path for func in group}
-        if (
-            len(group) < 2
-            or len(paths) < 2
-            or group[0].name in {"main", "parse_args"}
-        ):
+        if len(group) < 2 or len(paths) < 2 or group[0].name in {"main", "parse_args"}:
             continue
         first = group[0]
         evidence = (
@@ -149,7 +150,9 @@ def _duplicate_signature_smells(funcs: list[FunctionRecord]) -> list[Smell]:
             f"{_preview_locations(group)}"
         )
         smells.append(
-            Smell("duplicate-signature", first.path, first.line, first.signature, evidence)
+            Smell(
+                "duplicate-signature", first.path, first.line, first.signature, evidence
+            )
         )
     return smells
 
@@ -176,12 +179,20 @@ def _repeated_helper_name_smells(funcs: list[FunctionRecord]) -> list[Smell]:
             f"{_preview_locations(group)}"
         )
         smells.append(
-            Smell("repeated-helper-name", first.path, first.line, first.signature, evidence)
+            Smell(
+                "repeated-helper-name",
+                first.path,
+                first.line,
+                first.signature,
+                evidence,
+            )
         )
     return smells
 
 
-def smells_from_functions(funcs: list[FunctionRecord], min_duplicate_size: int) -> list[Smell]:
+def smells_from_functions(
+    funcs: list[FunctionRecord], min_duplicate_size: int
+) -> list[Smell]:
     smells = [
         *_single_function_smells(funcs),
         *_duplicate_body_smells(funcs, min_duplicate_size),

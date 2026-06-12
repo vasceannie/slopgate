@@ -19,9 +19,7 @@ class TestPowerShellCommandArgv:
         )
 
     def test_parses_with_dash_c_alias(self) -> None:
-        argv = _powershell_command_argv(
-            ["powershell", "-c", "& 'slopgate.exe' handle"]
-        )
+        argv = _powershell_command_argv(["powershell", "-c", "& 'slopgate.exe' handle"])
         assert argv == ["slopgate.exe", "handle"], (
             f"Expected parsed argv with -c, got {argv}"
         )
@@ -30,9 +28,7 @@ class TestPowerShellCommandArgv:
         argv = _powershell_command_argv(
             ["powershell.exe", "-NoProfile", "-File", "script.ps1"]
         )
-        assert argv == [], (
-            f"Expected empty list when no -Command/-c flag, got {argv}"
-        )
+        assert argv == [], f"Expected empty list when no -Command/-c flag, got {argv}"
 
     def test_returns_args_without_ampersand(self) -> None:
         argv = _powershell_command_argv(
@@ -56,12 +52,8 @@ class TestPowerShellCommandArgv:
         assert "handle" in argv, f"Expected handle in argv, got {argv}"
 
     def test_returns_empty_list_for_malformed_shlex_input(self) -> None:
-        argv = _powershell_command_argv(
-            ["powershell.exe", "-Command", "'unclosed"]
-        )
-        assert argv == [], (
-            f"Expected empty list for unclosed quote, got {argv}"
-        )
+        argv = _powershell_command_argv(["powershell.exe", "-Command", "'unclosed"])
+        assert argv == [], f"Expected empty list for unclosed quote, got {argv}"
 
     @pytest.mark.parametrize(
         "input_argv",
@@ -75,6 +67,4 @@ class TestPowerShellCommandArgv:
         self, input_argv: list[str]
     ) -> None:
         argv = _powershell_command_argv(input_argv)
-        assert argv == [], (
-            f"Expected empty list for input {input_argv}, got {argv}"
-        )
+        assert argv == [], f"Expected empty list for input {input_argv}, got {argv}"

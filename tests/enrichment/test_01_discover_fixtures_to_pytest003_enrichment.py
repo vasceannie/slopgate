@@ -288,9 +288,7 @@ class TestPYTEST003Enrichment:
         )
         result = evaluate_payload(payload, platform="opencode")
         assert result.output is not None
-        reason = support.required_string(
-            support.require_output(result), "reason"
-        )
+        reason = support.required_string(support.require_output(result), "reason")
         assert "PY-TEST-003" in reason
         assert "`db_session`" in reason, (
             f"OpenCode reason should include fixture names: {reason}"

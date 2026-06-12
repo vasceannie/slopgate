@@ -3,37 +3,57 @@
 from __future__ import annotations
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from pytest import CaptureFixture, MonkeyPatch
-from slopgate._types import object_dict
+from slopgate._types import ObjectDict, object_dict
 import slopgate.installer
 import slopgate.installer._opencode
 import slopgate.installer._shared
 import slopgate.util.platform
 from tests.test_installer import (
+    InstallDryRunCase,
     all_hook_commands,
-    count_slopgate_hook_commands,
+    command_includes_slopgate_handle,
     dry_run_install_json,
     existing_claude_settings,
     existing_codex_hooks,
-    hook_builder,
     hook_commands,
-    install_with_existing_hooks,
     installed_hook_commands,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingHooksCase:
+    harness_dir: str
+    file_name: str
+    existing_hooks: ObjectDict
+
+
+def install_with_existing_hooks(
+    tmp_path: Path, monkeypatch: MonkeyPatch, case: ExistingHooksCase
+) -> Path:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(slopgate.installer._shared, "find_binary", lambda: "slopgate")
+    hooks_path = tmp_path / case.harness_dir / case.file_name
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(json.dumps(case.existing_hooks), encoding="utf-8")
+    return hooks_path
 
 
 def test_claude_install_preserves_unrelated_hooks_and_replaces_only_slopgate(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     settings_path = install_with_existing_hooks(
-        tmp_path, monkeypatch, ".claude", "settings.json", existing_claude_settings()
+        tmp_path,
+        monkeypatch,
+        ExistingHooksCase(".claude", "settings.json", existing_claude_settings()),
     )
     assert slopgate.installer.install_claude(dry_run=False) == 0
     commands = installed_hook_commands(settings_path)
     assert "other-gate" in commands
     assert "/old/bin/slopgate handle" not in commands
-    assert count_slopgate_hook_commands(commands) == 1
+    assert sum(command_includes_slopgate_handle(command) for command in commands) == 1
 
 
 def test_claude_install_preserves_unrelated_hook_inside_mixed_entry(
@@ -42,26 +62,28 @@ def test_claude_install_preserves_unrelated_hook_inside_mixed_entry(
     settings_path = install_with_existing_hooks(
         tmp_path,
         monkeypatch,
-        ".claude",
-        "settings.json",
-        {
-            "hooks": {
-                "PreToolUse": [
-                    {
-                        "matcher": "Bash",
-                        "hooks": [
-                            {"type": "command", "command": "other-gate"},
-                            {"type": "command", "command": "slopgate handle"},
-                        ],
-                    }
-                ]
-            }
-        },
+        ExistingHooksCase(
+            ".claude",
+            "settings.json",
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {"type": "command", "command": "other-gate"},
+                                {"type": "command", "command": "slopgate handle"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        ),
     )
     assert slopgate.installer.install_claude(dry_run=False) == 0
     commands = installed_hook_commands(settings_path)
     assert "other-gate" in commands
-    assert count_slopgate_hook_commands(commands) == 1
+    assert sum(command_includes_slopgate_handle(command) for command in commands) == 1
 
 
 def test_claude_uninstall_removes_only_slopgate_hooks(
@@ -161,13 +183,21 @@ def test_codex_install_preserves_unrelated_hooks_and_replaces_only_slopgate(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     hooks_path = install_with_existing_hooks(
-        tmp_path, monkeypatch, ".codex", "hooks.json", existing_codex_hooks()
+        tmp_path,
+        monkeypatch,
+        ExistingHooksCase(".codex", "hooks.json", existing_codex_hooks()),
     )
     assert slopgate.installer.install_codex(dry_run=False) == 0
     commands = installed_hook_commands(hooks_path)
     assert "other-gate" in commands
     assert "/old/bin/slopgate handle --platform codex" not in commands
-    assert count_slopgate_hook_commands(commands, "--platform", "codex") == 1
+    assert (
+        sum(
+            command_includes_slopgate_handle(command, "--platform", "codex")
+            for command in commands
+        )
+        == 1
+    )
 
 
 def test_codex_uninstall_preserves_non_hook_user_settings_when_only_owned_hooks_remain(
@@ -204,14 +234,16 @@ def test_codex_uninstall_preserves_non_hook_user_settings_when_only_owned_hooks_
 
 
 def test_claude_hooks_include_cwd_changed() -> None:
-    hooks = object_dict(hook_builder("claude_hooks_block")("slopgate"))
+    hooks = object_dict(slopgate.installer.claude_hooks_block("slopgate"))
     assert "CwdChanged" in hooks
 
 
 def test_claude_dry_run_hooks_include_cwd_changed(
     capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    data = dry_run_install_json("claude", capsys, monkeypatch, tmp_path)
+    data = dry_run_install_json(
+        InstallDryRunCase(platform="claude"), capsys, monkeypatch, tmp_path
+    )
     assert "CwdChanged" in object_dict(data["hooks"])
 
 
@@ -219,12 +251,14 @@ def test_windows_codex_install_emits_powershell_hook_commands(
     capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     data = dry_run_install_json(
-        "codex",
+        InstallDryRunCase(
+            platform="codex",
+            binary="C:\\Users\\Trav App\\AppData\\Local\\Programs\\Python\\Scripts\\slopgate.exe",
+            windows=True,
+        ),
         capsys,
         monkeypatch,
         tmp_path,
-        binary="C:\\Users\\Trav App\\AppData\\Local\\Programs\\Python\\Scripts\\slopgate.exe",
-        windows=True,
     )
     commands = list(all_hook_commands(object_dict(data["hooks"])))
     assert commands
@@ -248,7 +282,12 @@ def test_windows_codex_install_emits_powershell_hook_commands(
 def test_claude_install_falls_back_to_python_module_invocation(
     capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    data = dry_run_install_json("claude", capsys, monkeypatch, tmp_path, binary=None)
+    data = dry_run_install_json(
+        InstallDryRunCase(platform="claude", binary=None),
+        capsys,
+        monkeypatch,
+        tmp_path,
+    )
     commands = list(all_hook_commands(object_dict(data["hooks"])))
     assert commands
     assert all((" -m slopgate handle" in command for command in commands))

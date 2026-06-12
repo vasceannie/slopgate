@@ -29,7 +29,7 @@ def _run_one_test(
     }
     result = evaluate_payload(payload, platform)
     deny_count = sum(1 for f in result.findings if f.decision in {"deny", "block"})
-    passed = (deny_count > 0) if bool(expect_deny) else (deny_count == 0)
+    passed = (deny_count > 0) if expect_deny else (deny_count == 0)
     status = "PASS" if passed else "FAIL"
     print(f"  [{status}] {label} ({deny_count} finding(s))")
     return status

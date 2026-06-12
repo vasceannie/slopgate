@@ -243,7 +243,7 @@ from ._production_symbols import (
     test_reference_tokens,
     transform_score,
 )
-from ._coverage_helpers import (
+from .coverage import (
     CoverageInputs,
     coverage_percent_from_json_file,
     coverage_percent_from_summary,

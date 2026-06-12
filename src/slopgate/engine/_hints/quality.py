@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from slopgate._types import object_dict, object_list, string_value
-from slopgate.constants import METADATA_PATH, POST_TOOL_USE, PRODUCTION_SYMBOL_PREVIEW_LIMIT
+from slopgate.constants import (
+    METADATA_PATH,
+    POST_TOOL_USE,
+    PRODUCTION_SYMBOL_PREVIEW_LIMIT,
+)
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 

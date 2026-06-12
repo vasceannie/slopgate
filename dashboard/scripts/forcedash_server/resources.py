@@ -1,4 +1,5 @@
 """Resource loading for remote Python programs."""
+
 from importlib import resources
 
 RESOURCE_PACKAGE = "forcedash_server.remote_scripts"

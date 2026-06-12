@@ -114,7 +114,7 @@ def _coerce_search_config(value: object) -> SearchConfig:
 
 def expand(path_str: str | None, default: Path | None = None) -> Path:
     """Expand a user-provided path string, falling back to *default*."""
-    if path_str is None or not str(path_str).strip():
+    if path_str is None or not path_str.strip():
         if default is None:
             raise IsxError("missing path")
         return default

@@ -13,7 +13,10 @@ from typing import TYPE_CHECKING, TypeGuard, TypeVar, cast
 from typing_extensions import override
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
-from slopgate.lint._detectors.duplicates._semantic_builtins import BUILTINS, SKIP_DECORATORS
+from .semantic_builtins import (
+    BUILTINS,
+    SKIP_DECORATORS,
+)
 from slopgate.lint._helpers import (
     ParsedFile,
     ensure_parsed,
@@ -43,9 +46,6 @@ class Normalizer(ast.NodeTransformer):
         self._name_map: dict[str, str] = {}
         self.call_func_ids: set[int] = set()
 
-    def _renamed(self, name: str) -> str:
-        return self._name_map.setdefault(name, f"v{len(self._name_map)}")
-
     def _generic_visit_as(self, node: ASTNodeT) -> ASTNodeT:
         visited = self.generic_visit(node)
         if not isinstance(visited, type(node)):
@@ -56,14 +56,14 @@ class Normalizer(ast.NodeTransformer):
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
     ) -> None:
-        node.name = self._renamed(node.name)
+        node.name = self._name_map.setdefault(node.name, f"v{len(self._name_map)}")
         node.returns = None
         node.decorator_list = []
 
     @override
     def visit_Name(self, node: ast.Name) -> ast.Name:
         if id(node) not in self.call_func_ids and node.id not in BUILTINS:
-            node.id = self._renamed(node.id)
+            node.id = self._name_map.setdefault(node.id, f"v{len(self._name_map)}")
         return node
 
     @override
@@ -79,7 +79,7 @@ class Normalizer(ast.NodeTransformer):
 
     @override
     def visit_arg(self, node: ast.arg) -> ast.arg:
-        node.arg = self._renamed(node.arg)
+        node.arg = self._name_map.setdefault(node.arg, f"v{len(self._name_map)}")
         node.annotation = None
         return self._generic_visit_as(node)
 
@@ -244,12 +244,12 @@ def end_lineno(node: ast.stmt, fallback: int) -> int:
 K = TypeVar("K", bound=Hashable)
 
 
-def emit_group_violations(
+def build_group_violations(
     rule: str,
     groups: dict[K, list[tuple[str, str, int]]],
     detail_fn: Callable[[K, list[str]], str],
 ) -> list[Violation]:
-    """Emit one violation per member for each group with 2+ members."""
+    """Build one violation per member for each group with 2+ members."""
     violations: list[Violation] = []
     for key, members in groups.items():
         if len(members) < 2:
@@ -287,7 +287,7 @@ def detect_semantic_clones(
             h = structure_hash(canonical)
             groups[h].append((pf.rel, node.name, node.lineno))
 
-    return emit_group_violations(
+    return build_group_violations(
         "semantic-clone",
         groups,
         lambda h, others: f"hash={h}, clones: {', '.join(others[:3])}",

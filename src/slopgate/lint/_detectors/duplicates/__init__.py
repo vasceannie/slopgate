@@ -13,7 +13,7 @@ __all__ = [
     "canonical_alias",
     "canonical_import_stmt",
     "canonicalize_import_block",
-    "emit_group_violations",
+    "build_group_violations",
     "end_lineno",
     "has_skip_decorator",
     "import_section",
@@ -38,7 +38,7 @@ __all__ = [
     "detect_duplicate_call_sequences",
     "detect_repeated_blocks",
 ]
-from ._semantic import (
+from .semantic import (
     ASTNodeT,
     BUILTINS,
     CONSTANT_TYPE_MAP,
@@ -49,7 +49,7 @@ from ._semantic import (
     canonical_alias,
     canonical_import_stmt,
     canonicalize_import_block,
-    emit_group_violations,
+    build_group_violations,
     end_lineno,
     has_skip_decorator,
     import_section,
@@ -62,7 +62,7 @@ from ._semantic import (
     structure_hash,
     detect_semantic_clones,
 )
-from ._literals import (
+from .literals import (
     collect_literals,
     constant_location,
     is_semantic_string_literal,
@@ -71,7 +71,7 @@ from ._literals import (
     string_literal_violation,
     detect_repeated_literals,
 )
-from ._blocks import (
+from .blocks import (
     MIN_BLOCK_SIZE,
     collect_block_windows,
     extract_call_sequence,

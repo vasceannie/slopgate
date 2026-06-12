@@ -296,5 +296,3 @@ def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
         + f"or restructuring so `{envied}` exposes a higher-level API."
     )
     append_enrichment_message(finding, extras)
-
-

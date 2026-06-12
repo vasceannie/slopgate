@@ -67,13 +67,14 @@ extraPaths = ["src", ".", "dashboard/scripts"]
 reportPrivateUsage = false
 
 [tool.pyrefly]
-pythonVersion = "3.12"
-venvPath = "."
-venv = ".venv"
-include = ["src", "tests"]
-search_path = ["src", "."]
+python-interpreter-path = ".venv/bin/python3"
+project-includes = ["src", "tests"]
+search_path = ["src", ".", "dashboard/scripts"]
 disable-search-path-heuristics = true
-typeCheckingMode = "strict"
+disable-project-excludes-heuristics = true
+min-severity = "warn"
+strict-callable-subtyping = true
+use-ignore-files = true
 
 [tool.ty.environment]
 python = ".venv"

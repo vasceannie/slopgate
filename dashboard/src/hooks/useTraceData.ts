@@ -206,6 +206,157 @@ export function summarizeTopRules(
 		}));
 }
 
+interface SessionAggregate {
+	platform: Platform;
+	events: HookEvent[];
+	findings: RuleFinding[];
+	results: HookResult[];
+	subprocesses: SubprocessRun[];
+}
+
+interface SessionSummary extends SessionAggregate {
+	id: string;
+	eventCount: number;
+	tools: string[];
+	languages: string[];
+	pathCount: number;
+	finalOutcome: Decision;
+	duration: number;
+	latestTimestamp: number;
+}
+
+interface TraceSessionIndexes {
+	sessions: SessionSummary[];
+	sessionDecisions: Map<string, Decision[]>;
+	sessionPathCounts: Map<string, number>;
+	hottestRepos: Array<{ repo: string; count: number }>;
+}
+
+function sessionBucket(
+	sessionMap: Map<string, SessionAggregate>,
+	sessionId: string,
+	platform: Platform,
+): SessionAggregate {
+	let bucket = sessionMap.get(sessionId);
+	if (!bucket) {
+		bucket = {
+			platform,
+			events: [],
+			findings: [],
+			results: [],
+			subprocesses: [],
+		};
+		sessionMap.set(sessionId, bucket);
+	}
+	return bucket;
+}
+
+function finalOutcomeFor(decisions: Decision[]): Decision {
+	if (decisions.includes("block")) return "block";
+	if (decisions.includes("deny")) return "deny";
+	if (decisions.includes("ask")) return "ask";
+	return "allow";
+}
+
+function repoLabelForPath(path: string): string {
+	const segments = path.split("/").filter(Boolean);
+	for (const marker of ["repos", "workspace-hooker"]) {
+		const markerIndex = segments.indexOf(marker);
+		if (markerIndex >= 0 && markerIndex + 1 < segments.length) {
+			return segments[markerIndex + 1];
+		}
+	}
+	if (segments.length >= 3 && segments[0] === "home") return segments[2];
+	return segments[0] || path;
+}
+
+export function buildTraceSessionIndexes(
+	events: HookEvent[],
+	rules: RuleFinding[],
+	results: HookResult[],
+	subprocesses: SubprocessRun[],
+): TraceSessionIndexes {
+	const sessionMap = new Map<string, SessionAggregate>();
+	const sessionPathSets = new Map<string, Set<string>>();
+	const repoCounts = new Map<string, number>();
+	const sessionDecisions = new Map<string, Decision[]>();
+
+	for (const event of events) {
+		sessionBucket(sessionMap, event.session_id, event.platform).events.push(
+			event,
+		);
+		const paths = event.candidate_paths ?? [];
+		const sessionPaths = sessionPathSets.get(event.session_id) ?? new Set();
+		for (const path of paths) sessionPaths.add(path);
+		sessionPathSets.set(event.session_id, sessionPaths);
+		for (const path of paths) {
+			const repo = repoLabelForPath(path);
+			repoCounts.set(repo, (repoCounts.get(repo) ?? 0) + 1);
+		}
+	}
+	for (const rule of rules) {
+		sessionBucket(sessionMap, rule.session_id, rule.platform).findings.push(rule);
+	}
+	for (const result of [...results].sort((a, b) =>
+		a.timestamp.localeCompare(b.timestamp),
+	)) {
+		sessionBucket(sessionMap, result.session_id, result.platform).results.push(
+			result,
+		);
+		const decisions = sessionDecisions.get(result.session_id) ?? [];
+		decisions.push(traceDecision(result));
+		sessionDecisions.set(result.session_id, decisions);
+	}
+	for (const subprocess of subprocesses) {
+		sessionMap.get(subprocess.session_id)?.subprocesses.push(subprocess);
+	}
+
+	return {
+		sessions: Array.from(sessionMap.entries())
+			.map(([id, data]) => {
+				const tools = [
+					...new Set(data.events.map((event) => event.tool_name).filter(Boolean)),
+				];
+				const languages = [
+					...new Set(data.events.flatMap((event) => event.languages ?? [])),
+				];
+				const timestamps = data.events.map((event) =>
+					new Date(event.timestamp).getTime(),
+				);
+				const duration =
+					timestamps.length > 1
+						? Math.max(...timestamps) - Math.min(...timestamps)
+						: 0;
+				const latestTimestamp =
+					timestamps.length > 0 ? Math.max(...timestamps) : 0;
+
+				return {
+					id,
+					...data,
+					eventCount: data.events.length,
+					tools,
+					languages,
+					pathCount: sessionPathSets.get(id)?.size ?? 0,
+					finalOutcome: finalOutcomeFor(sessionDecisions.get(id) ?? []),
+					duration,
+					latestTimestamp,
+				};
+			})
+			.sort((a, b) => b.latestTimestamp - a.latestTimestamp),
+		sessionDecisions,
+		sessionPathCounts: new Map(
+			Array.from(sessionPathSets.entries()).map(([id, paths]) => [
+				id,
+				paths.size,
+			]),
+		),
+		hottestRepos: Array.from(repoCounts.entries())
+			.sort(([, a], [, b]) => b - a)
+			.slice(0, 10)
+			.map(([repo, count]) => ({ repo, count })),
+	};
+}
+
 export function useTraceData(filters: FilterState) {
 	const {
 		data: rawData,
@@ -321,13 +472,14 @@ export function useTraceData(filters: FilterState) {
 		errorCount: number;
 	}>(() => {
 		const nextTotalInvocations = results.length;
-		const nextDecisionCounts = results.reduce(
-			(acc: Record<Decision, number>, r: HookResult) => {
-				acc[resolveDecision(r.findings)]++;
-				return acc;
-			},
-			emptyDecisionCounts(),
-		);
+		const nextDecisionCounts = emptyDecisionCounts();
+		let nextSkippedCount = 0;
+		let nextErrorCount = 0;
+		for (const result of results) {
+			nextDecisionCounts[resolveDecision(result.findings)]++;
+			if (result.skipped) nextSkippedCount++;
+			if ((result.errors ?? []).length > 0) nextErrorCount++;
+		}
 
 		return {
 			totalInvocations: nextTotalInvocations,
@@ -341,9 +493,8 @@ export function useTraceData(filters: FilterState) {
 			askRate: nextTotalInvocations
 				? ((nextDecisionCounts.ask || 0) / nextTotalInvocations) * 100
 				: 0,
-			skippedCount: results.filter((r: HookResult) => r.skipped).length,
-			errorCount: results.filter((r: HookResult) => (r.errors ?? []).length > 0)
-				.length,
+			skippedCount: nextSkippedCount,
+			errorCount: nextErrorCount,
 		};
 	}, [results]);
 
@@ -466,6 +617,10 @@ export function useTraceData(filters: FilterState) {
 			"duplicate-call-sequence",
 			"semantic-clone",
 		];
+		const ruleCountById = new Map<string, number>();
+		for (const rule of rules) {
+			ruleCountById.set(rule.rule_id, (ruleCountById.get(rule.rule_id) ?? 0) + 1);
+		}
 
 		return {
 			eventsByType: nextEventsByType,
@@ -476,97 +631,20 @@ export function useTraceData(filters: FilterState) {
 			topRules: summarizeTopRules(rules),
 			duplicationByRule: dupRules.map((id) => ({
 				rule_id: id,
-				count: rules.filter((f: RuleFinding) => f.rule_id === id).length,
+				count: ruleCountById.get(id) ?? 0,
 			})),
 		};
 	}, [events, results, rules, windowMs]);
 
-	const sessions = useMemo(() => {
-		const sessionMap = new Map<
-			string,
-			{
-				platform: Platform;
-				events: HookEvent[];
-				findings: RuleFinding[];
-				results: HookResult[];
-				subprocesses: SubprocessRun[];
-			}
-		>();
-
-		for (const e of events) {
-			if (!sessionMap.has(e.session_id)) {
-				sessionMap.set(e.session_id, {
-					platform: e.platform,
-					events: [],
-					findings: [],
-					results: [],
-					subprocesses: [],
-				});
-			}
-			sessionMap.get(e.session_id)?.events.push(e);
-		}
-		for (const r of rules) sessionMap.get(r.session_id)?.findings.push(r);
-		for (const r of results) sessionMap.get(r.session_id)?.results.push(r);
-		for (const s of subprocesses)
-			sessionMap.get(s.session_id)?.subprocesses.push(s);
-
-		return Array.from(sessionMap.entries())
-			.map(([id, data]) => {
-				const tools = [
-					...new Set(data.events.map((e) => e.tool_name).filter(Boolean)),
-				];
-				const languages = [
-					...new Set(data.events.flatMap((e) => e.languages ?? [])),
-				];
-				const pathCount = new Set(
-					data.events.flatMap((e) => e.candidate_paths ?? []),
-				).size;
-				const outcomes = data.results.flatMap((r: HookResult) =>
-					r.findings.map(
-						(f: { decision?: Decision | null }) => f.decision ?? "context",
-					),
-				);
-				const finalOutcome: Decision = outcomes.includes("block")
-					? "block"
-					: outcomes.includes("deny")
-						? "deny"
-						: outcomes.includes("ask")
-							? "ask"
-							: "allow";
-				const timestamps = data.events.map((e) =>
-					new Date(e.timestamp).getTime(),
-				);
-				const duration =
-					timestamps.length > 1
-						? Math.max(...timestamps) - Math.min(...timestamps)
-						: 0;
-				const latestTimestamp =
-					timestamps.length > 0 ? Math.max(...timestamps) : 0;
-
-				return {
-					id,
-					platform: data.platform,
-					eventCount: data.events.length,
-					tools,
-					languages,
-					pathCount,
-					finalOutcome,
-					duration,
-					latestTimestamp,
-					events: data.events,
-					findings: data.findings,
-					results: data.results,
-					subprocesses: data.subprocesses,
-				};
-			})
-			.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+	const sessionIndexes = useMemo(() => {
+		return buildTraceSessionIndexes(events, rules, results, subprocesses);
 	}, [events, results, rules, subprocesses]);
+	const { sessions } = sessionIndexes;
 
 	const {
 		asyncPassCount,
 		asyncFailCount,
 		asyncByCommand,
-		hottestRepos,
 		fireCounts,
 	} = useMemo<{
 		asyncPassCount: number;
@@ -579,66 +657,43 @@ export function useTraceData(filters: FilterState) {
 			medianRuntime: number;
 			failures: string[];
 		}>;
-		hottestRepos: Array<{ repo: string; count: number }>;
 		fireCounts: Map<string, number>;
 	}>(() => {
-		const nextAsyncPassCount = subprocesses.filter(
-			(s: SubprocessRun) => s.returncode === 0,
-		).length;
-		const nextAsyncFailCount = subprocesses.filter(
-			(s: SubprocessRun) => s.returncode !== 0,
-		).length;
-		const commands = [
-			...new Set(subprocesses.map((s: SubprocessRun) => s.command)),
-		].sort();
-		const nextAsyncByCommand = commands.reduce(
-			(acc, cmd) => {
-				const matching = subprocesses.filter(
-					(s: SubprocessRun) => s.command === cmd,
-				);
-				if (matching.length > 0) {
-					acc.push({
-						command: cmd,
-						total: matching.length,
-						pass: matching.filter((s: SubprocessRun) => s.returncode === 0)
-							.length,
-						fail: matching.filter((s: SubprocessRun) => s.returncode !== 0)
-							.length,
-						medianRuntime: median(
-							matching.map((s: SubprocessRun) => s.duration_ms),
-						),
-						failures: matching
-							.filter((s: SubprocessRun) => s.returncode !== 0)
-							.map((s: SubprocessRun) => s.stderr)
-							.slice(0, 3),
-					});
+		let nextAsyncPassCount = 0;
+		let nextAsyncFailCount = 0;
+		const subprocessesByCommand = new Map<string, SubprocessRun[]>();
+		for (const subprocess of subprocesses) {
+			if (subprocess.returncode === 0) nextAsyncPassCount++;
+			else nextAsyncFailCount++;
+			const existing = subprocessesByCommand.get(subprocess.command) ?? [];
+			existing.push(subprocess);
+			subprocessesByCommand.set(subprocess.command, existing);
+		}
+		const nextAsyncByCommand = Array.from(subprocessesByCommand.entries())
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([command, matching]) => {
+				let pass = 0;
+				let fail = 0;
+				const durations: number[] = [];
+				const failures: string[] = [];
+				for (const subprocess of matching) {
+					durations.push(subprocess.duration_ms);
+					if (subprocess.returncode === 0) {
+						pass++;
+					} else {
+						fail++;
+						if (failures.length < 3) failures.push(subprocess.stderr);
+					}
 				}
-				return acc;
-			},
-			[] as Array<{
-				command: string;
-				total: number;
-				pass: number;
-				fail: number;
-				medianRuntime: number;
-				failures: string[];
-			}>,
-		);
-
-		const repoCounts = events.reduce(
-			(acc: Record<string, number>, e: HookEvent) => {
-				for (const p of e.candidate_paths ?? []) {
-					const segments = p.split("/").filter(Boolean);
-					const repo =
-						segments.length >= 3 && segments[0] === "home"
-							? segments[2]
-							: segments[0] || p;
-					acc[repo] = (acc[repo] || 0) + 1;
-				}
-				return acc;
-			},
-			{} as Record<string, number>,
-		);
+				return {
+					command,
+					total: matching.length,
+					pass,
+					fail,
+					medianRuntime: median(durations),
+					failures,
+				};
+			});
 
 		const nextFireCounts = new Map<string, number>();
 		for (const r of rawData.rules)
@@ -648,13 +703,9 @@ export function useTraceData(filters: FilterState) {
 			asyncPassCount: nextAsyncPassCount,
 			asyncFailCount: nextAsyncFailCount,
 			asyncByCommand: nextAsyncByCommand,
-			hottestRepos: (Object.entries(repoCounts) as Array<[string, number]>)
-				.sort(([, a], [, b]) => b - a)
-				.slice(0, 10)
-				.map(([repo, count]) => ({ repo, count })),
 			fireCounts: nextFireCounts,
 		};
-	}, [events, rawData.rules, subprocesses]);
+	}, [rawData.rules, subprocesses]);
 
 	const operationalContext = useMemo<OperationalContext>(() => {
 		const traceRecords: TraceMetadata[] =
@@ -664,17 +715,9 @@ export function useTraceData(filters: FilterState) {
 			return decision === "block" || decision === "deny";
 		});
 
-		const sessionDecisions = new Map<string, Decision[]>();
-		for (const result of [...results].sort((a, b) =>
-			a.timestamp.localeCompare(b.timestamp),
-		)) {
-			if (!sessionDecisions.has(result.session_id))
-				sessionDecisions.set(result.session_id, []);
-			sessionDecisions.get(result.session_id)?.push(traceDecision(result));
-		}
 		let blockedSessions = 0;
 		let resolvedBlockedSessions = 0;
-		for (const decisions of sessionDecisions.values()) {
+		for (const decisions of sessionIndexes.sessionDecisions.values()) {
 			const firstBlockIdx = decisions.findIndex(
 				(d) => d === "block" || d === "deny",
 			);
@@ -703,15 +746,6 @@ export function useTraceData(filters: FilterState) {
 			}
 		}
 
-		const sessionPathCounts = new Map<string, number>();
-		for (const event of events) {
-			sessionPathCounts.set(
-				event.session_id,
-				(sessionPathCounts.get(event.session_id) ?? 0) +
-					(event.candidate_paths ?? []).length,
-			);
-		}
-
 		return {
 			platformCapabilities: topCounts(
 				traceRecords.map((r) => r.platform_capability),
@@ -726,7 +760,8 @@ export function useTraceData(filters: FilterState) {
 				5,
 			),
 			pathlessResults: results.filter(
-				(r: HookResult) => (sessionPathCounts.get(r.session_id) ?? 0) === 0,
+				(r: HookResult) =>
+					(sessionIndexes.sessionPathCounts.get(r.session_id) ?? 0) === 0,
 			).length,
 			repeatedDenials: Array.from(denialCounts.entries())
 				.filter(([, count]) => count > 1)
@@ -740,7 +775,7 @@ export function useTraceData(filters: FilterState) {
 			blockedSessions,
 			resolvedBlockedSessions,
 		};
-	}, [events, results, rules]);
+	}, [events, results, rules, sessionIndexes]);
 
 	const sourceStatus = useMemo(() => {
 		const windowStartAt = new Date(Date.now() - windowMs).toISOString();
@@ -848,7 +883,11 @@ export function useTraceData(filters: FilterState) {
 				failCount: asyncFailCount,
 				byCommand: asyncByCommand,
 			},
-			drift: { config: mockConfig, hottestRepos, operationalContext },
+			drift: {
+				config: mockConfig,
+				hottestRepos: sessionIndexes.hottestRepos,
+				operationalContext,
+			},
 			fireCounts,
 		}),
 		[
@@ -865,11 +904,11 @@ export function useTraceData(filters: FilterState) {
 			eventsByType,
 			eventsByTypeAndPlatform,
 			fireCounts,
-			hottestRepos,
 			operationalContext,
 			results,
 			rules,
 			sessions,
+			sessionIndexes,
 			skippedCount,
 			sourceStatus,
 			sparklines,
