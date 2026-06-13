@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FlagProvider } from "@/context/FlagContext";
+import { buildTraceSessionIndexes } from "@/hooks/useTraceData";
 import {
 	initialTimelineSelection,
 	primarySessionCause,
@@ -8,8 +9,90 @@ import {
 	sessionActivitySummary,
 	type TimelineEntry,
 } from "../../lib/sessionHelpers";
+import type { HookEvent, HookResult, LineageRole, Platform } from "@/types/slopgate";
 import { SessionExplorer } from "./SessionExplorer";
 import { SessionTimeline } from "./SessionTimeline";
+
+function lineageEvent(input: {
+	sessionId: string;
+	timestamp: string;
+	platform?: Platform;
+	toolName?: string;
+	candidatePaths?: string[];
+	parentSessionId?: string;
+	rootSessionId?: string;
+	originSessionId?: string;
+	lineageRole?: LineageRole;
+}): HookEvent {
+	const event: HookEvent = {
+		timestamp: input.timestamp,
+		platform: input.platform ?? "opencode",
+		event_name: "PreToolUse",
+		session_id: input.sessionId,
+		tool_name: input.toolName ?? "Bash",
+		candidate_paths: input.candidatePaths ?? ["/repo/src/lineage.py"],
+		languages: ["python"],
+	};
+	if (input.parentSessionId) event.parent_session_id = input.parentSessionId;
+	if (input.rootSessionId) event.root_session_id = input.rootSessionId;
+	if (input.originSessionId) event.origin_session_id = input.originSessionId;
+	if (input.lineageRole) event.lineage_role = input.lineageRole;
+	return event;
+}
+
+function lineageResult(input: {
+	sessionId: string;
+	timestamp: string;
+	platform?: Platform;
+	toolName?: string;
+	parentSessionId?: string;
+	rootSessionId?: string;
+	originSessionId?: string;
+	lineageRole?: LineageRole;
+}): HookResult {
+	const result: HookResult = {
+		timestamp: input.timestamp,
+		platform: input.platform ?? "opencode",
+		event_name: "PreToolUse",
+		session_id: input.sessionId,
+		tool_name: input.toolName ?? "Bash",
+		findings: [
+			{
+				rule_id: "PY-CODE-012",
+				severity: "MEDIUM",
+				decision: "warn",
+				message: "Child session produced this finding.",
+			},
+		],
+		errors: [],
+		output: null,
+		skipped: false,
+	};
+	if (input.parentSessionId) result.parent_session_id = input.parentSessionId;
+	if (input.rootSessionId) result.root_session_id = input.rootSessionId;
+	if (input.originSessionId) result.origin_session_id = input.originSessionId;
+	if (input.lineageRole) result.lineage_role = input.lineageRole;
+	return result;
+}
+
+function requiredParentElement(element: Element): HTMLElement {
+	const parent = element.parentElement;
+	if (!parent) {
+		throw new Error("Expected test target to have a parent element.");
+	}
+	return parent;
+}
+
+function textContentMatch(pattern: RegExp) {
+	return (_content: string, node: Element | null) => {
+		const hasText = (element: Element | null) =>
+			pattern.test(element?.textContent || "");
+		return (
+			hasText(node) &&
+			Array.from(node?.children ?? []).every((child) => !hasText(child))
+		);
+	};
+}
 
 const editSession: SessionData = {
     id: "opencode-edit-session",
@@ -62,7 +145,359 @@ describe("SessionTimeline", () => {
         );
     }
 
-    it("shows edit diffs and raw tool input in expanded hook drilldown", () => {
+	it("surfaces child and mirror origins inside a grouped parent timeline", () => {
+		const childEvent = lineageEvent({
+			sessionId: "child-session-beta",
+			timestamp: "2026-06-12T10:00:10.000Z",
+			parentSessionId: "parent-session-alpha",
+			rootSessionId: "parent-session-alpha",
+			lineageRole: "child",
+			toolName: "Bash",
+		});
+		const mirrorEvent = lineageEvent({
+			sessionId: "mirror-session-gamma",
+			timestamp: "2026-06-12T10:00:20.000Z",
+			platform: "cursor",
+			originSessionId: "parent-session-alpha",
+			lineageRole: "mirror",
+			toolName: "Edit",
+		});
+		const childMirrorEvent = lineageEvent({
+			sessionId: "child-mirror-session-delta",
+			timestamp: "2026-06-12T10:00:30.000Z",
+			platform: "cursor",
+			parentSessionId: "parent-session-alpha",
+			rootSessionId: "parent-session-alpha",
+			originSessionId: "parent-session-alpha",
+			lineageRole: "child_mirror",
+			toolName: "Write",
+		});
+		const { sessions } = buildTraceSessionIndexes(
+			[
+				lineageEvent({
+					sessionId: "parent-session-alpha",
+					timestamp: "2026-06-12T10:00:00.000Z",
+					platform: "claude",
+					lineageRole: "parent",
+					toolName: "Read",
+				}),
+				childEvent,
+				mirrorEvent,
+				childMirrorEvent,
+			],
+			[],
+			[
+				lineageResult({
+					sessionId: "child-session-beta",
+					timestamp: "2026-06-12T10:00:11.000Z",
+					parentSessionId: "parent-session-alpha",
+					rootSessionId: "parent-session-alpha",
+					lineageRole: "child",
+					toolName: "Bash",
+				}),
+				lineageResult({
+					sessionId: "mirror-session-gamma",
+					timestamp: "2026-06-12T10:00:21.000Z",
+					platform: "cursor",
+					originSessionId: "parent-session-alpha",
+					lineageRole: "mirror",
+					toolName: "Edit",
+				}),
+				lineageResult({
+					sessionId: "child-mirror-session-delta",
+					timestamp: "2026-06-12T10:00:31.000Z",
+					platform: "cursor",
+					parentSessionId: "parent-session-alpha",
+					rootSessionId: "parent-session-alpha",
+					originSessionId: "parent-session-alpha",
+					lineageRole: "child_mirror",
+					toolName: "Write",
+				}),
+			],
+			[],
+		);
+
+		render(
+			<FlagProvider>
+				<SessionExplorer sessions={sessions} />
+			</FlagProvider>,
+		);
+
+		expect(screen.getByText("parent-session-a…")).toBeInTheDocument();
+		expect(screen.queryByText("child-session-b…")).not.toBeInTheDocument();
+		expect(screen.queryByText("mirror-session-g…")).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByText("parent-session-a…"));
+
+		expect(screen.getByText("+3 linked")).toBeInTheDocument();
+		expect(screen.getByText("4 grouped sessions")).toBeInTheDocument();
+		expect(screen.getByText("1 child")).toBeInTheDocument();
+		expect(screen.getByText("1 mirror")).toBeInTheDocument();
+		expect(screen.getByText("1 child + mirror")).toBeInTheDocument();
+		expect(screen.queryByText(/source child:/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/source mirror:/)).not.toBeInTheDocument();
+		expect(screen.queryByText("Source session")).not.toBeInTheDocument();
+	});
+
+	it("renders unioned parent child and mirror trace fixture data in the component UI", () => {
+		const traceEvents: HookEvent[] = [
+			{
+				timestamp: "2026-06-12T10:00:00.000Z",
+				platform: "claude",
+				event_name: "PreToolUse",
+				session_id: "parent-union-session-alpha",
+				tool_name: "Read",
+				candidate_paths: ["/repo/README.md"],
+				languages: ["markdown"],
+				lineage_role: "parent",
+			},
+			{
+				timestamp: "2026-06-12T10:00:10.000Z",
+				platform: "opencode",
+				event_name: "PreToolUse",
+				session_id: "child-union-session-beta",
+				tool_name: "Bash",
+				candidate_paths: ["/repo/src/child.py"],
+				languages: ["python"],
+				command: "pytest child.py",
+				parent_session_id: "parent-union-session-alpha",
+				root_session_id: "parent-union-session-alpha",
+				lineage_role: "child",
+			},
+			{
+				timestamp: "2026-06-12T10:00:20.000Z",
+				platform: "cursor",
+				event_name: "PreToolUse",
+				session_id: "mirror-union-session-gamma",
+				tool_name: "Edit",
+				candidate_paths: ["/repo/dashboard/mirror.ts"],
+				languages: ["typescript"],
+				origin_session_id: "parent-union-session-alpha",
+				lineage_role: "mirror",
+			},
+			{
+				timestamp: "2026-06-12T10:00:30.000Z",
+				platform: "cursor",
+				event_name: "PreToolUse",
+				session_id: "child-mirror-union-session-delta",
+				tool_name: "Write",
+				candidate_paths: ["/repo/crates/delta.rs"],
+				languages: ["rust"],
+				parent_session_id: "parent-union-session-alpha",
+				root_session_id: "parent-union-session-alpha",
+				origin_session_id: "parent-union-session-alpha",
+				lineage_role: "child_mirror",
+			},
+			{
+				timestamp: "2026-06-12T10:01:00.000Z",
+				platform: "opencode",
+				event_name: "PreToolUse",
+				session_id: "standalone-control-session-epsilon",
+				tool_name: "Read",
+				candidate_paths: ["/repo/docs/unrelated.md"],
+				languages: ["markdown"],
+				lineage_role: "raw",
+			},
+		];
+		const traceResults: HookResult[] = [
+			{
+				timestamp: "2026-06-12T10:00:11.000Z",
+				platform: "opencode",
+				event_name: "PreToolUse",
+				session_id: "child-union-session-beta",
+				tool_name: "Bash",
+				findings: [
+					{
+						rule_id: "PY-CODE-012",
+						severity: "MEDIUM",
+						decision: "warn",
+						message: "Child warning should merge into the parent.",
+					},
+				],
+				errors: [],
+				output: null,
+				skipped: false,
+				parent_session_id: "parent-union-session-alpha",
+				root_session_id: "parent-union-session-alpha",
+				lineage_role: "child",
+			},
+			{
+				timestamp: "2026-06-12T10:00:21.000Z",
+				platform: "cursor",
+				event_name: "PreToolUse",
+				session_id: "mirror-union-session-gamma",
+				tool_name: "Edit",
+				findings: [
+					{
+						rule_id: "TS-CODE-001",
+						severity: "LOW",
+						decision: "warn",
+						message: "Mirror warning should merge into the parent.",
+					},
+				],
+				errors: [],
+				output: null,
+				skipped: false,
+				origin_session_id: "parent-union-session-alpha",
+				lineage_role: "mirror",
+			},
+			{
+				timestamp: "2026-06-12T10:00:31.000Z",
+				platform: "cursor",
+				event_name: "PreToolUse",
+				session_id: "child-mirror-union-session-delta",
+				tool_name: "Write",
+				findings: [
+					{
+						rule_id: "RS-CODE-001",
+						severity: "MEDIUM",
+						decision: "deny",
+						message: "Child mirror denial should control parent outcome.",
+					},
+				],
+				errors: [],
+				output: null,
+				skipped: false,
+				parent_session_id: "parent-union-session-alpha",
+				root_session_id: "parent-union-session-alpha",
+				origin_session_id: "parent-union-session-alpha",
+				lineage_role: "child_mirror",
+			},
+		];
+		const { sessions } = buildTraceSessionIndexes(
+			traceEvents,
+			[],
+			traceResults,
+			[],
+		);
+
+		render(
+			<FlagProvider>
+				<SessionExplorer sessions={sessions} />
+			</FlagProvider>,
+		);
+
+		expect(screen.getByText("parent-union-ses…")).toBeInTheDocument();
+		expect(screen.getByText(/standalone-contr/)).toBeInTheDocument();
+		expect(screen.queryByText("child-union-ses…")).not.toBeInTheDocument();
+		expect(screen.getByText("deny")).toBeInTheDocument();
+		expect(screen.getByText("claude")).toBeInTheDocument();
+		expect(screen.getByText("cursor")).toBeInTheDocument();
+		expect(screen.getAllByText("opencode").length).toBeGreaterThan(0);
+		expect(screen.getByText("Write")).toBeInTheDocument();
+		expect(screen.getAllByText("+3").length).toBeGreaterThan(0);
+		expect(screen.getByText("delta.rs")).toBeInTheDocument();
+		expect(screen.getByText("31s")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByText("parent-union-ses…"));
+
+		expect(screen.getByText("+3 linked")).toBeInTheDocument();
+		expect(screen.getByText("Blocked Session")).toBeInTheDocument();
+		expect(screen.getByText("Write (+3)")).toBeInTheDocument();
+		expect(screen.getByText("Events:")).toBeInTheDocument();
+		expect(screen.getByText("4")).toBeInTheDocument();
+		expect(screen.getByText("4 grouped sessions")).toBeInTheDocument();
+		expect(screen.getByText("1 child")).toBeInTheDocument();
+		expect(screen.getByText("1 mirror")).toBeInTheDocument();
+		expect(screen.getByText("1 child + mirror")).toBeInTheDocument();
+		expect(screen.queryByText(/source child:/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/source mirror:/)).not.toBeInTheDocument();
+		expect(
+			screen.getByText("Child mirror denial should control parent outcome."),
+		).toBeInTheDocument();
+
+		fireEvent.change(screen.getByPlaceholderText("Search sessions..."), {
+			target: { value: "mirror.ts" },
+		});
+		expect(screen.getByText("parent-union-ses…")).toBeInTheDocument();
+		expect(screen.queryByText(/standalone-contr/)).not.toBeInTheDocument();
+
+		const languageFilter = requiredParentElement(screen.getByText("Language:"));
+		fireEvent.click(within(languageFilter).getByRole("button", { name: "All" }));
+		expect(screen.getByText("markdown")).toBeInTheDocument();
+		expect(screen.getByText("python")).toBeInTheDocument();
+		expect(screen.getByText("rust")).toBeInTheDocument();
+		expect(screen.getByText("typescript")).toBeInTheDocument();
+	});
+
+	it("renders inferred historical mirror grouping in the component UI", () => {
+		const { sessions } = buildTraceSessionIndexes(
+			[
+				lineageEvent({
+					sessionId: "opencode-inferred-root",
+					timestamp: "2026-06-12T11:00:00.000Z",
+					platform: "opencode",
+					candidatePaths: ["/repo/dashboard/src/hooks/useTraceData.ts"],
+					toolName: "Read",
+				}),
+				lineageEvent({
+					sessionId: "opencode-inferred-root",
+					timestamp: "2026-06-12T11:03:00.000Z",
+					platform: "opencode",
+					candidatePaths: ["/repo/dashboard/src/components/SessionExplorer.tsx"],
+					toolName: "Grep",
+				}),
+				lineageEvent({
+					sessionId: "legacy-claude-mirror",
+					timestamp: "2026-06-12T11:00:01.000Z",
+					platform: "claude",
+					candidatePaths: ["/repo/dashboard/src/hooks/useTraceData.ts"],
+					toolName: "Read",
+				}),
+				lineageEvent({
+					sessionId: "legacy-claude-mirror",
+					timestamp: "2026-06-12T11:03:02.000Z",
+					platform: "claude",
+					candidatePaths: ["/repo/dashboard/src/components/SessionExplorer.tsx"],
+					toolName: "Grep",
+				}),
+				lineageEvent({
+					sessionId: "standalone-inferred-control",
+					timestamp: "2026-06-12T11:00:01.000Z",
+					platform: "claude",
+					candidatePaths: ["/repo/unrelated/file.ts"],
+					toolName: "Read",
+				}),
+				lineageEvent({
+					sessionId: "standalone-inferred-control",
+					timestamp: "2026-06-12T11:03:02.000Z",
+					platform: "claude",
+					candidatePaths: ["/repo/unrelated/file.ts"],
+					toolName: "Grep",
+				}),
+			],
+			[],
+			[],
+			[],
+		);
+
+		render(
+			<FlagProvider>
+				<SessionExplorer sessions={sessions} />
+			</FlagProvider>,
+		);
+
+		expect(screen.getByText("opencode-inferre…")).toBeInTheDocument();
+		expect(screen.getByText(/standalone-infer/)).toBeInTheDocument();
+		expect(screen.queryByText("legacy-claude-m…")).not.toBeInTheDocument();
+		expect(screen.getByText("+1 linked")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByText("opencode-inferre…"));
+
+		expect(screen.getByText("inferred")).toBeInTheDocument();
+		expect(screen.getByText("2 grouped sessions")).toBeInTheDocument();
+		expect(screen.getByText("1 mirror")).toBeInTheDocument();
+		expect(screen.queryByText("mirror: legacy-claude-mirror")).not.toBeInTheDocument();
+		expect(screen.queryByText(/source mirror:/)).not.toBeInTheDocument();
+
+		fireEvent.change(screen.getByPlaceholderText("Search sessions..."), {
+			target: { value: "SessionExplorer.tsx" },
+		});
+		expect(screen.getByText("opencode-inferre…")).toBeInTheDocument();
+		expect(screen.queryByText(/standalone-infer/)).not.toBeInTheDocument();
+	});
+
+	    it("shows edit diffs and raw tool input in expanded hook drilldown", () => {
         renderTimeline(editSession);
 
         fireEvent.click(
@@ -350,6 +785,54 @@ describe("SessionTimeline", () => {
             screen.getAllByText("Grouped finding(s):")[0],
         ).toBeInTheDocument();
         expect(screen.queryAllByText("Patch / focused diff:").length).toBe(0);
+    });
+
+    it("renders finding additional context as formatted evidence code", () => {
+        renderTimeline({
+            ...editSession,
+            id: "finding-evidence-session",
+            events: [],
+            results: [
+                {
+                    timestamp: "2026-06-11T22:12:00.000Z",
+                    platform: "codex",
+                    event_name: "UserPromptSubmit",
+                    session_id: "finding-evidence-session",
+                    tool_name: null,
+                    findings: [
+                        {
+                            rule_id: "BUILTIN-INJECT-PROMPT",
+                            severity: "LOW",
+                            decision: "context",
+                            message: "No message provided.",
+                            additional_context:
+                                "{\"policy\":\"deterministic\",\"nested\":{\"language\":\"json\"}}",
+                        },
+                        {
+                            rule_id: "PY-CODE-012",
+                            severity: "LOW",
+                            decision: "context",
+                            message: "Python evidence.",
+                            additional_context: "def choose_policy(value):\n    return value",
+                        },
+                    ],
+                    errors: [],
+                    output: null,
+                    skipped: false,
+                },
+            ],
+        });
+
+        expect(screen.getAllByText("Evidence (JSON):").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Evidence (Python):").length).toBeGreaterThan(0);
+        expect(
+            screen.getAllByText(textContentMatch(/"policy": "deterministic"/))
+                .length,
+        ).toBeGreaterThan(0);
+        expect(
+            screen.getAllByText(textContentMatch(/def choose_policy\(value\):/))
+                .length,
+        ).toBeGreaterThan(0);
     });
 
     it("formats Claude hookSpecificOutput context instead of raw JSON", () => {
@@ -705,9 +1188,10 @@ describe("SessionExplorer", () => {
 
 		fireEvent.click(screen.getByText("parent-session-a…"));
 
-		expect(screen.getByText("confidence: explicit")).toBeInTheDocument();
-		expect(screen.getByText("child: child-session-beta")).toBeInTheDocument();
-		expect(screen.getByText("mirror: mirror-session-gamma")).toBeInTheDocument();
+		expect(screen.getByText("explicit")).toBeInTheDocument();
+		expect(screen.getByText("3 grouped sessions")).toBeInTheDocument();
+		expect(screen.getByText("1 child")).toBeInTheDocument();
+		expect(screen.getByText("1 mirror")).toBeInTheDocument();
 
 		fireEvent.change(screen.getByPlaceholderText("Search sessions..."), {
 			target: { value: "child-session-beta" },
@@ -749,11 +1233,19 @@ describe("SessionExplorer", () => {
 
 		fireEvent.click(screen.getByText("parent-session-a…"));
 
-		expect(
-			screen.getByText("child_mirror: child-mirror-session-beta"),
-		).toBeInTheDocument();
+		expect(screen.getByText("2 grouped sessions")).toBeInTheDocument();
+		expect(screen.getByText("1 child + mirror")).toBeInTheDocument();
 		expect(
 			screen.queryByText("mirror: child-mirror-session-beta"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("child + mirror: child-mirror-session-beta"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("unclassified: child-mirror-session-beta"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("raw: child-mirror-session-beta"),
 		).not.toBeInTheDocument();
 	});
 });

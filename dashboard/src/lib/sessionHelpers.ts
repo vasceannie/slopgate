@@ -65,6 +65,8 @@ export type TimelineEntry = {
 	label: string;
 	detail: string;
 	sessionId: string;
+	sourceSessionId?: string;
+	sourceLineageRole?: LineageRole | null;
 	platform?: string;
 	eventName?: string;
 	toolName?: string;
@@ -105,6 +107,57 @@ interface FindingLike {
 	metadata?: Record<string, unknown>;
 }
 
+interface CauseCandidate {
+	ruleId: string;
+	severity: Severity;
+	decision: Decision;
+	message: string | null;
+	timestamp: string;
+	toolName?: string;
+	eventName?: string;
+	finding: FindingLike;
+}
+
+const DECISION_PRIORITY: Record<Decision, number> = {
+	block: 6,
+	deny: 5,
+	ask: 4,
+	warn: 3,
+	context: 2,
+	info: 1,
+	allow: 0,
+};
+
+const SEVERITY_PRIORITY: Record<Severity, number> = {
+	CRITICAL: 4,
+	HIGH: 3,
+	MEDIUM: 2,
+	LOW: 1,
+};
+
+function isBlockingDecision(decision: Decision): boolean {
+	return decision === "block" || decision === "deny";
+}
+
+function isAdvisoryDecision(decision: Decision): boolean {
+	return decision !== "block" && decision !== "deny" && decision !== "allow";
+}
+
+function isBetterCauseCandidate(
+	candidate: CauseCandidate,
+	current: CauseCandidate | null,
+): boolean {
+	if (!current) return true;
+	const decisionDiff =
+		DECISION_PRIORITY[candidate.decision] - DECISION_PRIORITY[current.decision];
+	if (decisionDiff !== 0) return decisionDiff > 0;
+	const severityDiff =
+		SEVERITY_PRIORITY[candidate.severity] -
+		SEVERITY_PRIORITY[current.severity];
+	if (severityDiff !== 0) return severityDiff > 0;
+	return candidate.timestamp > current.timestamp;
+}
+
 /**
  * Extracts candidate paths associated with a finding by checking its tool input
  * or correlating with matching session events close to its timestamp.
@@ -123,23 +176,31 @@ function getPathsForFinding(finding: FindingLike, session: SessionData): string[
 
 	// 2. Correlate with session events using tool_name and closest timestamp
 	if (finding.tool_name) {
-		const matchingEvents = session.events.filter(
-			(e) => e.tool_name === finding.tool_name && e.candidate_paths?.length > 0,
-		);
-		if (matchingEvents.length > 0) {
-			const findingTime = new Date(finding.timestamp || "").getTime();
-			let bestEvent = matchingEvents[0];
-			let minDiff = Number.POSITIVE_INFINITY;
-			for (const e of matchingEvents) {
-				const diff = Math.abs(new Date(e.timestamp).getTime() - findingTime);
-				if (diff < minDiff) {
-					minDiff = diff;
-					bestEvent = e;
-				}
+		const findingTime = new Date(finding.timestamp || "").getTime();
+		const hasFindingTime = Number.isFinite(findingTime);
+		let bestEvent: HookEvent | null = null;
+		let minDiff = Number.POSITIVE_INFINITY;
+		for (const event of session.events) {
+			if (
+				event.tool_name !== finding.tool_name ||
+				!event.candidate_paths?.length
+			) {
+				continue;
 			}
-			if (bestEvent.candidate_paths) {
-				paths.push(...bestEvent.candidate_paths);
+			if (!hasFindingTime) {
+				bestEvent = event;
+				break;
 			}
+			const eventTime = new Date(event.timestamp).getTime();
+			if (!Number.isFinite(eventTime)) continue;
+			const diff = Math.abs(eventTime - findingTime);
+			if (diff < minDiff) {
+				minDiff = diff;
+				bestEvent = event;
+			}
+		}
+		if (bestEvent?.candidate_paths) {
+			paths.push(...bestEvent.candidate_paths);
 		}
 	}
 
@@ -151,91 +212,54 @@ function getPathsForFinding(finding: FindingLike, session: SessionData): string[
  * then advisory rules, and falling back to Clean allow.
  */
 export function primarySessionCause(session: SessionData) {
-	const allFindings: Array<{
-		ruleId: string;
-		severity: Severity;
-		decision: Decision;
-		message: string | null;
-		timestamp: string;
-		toolName?: string;
-		eventName?: string;
-		paths: string[];
-	}> = [];
+	let bestBlocking: CauseCandidate | null = null;
+	let bestAdvisory: CauseCandidate | null = null;
+	const considerFinding = (finding: FindingLike) => {
+		const decision = finding.decision || "context";
+		const candidate: CauseCandidate = {
+			ruleId: finding.rule_id,
+			severity: finding.severity,
+			decision,
+			message: finding.message,
+			timestamp: finding.timestamp || "",
+			toolName: finding.tool_name,
+			eventName: finding.event_name,
+			finding,
+		};
+		if (isBlockingDecision(decision)) {
+			if (isBetterCauseCandidate(candidate, bestBlocking)) {
+				bestBlocking = candidate;
+			}
+			return;
+		}
+		if (isAdvisoryDecision(decision)) {
+			if (isBetterCauseCandidate(candidate, bestAdvisory)) {
+				bestAdvisory = candidate;
+			}
+		}
+	};
 
 	// 1. Gather from session.findings
 	for (const f of session.findings) {
-		const decision = f.decision || "context";
-		allFindings.push({
-			ruleId: f.rule_id,
-			severity: f.severity,
-			decision,
-			message: f.message,
-			timestamp: f.timestamp,
-			toolName: f.tool_name,
-			eventName: f.event_name,
-			paths: getPathsForFinding(f, session),
-		});
+		considerFinding(f);
 	}
 
 	// 2. Gather from session.results findings
 	for (const r of session.results) {
 		const findingsList = r.findings || [];
 		for (const f of findingsList) {
-			const decision = f.decision || "context";
-			allFindings.push({
-				ruleId: f.rule_id,
-				severity: f.severity,
-				decision,
-				message: f.message,
+			considerFinding({
+				...f,
 				timestamp: r.timestamp,
-				toolName: r.tool_name,
-				eventName: r.event_name,
-				paths: getPathsForFinding(
-					{ ...f, timestamp: r.timestamp, tool_name: r.tool_name },
-					session,
-				),
+				tool_name: r.tool_name,
+				event_name: r.event_name,
 			});
 		}
 	}
 
-	const DECISION_PRIORITY: Record<Decision, number> = {
-		block: 6,
-		deny: 5,
-		ask: 4,
-		warn: 3,
-		context: 2,
-		info: 1,
-		allow: 0,
-	};
-
-	const SEVERITY_PRIORITY: Record<Severity, number> = {
-		CRITICAL: 4,
-		HIGH: 3,
-		MEDIUM: 2,
-		LOW: 1,
-	};
-
-	const blockingFindings = allFindings.filter(
-		(f) => f.decision === "block" || f.decision === "deny",
-	);
-	const advisoryFindings = allFindings.filter(
-		(f) =>
-			f.decision !== "block" &&
-			f.decision !== "deny" &&
-			f.decision !== "allow",
-	);
-
-	if (blockingFindings.length > 0) {
-		blockingFindings.sort((a, b) => {
-			const decDiff =
-				DECISION_PRIORITY[b.decision] - DECISION_PRIORITY[a.decision];
-			if (decDiff !== 0) return decDiff;
-			const sevDiff =
-				SEVERITY_PRIORITY[b.severity] - SEVERITY_PRIORITY[a.severity];
-			if (sevDiff !== 0) return sevDiff;
-			return b.timestamp.localeCompare(a.timestamp);
-		});
-		const primary = blockingFindings[0];
+	const primary = bestBlocking ?? bestAdvisory;
+	if (primary) {
+		const paths = getPathsForFinding(primary.finding, session);
 		return {
 			decision: primary.decision,
 			ruleId: primary.ruleId,
@@ -243,31 +267,8 @@ export function primarySessionCause(session: SessionData) {
 			message: primary.message,
 			eventName: primary.eventName,
 			toolName: primary.toolName,
-			path: primary.paths[0] || undefined,
-			paths: primary.paths,
-		};
-	}
-
-	if (advisoryFindings.length > 0) {
-		advisoryFindings.sort((a, b) => {
-			const decDiff =
-				DECISION_PRIORITY[b.decision] - DECISION_PRIORITY[a.decision];
-			if (decDiff !== 0) return decDiff;
-			const sevDiff =
-				SEVERITY_PRIORITY[b.severity] - SEVERITY_PRIORITY[a.severity];
-			if (sevDiff !== 0) return sevDiff;
-			return b.timestamp.localeCompare(a.timestamp);
-		});
-		const primary = advisoryFindings[0];
-		return {
-			decision: primary.decision,
-			ruleId: primary.ruleId,
-			severity: primary.severity,
-			message: primary.message,
-			eventName: primary.eventName,
-			toolName: primary.toolName,
-			path: primary.paths[0] || undefined,
-			paths: primary.paths,
+			path: paths[0] || undefined,
+			paths,
 		};
 	}
 
@@ -298,16 +299,17 @@ export function primarySessionCause(session: SessionData) {
  * Returns a summary of agent activity in a session: last tool used, tool counts, event/path counts.
  */
 export function sessionActivitySummary(session: SessionData) {
-	const eventsWithTool = [...session.events]
-		.filter((e) => e.tool_name)
-		.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-	const lastTool =
-		eventsWithTool.length > 0
-			? eventsWithTool[eventsWithTool.length - 1].tool_name
-			: null;
-	const uniqueTools = new Set(
-		session.events.map((e) => e.tool_name).filter(Boolean),
-	);
+	let lastTool: string | null = null;
+	let lastToolTimestamp = "";
+	const uniqueTools = new Set<string>();
+	for (const event of session.events) {
+		if (!event.tool_name) continue;
+		uniqueTools.add(event.tool_name);
+		if (!lastTool || event.timestamp >= lastToolTimestamp) {
+			lastTool = event.tool_name;
+			lastToolTimestamp = event.timestamp;
+		}
+	}
 	return {
 		lastTool,
 		toolCount: uniqueTools.size,

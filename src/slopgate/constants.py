@@ -7,6 +7,11 @@ PERMISSION_REQUEST = "PermissionRequest"
 POST_TOOL_USE = "PostToolUse"
 DENY = "deny"
 BLOCK = "block"
+ALLOW = "allow"
+ASK = "ask"
+CONTEXT = "context"
+WARN = "warn"
+RULE_SURFACE_DECISIONS = frozenset({ALLOW, ASK, BLOCK, CONTEXT, DENY, WARN})
 
 METADATA_PATH = "path"
 METADATA_FUNCTION = "function"

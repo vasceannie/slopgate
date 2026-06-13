@@ -10,9 +10,17 @@ __all__ = [
     "detect_semantic_clones",
     "detect_assertion_free_tests",
     "detect_assertion_roulette",
+    "detect_boundary_logging",
     "detect_broad_except_swallow",
     "detect_conditional_assertions",
     "detect_deep_nesting",
+    "detect_dead_code",
+    "detect_feature_envy",
+    "detect_flat_sibling_files",
+    "detect_import_aliases",
+    "detect_import_fanout",
+    "detect_private_import_chains",
+    "detect_pytest_asyncio_patterns",
     "detect_stale_patterns",
     "detect_direct_get_logger",
     "detect_eager_tests",
@@ -44,12 +52,21 @@ from .code_smells import (
     detect_oversized_modules,
     detect_too_many_params,
 )
+from .source_interop import (
+    detect_dead_code,
+    detect_feature_envy,
+    detect_flat_sibling_files,
+    detect_import_aliases,
+    detect_import_fanout,
+    detect_private_import_chains,
+)
 from .exception_safety import (
     detect_broad_except_swallow,
     detect_silent_fallback,
 )
 from .line_length import detect_long_lines
 from .logging_conventions import (
+    detect_boundary_logging,
     detect_direct_get_logger,
     detect_wrong_logger_name,
 )
@@ -60,6 +77,7 @@ from .test_smells import (
     detect_conditional_assertions,
     detect_eager_tests,
     detect_fixtures_outside_conftest,
+    detect_pytest_asyncio_patterns,
     detect_long_tests,
 )
 from .type_safety import (
@@ -76,9 +94,16 @@ __all__ = [
     "detect_semantic_clones",
     "detect_assertion_free_tests",
     "detect_assertion_roulette",
+    "detect_boundary_logging",
     "detect_broad_except_swallow",
     "detect_conditional_assertions",
     "detect_deep_nesting",
+    "detect_dead_code",
+    "detect_feature_envy",
+    "detect_flat_sibling_files",
+    "detect_import_aliases",
+    "detect_import_fanout",
+    "detect_private_import_chains",
     "detect_stale_patterns",
     "detect_direct_get_logger",
     "detect_eager_tests",

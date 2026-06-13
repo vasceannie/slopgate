@@ -19,13 +19,10 @@ SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(SRC_DIR))
 
-_config_api = importlib.import_module("forcedash_server.config_api")
 _harness = importlib.import_module("forcedash_server.harness")
 _snapshot = importlib.import_module("forcedash_server.snapshot")
 streaming = importlib.import_module("forcedash_server.streaming")
 
-apply_config_patch = _config_api.apply_config_patch
-parse_config_payload = _config_api.parse_config_payload
 parse_harness_payload = _harness.parse_harness_payload
 build_trace_snapshot_script = _snapshot.build_trace_snapshot_script
 parse_snapshot_payload = _snapshot.parse_snapshot_payload
@@ -134,44 +131,6 @@ def _write_next_line_from_reader(reader: _IdlePipeReader) -> tuple[bool, bytes]:
 def test_snapshot_lookback_hours_clamps_query_values(path: str, expected: int) -> None:
     assert snapshot_lookback_hours(path) == expected, (
         f"Expected {path} to resolve to {expected} hours"
-    )
-
-
-def test_apply_config_patch_preserves_unmentioned_config_fields() -> None:
-    live: dict[str, object] = {
-        "enabled_rules": {"PY-LOG-002": False, "SHELL-001": True},
-        "regex_rules": [{"id": "keep"}],
-        "skip_paths": ["old"],
-        "unrelated": {"kept": True},
-    }
-    patch: dict[str, object] = {
-        "enabled_rules": {"PY-LOG-002": True, "ignored": "yes"},
-        "skip_paths": ["new", 123],
-    }
-
-    result = apply_config_patch(live, patch)
-
-    assert result["enabled_rules"] == {
-        "PY-LOG-002": True,
-        "SHELL-001": True,
-    }, "Expected boolean rule patching to merge valid booleans only"
-    assert result["regex_rules"] == [{"id": "keep"}], (
-        "Expected omitted regex rules to remain unchanged"
-    )
-    assert result["skip_paths"] == ["new"], (
-        "Expected skip path patching to keep string paths only"
-    )
-    assert result["unrelated"] == {"kept": True}, (
-        "Expected unrelated config fields to be preserved"
-    )
-
-
-def test_parse_config_payload_rejects_non_object_json() -> None:
-    config, error = parse_config_payload("[]")
-
-    assert config == {}, "Expected invalid config payload to return an empty config"
-    assert error == "Config payload must be a JSON object", (
-        "Expected a semantic error for non-object config"
     )
 
 

@@ -22,7 +22,12 @@ from forcedash_server.config import (
     PORT,
     SSH_HOST,
 )
-from forcedash_server.config_api import apply_config_patch, read_config, write_config
+from forcedash_server.config_api import (
+    apply_config_patch,
+    dashboard_config,
+    read_config,
+    write_config,
+)
 from forcedash_server.harness import harness_status
 from forcedash_server.snapshot import snapshot_lookback_hours, trace_snapshot
 from forcedash_server.streaming import stream_tail
@@ -147,7 +152,7 @@ def send_config(handler: ForceDashHandler) -> None:
     if err is not None:
         handler._json({"error": err}, HTTP_BAD_GATEWAY)
         return
-    handler._json(config)
+    handler._json(dashboard_config(config))
 
 
 def send_health(handler: ForceDashHandler) -> None:

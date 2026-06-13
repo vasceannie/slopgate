@@ -5,7 +5,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENT_NAMES } from "@/types/slopgate";
 import { TraceDataProvider } from "./TraceDataContext";
@@ -313,6 +313,22 @@ function RuleCountProbe() {
 	);
 }
 
+function DataIdentityProbe() {
+	const { data } = useTraceDataSource();
+	const lastDataRef = useRef(data);
+	const [dataChanges, setDataChanges] = useState(0);
+	useEffect(() => {
+		if (lastDataRef.current === data) return;
+		lastDataRef.current = data;
+		setDataChanges((count) => count + 1);
+	}, [data]);
+	return createElement(
+		"div",
+		{ "data-testid": "data-identity" },
+		`${data.rules.length}:${dataChanges}`,
+	);
+}
+
 function SourceStateProbe() {
 	const { data, sourceMode, sourceMeta } = useTraceDataSource();
 	return createElement(
@@ -442,6 +458,35 @@ describe("TraceDataProvider stream de-duplication", () => {
 		);
 	});
 
+	it("keeps trace data identity stable for exact duplicate stream records", async () => {
+		render(
+			createElement(TraceDataProvider, null, createElement(DataIdentityProbe)),
+		);
+
+		await waitFor(() =>
+			expect(MockEventSource.instances.length).toBeGreaterThan(0),
+		);
+		const stream = MockEventSource.instances[0];
+		const duplicate = streamRule("same finding", { path: "src/a.py" });
+		act(() => {
+			stream.emit(duplicate);
+		});
+
+		await waitFor(() =>
+			expect(screen.getByTestId("data-identity")).toHaveTextContent(/^1:/),
+		);
+		const afterFirstRecord = screen.getByTestId("data-identity").textContent;
+		expect(afterFirstRecord).toMatch(/^1:\d+$/);
+
+		act(() => {
+			stream.emit(duplicate);
+		});
+
+		expect(screen.getByTestId("data-identity").textContent).toBe(
+			afterFirstRecord,
+		);
+	});
+
 	it("ignores non-trace stream JSON without counting schema failures", async () => {
 		render(
 			createElement(TraceDataProvider, null, createElement(SourceStateProbe)),
@@ -474,6 +519,23 @@ describe("TraceDataProvider initial snapshot loading", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 		Reflect.deleteProperty(window, "__SLOPGATE_DATA__");
+	});
+
+	it("requests a bounded 24h snapshot on initial load", async () => {
+		const fetchSnapshot = vi.fn(async (_input: RequestInfo | URL) => ({
+			ok: true,
+			json: async () => ({ ...EMPTY_TRACE_RESPONSE, lookback_hours: 24 }),
+		}));
+		vi.stubGlobal("fetch", fetchSnapshot);
+
+		render(
+			createElement(TraceDataProvider, null, createElement(SourceStateProbe)),
+		);
+
+		await waitFor(() => expect(fetchSnapshot).toHaveBeenCalled());
+		expect(fetchSnapshot).toHaveBeenCalledWith(
+			expect.stringContaining("lookback_hours=24"),
+		);
 	});
 
 	it("starts empty while the first live snapshot is pending", async () => {

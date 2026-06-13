@@ -97,7 +97,7 @@ def _evaluate_with_stubbed_hook(
 
 
 def _platform_normalization_observation(platform: str | None) -> tuple[str | None, str]:
-    expected_platform = (platform or "claude").strip().lower()
+    expected_platform = (platform or "unknown").strip().lower()
     evaluator, _response = _evaluate_with_stubbed_hook(
         daemon.DaemonRequest(payload={"command": "probe"}, platform=platform),
         feedback="",
@@ -135,6 +135,24 @@ def test_evaluate_hook_request_preserves_claude_feedback_exit() -> None:
     )
     assert response.exit_code == daemon.CLAUDE_TEAM_EVENT_EXIT_CODE, (
         "Claude feedback should preserve the direct CLI exit code"
+    )
+
+
+def test_evaluate_hook_request_missing_platform_does_not_emit_claude_feedback() -> None:
+    evaluator, response = _evaluate_with_stubbed_hook(
+        daemon.DaemonRequest(payload={"command": "pytest"}, platform=None),
+        feedback="repair this",
+        output={"decision": "allow"},
+    )
+
+    assert evaluator.platform == "unknown", (
+        "Daemon requests without platform provenance should evaluate as unknown"
+    )
+    assert response.stderr is None, (
+        "Unknown platform must not trigger Claude-specific retry feedback"
+    )
+    assert response.output == {"decision": "allow"}, (
+        "Unknown platform should still return compatibility-rendered engine output"
     )
 
 

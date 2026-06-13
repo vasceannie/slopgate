@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import re
 from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
@@ -10,7 +8,11 @@ from slopgate.constants import (
 )
 from slopgate.models import RegexRuleConfig, RuleFinding, Severity
 from slopgate.rules.base import Rule
-from slopgate.rules.regex_rule_matching import RegexHit, RegexRuleMatcher
+from slopgate.rules.regex_rule_matching import (
+    RegexHit,
+    RegexRuleMatcher,
+    compile_regex_patterns,
+)
 from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
@@ -41,13 +43,10 @@ class RegexRule(Rule):
         self.rule_id = config.rule_id
         self.title = config.title
         self.events = tuple(config.events)
-        flags = 0
-        if config.multiline:
-            flags |= re.MULTILINE | re.DOTALL
-        if not config.case_sensitive:
-            flags |= re.IGNORECASE
-        patterns = [re.compile(pattern, flags) for pattern in config.patterns]
-        self._matcher = RegexRuleMatcher(config=config, patterns=patterns)
+        self._matcher = RegexRuleMatcher(
+            config=config,
+            patterns=compile_regex_patterns(config),
+        )
 
     def _render_message(self, hits: list[RegexHit]) -> str:
         if not self.config.message:

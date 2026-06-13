@@ -28,6 +28,9 @@ class Rule(ABC):
 
 
 def is_rule_enabled(ctx: HookContext, rule_id: str, default: bool = True) -> bool:
+    surface = ctx.config.rule_surfaces.get(rule_id)
+    if surface is not None and surface.hook.enabled is not None:
+        return surface.hook.enabled
     value = ctx.config.enabled_rules.get(rule_id)
     return default if value is None else value
 

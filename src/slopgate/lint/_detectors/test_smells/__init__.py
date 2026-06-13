@@ -73,6 +73,7 @@ __all__ = [
     "detect_hand_built_test_payloads",
     "detect_mock_theater",
     "detect_mocked_integration_tests",
+    "detect_pytest_asyncio_patterns",
     "detect_schema_bypasses",
     "detect_weak_assertions",
     "COVERAGE_JSON_NAMES",
@@ -211,6 +212,7 @@ from ._payload_detectors import (
     detect_schema_bypasses,
     detect_weak_assertions,
 )
+from .pytest_asyncio import detect_pytest_asyncio_patterns
 from ._production_symbols import (
     COVERAGE_JSON_NAMES,
     COVERAGE_XML_NAMES,

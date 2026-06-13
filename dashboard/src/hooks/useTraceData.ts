@@ -340,7 +340,7 @@ function lineageConfidenceFor(
 		lineage.rootSessionId ||
 		lineage.originSessionId ||
 		lineage.originPlatform ||
-		lineage.lineageRole
+		(lineage.lineageRole && lineage.lineageRole !== "raw")
 		? "explicit"
 		: "none";
 }
@@ -394,6 +394,239 @@ function sortByTimestamp<T extends { timestamp?: string }>(items: T[]): T[] {
 	return [...items].sort((a, b) => timestampMs(a) - timestampMs(b));
 }
 
+const INFERRED_MIRROR_START_WINDOW_MS = 3000;
+const INFERRED_MIRROR_END_WINDOW_MS = 10000;
+const INFERRED_CHILD_WINDOW_SLACK_MS = 5000;
+const INFERRED_CHILD_MIN_PARENT_EXTRA_MS = 30000;
+const INFERRED_CHILD_PARENT_DURATION_MULTIPLIER = 3;
+
+type InferredLineageRole = "child" | "mirror";
+
+interface SessionTimeRange {
+	start: number;
+	end: number;
+	duration: number;
+}
+
+function timestampRangeForItems(
+	items: Array<{ timestamp?: string }>,
+): SessionTimeRange | null {
+	let start = Number.POSITIVE_INFINITY;
+	let end = Number.NEGATIVE_INFINITY;
+	for (const item of items) {
+		const timestamp = timestampMs(item);
+		if (timestamp <= 0) continue;
+		if (timestamp < start) start = timestamp;
+		if (timestamp > end) end = timestamp;
+	}
+	if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+	return { start, end, duration: Math.max(0, end - start) };
+}
+
+interface InferredRelation {
+	parentId: string;
+	role: InferredLineageRole;
+}
+
+function sessionTimeRange(session: SessionSummary): SessionTimeRange | null {
+	return timestampRangeForItems([
+		...session.events,
+		...session.findings,
+		...session.results,
+		...session.subprocesses,
+	]);
+}
+
+function meaningfulSessionPath(path: string): string | null {
+	const trimmed = path.trim();
+	if (!trimmed || trimmed === "/" || trimmed === "." || trimmed === ",") {
+		return null;
+	}
+	return trimmed;
+}
+
+function sessionPathSet(session: SessionSummary): Set<string> {
+	const paths = new Set<string>();
+	for (const event of session.events) {
+		for (const path of event.candidate_paths ?? []) {
+			const meaningfulPath = meaningfulSessionPath(path);
+			if (meaningfulPath) paths.add(meaningfulPath);
+		}
+	}
+	return paths;
+}
+
+function sharedPathCount(left: Set<string>, right: Set<string>): number {
+	let count = 0;
+	const [smaller, larger] =
+		left.size <= right.size ? [left, right] : [right, left];
+	for (const path of smaller) {
+		if (larger.has(path)) count++;
+	}
+	return count;
+}
+
+function hasExplicitLineage(session: SessionSummary): boolean {
+	return session.lineageConfidence === "explicit";
+}
+
+function platformPreference(session: SessionSummary): number {
+	const platforms = new Set(session.platforms ?? [session.platform]);
+	if (platforms.has("opencode")) return 0;
+	if (platforms.has("codex")) return 1;
+	if (platforms.has("cursor")) return 2;
+	if (platforms.has("claude")) return 3;
+	return 4;
+}
+
+function preferredInferredPrimary(
+	left: SessionSummary,
+	right: SessionSummary,
+): SessionSummary {
+	const leftRank = platformPreference(left);
+	const rightRank = platformPreference(right);
+	if (leftRank !== rightRank) return leftRank < rightRank ? left : right;
+	if (left.duration !== right.duration) {
+		return left.duration > right.duration ? left : right;
+	}
+	if (left.eventCount !== right.eventCount) {
+		return left.eventCount > right.eventCount ? left : right;
+	}
+	if (left.latestTimestamp !== right.latestTimestamp) {
+		return left.latestTimestamp > right.latestTimestamp ? left : right;
+	}
+	return left.id.localeCompare(right.id) <= 0 ? left : right;
+}
+
+function canInferMirrorRelation(
+	left: SessionSummary,
+	right: SessionSummary,
+	ranges: Map<string, SessionTimeRange>,
+	pathSets: Map<string, Set<string>>,
+): boolean {
+	const leftRange = ranges.get(left.id);
+	const rightRange = ranges.get(right.id);
+	if (!leftRange || !rightRange) return false;
+	const startDelta = Math.abs(leftRange.start - rightRange.start);
+	const endDelta = Math.abs(leftRange.end - rightRange.end);
+	const sharedPaths = sharedPathCount(
+		pathSets.get(left.id) ?? new Set<string>(),
+		pathSets.get(right.id) ?? new Set<string>(),
+	);
+	return (
+		startDelta <= INFERRED_MIRROR_START_WINDOW_MS &&
+		endDelta <= INFERRED_MIRROR_END_WINDOW_MS &&
+		sharedPaths > 0
+	);
+}
+
+function canInferChildRelation(
+	parent: SessionSummary,
+	child: SessionSummary,
+	ranges: Map<string, SessionTimeRange>,
+	pathSets: Map<string, Set<string>>,
+): boolean {
+	const parentRange = ranges.get(parent.id);
+	const childRange = ranges.get(child.id);
+	if (!parentRange || !childRange) return false;
+	if (
+		childRange.start < parentRange.start - INFERRED_CHILD_WINDOW_SLACK_MS ||
+		childRange.end > parentRange.end + INFERRED_CHILD_WINDOW_SLACK_MS
+	) {
+		return false;
+	}
+	const minimumParentDuration = Math.max(
+		childRange.duration * INFERRED_CHILD_PARENT_DURATION_MULTIPLIER,
+		childRange.duration + INFERRED_CHILD_MIN_PARENT_EXTRA_MS,
+	);
+	if (parentRange.duration < minimumParentDuration) return false;
+	return (
+		sharedPathCount(
+			pathSets.get(parent.id) ?? new Set<string>(),
+			pathSets.get(child.id) ?? new Set<string>(),
+		) > 0
+	);
+}
+
+function relationParentScore(parent: SessionSummary, child: SessionSummary): number {
+	const parentRangeBonus = Math.max(0, parent.duration - child.duration) / 1000;
+	return parentRangeBonus - platformPreference(parent) * 100;
+}
+
+function inferHistoricalRelations(
+	sessions: SessionSummary[],
+): Map<string, InferredRelation> {
+	const rawSessions = sessions.filter((session) => !hasExplicitLineage(session));
+	const ranges = new Map<string, SessionTimeRange>();
+	const pathSets = new Map<string, Set<string>>();
+	for (const session of rawSessions) {
+		const range = sessionTimeRange(session);
+		if (range) ranges.set(session.id, range);
+		pathSets.set(session.id, sessionPathSet(session));
+	}
+	const relations = new Map<string, InferredRelation>();
+
+	for (let leftIndex = 0; leftIndex < rawSessions.length; leftIndex++) {
+		for (let rightIndex = leftIndex + 1; rightIndex < rawSessions.length; rightIndex++) {
+			const left = rawSessions[leftIndex];
+			const right = rawSessions[rightIndex];
+			if (!canInferMirrorRelation(left, right, ranges, pathSets)) continue;
+			const primary = preferredInferredPrimary(left, right);
+			const related = primary.id === left.id ? right : left;
+			if (!relations.has(related.id)) {
+				relations.set(related.id, { parentId: primary.id, role: "mirror" });
+			}
+		}
+	}
+
+	for (const child of rawSessions) {
+		if (relations.has(child.id)) continue;
+		let bestParent: SessionSummary | null = null;
+		let bestScore = Number.NEGATIVE_INFINITY;
+		for (const parent of rawSessions) {
+			if (parent.id === child.id) continue;
+			if (!canInferChildRelation(parent, child, ranges, pathSets)) continue;
+			const score = relationParentScore(parent, child);
+			if (score > bestScore) {
+				bestScore = score;
+				bestParent = parent;
+			}
+		}
+		if (bestParent) {
+			relations.set(child.id, { parentId: bestParent.id, role: "child" });
+		}
+	}
+
+	return relations;
+}
+
+function inferredRootFor(
+	sessionId: string,
+	relations: Map<string, InferredRelation>,
+): string {
+	let root = sessionId;
+	const seen = new Set<string>();
+	while (!seen.has(root)) {
+		seen.add(root);
+		const relation = relations.get(root);
+		if (!relation) return root;
+		root = relation.parentId;
+	}
+	return sessionId;
+}
+
+function withInferredRole(
+	session: SessionSummary,
+	relation: InferredRelation | undefined,
+): SessionSummary {
+	if (!relation) return session;
+	return {
+		...session,
+		lineageRole: relation.role,
+		lineageConfidence: "inferred",
+	};
+}
+
 function mergeGroupSession(
 	group: SessionGroup,
 	sessionsById: Map<string, SessionSummary>,
@@ -421,15 +654,14 @@ function mergeGroupSession(
 	const languages = [...new Set(events.flatMap((event) => event.languages ?? []))];
 	const pathCount = new Set(events.flatMap((event) => event.candidate_paths ?? []))
 		.size;
-	const allTimestamps = [...events, ...findings, ...results, ...subprocesses].map(
-		timestampMs,
-	).filter((timestamp) => timestamp > 0);
-	const duration =
-		allTimestamps.length > 1
-			? Math.max(...allTimestamps) - Math.min(...allTimestamps)
-			: 0;
-	const latestTimestamp =
-		allTimestamps.length > 0 ? Math.max(...allTimestamps) : primary.latestTimestamp;
+	const range = timestampRangeForItems([
+		...events,
+		...findings,
+		...results,
+		...subprocesses,
+	]);
+	const duration = range?.duration ?? 0;
+	const latestTimestamp = range?.end ?? primary.latestTimestamp;
 	const decisions = [
 		...results.map(traceDecision),
 		...findings.map((finding) => finding.decision ?? "context"),
@@ -462,9 +694,12 @@ function mergeGroupSession(
 }
 
 function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
+	const inferredRelations = inferHistoricalRelations(sessions);
 	const buckets = new Map<string, SessionSummary[]>();
 	for (const session of sessions) {
-		const root = lineageRootFor(session);
+		const root = hasExplicitLineage(session)
+			? lineageRootFor(session)
+			: inferredRootFor(session.id, inferredRelations);
 		const bucket = buckets.get(root) ?? [];
 		bucket.push(session);
 		buckets.set(root, bucket);
@@ -482,13 +717,15 @@ function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
 				(session) =>
 					session.lineageRole === "child" ||
 					session.lineageRole === "child_mirror" ||
-					Boolean(session.parentSessionId),
+					Boolean(session.parentSessionId) ||
+					inferredRelations.get(session.id)?.role === "child",
 			);
 			const mirrorSessions = related.filter(
 				(session) =>
 					session.lineageRole === "mirror" ||
 					session.lineageRole === "child_mirror" ||
-					Boolean(session.originSessionId),
+					Boolean(session.originSessionId) ||
+					inferredRelations.get(session.id)?.role === "mirror",
 			);
 			const platforms = Array.from(
 				new Set(groupedSessions.flatMap((session) => session.platforms ?? [session.platform])),
@@ -503,8 +740,16 @@ function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
 			return {
 				id,
 				primarySession,
-				childSessions: uniqueSessions(childSessions),
-				mirrorSessions: uniqueSessions(mirrorSessions),
+				childSessions: uniqueSessions(
+					childSessions.map((session) =>
+						withInferredRole(session, inferredRelations.get(session.id)),
+					),
+				),
+				mirrorSessions: uniqueSessions(
+					mirrorSessions.map((session) =>
+						withInferredRole(session, inferredRelations.get(session.id)),
+					),
+				),
 				rawSessionIds: groupedSessions.map((session) => session.id),
 				lineageConfidence: confidence,
 				platforms,
@@ -580,15 +825,9 @@ export function buildTraceSessionIndexes(
 				const languages = [
 					...new Set(data.events.flatMap((event) => event.languages ?? [])),
 				];
-				const timestamps = data.events.map((event) =>
-					new Date(event.timestamp).getTime(),
-				);
-				const duration =
-					timestamps.length > 1
-						? Math.max(...timestamps) - Math.min(...timestamps)
-						: 0;
-				const latestTimestamp =
-					timestamps.length > 0 ? Math.max(...timestamps) : 0;
+				const range = timestampRangeForItems(data.events);
+				const duration = range?.duration ?? 0;
+				const latestTimestamp = range?.end ?? 0;
 
 				return {
 					id,

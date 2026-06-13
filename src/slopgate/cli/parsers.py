@@ -6,9 +6,9 @@ from typing import cast
 from slopgate._argparse_types import SubparserRegistry
 
 from slopgate.cli._migrate import cmd_migrate
+from slopgate.cli.platforms import add_platform_argument
 from slopgate.cli.commands import (
     INSTALL_TARGETS,
-    PLATFORM_HELP,
     VALID_PLATFORMS,
     cmd_check,
     cmd_config_init,
@@ -27,12 +27,6 @@ from slopgate.cli.commands import (
     cmd_update_suite,
     cmd_version,
 )
-
-
-def _add_platform_argument(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(
-        "--platform", choices=VALID_PLATFORMS, default="claude", help=PLATFORM_HELP
-    )
 
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
@@ -243,7 +237,7 @@ def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
     }
     registration = HookRuntimeParserRegistration(
         add_command_parser=_add_command_parser,
-        add_platform_argument=_add_platform_argument,
+        add_platform_argument=add_platform_argument,
         help_by_name=help_by_name,
         func_by_name=func_by_name,
     )

@@ -69,6 +69,24 @@ class RegexRuleConfig:
 
 
 @dataclass(slots=True)
+class HookSurfaceConfig:
+    enabled: bool | None = None
+    events: tuple[str, ...] = ()
+    action: str | None = None
+
+
+@dataclass(slots=True)
+class CliSurfaceConfig:
+    enabled: bool | None = None
+
+
+@dataclass(slots=True)
+class RuleSurfaceConfig:
+    hook: HookSurfaceConfig = field(default_factory=HookSurfaceConfig)
+    cli: CliSurfaceConfig = field(default_factory=CliSurfaceConfig)
+
+
+@dataclass(slots=True)
 class RuntimeConfig:
     root: Path
     repo_root: Path
@@ -114,6 +132,7 @@ class RuntimeConfig:
     disabled_rules: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)
     enabled_rules: dict[str, bool] = field(default_factory=dict)
+    rule_surfaces: dict[str, RuleSurfaceConfig] = field(default_factory=dict)
     regex_rules: list[RegexRuleConfig] = field(default_factory=list)
 
 

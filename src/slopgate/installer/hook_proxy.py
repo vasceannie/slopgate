@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from typing import Protocol
 
-from slopgate.constants import PLATFORM_CLAUDE
+from slopgate.constants import UNKNOWN_VALUE
 from slopgate.daemon.paths import DEFAULT_DAEMON_SOCKET_NAME
 
 HOOK_PROXY_MARKER = "SLOPGATE_DAEMON_PROXY=1"
@@ -16,7 +16,7 @@ NODE_DAEMON_CLIENT_SCRIPT = (
     "try{payload=text.trim()?JSON.parse(text):{};}catch(e){"
     "fs.writeSync(2,'Invalid JSON on stdin: '+e.message+'\\n');process.exit(1)}"
     "const req=JSON.stringify({payload,platform:process.env.SLOPGATE_HOOK_PLATFORM||"
-    f"{PLATFORM_CLAUDE!r},event:'handle'}})+'\\n';"
+    f"{UNKNOWN_VALUE!r},event:'handle'}})+'\\n';"
     "const sock=process.env.SLOPGATE_DAEMON_SOCKET;let data='';"
     "const client=net.createConnection(sock);client.setTimeout(1000);"
     "client.on('connect',()=>client.end(req));"

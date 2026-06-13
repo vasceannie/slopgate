@@ -8,6 +8,7 @@ import type {
 	Decision,
 	HookEvent,
 	HookResult,
+	LineageRole,
 } from "@/types/slopgate";
 import { FlagButton } from "./FlagButton";
 import { TimelineVerdictStrip } from "./TimelineVerdictStrip";
@@ -29,6 +30,20 @@ const DETAIL_TOGGLES: DetailToggle[] = ["findings", "errors"];
 type EventMatch = {
 	event: HookEvent;
 	index: number;
+};
+
+type LineageSource = {
+	session_id: string;
+	parent_session_id?: string | null;
+	root_session_id?: string | null;
+	origin_session_id?: string | null;
+	lineage_role?: LineageRole | null;
+};
+
+type SourceOrigin = {
+	roleLabel: string;
+	sessionLabel: string;
+	fullSessionId: string;
 };
 
 type DrilldownFields = Pick<
@@ -71,6 +86,11 @@ type FocusedEditPayload = {
 	rawText: string;
 };
 
+type EvidenceCode = {
+	language: "JSON" | "Python" | "YAML" | "Text";
+	text: string;
+};
+
 const FILE_CONTEXT_PATTERN =
 	/(^\.?\.?\/|\/|\\|\.(py|ts|tsx|js|jsx|json|md|toml|ya?ml|sh|css|html|tool)$|^(src|tests?|dashboard|bundle|docs|logs|scripts)$)/i;
 const TOOL_EXPRESSION_PATTERN =
@@ -82,6 +102,9 @@ const APPLY_PATCH_MARKER = "*** Begin Patch";
 const UNIFIED_DIFF_GIT_HEADER_PATTERN = /^diff --git\s+a\/.+\s+b\/.+/m;
 const UNIFIED_DIFF_FILE_HEADER_PATTERN =
 	/^---\s+(?:a\/.+|\/dev\/null)\s*\r?\n\+\+\+\s+(?:b\/.+|\/dev\/null)/m;
+const PYTHON_CONTEXT_PATTERN =
+	/(^|\n)\s*(class|def|from|import|return|with|if|elif|else|try|except)\b|(^|\n)\s*@[\w.]+/;
+const YAML_CONTEXT_PATTERN = /(^|\n)\s*[\w.-]+:\s*\S/;
 const CODE_TOKEN_PATTERN =
 	/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60(?:\\.|[^\x60\\])*\x60|\b(?:true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b|--?[\w-]+|https?:\/\/[^\s)]+|[#@][\w/-]+|{}[\](),.:;=])/g;
 
@@ -687,6 +710,33 @@ function CodeBlock({ text }: { text: string }) {
 	);
 }
 
+function evidenceCode(value: string): EvidenceCode {
+	const trimmed = value.trim();
+	const parsed = jsonValueFromText(trimmed);
+	if (parsed !== null) {
+		return { language: "JSON", text: formattedJsonValue(parsed) };
+	}
+	if (PYTHON_CONTEXT_PATTERN.test(trimmed)) {
+		return { language: "Python", text: trimmed };
+	}
+	if (YAML_CONTEXT_PATTERN.test(trimmed)) {
+		return { language: "YAML", text: trimmed };
+	}
+	return { language: "Text", text: trimmed };
+}
+
+function FindingEvidenceBlock({ text }: { text: string }) {
+	const evidence = evidenceCode(text);
+	return (
+		<div className="mt-2 space-y-1">
+			<div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+				Evidence ({evidence.language}):
+			</div>
+			<CodeBlock text={evidence.text} />
+		</div>
+	);
+}
+
 function PrettyJsonValue({
 	value,
 	compactPatchText = false,
@@ -1004,14 +1054,96 @@ function shortSessionId(sessionId: string): string {
 	return sessionId.length > 16 ? `${sessionId.slice(0, 16)}…` : sessionId;
 }
 
+function lineageRoleLabel(role?: LineageRole | null): string {
+	if (role === "child_mirror") return "child + mirror";
+	if (!role || role === "raw") return "linked";
+	return role;
+}
+
+function sourceLineageRoleFor(
+	session: SessionData,
+	source: LineageSource,
+): LineageRole | null {
+	if (
+		source.lineage_role &&
+		source.lineage_role !== "parent" &&
+		source.lineage_role !== "raw"
+	) {
+		return source.lineage_role;
+	}
+	if (source.session_id === session.id) return null;
+
+	const childMatch = (session.childSessions ?? []).find(
+		(child) => child.id === source.session_id,
+	);
+	const mirrorMatch = (session.mirrorSessions ?? []).find(
+		(mirror) => mirror.id === source.session_id,
+	);
+	if (childMatch && mirrorMatch) return "child_mirror";
+	if (childMatch) return childMatch.lineageRole ?? "child";
+	if (mirrorMatch) return mirrorMatch.lineageRole ?? "mirror";
+
+	const parentLinks = [source.parent_session_id, source.root_session_id];
+	if (
+		parentLinks.includes(session.id) ||
+		(session.rootSessionId && parentLinks.includes(session.rootSessionId))
+	) {
+		return source.origin_session_id ? "child_mirror" : "child";
+	}
+	if (
+		source.origin_session_id === session.id ||
+		(session.rootSessionId && source.origin_session_id === session.rootSessionId)
+	) {
+		return "mirror";
+	}
+	return null;
+}
+
+function timelineSourceFields(
+	session: SessionData,
+	source: LineageSource,
+): Pick<TimelineEntry, "sourceSessionId" | "sourceLineageRole"> {
+	const sourceLineageRole = sourceLineageRoleFor(session, source);
+	if (source.session_id === session.id && sourceLineageRole === null) return {};
+	return { sourceSessionId: source.session_id, sourceLineageRole };
+}
+
+function isLinkedSource(session: SessionData, source: LineageSource): boolean {
+	return (
+		source.session_id !== session.id || sourceLineageRoleFor(session, source) !== null
+	);
+}
+
+function pickTimelineSource(
+	session: SessionData,
+	primary: LineageSource,
+	fallback?: LineageSource,
+): LineageSource {
+	if (isLinkedSource(session, primary)) return primary;
+	if (fallback && isLinkedSource(session, fallback)) return fallback;
+	return primary;
+}
+
+function sourceOrigin(entry: TimelineEntry): SourceOrigin | null {
+	if (!entry.sourceSessionId || entry.sourceSessionId === entry.sessionId) {
+		return null;
+	}
+	return {
+		roleLabel: lineageRoleLabel(entry.sourceLineageRole),
+		sessionLabel: shortSessionId(entry.sourceSessionId),
+		fullSessionId: entry.sourceSessionId,
+	};
+}
+
 function formatAuditTime(timestamp: string | undefined): string {
 	if (!timestamp) return "unknown";
 	return new Date(timestamp).toLocaleTimeString();
 }
 
 function auditRows(entry: TimelineEntry): Array<[string, string]> {
-	return [
-		["Session", shortSessionId(entry.sessionId)],
+	const origin = sourceOrigin(entry);
+	const rows: Array<[string, string]> = [
+		["Grouped session", shortSessionId(entry.sessionId)],
 		["Platform", entry.platform ?? "unknown"],
 		["Event", entry.eventName ?? entry.label],
 		["Tool", entry.toolName || "session lifecycle"],
@@ -1021,6 +1153,15 @@ function auditRows(entry: TimelineEntry): Array<[string, string]> {
 		["Findings", String(entry.findingCount ?? 0)],
 		["Errors", String(entry.errorCount ?? 0)],
 	];
+	if (origin) {
+		rows.splice(
+			1,
+			0,
+			["Source session", origin.fullSessionId],
+			["Source role", origin.roleLabel],
+		);
+	}
+	return rows;
 }
 
 function toggleSetValue<T>(selected: Set<T>, value: T): Set<T> {
@@ -1190,6 +1331,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 			const outputDetails = toolInputDetails(r.output);
 			if (matched) {
 				claimedEventIndexes.add(matched.index);
+				const source = pickTimelineSource(session, matched.event, r);
 				const drilldown = mergeDrilldown(
 					mergeDrilldown(eventDrilldown(r), outputDetails),
 					eventDrilldown(matched.event),
@@ -1204,6 +1346,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 					label: matched.event.event_name,
 					detail: eventDetail(matched.event),
 					sessionId: session.id,
+					...timelineSourceFields(session, source),
 					platform: matched.event.platform,
 					eventName: matched.event.event_name,
 					toolName: matched.event.tool_name,
@@ -1242,6 +1385,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 				label: `Result: ${d}`,
 				detail: resultDetail(r),
 				sessionId: session.id,
+				...timelineSourceFields(session, r),
 				platform: r.platform,
 				eventName: r.event_name,
 				toolName: r.tool_name,
@@ -1269,6 +1413,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 				label: e.event_name,
 				detail: eventDetail(e),
 				sessionId: session.id,
+				...timelineSourceFields(session, e),
 				platform: e.platform,
 				eventName: e.event_name,
 				toolName: e.tool_name,
@@ -1298,6 +1443,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 				label: f.rule_id,
 				detail: `${f.severity} → ${dec}: ${msg.slice(0, 80) || "(no message)"}`,
 				sessionId: session.id,
+				...timelineSourceFields(session, f),
 				platform: f.platform,
 				eventName: f.event_name,
 				toolName: f.tool_name,
@@ -1319,6 +1465,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 				label: s.command.slice(0, 40),
 				detail: `exit ${s.returncode} (${s.duration_ms}ms)`,
 				sessionId: session.id,
+				...timelineSourceFields(session, s),
 				eventName: s.event_name,
 				eventTime: s.timestamp,
 				decision: s.returncode === 0 ? "allow" : "deny",
@@ -1622,9 +1769,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 										{findingSummary(finding)}
 									</div>
 									{finding.additionalContext && (
-										<div className="mt-1 break-all text-foreground font-mono bg-background/25 p-1 rounded">
-											{finding.additionalContext}
-										</div>
+										<FindingEvidenceBlock text={finding.additionalContext} />
 									)}
 								</div>
 							))}

@@ -7,6 +7,16 @@ from slopgate.models import RegexRuleConfig
 from slopgate.util.payloads import any_path_matches
 
 
+def compile_regex_patterns(config: RegexRuleConfig) -> list[re.Pattern[str]]:
+    """Compile regex rule patterns using the runtime rule flags."""
+    flags = 0
+    if config.multiline:
+        flags |= re.MULTILINE | re.DOTALL
+    if not config.case_sensitive:
+        flags |= re.IGNORECASE
+    return [re.compile(pattern, flags) for pattern in config.patterns]
+
+
 @dataclass(slots=True)
 class RegexHit:
     path: str | None

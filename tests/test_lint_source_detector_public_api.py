@@ -11,11 +11,21 @@ from slopgate.lint._detectors.exception_safety import (
     detect_silent_except,
     detect_silent_fallback,
 )
+from slopgate.lint._detectors.logging_conventions import detect_boundary_logging
+from slopgate.lint._detectors.source_interop import (
+    detect_dead_code,
+    detect_feature_envy,
+    detect_flat_sibling_files,
+    detect_import_aliases,
+    detect_import_fanout,
+    detect_private_import_chains,
+)
 from slopgate.lint._detectors.type_safety import (
     detect_any_usage,
     detect_type_suppressions,
 )
 from slopgate.lint._helpers import ParsedFile, parse_files
+from slopgate.lint._config import load_config, reset_config
 
 IDENTIFIERS = strategies.from_regex(r"[a-z][a-z_]{0,12}", fullmatch=True)
 
@@ -144,6 +154,136 @@ def transform(value: dict[str, Any]) -> Any:
         ("banned-any", "transform"),
         ("type-suppression", "line-4"),
     ]
+
+
+def test_feature_envy_detector_reports_external_object_dominance(
+    tmp_path: Path,
+) -> None:
+    load_config(tmp_path)
+    parsed = parsed_file(
+        tmp_path,
+        """
+def render(order):
+    customer = account.customer.name
+    total = account.invoice.total
+    status = account.state.value
+    return f"{customer}:{total}:{status}"
+""".lstrip(),
+    )
+
+    violations = detect_feature_envy(parsed)
+    reset_config()
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("feature-envy", "render")
+    ], "Expected feature-envy detector to match PY-CODE-012 repository scans"
+
+
+def test_dead_code_detector_reports_unreachable_statement(tmp_path: Path) -> None:
+    parsed = parsed_file(
+        tmp_path,
+        """
+def choose() -> int:
+    return 1
+    value = 2
+    return value
+""".lstrip(),
+    )
+
+    violations = detect_dead_code(parsed)
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("dead-code", "choose")
+    ], "Expected dead-code detector to match PY-CODE-016 repository scans"
+
+
+def test_flat_sibling_detector_reports_prefix_file_sprawl(tmp_path: Path) -> None:
+    load_config(tmp_path)
+    src = tmp_path / "src" / "pkg"
+    parsed = [
+        *parsed_file(tmp_path, "VALUE = 1\n", "src/pkg/agent_core.py"),
+        *parsed_file(tmp_path, "VALUE = 1\n", "src/pkg/agent_state.py"),
+        *parsed_file(tmp_path, "VALUE = 1\n", "src/pkg/agent_tools.py"),
+    ]
+
+    violations = detect_flat_sibling_files(parsed)
+    reset_config()
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("flat-sibling-files", "agent")
+    ], f"Expected flat sibling detector to scan {src}"
+
+
+def test_boundary_logging_detector_reports_unlogged_event_boundary(
+    tmp_path: Path,
+) -> None:
+    parsed = parsed_file(
+        tmp_path,
+        """
+def publish_user_created(event):
+    bus.publish(event)
+""".lstrip(),
+        "src/events/publisher.py",
+    )
+
+    violations = detect_boundary_logging(parsed)
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("boundary-logging", "publish_user_created")
+    ], "Expected boundary logging detector to match PY-LOG-002 repository scans"
+
+
+def test_boundary_logging_detector_ignores_logged_boundary(tmp_path: Path) -> None:
+    parsed = parsed_file(
+        tmp_path,
+        """
+def publish_user_created(event):
+    logger.info("publishing user event", extra={"event": event.name})
+    bus.publish(event)
+""".lstrip(),
+        "src/events/publisher.py",
+    )
+
+    assert detect_boundary_logging(parsed) == [], (
+        "Logged event boundaries should not produce PY-LOG-002 CLI findings"
+    )
+
+
+def test_import_fanout_detector_reports_large_from_import(tmp_path: Path) -> None:
+    parsed = parsed_file(
+        tmp_path,
+        """
+from package.module import one, two, three, four, five, six, seven, eight, nine
+""".lstrip(),
+    )
+
+    violations = detect_import_fanout(parsed)
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("import-fanout", "package.module")
+    ], "Expected import fanout detector to match PY-IMPORT-001 repository scans"
+
+
+def test_import_alias_detector_reports_noncanonical_alias(tmp_path: Path) -> None:
+    parsed = parsed_file(tmp_path, "import requests as rq\n")
+
+    violations = detect_import_aliases(parsed)
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("import-alias", "rq")
+    ], "Expected import alias detector to match PY-IMPORT-002 repository scans"
+
+
+def test_private_import_chain_detector_reports_stacked_private_import(
+    tmp_path: Path,
+) -> None:
+    parsed = parsed_file(tmp_path, "from pkg._internal._detail import value\n")
+
+    violations = detect_private_import_chains(parsed)
+
+    assert [(item.rule, item.identifier) for item in violations] == [
+        ("private-import-chain", "pkg._internal._detail")
+    ], "Expected private import detector to match PY-IMPORT-003 repository scans"
 
 
 @given(IDENTIFIERS)

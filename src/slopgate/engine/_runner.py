@@ -5,7 +5,14 @@ from pathlib import Path
 from time import monotonic
 from typing import Literal
 
-from slopgate.constants import SESSION_ID, PLATFORM_OPENCODE, PLATFORM_CODEX
+from slopgate.constants import (
+    CONTEXT,
+    WARN,
+    SESSION_ID,
+    PLATFORM_OPENCODE,
+    PLATFORM_CODEX,
+    UNKNOWN_VALUE,
+)
 from slopgate.config import (
     is_path_skipped,
     is_repo_disabled,
@@ -36,6 +43,34 @@ def _apply_severity_overrides(
             finding.severity = Severity.from_value(override)
 
 
+def _hook_surface_allows_event(rule: Rule, ctx: HookContext) -> bool:
+    surface = ctx.config.rule_surfaces.get(rule.rule_id)
+    if surface is None or not surface.hook.events:
+        return True
+    return ctx.event_name in surface.hook.events
+
+
+def _hook_surface_enabled(rule: Rule, ctx: HookContext) -> bool:
+    surface = ctx.config.rule_surfaces.get(rule.rule_id)
+    if surface is not None and surface.hook.enabled is not None:
+        return surface.hook.enabled
+    value = ctx.config.enabled_rules.get(rule.rule_id)
+    return rule.enabled if value is None else value
+
+
+def _apply_hook_surface_action(ctx: HookContext, findings: list[RuleFinding]) -> None:
+    for finding in findings:
+        surface = ctx.config.rule_surfaces.get(finding.rule_id)
+        action = surface.hook.action if surface is not None else None
+        if action is None:
+            continue
+        if action in {CONTEXT, WARN}:
+            finding.decision = None
+        else:
+            finding.decision = action
+        finding.metadata["surface_action"] = action
+
+
 def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
     return {
         "platform": platform,
@@ -61,6 +96,11 @@ def platform_capability(platform: str) -> tuple[str, str | None]:
         return (
             "partial",
             "cursor postToolUse and afterFileEdit cannot hard-block tool results; they inject additional_context only. workspaceOpen and several observational hooks are not installed by default",
+        )
+    if normalized == UNKNOWN_VALUE:
+        return (
+            UNKNOWN_VALUE,
+            "hook platform was omitted or could not be proven; Slopgate used compatibility parsing without assigning Claude provenance",
         )
     return ("full", None)
 
@@ -128,6 +168,7 @@ def _run_rule(
         elapsed_ms = round((monotonic() - start) * 1000.0, 3)
         if not result:
             return
+        _apply_hook_surface_action(ctx, result)
         _apply_severity_overrides(result, ctx.config.severity_overrides)
         acc.findings.extend(result)
         _trace_findings(ctx, platform, result, elapsed_ms)
@@ -215,7 +256,12 @@ def run_rules(
         rules.extend(build_repo_strict_rules(ctx))
 
     for rule in rules:
-        if rule.supports(ctx.event_name) and rule.rule_id not in disabled:
+        if (
+            rule.rule_id not in disabled
+            and _hook_surface_enabled(rule, ctx)
+            and rule.supports(ctx.event_name)
+            and _hook_surface_allows_event(rule, ctx)
+        ):
             _run_rule(rule, ctx, platform, acc)
     _safe_enrich(ctx, platform, acc)
     return acc

@@ -21,10 +21,200 @@ import { SEVERITY_COLORS } from "@/lib/chartTheme";
 import { getRuleDescription } from "@/lib/ruleDescriptions";
 import { cn } from "@/lib/utils";
 import type { RuleMetadata, Severity, SlopgateConfig } from "@/types/slopgate";
+import type { RuleHookSurface, RuleSurfaceAction } from "@/types/slopgate";
 
 interface Props {
 	/** Fire counts from trace data (rule_id → count) */
 	fireCounts: Map<string, number>;
+}
+
+const TABLE_COLSPAN = 10;
+const QUALITY_LINT_RULE_ID = "QUALITY-LINT-001";
+const HOOK_ACTIONS = [
+	"deny",
+	"ask",
+	"block",
+	"allow",
+	"context",
+	"warn",
+] as const satisfies readonly RuleSurfaceAction[];
+const HOOK_EVENT_OPTIONS = [
+	"PreToolUse",
+	"PermissionRequest",
+	"PostToolUse",
+	"UserPromptSubmit",
+	"Stop",
+] as const;
+
+const CLI_RULE_IDS = [
+	"assertion-free-test",
+	"assertion-roulette",
+	"banned-any",
+	"boundary-logging",
+	"broad-except-swallow",
+	"conditional-assertion",
+	"deep-nesting",
+	"deprecated-pattern",
+	"dead-code",
+	"direct-get-logger",
+	"duplicate-call-sequence",
+	"eager-test",
+	"feature-envy",
+	"fixture-outside-conftest",
+	"flat-sibling-files",
+	"god-class",
+	"hand-built-test-payload",
+	"high-complexity",
+	"hypothesis-candidate",
+	"import-alias",
+	"import-fanout",
+	"langgraph-deprecated-api",
+	"langgraph-state-mutation",
+	"langgraph-state-reducer",
+	"long-line",
+	"long-method",
+	"long-test",
+	"missing-integration-test",
+	"mock-theater",
+	"mocked-integration-test",
+	"obsolete-or-deprecated-test",
+	"oversized-module",
+	"oversized-module-soft",
+	"python-parse-error",
+	"private-import-chain",
+	"pytest-asyncio-pattern",
+	"repeated-code-block",
+	"repeated-magic-number",
+	"repeated-string-literal",
+	"schema-bypass-test-data",
+	"semantic-clone",
+	"silent-datetime-fallback",
+	"silent-except",
+	"too-many-params",
+	"type-suppression",
+	"unnecessary-wrapper",
+	"untested-production-code",
+	"weak-test-assertion",
+	"wrong-logger-name",
+] as const;
+
+const CLI_RULE_ID_SET = new Set<string>(CLI_RULE_IDS);
+const CLI_EXECUTABLE_REGEX_TARGETS = new Set<string>(["content", "path"]);
+const CLI_DEFAULT_OFF_RULE_IDS = new Set<string>([
+	"dead-code",
+	"boundary-logging",
+	"feature-envy",
+	"flat-sibling-files",
+	"import-alias",
+	"import-fanout",
+	"langgraph-deprecated-api",
+	"langgraph-state-mutation",
+	"langgraph-state-reducer",
+	"private-import-chain",
+	"pytest-asyncio-pattern",
+]);
+
+const CLI_CATEGORY = { label: "CLI · Batch lint", emoji: "🧪" };
+const COMMAND_ONLY_RULE_PREFIXES = [
+	"GIT-",
+	"REMIND-",
+	"PY-SHELL-",
+	"SHELL-",
+] as const;
+const CONFIG_SAFETY_RULE_PREFIXES = [
+	"BASELINE-",
+	"CONFIG-",
+	"FE-LINTER-",
+	"PY-LINTER-",
+	"QA-PATH-",
+	"WARN-BASELINE-",
+] as const;
+const SESSION_LIFECYCLE_RULE_PREFIXES = [
+	"BUILTIN-ENFORCE-FULL-READ",
+	"BUILTIN-INJECT-PROMPT",
+	"REPO-ENROLL-",
+	"SESSION-",
+	"STOP-",
+	"WARN-LARGE-",
+] as const;
+
+function hasAnyPrefix(rule_id: string, prefixes: readonly string[]): boolean {
+	return prefixes.some((prefix) => rule_id.startsWith(prefix));
+}
+
+function cliUnsupportedReason(
+	rule_id: string,
+	regexRule?: { target: string },
+): string {
+  if (regexRule?.target === "command") return "command only";
+	if (rule_id === "BUILTIN-PROTECTED-PATHS") return "protected mutation";
+	if (hasAnyPrefix(rule_id, CONFIG_SAFETY_RULE_PREFIXES)) return "config safety";
+	if (hasAnyPrefix(rule_id, COMMAND_ONLY_RULE_PREFIXES)) return "command only";
+	if (hasAnyPrefix(rule_id, SESSION_LIFECYCLE_RULE_PREFIXES)) {
+		return "session lifecycle";
+	}
+	return "runtime payload";
+}
+
+function formatCliTitle(rule_id: string): string {
+	return rule_id
+		.split("-")
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
+}
+
+function directHookRuleCliCounterparts(
+	config: SlopgateConfig,
+): Record<string, string[]> {
+	return Object.fromEntries(
+		Object.entries(config.rule_counterparts).filter(
+			([rule_id]) => rule_id !== QUALITY_LINT_RULE_ID,
+		),
+	);
+}
+
+function hookCounterpartsForCli(
+	rule_id: string,
+	counterparts: Record<string, string[]>,
+): string[] {
+	return Object.entries(counterparts)
+		.filter(([_hookRuleId, cliRuleIds]) => cliRuleIds.includes(rule_id))
+		.map(([hookRuleId]) => hookRuleId);
+}
+
+function surfaceHookEnabled(
+	config: SlopgateConfig,
+	rule_id: string,
+): boolean {
+	const surfaceEnabled = config.rule_surfaces[rule_id]?.hook?.enabled;
+	if (surfaceEnabled !== undefined) return surfaceEnabled;
+	const enabledVal = config.enabled_rules[rule_id];
+	return enabledVal === undefined ? true : Boolean(enabledVal);
+}
+
+function surfaceCliEnabled(
+	config: SlopgateConfig,
+	rule_id: string,
+	cliCounterparts: string[],
+	defaultEnabled: boolean,
+): { enabled: boolean; partiallyEnabled: boolean } {
+	const surfaceEnabled = config.rule_surfaces[rule_id]?.cli?.enabled;
+	if (surfaceEnabled !== undefined) {
+		return { enabled: surfaceEnabled, partiallyEnabled: false };
+	}
+	const cliStates = cliCounterparts.map(
+		(cliRuleId) => config.enabled_cli_rules[cliRuleId] ?? defaultEnabled,
+	);
+	const enabled =
+		cliStates.length > 0 ? cliStates.every(Boolean) : defaultEnabled;
+	return {
+		enabled,
+		partiallyEnabled: cliStates.some(Boolean) && !enabled,
+	};
+}
+
+function hookEventsForRule(config: SlopgateConfig, rule_id: string): string[] {
+	return config.rule_surfaces[rule_id]?.hook?.events ?? [];
 }
 
 // ── Category grouping ────────────────────────────────────────────────────────
@@ -55,11 +245,18 @@ const CATEGORY_MAP: Array<{
 ];
 
 function getCategory(rule_id: string): { label: string; emoji: string } {
+	if (CLI_RULE_ID_SET.has(rule_id)) return CLI_CATEGORY;
 	for (const { prefix, label, emoji } of CATEGORY_MAP) {
 		const prefixes = Array.isArray(prefix) ? prefix : [prefix];
 		if (prefixes.some((p) => rule_id.startsWith(p))) return { label, emoji };
 	}
 	return { label: "Other", emoji: "📋" };
+}
+
+function categorySortIndex(label: string): number {
+	if (label === CLI_CATEGORY.label) return CATEGORY_MAP.length;
+	const index = CATEGORY_MAP.findIndex((c) => c.label === label);
+	return index === -1 ? CATEGORY_MAP.length + 1 : index;
 }
 
 // ── Build rule metadata list from config ────────────────────────────────────
@@ -68,42 +265,131 @@ function buildRuleMetadata(
 	fireCounts: Map<string, number>,
 ): RuleMetadata[] {
 	const regexMap = new Map(config.regex_rules.map((r) => [r.rule_id, r]));
-	const allRuleIds = new Set<string>([
+	const directCounterparts = directHookRuleCliCounterparts(config);
+	const directCliCounterpartIds = new Set<string>(
+		Object.values(directCounterparts).flat(),
+	);
+	const hookRuleIds = new Set<string>([
 		...Object.keys(config.enabled_rules),
+		...Object.keys(config.rule_surfaces).filter(
+			(ruleId) => !CLI_RULE_ID_SET.has(ruleId),
+		),
 		...config.regex_rules.map((r) => r.rule_id),
 	]);
+	const cliRuleIds = new Set<string>([
+		...CLI_RULE_IDS,
+		...Object.keys(config.enabled_cli_rules),
+		...Object.keys(config.rule_surfaces).filter((ruleId) =>
+			CLI_RULE_ID_SET.has(ruleId),
+		),
+	]);
 
-	return [...allRuleIds]
+	const hookRules = [...hookRuleIds].map((rule_id) => {
+		const regexRule = regexMap.get(rule_id);
+		const hookEnabled = surfaceHookEnabled(config, rule_id);
+		const cliCounterparts = directCounterparts[rule_id] ?? [];
+		const regexCliExecutable =
+			regexRule !== undefined &&
+			CLI_EXECUTABLE_REGEX_TARGETS.has(regexRule.target);
+		const cliRuleIds =
+			cliCounterparts.length > 0
+				? cliCounterparts
+				: regexCliExecutable
+					? [rule_id]
+					: [];
+		const { enabled: cliEnabled, partiallyEnabled: cliPartiallyEnabled } =
+			surfaceCliEnabled(
+				config,
+				rule_id,
+				cliRuleIds,
+				cliCounterparts.length > 0 &&
+					cliRuleIds.every((cliRuleId) => !CLI_DEFAULT_OFF_RULE_IDS.has(cliRuleId)),
+			);
+		const hookAction =
+			config.rule_surfaces[rule_id]?.hook?.action ?? regexRule?.action ?? "deny";
+		const hookEvents = hookEventsForRule(config, rule_id);
+
+		return {
+			rule_id,
+			title: regexRule?.title ?? rule_id,
+			description:
+				getRuleDescription(rule_id) ?? regexRule?.message?.split("\n")[0] ?? "",
+			severity: (regexRule?.severity ?? "MEDIUM") as Severity,
+			category: getCategory(rule_id).label,
+			source: regexRule ? "regex" : "builtin",
+			enabled: hookEnabled || cliEnabled || cliPartiallyEnabled,
+			hookSupported: true,
+			cliSupported: cliRuleIds.length > 0,
+			hookEnabled,
+			cliEnabled,
+			cliPartiallyEnabled,
+			cliUnsupportedReason:
+				cliRuleIds.length > 0
+					? undefined
+					: cliUnsupportedReason(rule_id, regexRule),
+			fireCount:
+				(fireCounts.get(rule_id) ?? 0) +
+				cliCounterparts.reduce(
+					(total, cliRuleId) => total + (fireCounts.get(cliRuleId) ?? 0),
+					0,
+				),
+			action: hookAction as RuleMetadata["action"],
+			hookAction: hookAction as RuleSurfaceAction,
+			hookEvents,
+			path_globs: regexRule?.path_globs ?? [],
+			exclude_path_globs: regexRule?.exclude_path_globs ?? [],
+			events: regexRule?.events ?? [],
+			cliRuleIds,
+			cliCounterparts,
+			hookCounterparts: [],
+		} satisfies RuleMetadata;
+	});
+
+	const cliRules = [...cliRuleIds]
+		.filter((rule_id) => !directCliCounterpartIds.has(rule_id))
 		.map((rule_id) => {
-			const regexRule = regexMap.get(rule_id);
-			const enabledVal = config.enabled_rules[rule_id];
-			const enabled = enabledVal === undefined ? true : Boolean(enabledVal);
+			const surfaceEnabled = config.rule_surfaces[rule_id]?.cli?.enabled;
+			const enabledVal = config.enabled_cli_rules[rule_id];
+			const cliEnabled =
+				surfaceEnabled ??
+				(enabledVal === undefined
+					? !CLI_DEFAULT_OFF_RULE_IDS.has(rule_id)
+					: Boolean(enabledVal));
 
 			return {
 				rule_id,
-				title: regexRule?.title ?? rule_id,
-				description:
-					getRuleDescription(rule_id) ??
-					regexRule?.message?.split("\n")[0] ??
-					"",
-				severity: (regexRule?.severity ?? "MEDIUM") as Severity,
-				category: getCategory(rule_id).label,
-				source: regexRule ? "regex" : "builtin",
-				enabled,
+				title: formatCliTitle(rule_id),
+				description: "CLI lint collector used by slopgate lint.",
+				severity: "MEDIUM" as Severity,
+				category: CLI_CATEGORY.label,
+				source: "cli",
+				enabled: cliEnabled,
+				hookSupported: false,
+				cliSupported: true,
+				hookEnabled: true,
+				cliEnabled,
+				cliPartiallyEnabled: false,
+				hookUnsupportedReason: "source lint available",
 				fireCount: fireCounts.get(rule_id) ?? 0,
-				action: (regexRule?.action ?? "deny") as RuleMetadata["action"],
-				path_globs: regexRule?.path_globs ?? [],
-				exclude_path_globs: regexRule?.exclude_path_globs ?? [],
-				events: regexRule?.events ?? [],
+				action: "lint",
+				hookAction: "deny",
+				hookEvents: [],
+				path_globs: [],
+				exclude_path_globs: [],
+				events: ["slopgate lint"],
+				cliRuleIds: [rule_id],
+				cliCounterparts: [],
+				hookCounterparts: hookCounterpartsForCli(rule_id, directCounterparts),
 			} satisfies RuleMetadata;
-		})
-		.sort((a, b) => {
-			// Sort by category order, then alphabetically
-			const catA = CATEGORY_MAP.findIndex((c) => a.category === c.label);
-			const catB = CATEGORY_MAP.findIndex((c) => b.category === c.label);
-			if (catA !== catB) return catA - catB;
-			return a.rule_id.localeCompare(b.rule_id);
 		});
+
+	return [...hookRules, ...cliRules].sort((a, b) => {
+		// Sort by category order, then alphabetically
+		const catA = categorySortIndex(a.category);
+		const catB = categorySortIndex(b.category);
+		if (catA !== catB) return catA - catB;
+		return a.rule_id.localeCompare(b.rule_id);
+	});
 }
 
 // ── Global skip_paths editor ─────────────────────────────────────────────────
@@ -186,21 +472,36 @@ const SummaryCards = memo(function SummaryCards({
 	rules: RuleMetadata[];
 }) {
 	const total = rules.length;
-	const enabled = rules.filter((r) => r.enabled).length;
-	const disabled = rules.filter((r) => !r.enabled).length;
+	const hookEnabled = rules.filter(
+		(r) => r.hookSupported && r.hookEnabled,
+	).length;
+	const hookDisabled = rules.filter(
+		(r) => r.hookSupported && !r.hookEnabled,
+	).length;
+	const cliEnabled = rules.filter((r) => r.cliSupported && r.cliEnabled).length;
+	const cliDisabled = rules.filter(
+		(r) => r.cliSupported && !r.cliEnabled,
+	).length;
 	const active = rules.filter((r) => r.enabled && r.fireCount > 0).length;
-	const dormant = rules.filter((r) => r.enabled && r.fireCount === 0).length;
 
 	return (
 		<div className="grid grid-cols-5 gap-2">
 			{[
 				{ label: "Total Rules", value: total, color: "text-foreground" },
-				{ label: "Enabled", value: enabled, color: "text-signal-allow" },
-				{ label: "Disabled", value: disabled, color: "text-muted-foreground" },
+				{
+					label: "Hook On / Off",
+					value: `${hookEnabled}/${hookDisabled}`,
+					color: "text-signal-allow",
+				},
+				{
+					label: "CLI On / Off",
+					value: `${cliEnabled}/${cliDisabled}`,
+					color: "text-primary",
+				},
 				{ label: "Active (fired)", value: active, color: "text-signal-ask" },
 				{
-					label: "Dormant (0 fires)",
-					value: dormant,
+					label: "Disabled Total",
+					value: hookDisabled + cliDisabled,
 					color: "text-muted-foreground/60",
 				},
 			].map(({ label, value, color }) => (
@@ -217,6 +518,39 @@ const SummaryCards = memo(function SummaryCards({
 				</div>
 			))}
 		</div>
+	);
+});
+
+const SurfaceSwitch = memo(function SurfaceSwitch({
+	label,
+	supported,
+	checked,
+	onToggle,
+	unsupportedLabel,
+}: {
+	label: string;
+	supported: boolean;
+	checked: boolean;
+	onToggle: () => void;
+	unsupportedLabel: string;
+}) {
+	if (!supported) {
+		return (
+			<span
+				className="inline-flex items-center rounded border border-border/40 px-1.5 py-0.5 text-[9px] text-muted-foreground/50"
+				title={`${label} is not available: ${unsupportedLabel}`}
+			>
+				{unsupportedLabel}
+			</span>
+		);
+	}
+	return (
+		<Switch
+			aria-label={label}
+			checked={checked}
+			onCheckedChange={onToggle}
+			className="scale-75 origin-left"
+		/>
 	);
 });
 
@@ -307,22 +641,39 @@ const ExclusionEditor = memo(function ExclusionEditor({
 // ── Individual rule row ───────────────────────────────────────────────────────
 const RuleRow = memo(function RuleRow({
 	rule,
-	onToggle,
+	onSetHookSurface,
+	onSetRuleCliSurface,
 	onExclusionsChange,
 }: {
 	rule: RuleMetadata;
-	onToggle: (id: string) => void;
+	onSetHookSurface: (id: string, hook: RuleHookSurface) => void;
+	onSetRuleCliSurface: (
+		id: string,
+		cliRuleIds: string[],
+		enabled: boolean,
+	) => void;
 	onExclusionsChange: (id: string, globs: string[]) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const sevColor = SEVERITY_COLORS[rule.severity] ?? "hsl(210,20%,55%)";
+	const toggleEvent = useCallback(
+		(eventName: string) => {
+			const events = new Set(rule.hookEvents);
+			if (events.has(eventName)) events.delete(eventName);
+			else events.add(eventName);
+			onSetHookSurface(rule.rule_id, { events: [...events].sort() });
+		},
+		[onSetHookSurface, rule.hookEvents, rule.rule_id],
+	);
 
 	const actionBadge: Record<string, string> = {
 		deny: "bg-signal-block/20 text-signal-block",
 		block: "bg-signal-block/20 text-signal-block",
 		warn: "bg-signal-warn/20 text-signal-warn",
 		ask: "bg-signal-ask/20 text-signal-ask",
+		allow: "bg-signal-allow/20 text-signal-allow",
 		context: "bg-muted text-muted-foreground",
+		lint: "bg-primary/10 text-primary",
 	};
 
 	return (
@@ -344,12 +695,32 @@ const RuleRow = memo(function RuleRow({
 						)}
 					</button>
 				</td>
-				{/* toggle */}
+				{/* hook toggle */}
 				<td className="px-2 py-2">
-					<Switch
-						checked={rule.enabled}
-						onCheckedChange={() => onToggle(rule.rule_id)}
-						className="scale-75 origin-left"
+					<SurfaceSwitch
+						label={`${rule.rule_id} hook enablement`}
+						supported={rule.hookSupported}
+						checked={rule.hookEnabled}
+						unsupportedLabel={rule.hookUnsupportedReason ?? "cli only"}
+						onToggle={() =>
+							onSetHookSurface(rule.rule_id, { enabled: !rule.hookEnabled })
+						}
+					/>
+				</td>
+				{/* CLI toggle */}
+				<td className="px-2 py-2">
+					<SurfaceSwitch
+						label={`${rule.rule_id} CLI enablement`}
+						supported={rule.cliSupported}
+						checked={rule.cliEnabled}
+						unsupportedLabel={rule.cliUnsupportedReason ?? "hook only"}
+						onToggle={() =>
+							onSetRuleCliSurface(
+								rule.rule_id,
+								rule.cliRuleIds,
+								!rule.cliEnabled,
+							)
+						}
 					/>
 				</td>
 				{/* rule id */}
@@ -454,11 +825,112 @@ const RuleRow = memo(function RuleRow({
 			</tr>
 			{expanded && (
 				<tr className="border-b border-border/20 bg-muted/5">
-					<td colSpan={9} className="px-8 py-3 space-y-3">
+					<td colSpan={TABLE_COLSPAN} className="px-8 py-3 space-y-3">
 						{/* description */}
 						{rule.description && (
 							<div className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
 								{rule.description}
+							</div>
+						)}
+						<div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+							{rule.hookSupported && (
+								<span
+									className={cn(
+										"px-1.5 py-0.5 rounded border",
+										rule.hookEnabled
+											? "border-signal-allow/25 bg-signal-allow/10 text-signal-allow"
+											: "border-border bg-muted/40",
+									)}
+								>
+									Hook runtime {rule.hookEnabled ? "enabled" : "disabled"}
+								</span>
+							)}
+							{rule.cliSupported && (
+								<span
+									className={cn(
+										"px-1.5 py-0.5 rounded border",
+										rule.cliEnabled || rule.cliPartiallyEnabled
+											? "border-primary/25 bg-primary/10 text-primary"
+											: "border-border bg-muted/40",
+									)}
+								>
+									CLI lint{" "}
+									{rule.cliPartiallyEnabled
+										? "partially enabled"
+										: rule.cliEnabled
+											? "enabled"
+											: "disabled"}
+								</span>
+							)}
+							{rule.cliCounterparts.length > 0 && (
+								<span className="px-1.5 py-0.5 rounded border border-border bg-muted/30">
+									CLI checks: {rule.cliCounterparts.join(", ")}
+								</span>
+							)}
+							{rule.hookCounterparts.length > 0 && (
+								<span className="px-1.5 py-0.5 rounded border border-border bg-muted/30">
+									Hook counterparts: {rule.hookCounterparts.join(", ")}
+								</span>
+							)}
+						</div>
+						{rule.hookSupported && (
+							<div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+								<div className="space-y-1">
+									<div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+										Hook action
+									</div>
+									<select
+										value={rule.hookAction}
+										onChange={(event) =>
+											onSetHookSurface(rule.rule_id, {
+												action: event.target.value as RuleSurfaceAction,
+											})
+										}
+										className="h-7 w-full rounded border border-border bg-background px-2 text-[11px] font-mono text-foreground"
+									>
+										{HOOK_ACTIONS.map((action) => (
+											<option key={action} value={action}>
+												{action}
+											</option>
+										))}
+									</select>
+								</div>
+								<div className="space-y-1">
+									<div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+										Hook events
+									</div>
+									<div className="flex flex-wrap gap-1.5">
+										{HOOK_EVENT_OPTIONS.map((eventName) => {
+											const checked = rule.hookEvents.includes(eventName);
+											return (
+												<button
+													key={eventName}
+													type="button"
+													onClick={() => toggleEvent(eventName)}
+													className={cn(
+														"rounded border px-2 py-1 text-[10px] font-mono transition-colors",
+														checked
+															? "border-primary/35 bg-primary/15 text-primary"
+															: "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+													)}
+												>
+													{eventName}
+												</button>
+											);
+										})}
+										{rule.hookEvents.length > 0 && (
+											<button
+												type="button"
+												onClick={() =>
+													onSetHookSurface(rule.rule_id, { events: [] })
+												}
+												className="rounded border border-border bg-muted/20 px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/40"
+											>
+												Clear
+											</button>
+										)}
+									</div>
+								</div>
 							</div>
 						)}
 						{/* exclusions FIRST — most likely reason to expand */}
@@ -497,13 +969,19 @@ const CategoryGroup = memo(function CategoryGroup({
 	label,
 	emoji,
 	rules,
-	onToggle,
+	onSetHookSurface,
+	onSetRuleCliSurface,
 	onExclusionsChange,
 }: {
 	label: string;
 	emoji: string;
 	rules: RuleMetadata[];
-	onToggle: (id: string) => void;
+	onSetHookSurface: (id: string, hook: RuleHookSurface) => void;
+	onSetRuleCliSurface: (
+		id: string,
+		cliRuleIds: string[],
+		enabled: boolean,
+	) => void;
 	onExclusionsChange: (id: string, globs: string[]) => void;
 }) {
 	const active = rules.filter((r) => r.enabled && r.fireCount > 0).length;
@@ -518,7 +996,7 @@ const CategoryGroup = memo(function CategoryGroup({
 				className="border-b border-border/50 bg-card/50 cursor-pointer select-none hover:bg-muted/20"
 				onClick={() => setOpen((o) => !o)}
 			>
-				<td colSpan={9} className="px-3 py-2">
+				<td colSpan={TABLE_COLSPAN} className="px-3 py-2">
 					<div className="flex items-center gap-2">
 						{open ? (
 							<ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -549,7 +1027,8 @@ const CategoryGroup = memo(function CategoryGroup({
 					<RuleRow
 						key={rule.rule_id}
 						rule={rule}
-						onToggle={onToggle}
+						onSetHookSurface={onSetHookSurface}
+						onSetRuleCliSurface={onSetRuleCliSurface}
 						onExclusionsChange={onExclusionsChange}
 					/>
 				))}
@@ -646,7 +1125,13 @@ const SaveToolbar = memo(function SaveToolbar() {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function RuleManager({ fireCounts }: Props) {
-	const { config, toggleRule, setExclusions, loading } = useRulesConfig();
+	const {
+		config,
+		setRuleHookSurface,
+		setRuleCliSurface,
+		setExclusions,
+		loading,
+	} = useRulesConfig();
 	const [search, setSearch] = useState("");
 	const [filter, setFilter] = useState<
 		"all" | "active" | "dormant" | "disabled"
@@ -670,7 +1155,9 @@ export function RuleManager({ fireCounts }: Props) {
 				(r) =>
 					r.rule_id.toLowerCase().includes(q) ||
 					r.title.toLowerCase().includes(q) ||
-					r.description.toLowerCase().includes(q),
+					r.description.toLowerCase().includes(q) ||
+					r.cliCounterparts.some((id) => id.toLowerCase().includes(q)) ||
+					r.hookCounterparts.some((id) => id.toLowerCase().includes(q)),
 			);
 		}
 		return rules;
@@ -686,11 +1173,16 @@ export function RuleManager({ fireCounts }: Props) {
 		}
 		// Sort groups by category order
 		return [...map.entries()].sort(([a], [b]) => {
-			const ai = CATEGORY_MAP.findIndex((c) => c.label === a);
-			const bi = CATEGORY_MAP.findIndex((c) => c.label === b);
-			return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+			return categorySortIndex(a) - categorySortIndex(b);
 		});
 	}, [filtered]);
+
+	const setRuleCliEnabled = useCallback(
+		(rule_id: string, cliRuleIds: string[], enabled: boolean) => {
+			setRuleCliSurface(rule_id, cliRuleIds, { enabled });
+		},
+		[setRuleCliSurface],
+	);
 
 	if (loading) {
 		return (
@@ -761,7 +1253,8 @@ export function RuleManager({ fireCounts }: Props) {
 					<thead>
 						<tr className="border-b border-border text-muted-foreground text-[10px] uppercase bg-card/50">
 							<th className="px-2 py-2 w-6" />
-							<th className="px-2 py-2 text-left w-12">On</th>
+							<th className="px-2 py-2 text-left w-12">Hook</th>
+							<th className="px-2 py-2 text-left w-12">CLI</th>
 							<th className="px-2 py-2 text-left">Rule ID</th>
 							<th className="px-2 py-2 text-left">Title / Description</th>
 							<th className="px-2 py-2 text-left w-20">Severity</th>
@@ -775,7 +1268,7 @@ export function RuleManager({ fireCounts }: Props) {
 						{grouped.length === 0 ? (
 							<tr>
 								<td
-									colSpan={9}
+									colSpan={TABLE_COLSPAN}
 									className="text-center py-8 text-muted-foreground text-xs"
 								>
 									No rules match
@@ -788,7 +1281,8 @@ export function RuleManager({ fireCounts }: Props) {
 									label={label}
 									emoji={emoji}
 									rules={rules}
-									onToggle={toggleRule}
+									onSetHookSurface={setRuleHookSurface}
+									onSetRuleCliSurface={setRuleCliEnabled}
 									onExclusionsChange={setExclusions}
 								/>
 							))
@@ -801,8 +1295,8 @@ export function RuleManager({ fireCounts }: Props) {
 			<div className="text-[10px] text-muted-foreground/60 text-center">
 				Changes are saved to{" "}
 				<code className="font-mono">~/.config/slopgate/config.json</code> on
-				Littlebox via SSH. Slopgate reads config on every hook invocation —
-				changes take effect immediately.
+				Littlebox via SSH. Hook switches affect runtime hook invocation; CLI
+				switches affect <code className="font-mono">slopgate lint</code>.
 			</div>
 		</div>
 	);

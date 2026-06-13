@@ -4,20 +4,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from slopgate.models import RegexRuleConfig, RuntimeConfig
-from slopgate.policy_defaults import RUNTIME_POLICY_DEFAULTS
+from slopgate.models import RegexRuleConfig, RuleSurfaceConfig, RuntimeConfig
 
 from ._coerce import (
     bool_value,
     command_map,
-    float_value,
-    int_value,
     object_dict,
     string_list,
     string_value,
 )
 from ._io import load_toml
+from ._python_runtime import _python_runtime_settings
 from ._repo import DISABLE_SENTINELS
+from ._rule_surfaces import _merge_rule_surfaces, _rule_surface_configs
 
 
 def _resolve_trace_dir(raw: dict[str, object], root: Path) -> Path:
@@ -71,6 +70,7 @@ def _regex_rule_configs(value: object) -> list[RegexRuleConfig]:
 class _RepoQualityGateSettings:
     thresholds: dict[str, object]
     enabled_rules: dict[str, bool]
+    rule_surfaces: dict[str, RuleSurfaceConfig]
     post_edit_quality: dict[str, object]
     hook_guidance: dict[str, object]
     async_jobs: dict[str, object]
@@ -98,21 +98,6 @@ class _HookGuidanceSettings:
     quality_check_command: str
 
 
-@dataclass(frozen=True, slots=True)
-class _PythonRuntimeSettings:
-    ast_enabled: bool
-    max_parse_chars: int
-    long_method_lines: int
-    long_parameter_limit: int
-    max_complexity: int
-    max_nesting_depth: int
-    max_god_class_methods: int
-    max_line_length: int
-    feature_envy_threshold: float
-    feature_envy_min_accesses: int
-    import_fanout_limit: int
-
-
 def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
     toml_data = load_toml(repo_root)
     qg_section = object_dict(toml_data.get("slopgate", {}))
@@ -122,6 +107,7 @@ def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
             key: bool(value)
             for key, value in object_dict(toml_data.get("enabled_rules", {})).items()
         },
+        rule_surfaces=_rule_surface_configs(toml_data.get("rule_surfaces")),
         post_edit_quality=object_dict(toml_data.get("post_edit_quality", {})),
         hook_guidance=object_dict(toml_data.get("hook_guidance", {})),
         async_jobs=object_dict(toml_data.get("async_jobs", {})),
@@ -176,6 +162,13 @@ def _enabled_rule_settings(
     return enabled_rules
 
 
+def _rule_surface_settings(
+    raw: dict[str, object], repo_settings: _RepoQualityGateSettings
+) -> dict[str, RuleSurfaceConfig]:
+    global_surfaces = _rule_surface_configs(raw.get("rule_surfaces"))
+    return _merge_rule_surfaces(global_surfaces, repo_settings.rule_surfaces)
+
+
 def _post_edit_quality_settings(
     raw: dict[str, object], repo_settings: _RepoQualityGateSettings
 ) -> _PostEditQualitySettings:
@@ -220,80 +213,6 @@ def _async_job_settings(
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _PythonAstThresholdKeys:
-    threshold: str
-    python_ast: str
-    default: str
-
-
-def _runtime_policy_int_threshold(thresholds: dict[str, object], key: str) -> int:
-    default = int(RUNTIME_POLICY_DEFAULTS[key])
-    return int_value(thresholds.get(key), default)
-
-
-def _runtime_policy_float_threshold(thresholds: dict[str, object], key: str) -> float:
-    default = float(RUNTIME_POLICY_DEFAULTS[key])
-    return float_value(thresholds.get(key), default)
-
-
-def _python_ast_threshold_int(
-    thresholds: dict[str, object],
-    python_ast: dict[str, object],
-    keys: _PythonAstThresholdKeys,
-) -> int:
-    value = thresholds.get(
-        keys.threshold,
-        python_ast.get(keys.python_ast, RUNTIME_POLICY_DEFAULTS[keys.default]),
-    )
-    return int_value(value, int(RUNTIME_POLICY_DEFAULTS[keys.default]))
-
-
-def _python_runtime_settings(
-    raw: dict[str, object], repo_settings: _RepoQualityGateSettings
-) -> _PythonRuntimeSettings:
-    python_ast = object_dict(raw.get("python_ast", {}))
-    thresholds = repo_settings.thresholds
-    return _PythonRuntimeSettings(
-        ast_enabled=bool_value(python_ast.get("enabled"), True),
-        max_parse_chars=int_value(
-            python_ast.get("max_parse_chars"),
-            int(RUNTIME_POLICY_DEFAULTS["max_parse_chars"]),
-        ),
-        long_method_lines=_python_ast_threshold_int(
-            thresholds,
-            python_ast,
-            _PythonAstThresholdKeys(
-                "max_method_lines", "long_method_lines", "long_method_lines"
-            ),
-        ),
-        long_parameter_limit=_python_ast_threshold_int(
-            thresholds,
-            python_ast,
-            _PythonAstThresholdKeys(
-                "max_params", "long_parameter_limit", "long_parameter_limit"
-            ),
-        ),
-        max_complexity=_runtime_policy_int_threshold(thresholds, "max_complexity"),
-        max_nesting_depth=_runtime_policy_int_threshold(
-            thresholds, "max_nesting_depth"
-        ),
-        max_god_class_methods=_runtime_policy_int_threshold(
-            thresholds, "max_god_class_methods"
-        ),
-        max_line_length=_runtime_policy_int_threshold(thresholds, "max_line_length"),
-        feature_envy_threshold=_runtime_policy_float_threshold(
-            thresholds, "feature_envy_threshold"
-        ),
-        feature_envy_min_accesses=_runtime_policy_int_threshold(
-            thresholds, "feature_envy_min_accesses"
-        ),
-        import_fanout_limit=_runtime_policy_int_threshold(
-            thresholds, "import_fanout_limit"
-        ),
-    )
-
-
 def merge_config(
     actual_root: Path,
     raw: dict[str, object],
@@ -303,7 +222,7 @@ def merge_config(
     post_edit = _post_edit_quality_settings(raw, repo_settings)
     hook_guidance = _hook_guidance_settings(raw, repo_settings)
     async_jobs = _async_job_settings(raw, repo_settings)
-    python_runtime = _python_runtime_settings(raw, repo_settings)
+    python_runtime = _python_runtime_settings(raw, repo_settings.thresholds)
 
     return RuntimeConfig(
         root=actual_root,
@@ -342,5 +261,6 @@ def merge_config(
         disabled_rules=repo_settings.disabled_rules,
         severity_overrides=repo_settings.severity_overrides,
         enabled_rules=_enabled_rule_settings(raw, repo_settings),
+        rule_surfaces=_rule_surface_settings(raw, repo_settings),
         regex_rules=_regex_rule_configs(raw.get("regex_rules", [])),
     )

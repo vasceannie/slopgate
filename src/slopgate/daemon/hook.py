@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from slopgate.cli._claude_retry import claude_team_event_feedback
-from slopgate.constants import PLATFORM_CLAUDE
+from slopgate.constants import PLATFORM_CLAUDE, UNKNOWN_VALUE
 from slopgate.daemon.protocol import (
     DaemonRequest,
     DaemonResponse,
@@ -16,7 +16,7 @@ CLAUDE_TEAM_EVENT_EXIT_CODE = 2
 
 
 def evaluate_hook_request(request: DaemonRequest) -> DaemonResponse:
-    platform = (request.platform or PLATFORM_CLAUDE).strip().lower()
+    platform = (request.platform or UNKNOWN_VALUE).strip().lower()
     if not request.payload:
         logger.info(
             "hook daemon empty payload noop",

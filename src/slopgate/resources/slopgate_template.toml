@@ -103,6 +103,22 @@ default = "all"
 [enabled_rules]
 # "GIT-001" = true
 
+[enabled_cli_rules]
+# Batch lint collector toggles. Missing entries default to enabled.
+# "long-method" = true
+
+# Optional first-class surface overrides. Missing values inherit defaults.
+# Hook events constrain where the rule may evaluate; actions are allow, ask,
+# deny, block, context, or warn. CLI enablement is applied to mapped collectors.
+#
+# [rule_surfaces."PY-LOG-001".hook]
+# enabled = true
+# events = ["PreToolUse"]
+# action = "deny"
+#
+# [rule_surfaces."PY-LOG-001".cli]
+# enabled = true
+
 [post_edit_quality]
 # enabled = true
 # block_on_failure = true

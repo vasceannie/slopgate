@@ -14,6 +14,12 @@ from pathlib import Path
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, find_source_files
+from slopgate.rules.python_ast._rules._boundary_helpers import (
+    boundary_kind_for_function,
+    has_boundary_log_call,
+    is_test_module_path,
+    iter_public_boundary_functions,
+)
 
 
 @dataclass(frozen=True)
@@ -98,6 +104,37 @@ def detect_wrong_logger_name(
             _collect_wrong_logger_name_violations(pf, list(disallowed), expected)
         )
 
+    return violations
+
+
+def _boundary_owner(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    class_name: str | None,
+) -> str:
+    return f"{class_name}.{node.name}" if class_name else node.name
+
+
+def detect_boundary_logging(
+    files: Sequence[Path | ParsedFile] | None = None,
+) -> list[Violation]:
+    """Flag event/package boundary functions without logging or telemetry calls."""
+    parsed = ensure_parsed(files, fallback=find_source_files())
+    violations: list[Violation] = []
+    for pf in parsed:
+        if is_test_module_path(pf.rel):
+            continue
+        for node, class_name in iter_public_boundary_functions(pf.tree.body):
+            kind = boundary_kind_for_function(pf.rel, node, class_name)
+            if kind is None or has_boundary_log_call(node):
+                continue
+            violations.append(
+                Violation(
+                    rule="boundary-logging",
+                    relative_path=pf.rel,
+                    identifier=_boundary_owner(node, class_name),
+                    detail=f"{kind} line={node.lineno}",
+                )
+            )
     return violations
 
 

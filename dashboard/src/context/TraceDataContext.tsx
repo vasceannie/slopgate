@@ -71,6 +71,7 @@ async function parseJSONLFile(file: File): Promise<{
 }
 
 const MAX_RECORDS_PER_CATEGORY = 250000;
+const INITIAL_SNAPSHOT_LOOKBACK_HOURS = 24;
 
 const EMPTY_TRACE_DATA: TraceData = {
 	events: [],
@@ -234,47 +235,49 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 			if (!accepted) return "rejected";
 			if (accepted.type === "ignored") return "ignored";
 			if (accepted.type === "event") {
-				setData((prev: TraceData) => ({
-					...prev,
-					events: appendBoundedUnique(
+				setData((prev: TraceData) => {
+					const events = appendBoundedUnique(
 						prev.events,
 						accepted.record,
 						recordKeysRef.current.events,
-					),
-				}));
+					);
+					return events === prev.events ? prev : { ...prev, events };
+				});
 				return "accepted";
 			}
 			if (accepted.type === "rule") {
-				setData((prev: TraceData) => ({
-					...prev,
-					rules: appendBoundedUnique(
+				setData((prev: TraceData) => {
+					const rules = appendBoundedUnique(
 						prev.rules,
 						accepted.record,
 						recordKeysRef.current.rules,
-					),
-				}));
+					);
+					return rules === prev.rules ? prev : { ...prev, rules };
+				});
 				return "accepted";
 			}
 			if (accepted.type === "result") {
-				setData((prev: TraceData) => ({
-					...prev,
-					results: appendBoundedUnique(
+				setData((prev: TraceData) => {
+					const results = appendBoundedUnique(
 						prev.results,
 						accepted.record,
 						recordKeysRef.current.results,
-					),
-				}));
+					);
+					return results === prev.results ? prev : { ...prev, results };
+				});
 				return "accepted";
 			}
 			if (accepted.type === "subprocess") {
-				setData((prev: TraceData) => ({
-					...prev,
-					subprocesses: appendBoundedUnique(
+				setData((prev: TraceData) => {
+					const subprocesses = appendBoundedUnique(
 						prev.subprocesses,
 						accepted.record,
 						recordKeysRef.current.subprocesses,
-					),
-				}));
+					);
+					return subprocesses === prev.subprocesses
+						? prev
+						: { ...prev, subprocesses };
+				});
 				return "accepted";
 			}
 			return "rejected";
@@ -380,7 +383,7 @@ export function TraceDataProvider({ children }: { children: ReactNode }) {
 	}, [replaceData]);
 
 	useEffect(() => {
-		void refreshSnapshot(168);
+		void refreshSnapshot(INITIAL_SNAPSHOT_LOOKBACK_HOURS);
 	}, [refreshSnapshot]);
 
 	const ingestFiles = useCallback(async (files: File[]) => {

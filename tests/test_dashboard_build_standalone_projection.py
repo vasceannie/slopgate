@@ -16,6 +16,9 @@ SHORT_TEXT = strategies.text(
 def test_slopgate_config_shape_exposes_dashboard_config_keys() -> None:
     assert set(SlopgateConfig.__annotations__) == {
         "enabled_rules",
+        "enabled_cli_rules",
+        "rule_surfaces",
+        "rule_counterparts",
         "regex_rules",
         "skip_paths",
     }

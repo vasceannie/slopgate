@@ -229,7 +229,9 @@ export interface FilterState {
 // ── Rule configuration types ───────────────────────────────────────────────
 
 export type RuleAction = "deny" | "block" | "warn" | "ask" | "context";
-export type RuleTarget = "content" | "path" | "command";
+export type RuleSurfaceAction = RuleAction | "allow";
+export type RuleUiAction = RuleSurfaceAction | "lint";
+export type RuleTarget = "content" | "path" | "command" | "prompt";
 
 /** A regex/declarative rule entry from defaults.json or user config */
 export interface RegexRuleConfig {
@@ -249,10 +251,31 @@ export interface RegexRuleConfig {
 	multiline?: boolean;
 }
 
+export interface RuleHookSurface {
+	enabled?: boolean;
+	events?: string[];
+	action?: RuleSurfaceAction;
+}
+
+export interface RuleCliSurface {
+	enabled?: boolean;
+}
+
+export interface RuleSurfaceConfig {
+	hook?: RuleHookSurface;
+	cli?: RuleCliSurface;
+}
+
 /** Merged config injected by build-standalone as window.__SLOPGATE_CONFIG__ */
 export interface SlopgateConfig {
 	/** rule_id → enabled (bool). Missing key means default (true). */
 	enabled_rules: Record<string, boolean>;
+	/** CLI lint collector → enabled (bool). Missing key means default (true). */
+	enabled_cli_rules: Record<string, boolean>;
+	/** Canonical per-surface overrides for hook and CLI rule behavior. */
+	rule_surfaces: Record<string, RuleSurfaceConfig>;
+	/** Canonical hook rule → CLI collector counterparts from Slopgate parity. */
+	rule_counterparts: Record<string, string[]>;
 	/** All regex rules with per-rule exclude_path_globs merged from user config */
 	regex_rules: RegexRuleConfig[];
 	skip_paths: string[];
@@ -266,13 +289,25 @@ export interface RuleMetadata {
 	severity: Severity;
 	/** Derived from rule_id prefix, e.g. PY-CODE → python, GIT → git */
 	category: string;
-	source: "builtin" | "regex";
+	source: "builtin" | "regex" | "cli";
 	enabled: boolean;
+	hookSupported: boolean;
+	cliSupported: boolean;
+	hookEnabled: boolean;
+	cliEnabled: boolean;
+	cliPartiallyEnabled: boolean;
+	hookUnsupportedReason?: string;
+	cliUnsupportedReason?: string;
 	fireCount: number;
-	action: RuleAction;
+	action: RuleUiAction;
+	hookAction: RuleSurfaceAction;
+	hookEvents: string[];
 	path_globs: string[];
 	exclude_path_globs: string[];
 	events: string[];
+	cliRuleIds: string[];
+	cliCounterparts: string[];
+	hookCounterparts: string[];
 }
 
 // Investigation flag system

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from slopgate.constants import (
     SESSION_ID,
+    PLATFORM_CLAUDE,
     TOOL_WRITE,
     TOOL_EDIT,
     TOOL_READ,
@@ -13,6 +14,7 @@ from slopgate.constants import (
     TOOL_GREP,
     TOOL_WEB_SEARCH,
     TOOL_WEB_FETCH,
+    UNKNOWN_VALUE,
 )
 from slopgate.adapters import get_adapter
 from slopgate.config import resolve_repo_root
@@ -40,6 +42,7 @@ from ._runner import (
 @dataclass(frozen=True, slots=True)
 class _EvaluationMetadata:
     platform: str
+    platform_source: str
     enforcement_mode: EnforcementMode
     resolved_repo_root: Path | None
     platform_capability: str
@@ -54,6 +57,7 @@ def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata
     capability, degraded_reason = platform_capability(platform)
     return _EvaluationMetadata(
         platform=platform,
+        platform_source=platform,
         enforcement_mode=resolve_enforcement_mode(ctx),
         resolved_repo_root=resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd()),
         platform_capability=capability,
@@ -152,6 +156,7 @@ def _payload_for_start(
 ) -> dict[str, object]:
     return {
         "platform": metadata.platform,
+        "platform_source": metadata.platform_source,
         "platform_capability": metadata.platform_capability,
         "degraded_reason": metadata.degraded_reason,
         "event_name": ctx.event_name,
@@ -172,6 +177,7 @@ def _payload_for_done(
 ) -> dict[str, object]:
     return {
         "platform": metadata.platform,
+        "platform_source": metadata.platform_source,
         "platform_capability": metadata.platform_capability,
         "degraded_reason": metadata.degraded_reason,
         "event_name": ctx.event_name,
@@ -188,15 +194,19 @@ def _payload_for_done(
 
 def evaluate_payload(
     payload_dict: Mapping[str, object],
-    platform: str = "claude",
+    platform: str = UNKNOWN_VALUE,
 ) -> EngineResult:
-    adapter = get_adapter(platform)
+    trace_platform = platform.strip().lower() or UNKNOWN_VALUE
+    adapter_platform = (
+        PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
+    )
+    adapter = get_adapter(adapter_platform)
     ctx = build_context(adapter.normalize_payload(payload_dict))
-    metadata = _evaluation_metadata(ctx, platform)
+    metadata = _evaluation_metadata(ctx, trace_platform)
     ctx.trace.event(_payload_for_start(ctx, metadata))
 
     capture_repair_plan_signal(ctx)
-    acc = run_rules(ctx, platform, metadata.enforcement_mode)
+    acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
     enforce_retry_budget(ctx, acc.findings)
     apply_loop_aware_steering(ctx, acc.findings)
     inject_recent_failure_context(ctx, acc.findings)

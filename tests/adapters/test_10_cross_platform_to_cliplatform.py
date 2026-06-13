@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+
 from pytest import MonkeyPatch
 
 from tests.test_adapters import (
@@ -142,9 +144,20 @@ class TestCrossPlatform:
 
 
 class TestCLIPlatform:
+    def test_platform_argument_helper_defaults_to_unknown(self) -> None:
+        from slopgate.cli.platforms import add_platform_argument
+
+        parser = argparse.ArgumentParser()
+        add_platform_argument(parser)
+
+        parsed = object_dict(vars(parser.parse_args([])))
+        assert string_value(parsed.get("platform")) == "unknown", (
+            "Shared runtime platform helper should default omitted provenance to unknown"
+        )
+
     def test_handle_with_platform_flag(self) -> None:
         """Verify CLI accepts --platform without error."""
-        from slopgate.cli import build_parser
+        from slopgate.cli.parsers import build_parser
 
         parsed = object_dict(
             vars(build_parser().parse_args(["handle", "--platform", "codex"]))
@@ -152,13 +165,19 @@ class TestCLIPlatform:
         assert string_value(parsed.get("platform")) == "codex"
 
     def test_handle_default_platform(self) -> None:
-        from slopgate.cli import build_parser
+        from slopgate.cli.parsers import build_parser
 
         parsed = object_dict(vars(build_parser().parse_args(["handle"])))
-        assert string_value(parsed.get("platform")) == "claude"
+        assert string_value(parsed.get("platform")) == "unknown"
+
+    def test_install_rejects_unknown_platform_target(self) -> None:
+        from slopgate.cli.parsers import build_parser
+
+        with pytest.raises(SystemExit):
+            _ = build_parser().parse_args(["install", "unknown"])
 
     def test_replay_with_platform(self) -> None:
-        from slopgate.cli import build_parser
+        from slopgate.cli.parsers import build_parser
 
         parsed = object_dict(
             vars(
@@ -170,7 +189,7 @@ class TestCLIPlatform:
         assert string_value(parsed.get("platform")) == "opencode"
 
     def test_invalid_platform_rejected(self) -> None:
-        from slopgate.cli import build_parser
+        from slopgate.cli.parsers import build_parser
 
         with pytest.raises(SystemExit):
             _ = build_parser().parse_args(["handle", "--platform", "vim"])

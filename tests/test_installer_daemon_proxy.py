@@ -37,6 +37,15 @@ def test_node_daemon_client_preserves_empty_stdin_noop() -> None:
     )
 
 
+def test_node_daemon_client_uses_unknown_when_platform_env_is_absent() -> None:
+    assert "SLOPGATE_HOOK_PLATFORM||'unknown'" in NODE_DAEMON_CLIENT_SCRIPT, (
+        "Daemon proxy should not invent Claude provenance when platform env is absent"
+    )
+    assert "SLOPGATE_HOOK_PLATFORM||'claude'" not in NODE_DAEMON_CLIENT_SCRIPT, (
+        "Daemon proxy should avoid the old false-Claude fallback"
+    )
+
+
 def test_posix_hook_command_is_owned_by_slopgate() -> None:
     command = slopgate.installer._shared.hook_command(
         "slopgate", "handle", windows=False

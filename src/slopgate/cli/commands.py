@@ -4,6 +4,13 @@ import json
 from pathlib import Path
 from typing import cast
 from slopgate._types import object_dict
+from slopgate.constants import UNKNOWN_VALUE
+from slopgate.cli.platforms import (
+    INSTALL_TARGETS,
+    PLATFORM_HELP,
+    RUNTIME_PLATFORMS,
+    VALID_PLATFORMS,
+)
 from slopgate.cli._config_commands import (
     cmd_config_init,
     cmd_config_path,
@@ -14,6 +21,7 @@ from slopgate.cli.io import CliInputError, string_arg
 
 __all__ = [
     "VALID_PLATFORMS",
+    "RUNTIME_PLATFORMS",
     "INSTALL_TARGETS",
     "PLATFORM_HELP",
     "CliInputError",
@@ -24,12 +32,6 @@ __all__ = [
     "cmd_handle",
     "cmd_handle_async",
 ]
-
-VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor")
-INSTALL_TARGETS = (*VALID_PLATFORMS, "all")
-PLATFORM_HELP = (
-    f"Target platform. Choices: {', '.join(VALID_PLATFORMS)} (default: claude)"
-)
 
 
 def _bool_arg(args: argparse.Namespace, name: str, default: bool = False) -> bool:
@@ -125,7 +127,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     payload_path = Path(string_arg(args, "payload")).resolve()
     parsed = cast(object, json.loads(payload_path.read_text(encoding="utf-8")))
     payload = object_dict(parsed)
-    platform = string_arg(args, "platform", "claude")
+    platform = string_arg(args, "platform", UNKNOWN_VALUE)
     result = evaluate_payload(payload, platform=platform)
     if _bool_arg(args, "pretty"):
         print(json.dumps(result.output, indent=2))

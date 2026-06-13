@@ -43,6 +43,24 @@ function event(session_id: string, platform: Platform = "opencode"): HookEvent {
 	};
 }
 
+function traceEvent(
+	session_id: string,
+	timestamp: string,
+	platform: Platform,
+	candidate_paths: string[],
+	tool_name = "Read",
+): HookEvent {
+	return {
+		timestamp,
+		platform,
+		event_name: "PreToolUse",
+		session_id,
+		tool_name,
+		candidate_paths,
+		languages: ["typescript"],
+	};
+}
+
 describe("trace top-rule summaries", () => {
 	it("prioritizes enforcement deny/block rules ahead of enrichment noise", () => {
 		const rules = [
@@ -192,6 +210,28 @@ describe("trace session indexes", () => {
 		expect(indexes.hottestRepos).toEqual([{ repo: "slopgate", count: 2 }]);
 	});
 
+	it("handles large sessions without spreading timestamp arrays", () => {
+		const start = Date.UTC(2026, 4, 27, 12, 0, 0);
+		const events: HookEvent[] = Array.from(
+			{ length: 120_000 },
+			(_unused, index) => ({
+				...event("large-session", "opencode"),
+				timestamp: new Date(start + index).toISOString(),
+				candidate_paths: ["/home/trav/repos/slopgate/src/large.py"],
+			}),
+		);
+
+		const indexes = buildTraceSessionIndexes(events, [], [], []);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "large-session",
+			eventCount: events.length,
+			pathCount: 1,
+			duration: events.length - 1,
+		});
+	});
+
 	it("returns grouped primary rows with child and mirror lineage attached", () => {
 		const parent = event("parent-session", "claude");
 		const child: HookEvent = {
@@ -309,5 +349,163 @@ describe("trace session indexes", () => {
 		expect(indexes.sessions[0].subprocesses.map((item) => item.session_id)).toEqual([
 			"child-session",
 		]);
+	});
+
+	it("infers mirrored historical sessions from matching windows and paths", () => {
+		const opencodeMirror = [
+			traceEvent(
+				"opencode-root",
+				"2026-05-27T12:00:00.000Z",
+				"opencode",
+				["/repo/dashboard/src/hooks/useTraceData.ts"],
+			),
+			traceEvent(
+				"opencode-root",
+				"2026-05-27T12:03:00.000Z",
+				"opencode",
+				["/repo/dashboard/src/components/SessionExplorer.tsx"],
+				"Grep",
+			),
+		];
+		const claudeMirror = [
+			traceEvent(
+				"legacy-claude-mirror",
+				"2026-05-27T12:00:01.000Z",
+				"claude",
+				["/repo/dashboard/src/hooks/useTraceData.ts"],
+			),
+			traceEvent(
+				"legacy-claude-mirror",
+				"2026-05-27T12:03:02.000Z",
+				"claude",
+				["/repo/dashboard/src/components/SessionExplorer.tsx"],
+				"Grep",
+			),
+		];
+		const unrelated = [
+			traceEvent(
+				"unrelated-claude-session",
+				"2026-05-27T12:00:01.000Z",
+				"claude",
+				["/repo/other/file.ts"],
+			),
+			traceEvent(
+				"unrelated-claude-session",
+				"2026-05-27T12:03:02.000Z",
+				"claude",
+				["/repo/other/file.ts"],
+				"Grep",
+			),
+		];
+
+		const indexes = buildTraceSessionIndexes(
+			[...opencodeMirror, ...claudeMirror, ...unrelated],
+			[],
+			[],
+			[],
+		);
+		const grouped = indexes.sessions.find((session) => session.id === "opencode-root");
+		const standalone = indexes.sessions.find(
+			(session) => session.id === "unrelated-claude-session",
+		);
+
+		expect(indexes.sessions).toHaveLength(2);
+		expect(grouped).toMatchObject({
+			id: "opencode-root",
+			lineageConfidence: "inferred",
+			platforms: ["claude", "opencode"],
+		});
+		expect([...(grouped?.rawSessionIds ?? [])].sort()).toEqual([
+			"legacy-claude-mirror",
+			"opencode-root",
+		]);
+		expect(grouped?.mirrorSessions?.map((session) => session.id)).toEqual([
+			"legacy-claude-mirror",
+		]);
+		expect(grouped?.childSessions).toEqual([]);
+		expect(standalone).toMatchObject({
+			id: "unrelated-claude-session",
+			lineageConfidence: "none",
+			rawSessionIds: ["unrelated-claude-session"],
+		});
+	});
+
+	it("infers contained historical child sessions under non-claude parent rows", () => {
+		const parentEvents = [
+			traceEvent(
+				"opencode-parent",
+				"2026-05-27T12:00:00.000Z",
+				"opencode",
+				["/repo/dashboard/src/hooks/useTraceData.ts"],
+			),
+			traceEvent(
+				"opencode-parent",
+				"2026-05-27T12:10:00.000Z",
+				"opencode",
+				["/repo/dashboard/src/components/SessionExplorer.tsx"],
+				"Grep",
+			),
+		];
+		const childEvents = [
+			traceEvent(
+				"legacy-claude-child",
+				"2026-05-27T12:02:00.000Z",
+				"claude",
+				["/repo/dashboard/src/hooks/useTraceData.ts"],
+			),
+			traceEvent(
+				"legacy-claude-child",
+				"2026-05-27T12:03:00.000Z",
+				"claude",
+				["/repo/dashboard/src/hooks/useTraceData.ts"],
+				"Grep",
+			),
+		];
+		const unrelatedEvents = [
+			traceEvent(
+				"unrelated-contained-session",
+				"2026-05-27T12:02:00.000Z",
+				"claude",
+				["/repo/other/file.ts"],
+			),
+			traceEvent(
+				"unrelated-contained-session",
+				"2026-05-27T12:03:00.000Z",
+				"claude",
+				["/repo/other/file.ts"],
+				"Grep",
+			),
+		];
+
+		const indexes = buildTraceSessionIndexes(
+			[...parentEvents, ...childEvents, ...unrelatedEvents],
+			[],
+			[],
+			[],
+		);
+		const grouped = indexes.sessions.find((session) => session.id === "opencode-parent");
+		const standalone = indexes.sessions.find(
+			(session) => session.id === "unrelated-contained-session",
+		);
+
+		expect(indexes.sessions).toHaveLength(2);
+		expect(grouped).toMatchObject({
+			id: "opencode-parent",
+			lineageConfidence: "inferred",
+			platforms: ["claude", "opencode"],
+		});
+		expect([...(grouped?.rawSessionIds ?? [])].sort()).toEqual([
+			"legacy-claude-child",
+			"opencode-parent",
+		]);
+		expect(grouped?.childSessions?.map((session) => session.id)).toEqual([
+			"legacy-claude-child",
+		]);
+		expect(grouped?.mirrorSessions).toEqual([]);
+		expect(standalone).toMatchObject({
+			id: "unrelated-contained-session",
+			lineageConfidence: "none",
+			rawSessionIds: ["unrelated-contained-session"],
+		});
 	});
 });

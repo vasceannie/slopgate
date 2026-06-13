@@ -29,6 +29,7 @@ from .projection import (
     classify,
     format_item,
 )
+from rule_interop import load_rule_counterparts
 
 
 def _load_jsonl(path: Path) -> list[JSONDict]:
@@ -167,7 +168,14 @@ def _load_slopgate_config(ssh_host: str) -> SlopgateConfig:
             "  WARNING: defaults.json not found, skipping config injection",
             file=sys.stderr,
         )
-        return {"enabled_rules": {}, "regex_rules": [], "skip_paths": []}
+        return {
+            "enabled_rules": {},
+            "enabled_cli_rules": {},
+            "rule_surfaces": {},
+            "rule_counterparts": load_rule_counterparts(),
+            "regex_rules": [],
+            "skip_paths": [],
+        }
     with defaults_path.open(encoding="utf-8") as f:
         defaults_raw: object = json.load(f)
     defaults = coerce_object_dict(defaults_raw) or {}
@@ -178,10 +186,21 @@ def _load_slopgate_config(ssh_host: str) -> SlopgateConfig:
     user_enabled = coerce_bool_dict(user_config.get("enabled_rules"))
     merged_enabled = {**default_enabled, **user_enabled}
 
+    default_cli_enabled = coerce_bool_dict(defaults.get("enabled_cli_rules"))
+    user_cli_enabled = coerce_bool_dict(user_config.get("enabled_cli_rules"))
+    merged_cli_enabled = {**default_cli_enabled, **user_cli_enabled}
+
+    default_surfaces = coerce_object_dict(defaults.get("rule_surfaces")) or {}
+    user_surfaces = coerce_object_dict(user_config.get("rule_surfaces")) or {}
+    merged_surfaces = {**default_surfaces, **user_surfaces}
+
     merged_regex = _merge_regex_rules(defaults, user_config)
 
     return {
         "enabled_rules": merged_enabled,
+        "enabled_cli_rules": merged_cli_enabled,
+        "rule_surfaces": merged_surfaces,
+        "rule_counterparts": load_rule_counterparts(),
         "regex_rules": merged_regex,
         "skip_paths": coerce_str_list(
             user_config.get("skip_paths", defaults.get("skip_paths", []))

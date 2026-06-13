@@ -153,4 +153,5 @@ def build_default_values(root: Path) -> dict[str, object]:
     values.update(_test_values())
     values["deprecated_patterns"] = _deprecated_patterns()
     values["enable_git_base_debt"] = LINT_SCOPE_DEFAULTS["git_base_debt"]
+    values["enabled_cli_rules"] = {}
     return values

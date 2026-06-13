@@ -104,7 +104,7 @@ function OverviewLoadingPlaceholder() {
 
 export default function Dashboard() {
 	const [filters, setFilters] = useState<FilterState>({
-		timeWindow: "7d",
+		timeWindow: "24h",
 		platforms: [],
 		pathFilter: null,
 	});

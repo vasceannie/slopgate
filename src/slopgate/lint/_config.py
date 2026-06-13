@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 from slopgate.constants import LINT_SCOPE_ALL, LINT_SCOPE_CHANGED, LINT_SCOPE_STAGED
-from slopgate.lint._toml_overrides import apply_paths_overrides, resolve_baseline_path
+from slopgate.lint._toml_overrides import (
+    apply_paths_overrides,
+    apply_rule_enablement_overrides,
+    resolve_baseline_path,
+)
 from slopgate.lint.config_values import build_default_values
 
 
@@ -72,6 +76,7 @@ class QualityConfig:
     deprecated_patterns: list[tuple[str, str]]
 
     enable_git_base_debt: bool
+    enabled_cli_rules: dict[str, bool]
 
 
 _config_instance: ContextVar[QualityConfig | None] = ContextVar(
@@ -134,6 +139,7 @@ class _QualityConfigValues(TypedDict):
     deprecated_patterns: list[tuple[str, str]]
 
     enable_git_base_debt: bool
+    enabled_cli_rules: dict[str, bool]
 
 
 def load_config(project_root: Path) -> QualityConfig:
@@ -142,6 +148,7 @@ def load_config(project_root: Path) -> QualityConfig:
     root = project_root.resolve()
     values = build_default_values(root)
     apply_paths_overrides(values, root)
+    apply_rule_enablement_overrides(values, root)
     configured_baseline = resolve_baseline_path(root)
     if configured_baseline is not None:
         values["baseline_path"] = configured_baseline

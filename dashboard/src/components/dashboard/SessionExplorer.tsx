@@ -54,15 +54,30 @@ function toggleSetValue<T>(selected: Set<T>, value: T): Set<T> {
 }
 
 function latestSessionTimestamp(session: SessionData): number {
-    const timestamps = [
-        ...session.events.map((event) => event.timestamp),
-        ...session.findings.map((finding) => finding.timestamp),
-        ...session.results.map((result) => result.timestamp),
-        ...session.subprocesses.map((run) => run.timestamp),
-    ]
-        .map((timestamp) => Date.parse(timestamp))
-        .filter(Number.isFinite);
-    return timestamps.length > 0 ? Math.max(...timestamps) : 0;
+	let latest = 0;
+	const inspectTimestamp = (timestamp: string | undefined) => {
+		if (!timestamp) return;
+		const parsed = Date.parse(timestamp);
+		if (Number.isFinite(parsed) && parsed > latest) latest = parsed;
+	};
+	for (const event of session.events) inspectTimestamp(event.timestamp);
+	for (const finding of session.findings) inspectTimestamp(finding.timestamp);
+	for (const result of session.results) inspectTimestamp(result.timestamp);
+	for (const run of session.subprocesses) inspectTimestamp(run.timestamp);
+	return latest;
+}
+
+function uniqueEventCandidatePaths(events: SessionData["events"]): string[] {
+	const paths: string[] = [];
+	const seen = new Set<string>();
+	for (const event of events) {
+		for (const path of event.candidate_paths ?? []) {
+			if (!path || seen.has(path)) continue;
+			seen.add(path);
+			paths.push(path);
+		}
+	}
+	return paths;
 }
 
 function matchesDateRange(
@@ -430,8 +445,8 @@ const SessionRow = memo(function SessionRow({
     onToggle: () => void;
     onCopy: () => void;
 }) {
-    const cause = primarySessionCause(s);
-    const activity = sessionActivitySummary(s);
+	const cause = useMemo(() => primarySessionCause(s), [s]);
+	const activity = useMemo(() => sessionActivitySummary(s), [s]);
 
 	const causePaths = cause.paths || [];
 	const childSessions = s.childSessions ?? [];
@@ -440,11 +455,15 @@ const SessionRow = memo(function SessionRow({
 	const mirrorOnlySessions = mirrorSessions.filter(
 		(session) => !childSessionIds.has(session.id),
 	);
+	const rawSessionIds = s.rawSessionIds ?? [s.id];
+	const childMirrorCount = childSessions.filter(
+		(session) => session.lineageRole === "child_mirror",
+	).length;
+	const childOnlyCount = childSessions.length - childMirrorCount;
+	const mirrorOnlyCount = mirrorOnlySessions.length;
 	const lineageCount = childSessions.length + mirrorOnlySessions.length;
-	const genericPaths = [
-		...new Set(s.events.flatMap((e) => e.candidate_paths ?? [])),
-	];
-    const displayPaths = causePaths.length > 0 ? causePaths : genericPaths;
+	const genericPaths = useMemo(() => uniqueEventCandidatePaths(s.events), [s.events]);
+	const displayPaths = causePaths.length > 0 ? causePaths : genericPaths;
 
     return (
         <>
@@ -601,28 +620,33 @@ const SessionRow = memo(function SessionRow({
 					<td colSpan={9} className="max-w-0 overflow-hidden p-0">
 						{(lineageCount > 0 || (s.rawSessionIds ?? []).length > 1) && (
 							<div className="border-b border-border bg-background/40 px-4 py-3 text-[10px] text-muted-foreground">
-								<div className="mb-2 flex flex-wrap items-center gap-2">
+								<div className="flex flex-wrap items-center gap-2">
 									<span className="font-semibold uppercase tracking-wide text-foreground">
 										Lineage
 									</span>
-									<span>confidence: {s.lineageConfidence ?? "none"}</span>
-									<span>role: {s.lineageRole ?? "raw"}</span>
-								</div>
-								<div className="grid gap-1 font-mono">
-									{(s.rawSessionIds ?? [s.id]).map((id) => (
-										<span key={id}>raw: {id}</span>
-									))}
-									{childSessions.map((session) => (
-										<span key={`child-${session.id}`}>
-											{session.lineageRole === "child_mirror"
-												? "child_mirror"
-												: "child"}
-											: {session.id}
+									<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+										{s.lineageConfidence ?? "none"}
+									</span>
+									{rawSessionIds.length > 1 && (
+										<span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-primary">
+											{rawSessionIds.length} grouped sessions
 										</span>
-									))}
-									{mirrorOnlySessions.map((session) => (
-										<span key={`mirror-${session.id}`}>mirror: {session.id}</span>
-									))}
+									)}
+									{childOnlyCount > 0 && (
+										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+											{childOnlyCount} child
+										</span>
+									)}
+									{childMirrorCount > 0 && (
+										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+											{childMirrorCount} child + mirror
+										</span>
+									)}
+									{mirrorOnlyCount > 0 && (
+										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+											{mirrorOnlyCount} mirror
+										</span>
+									)}
 								</div>
 							</div>
 						)}

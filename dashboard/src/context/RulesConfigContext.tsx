@@ -15,7 +15,11 @@
  *   - apiAvailable: false when running without the serve.py API server
  */
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import type { SlopgateConfig } from "@/types/slopgate";
+import type {
+	RuleCliSurface,
+	RuleHookSurface,
+	SlopgateConfig,
+} from "@/types/slopgate";
 
 import {
 	EMPTY_CONFIG,
@@ -33,22 +37,40 @@ function getBakedConfig(): SlopgateConfig | null {
 	return w.__SLOPGATE_CONFIG__ ?? null;
 }
 
+function normalizeConfig(config: SlopgateConfig | null): SlopgateConfig {
+	return {
+		enabled_rules: config?.enabled_rules ?? {},
+		enabled_cli_rules: config?.enabled_cli_rules ?? {},
+		rule_surfaces: config?.rule_surfaces ?? {},
+		rule_counterparts: config?.rule_counterparts ?? {},
+		regex_rules: config?.regex_rules ?? [],
+		skip_paths: config?.skip_paths ?? [],
+	};
+}
+
 /** Deep-clone a config object */
 function cloneConfig(c: SlopgateConfig): SlopgateConfig {
 	return JSON.parse(JSON.stringify(c));
 }
 
 /** Count differences between two enabled_rules dicts */
-function countPending(saved: SlopgateConfig, current: SlopgateConfig): number {
+function countBoolMapDiffs(
+	saved: Record<string, boolean>,
+	current: Record<string, boolean>,
+): number {
 	let n = 0;
-	const allKeys = new Set([
-		...Object.keys(saved.enabled_rules),
-		...Object.keys(current.enabled_rules),
-	]);
+	const allKeys = new Set([...Object.keys(saved), ...Object.keys(current)]);
 	for (const k of allKeys) {
-		if ((saved.enabled_rules[k] ?? true) !== (current.enabled_rules[k] ?? true))
-			n++;
+		if ((saved[k] ?? true) !== (current[k] ?? true)) n++;
 	}
+	return n;
+}
+
+function countPending(saved: SlopgateConfig, current: SlopgateConfig): number {
+	let n = countBoolMapDiffs(saved.enabled_rules, current.enabled_rules);
+	n += countBoolMapDiffs(saved.enabled_cli_rules, current.enabled_cli_rules);
+	if (JSON.stringify(saved.rule_surfaces) !== JSON.stringify(current.rule_surfaces))
+		n++;
 	// Count exclusion diffs for regex rules
 	const savedGlobs = new Map(
 		saved.regex_rules.map((r) => [r.rule_id, r.exclude_path_globs ?? []]),
@@ -69,11 +91,11 @@ function countPending(saved: SlopgateConfig, current: SlopgateConfig): number {
 }
 
 export function RulesConfigProvider({ children }: { children: ReactNode }) {
-	const baked = getBakedConfig();
+	const [bakedConfig] = useState(() => normalizeConfig(getBakedConfig()));
 	const [savedConfig, setSavedConfig] = useState<SlopgateConfig>(
-		baked ?? EMPTY_CONFIG,
+		bakedConfig,
 	);
-	const [config, setConfig] = useState<SlopgateConfig>(baked ?? EMPTY_CONFIG);
+	const [config, setConfig] = useState<SlopgateConfig>(bakedConfig);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [apiAvailable, setApiAvailable] = useState(false);
@@ -101,7 +123,13 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 				// Merge: prefer baked regex_rules (with merged exclusions), but use live enabled_rules
 				const live: SlopgateConfig = {
 					enabled_rules: data.enabled_rules ?? {},
-					regex_rules: baked?.regex_rules ?? data.regex_rules ?? [],
+					enabled_cli_rules: data.enabled_cli_rules ?? {},
+					rule_surfaces: data.rule_surfaces ?? {},
+					rule_counterparts:
+						data.rule_counterparts ?? bakedConfig.rule_counterparts,
+					regex_rules: bakedConfig.regex_rules.length
+						? bakedConfig.regex_rules
+						: data.regex_rules ?? [],
 					skip_paths: data.skip_paths ?? [],
 				};
 				setSavedConfig(cloneConfig(live));
@@ -114,7 +142,7 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [baked?.regex_rules]);
+	}, [bakedConfig.regex_rules, bakedConfig.rule_counterparts]);
 
 	const toggleRule = useCallback((rule_id: string) => {
 		setConfig((prev) => {
@@ -125,6 +153,76 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 			};
 		});
 	}, []);
+
+	const toggleCliRule = useCallback((rule_id: string) => {
+		setConfig((prev) => {
+			const current = prev.enabled_cli_rules[rule_id] ?? true;
+			return {
+				...prev,
+				enabled_cli_rules: {
+					...prev.enabled_cli_rules,
+					[rule_id]: !current,
+				},
+			};
+		});
+	}, []);
+
+	const setCliRules = useCallback((rule_ids: string[], enabled: boolean) => {
+		setConfig((prev) => {
+			const enabled_cli_rules = { ...prev.enabled_cli_rules };
+			for (const rule_id of rule_ids) {
+				enabled_cli_rules[rule_id] = enabled;
+			}
+			return { ...prev, enabled_cli_rules };
+		});
+	}, []);
+
+	const setRuleHookSurface = useCallback(
+		(rule_id: string, hook: RuleHookSurface) => {
+			setConfig((prev) => ({
+				...prev,
+				rule_surfaces: {
+					...prev.rule_surfaces,
+					[rule_id]: {
+						...(prev.rule_surfaces[rule_id] ?? {}),
+						hook: {
+							...(prev.rule_surfaces[rule_id]?.hook ?? {}),
+							...hook,
+						},
+					},
+				},
+			}));
+		},
+		[],
+	);
+
+	const setRuleCliSurface = useCallback(
+		(rule_id: string, cliRuleIds: string[], cli: RuleCliSurface) => {
+			setConfig((prev) => {
+				const enabled_cli_rules = { ...prev.enabled_cli_rules };
+				if (typeof cli.enabled === "boolean") {
+					for (const cliRuleId of cliRuleIds) {
+						enabled_cli_rules[cliRuleId] = cli.enabled;
+					}
+				}
+				return {
+					...prev,
+					enabled_cli_rules,
+					rule_surfaces: {
+						...prev.rule_surfaces,
+						[rule_id]: {
+							...(prev.rule_surfaces[rule_id] ?? {}),
+							cli: {
+								...(prev.rule_surfaces[rule_id]?.cli ?? {}),
+								...cli,
+							},
+						},
+					},
+				};
+			});
+		},
+		[],
+	);
 
 	const setExclusions = useCallback((rule_id: string, globs: string[]) => {
 		setConfig((prev) => ({
@@ -145,6 +243,8 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 		try {
 			const patch = {
 				enabled_rules: config.enabled_rules,
+				enabled_cli_rules: config.enabled_cli_rules,
+				rule_surfaces: config.rule_surfaces,
 				regex_rules: config.regex_rules,
 				skip_paths: config.skip_paths,
 			};
@@ -180,6 +280,10 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 				config,
 				pendingCount,
 				toggleRule,
+				toggleCliRule,
+				setCliRules,
+				setRuleHookSurface,
+				setRuleCliSurface,
 				setExclusions,
 				setSkipPaths,
 				saveConfig,

@@ -56,7 +56,7 @@ def cmd_handle(args: argparse.Namespace) -> int:
         return report_cli_input_error(exc)
     if not payload:
         return 0
-    platform = string_arg(args, "platform", PLATFORM_CLAUDE)
+    platform = string_arg(args, "platform", UNKNOWN_VALUE)
     logger.info(
         "hook cli handle payload",
         platform=platform,
