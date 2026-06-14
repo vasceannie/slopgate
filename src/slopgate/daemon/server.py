@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from dataclasses import replace
 from functools import partial
 import json
 from pathlib import Path
@@ -159,8 +158,7 @@ class HookDaemonServer:
         except RuntimeError as exc:
             _release_admission(admitted.repo_lane, admitted.worker_slots)
             self._send_response(
-                admitted.connection,
-                _accepted_response(DaemonResponse(ok=False, error=str(exc))),
+                admitted.connection, DaemonResponse(ok=False, error=str(exc))
             )
             admitted.connection.close()
             return None
@@ -187,11 +185,13 @@ class HookDaemonServer:
                     error=exc.__class__.__name__,
                 )
                 response = DaemonResponse(ok=False, error=str(exc))
-            self._send_response(connection, _accepted_response(response))
+            self._send_response(connection, response)
 
     def _handle_connection(self, connection: socket.socket) -> None:
         try:
-            request = _read_request(self.socket_path, connection)
+            response = self._scheduler.evaluate(
+                _read_request(self.socket_path, connection)
+            )
         except REQUEST_FAILURE_EXCEPTIONS as exc:
             logger.warning(
                 "hook daemon request failed",
@@ -199,16 +199,6 @@ class HookDaemonServer:
                 error=exc.__class__.__name__,
             )
             response = DaemonResponse(ok=False, error=str(exc))
-        else:
-            try:
-                response = _accepted_response(self._scheduler.evaluate(request))
-            except REQUEST_FAILURE_EXCEPTIONS as exc:
-                logger.warning(
-                    "hook daemon request failed",
-                    socket_path=str(self.socket_path),
-                    error=exc.__class__.__name__,
-                )
-                response = _accepted_response(DaemonResponse(ok=False, error=str(exc)))
         self._send_response(connection, response)
 
     def _send_response(
@@ -236,11 +226,7 @@ class HookDaemonServer:
                 response_ok=response.ok,
             )
             return encode_response(
-                DaemonResponse(
-                    ok=False,
-                    error="daemon response serialization failed",
-                    accepted=response.accepted,
-                )
+                DaemonResponse(ok=False, error="daemon response serialization failed")
             )
 
     def _unlink_socket(self) -> None:
@@ -257,12 +243,6 @@ class HookDaemonServer:
 
 def _retain_pending_futures(futures: set[Future[None]]) -> set[Future[None]]:
     return {future for future in futures if not future.done()}
-
-
-def _accepted_response(response: DaemonResponse) -> DaemonResponse:
-    if response.accepted:
-        return response
-    return replace(response, accepted=True)
 
 
 def _read_request(socket_path: Path, connection: socket.socket) -> DaemonRequest:

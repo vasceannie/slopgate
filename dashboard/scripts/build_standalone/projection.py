@@ -18,7 +18,7 @@ JSONDict: TypeAlias = dict[str, object]
 class SlopgateConfig(TypedDict):
     enabled_rules: dict[str, bool]
     enabled_cli_rules: dict[str, bool]
-    rule_surfaces: JSONDict
+    rule_surfaces: dict[str, JSONDict]
     rule_counterparts: dict[str, list[str]]
     regex_rules: list[JSONDict]
     skip_paths: list[str]
