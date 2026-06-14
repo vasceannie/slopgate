@@ -22,7 +22,6 @@ import type {
 } from "@/types/slopgate";
 
 import {
-	EMPTY_CONFIG,
 	RulesConfigContext,
 	type SaveStatus,
 } from "./rulesConfigContext";

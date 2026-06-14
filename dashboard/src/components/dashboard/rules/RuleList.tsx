@@ -1,11 +1,11 @@
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
-import { Search, ChevronDown, ChevronRight } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SEVERITY_COLORS } from "@/lib/chartTheme";
 import { cn } from "@/lib/utils";
 import type { RuleMetadata } from "@/types/slopgate";
-import { SEVERITY_COLORS } from "@/lib/chartTheme";
 import { categorySortIndex, getCategory } from "./model";
 
 type FilterType = "all" | "hot" | "disabled" | "partial" | "unsupported" | "changed";
@@ -438,7 +438,6 @@ export const RuleList = memo(function RuleList({
 			case "changed":
 				list = list.filter((r) => r.isChanged);
 				break;
-			case "all":
 			default:
 				break;
 		}

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FlagProvider } from "@/context/FlagContext";
 import { buildTraceSessionIndexes } from "@/hooks/useTraceData";
+import type { HookEvent, HookResult, LineageRole, Platform } from "@/types/slopgate";
 import {
 	initialTimelineSelection,
 	primarySessionCause,
@@ -9,7 +10,6 @@ import {
 	sessionActivitySummary,
 	type TimelineEntry,
 } from "../../lib/sessionHelpers";
-import type { HookEvent, HookResult, LineageRole, Platform } from "@/types/slopgate";
 import { SessionExplorer } from "./SessionExplorer";
 import { SessionTimeline } from "./SessionTimeline";
 

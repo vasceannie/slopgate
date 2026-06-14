@@ -368,7 +368,7 @@ export function SessionExplorer({ sessions }: Props) {
                             </tr>
                         </thead>
                         <tbody>
-                            {paginated.map((s) => (
+                            {paginated.map((s, index) => (
                                 <SessionRow
                                     key={s.id}
                                     session={s}
@@ -380,6 +380,7 @@ export function SessionExplorer({ sessions }: Props) {
                                         )
                                     }
                                     onCopy={() => copyId(s.id)}
+                                    index={index}
                                 />
                             ))}
                             {paginated.length === 0 && (
@@ -438,12 +439,14 @@ const SessionRow = memo(function SessionRow({
     isCopied,
     onToggle,
     onCopy,
+    index,
 }: {
     session: SessionData;
     isExpanded: boolean;
     isCopied: boolean;
     onToggle: () => void;
     onCopy: () => void;
+    index: number;
 }) {
 	const cause = useMemo(() => primarySessionCause(s), [s]);
 	const activity = useMemo(() => sessionActivitySummary(s), [s]);
@@ -469,17 +472,32 @@ const SessionRow = memo(function SessionRow({
         <>
             <tr
                 className={cn(
-                    "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors",
+                    "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-all duration-150 animate-in fade-in slide-in-from-bottom-1 fill-mode-both",
                     isExpanded && "bg-muted/10",
                 )}
+                style={{
+                    animationDelay: `${index * 25}ms`,
+                    animationFillMode: "both",
+                }}
                 onClick={onToggle}
             >
                 <td className="px-3 py-2">
-                    {isExpanded ? (
-                        <ChevronDown className="w-3 h-3" />
-                    ) : (
-                        <ChevronRight className="w-3 h-3" />
-                    )}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle();
+                        }}
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? "Collapse session" : "Expand session"}
+                        className="flex items-center justify-center p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                        {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                        ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        )}
+                    </button>
                 </td>
 				<td className="px-3 py-2 font-mono">
 					<span className="flex items-center gap-1">

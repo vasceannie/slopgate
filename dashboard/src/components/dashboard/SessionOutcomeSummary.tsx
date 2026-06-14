@@ -24,19 +24,19 @@ export function SessionOutcomeSummary({ session }: SessionOutcomeSummaryProps) {
 		cause.decision !== "allow";
 
 	return (
-		<div className="bg-card/25 border-b border-border/60 px-4 py-3 text-xs select-none">
+		<div className="bg-card/25 border-b border-border/60 px-4 py-3 text-xs select-none transition-all duration-300 hover:bg-card/30">
 			<div className="flex flex-wrap items-center justify-between gap-4">
 				<div className="flex items-center gap-2.5 min-w-0">
 					{isBlocked ? (
-						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-deny/10 text-signal-deny border border-signal-deny/20">
+						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-deny/10 text-signal-deny border border-signal-deny/20 transition-transform duration-200 hover:scale-105">
 							<AlertOctagon className="w-4 h-4" />
 						</div>
 					) : isAdvisory ? (
-						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-ask/10 text-signal-ask border border-signal-ask/20">
+						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-ask/10 text-signal-ask border border-signal-ask/20 transition-transform duration-200 hover:scale-105">
 							<ShieldAlert className="w-4 h-4" />
 						</div>
 					) : (
-						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-allow/10 text-signal-allow border border-signal-allow/20">
+						<div className="flex items-center justify-center w-6 h-6 rounded bg-signal-allow/10 text-signal-allow border border-signal-allow/20 transition-transform duration-200 hover:scale-105">
 							<CheckCircle2 className="w-4 h-4" />
 						</div>
 					)}

@@ -1607,7 +1607,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 		return isLifecycleOnly;
 	}), [pageEntries]);
 
-	const renderTimelineRow = (entry: TimelineEntry, isUnmatched = false) => {
+	const renderTimelineRow = (entry: TimelineEntry, index: number, isUnmatched = false) => {
 		const isSelected = activeEntryId === entry.id;
 		const rowSummary = timelineRowSummary(entry);
 
@@ -1621,17 +1621,21 @@ export const SessionTimeline = memo(function SessionTimeline({
 			<div
 				key={entry.id}
 				className={cn(
-					"relative flex flex-col mb-3 last:mb-0 group border-b border-border/10 pb-2 transition-all",
+					"relative flex flex-col mb-3 last:mb-0 group border-b border-border/10 pb-2 transition-all duration-150 animate-in fade-in slide-in-from-bottom-1 fill-mode-both",
 					deEmphasize && "opacity-60 hover:opacity-100",
 					isSelected && "bg-primary/5 rounded px-2 -mx-2 border-primary/20",
 				)}
+				style={{
+					animationDelay: `${index * 15}ms`,
+					animationFillMode: "both",
+				}}
 			>
 				<button
 					type="button"
 					aria-label={`${entry.type} ${entry.label} ${entry.resultLabel ?? ""}`.trim()}
 					aria-expanded={isSelected}
 					className={cn(
-						"relative flex w-full cursor-pointer items-start gap-3 rounded p-1.5 pr-9 text-left transition-colors hover:bg-muted/10 focus:outline-none focus:ring-1 focus:ring-primary/50",
+						"relative flex w-full cursor-pointer items-start gap-3 rounded p-1.5 pr-9 text-left transition-all duration-150 ease-out-quint hover:bg-muted/15 active:scale-[0.985] focus:outline-none focus:ring-1 focus:ring-primary/50",
 						isSelected && "bg-primary/10 ring-1 ring-primary/30",
 					)}
 					onClick={() => {
@@ -1714,7 +1718,7 @@ export const SessionTimeline = memo(function SessionTimeline({
 		const corrStatus = correlationStatus(entry);
 
 		return (
-			<div className="bg-muted/15 border border-border/20 p-3 rounded text-[11px] space-y-3 font-sans">
+			<div key={entry.id} className="bg-muted/15 border border-border/20 p-3 rounded text-[11px] space-y-3 font-sans transition-all duration-300 ease-out-expo animate-in fade-in slide-in-from-right-4">
 				<TimelineVerdictStrip entry={entry} />
 
 				{entry.candidate_paths && entry.candidate_paths.length > 0 && (
@@ -2032,14 +2036,14 @@ export const SessionTimeline = memo(function SessionTimeline({
 					<div className="p-4 pl-10 relative">
 						<div className="absolute left-[21px] top-6 bottom-6 w-px bg-border" />
 
-						{pagePrimaryEntries.map((entry) => renderTimelineRow(entry))}
+						{pagePrimaryEntries.map((entry, idx) => renderTimelineRow(entry, idx))}
 
 						{pageUnmatchedEntries.length > 0 && (
 							<div className="mt-4">
 								<h4 className="text-[9px] text-muted-foreground uppercase tracking-wider mb-2 font-bold pl-1.5">
 									Unmatched trace events ({pageUnmatchedEntries.length})
 								</h4>
-								{pageUnmatchedEntries.map((entry) => renderTimelineRow(entry, true))}
+								{pageUnmatchedEntries.map((entry, idx) => renderTimelineRow(entry, pagePrimaryEntries.length + idx, true))}
 							</div>
 						)}
 
@@ -2096,7 +2100,7 @@ function NestedFilterChip({
 			type="button"
 			onClick={onClick}
 			className={cn(
-				"rounded border px-1.5 py-0.5 transition-colors",
+				"rounded border px-1.5 py-0.5 transition-all duration-150 ease-out-quint active:scale-95",
 				active
 					? "border-primary/40 bg-primary/15 text-primary"
 					: "border-border/40 bg-muted/20 text-muted-foreground hover:text-foreground",
@@ -2146,7 +2150,7 @@ function NestedMultiSelectMenu<T extends string>({
 				ref={triggerRef}
 				onClick={() => setOpenMenuId(isOpen ? null : menuId)}
 				className={cn(
-					"rounded border px-1.5 py-0.5 transition-colors",
+					"rounded border px-1.5 py-0.5 transition-all duration-150 ease-out-quint active:scale-95",
 					selected.size > 0 || isOpen
 						? "border-primary/40 bg-primary/15 text-primary"
 						: "border-border/40 bg-muted/20 text-muted-foreground hover:text-foreground",
@@ -2155,7 +2159,7 @@ function NestedMultiSelectMenu<T extends string>({
 				{selectionLabel}
 			</button>
 			{isOpen && (
-				<div className="absolute left-0 top-full z-30 mt-1 min-w-44 rounded border border-border bg-popover p-2 shadow-lg">
+				<div className="absolute left-0 top-full z-30 mt-1 min-w-44 rounded border border-border bg-popover p-2 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150 ease-out-quint">
 					<div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
 						Options
 					</div>

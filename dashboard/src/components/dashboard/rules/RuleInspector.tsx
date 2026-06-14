@@ -1,17 +1,18 @@
-import { memo, useCallback, useState, useMemo } from "react";
-import { X, Plus, HelpCircle, AlertTriangle } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
+import { AlertTriangle, HelpCircle, Plus, X } from "lucide-react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
 	Sheet,
 	SheetContent,
+	SheetDescription,
 	SheetHeader,
 	SheetTitle,
-	SheetDescription,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { SEVERITY_COLORS } from "@/lib/chartTheme";
 import { cn } from "@/lib/utils";
 import type {
 	RuleCliSurface,
@@ -19,7 +20,6 @@ import type {
 	RuleMetadata,
 	RuleSurfaceAction,
 } from "@/types/slopgate";
-import { SEVERITY_COLORS } from "@/lib/chartTheme";
 import { HOOK_ACTIONS, HOOK_EVENT_OPTIONS } from "./model";
 
 interface RuleInspectorProps {
@@ -193,10 +193,11 @@ const HookParamsSection = memo(function HookParamsSection({
 				Hook Parameters
 			</h4>
 			<div className="space-y-1">
-				<label className="text-[0.75rem] text-muted-foreground font-medium">
+				<label htmlFor="action-enforcement" className="text-[0.75rem] text-muted-foreground font-medium">
 					Action Enforcement
 				</label>
 				<select
+					id="action-enforcement"
 					value={hookAction}
 					onChange={handleActionChange}
 					className="h-8 w-full rounded border border-border bg-background px-2.5 text-[0.875rem] text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary"
@@ -210,9 +211,9 @@ const HookParamsSection = memo(function HookParamsSection({
 			</div>
 
 			<div className="space-y-1.5 pt-1">
-				<label className="text-[0.75rem] text-muted-foreground font-medium">
+				<span className="text-[0.75rem] text-muted-foreground font-medium block">
 					Event Subscription Triggers
-				</label>
+				</span>
 				<div className="flex flex-wrap gap-1.5">
 					{HOOK_EVENT_OPTIONS.map((evtName) => {
 						const hasEvent = hookEvents.includes(evtName);
@@ -249,7 +250,7 @@ interface PathExclusionsSectionProps {
 }
 
 const PathExclusionsSection = memo(function PathExclusionsSection({
-	ruleId,
+	ruleId: _ruleId,
 	source,
 	excludePathGlobs,
 	draftExclusion,

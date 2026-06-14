@@ -1,10 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useRulesConfig } from "@/context/useRulesConfig";
-import type { RuleMetadata, SlopgateConfig } from "@/types/slopgate";
+import type { SlopgateConfig } from "@/types/slopgate";
 import { buildRuleMetadata, getRuleChangedFields } from "./model";
 import { RuleCommandBand } from "./RuleCommandBand";
-import { RuleList } from "./RuleList";
 import { RuleInspector } from "./RuleInspector";
+import { RuleList } from "./RuleList";
 
 interface RuleWorkbenchProps {
 	fireCounts: Map<string, number>;

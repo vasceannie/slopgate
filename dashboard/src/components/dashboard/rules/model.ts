@@ -1,11 +1,9 @@
+import { getRuleDescription } from "@/lib/ruleDescriptions";
 import type {
-	RuleCliSurface,
-	RuleHookSurface,
 	RuleMetadata,
 	Severity,
 	SlopgateConfig,
 } from "@/types/slopgate";
-import { getRuleDescription } from "@/lib/ruleDescriptions";
 export const QUALITY_LINT_RULE_ID = "QUALITY-LINT-001";
 
 export const HOOK_ACTIONS = [

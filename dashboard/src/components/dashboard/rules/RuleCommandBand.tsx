@@ -1,7 +1,8 @@
-import { memo, useCallback, useMemo, useState } from "react";
 import {
 	AlertTriangle,
 	Check,
+	ChevronDown,
+	ChevronUp,
 	Globe,
 	Loader2,
 	Plus,
@@ -10,13 +11,12 @@ import {
 	Wifi,
 	WifiOff,
 	X,
-	ChevronDown,
-	ChevronUp,
 } from "lucide-react";
-import { useRulesConfig } from "@/context/useRulesConfig";
-import { Input } from "@/components/ui/input";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useRulesConfig } from "@/context/useRulesConfig";
 import { cn } from "@/lib/utils";
 import type { RuleMetadata } from "@/types/slopgate";
 import { getPendingChangesList } from "./model";
