@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from slopgate.constants import METADATA_PATH, PRODUCTION_SYMBOL_PREVIEW_LIMIT
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
-    loaded_source_at_path,
     metadata_str,
     path_source_from_metadata,
     safe_parse,
@@ -60,7 +59,7 @@ def _load_target_function(
     func_name = metadata_str(finding.metadata, "function")
     if path_str is None or func_name is None:
         return None
-    loaded = loaded_source_at_path(path_str, ctx.config.root)
+    loaded = path_source_from_metadata(finding, ctx)
     if loaded is None:
         return None
     full_path, source = loaded

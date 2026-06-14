@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -74,13 +75,7 @@ def build_project_index(request: ProjectIndexRequest) -> ProjectIndex:
         summaries.append(summary)
         bytes_used += summary_size
     dirty_paths = tuple(
-        sorted(
-            {
-                path.resolve().relative_to(root).as_posix()
-                for path in request.dirty_paths
-                if path.resolve().is_relative_to(root)
-            }
-        )
+        sorted({_project_path_text(path, root) for path in request.dirty_paths})
     )
     return ProjectIndex(
         root=root,
@@ -112,6 +107,13 @@ def _common_parent(left: Path, right: Path) -> Path:
             break
         common_parts.append(left_part)
     return Path(*common_parts) if common_parts else Path(left.anchor or right.anchor)
+
+
+def _project_path_text(path: Path, root: Path) -> str:
+    resolved = path.resolve()
+    if resolved.is_relative_to(root):
+        return resolved.relative_to(root).as_posix()
+    return Path(os.path.relpath(resolved, root)).as_posix()
 
 
 def _sorted_project_paths(

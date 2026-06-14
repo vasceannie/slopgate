@@ -157,10 +157,12 @@ def test_node_daemon_client_fails_closed_after_accepted_response() -> None:
         "response.accepted" in NODE_DAEMON_CLIENT_SCRIPT,
         "process.exit(Number(response.exit_code)||1)" in NODE_DAEMON_CLIENT_SCRIPT,
         "process.exit(75)" in NODE_DAEMON_CLIENT_SCRIPT,
+        "client.write(req,()=>{sent=true;client.end()})" in NODE_DAEMON_CLIENT_SCRIPT,
+        "sent=true;client.end(req)" not in NODE_DAEMON_CLIENT_SCRIPT,
     )
 
-    assert accepted_contract == (True, True, True), (
-        "Node daemon proxy should fail closed for accepted errors while preserving fallback sentinel"
+    assert accepted_contract == (True, True, True, True, True), (
+        "Node proxy should mark request admission only after the write callback"
     )
 
 

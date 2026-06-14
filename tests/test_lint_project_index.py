@@ -136,6 +136,47 @@ def test_project_index_tracks_dirty_paths_and_memory_cap(tmp_path: Path) -> None
     }
 
 
+def test_project_index_preserves_dirty_paths_outside_index_root(
+    tmp_path: Path,
+) -> None:
+    source, test = _write_project_files(tmp_path / "repo")
+    external_dirty = tmp_path / "external" / "generated.py"
+    external_dirty.parent.mkdir(parents=True)
+    external_dirty.write_text("VALUE = 1\n", encoding="utf-8")
+
+    index = build_project_index(
+        ProjectIndexRequest(
+            root=tmp_path / "repo",
+            src_files=(source,),
+            test_files=(test,),
+            dirty_paths=(external_dirty,),
+        )
+    )
+
+    assert index.dirty_paths == ("../external/generated.py",), (
+        "Dirty paths outside source/test common roots should remain visible"
+    )
+
+
+def test_project_index_preserves_dirty_only_paths(tmp_path: Path) -> None:
+    dirty_path = tmp_path / "generated" / "worker.py"
+    dirty_path.parent.mkdir(parents=True)
+    dirty_path.write_text("VALUE = 1\n", encoding="utf-8")
+
+    index = build_project_index(
+        ProjectIndexRequest(
+            root=tmp_path,
+            src_files=(),
+            test_files=(),
+            dirty_paths=(dirty_path,),
+        )
+    )
+
+    assert index.dirty_paths == ("generated/worker.py",), (
+        "Dirty-only index builds should preserve their dirty path signal"
+    )
+
+
 def test_project_index_uses_file_common_root_for_external_inputs(
     tmp_path: Path,
 ) -> None:

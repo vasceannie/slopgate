@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
+    enrichment_root,
     relative_path,
     safe_read,
 )
@@ -52,7 +53,8 @@ def enrich_hardcoded_paths(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich PY-QUALITY-009 with central path-config hints."""
 
     extras: list[str] = []
-    for candidate in _iter_path_config_candidates(ctx.config.root):
+    root = enrichment_root(ctx)
+    for candidate in _iter_path_config_candidates(root):
         content = safe_read(candidate, max_bytes=10_000)
         if not content:
             continue
@@ -60,7 +62,7 @@ def enrich_hardcoded_paths(finding: RuleFinding, ctx: HookContext) -> None:
         if not lines:
             continue
 
-        relative = relative_path(candidate, ctx.config.root)
+        relative = relative_path(candidate, root)
         extras.append(f"\nPath configuration found in `{relative}`:")
         extras.extend(f"  {line}" for line in lines)
         break

@@ -25,7 +25,7 @@ NODE_DAEMON_CLIENT_SCRIPT = (
     "const sock=process.env.SLOPGATE_DAEMON_SOCKET;let data='',sent=false;"
     "const failClosed=m=>{fs.writeSync(2,m+'\\n');process.exit(1)};"
     f"const client=net.createConnection(sock);client.setTimeout({NODE_DAEMON_TIMEOUT_MS});"
-    "client.on('connect',()=>{sent=true;client.end(req)});"
+    "client.on('connect',()=>{client.write(req,()=>{sent=true;client.end()})});"
     "client.on('data',chunk=>data+=chunk);"
     "client.on('timeout',()=>sent?failClosed('daemon request accepted but response unavailable: timed out'):process.exit(75));"
     "client.on('error',e=>sent?failClosed('daemon request accepted but response unavailable: '+e.message):process.exit(75));"

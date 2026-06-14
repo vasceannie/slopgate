@@ -95,10 +95,32 @@ def loaded_source_at_path(path_str: str, root: Path) -> tuple[Path, str] | None:
     return full_path, source
 
 
+def enrichment_root(ctx: HookContext) -> Path:
+    root = ctx.config.root
+    repo_root_value = getattr(ctx.config, "repo_root", root)
+    repo_root = repo_root_value if isinstance(repo_root_value, Path) else root
+    cwd_value = getattr(ctx, "cwd", root)
+    cwd = cwd_value if isinstance(cwd_value, Path) else Path(str(cwd_value))
+    resolved_root = root.resolve()
+    resolved_repo_root = repo_root.resolve()
+    resolved_cwd = cwd.resolve()
+    if (
+        resolved_root == resolved_repo_root
+        or resolved_root.is_relative_to(resolved_repo_root)
+        or resolved_cwd.is_relative_to(resolved_repo_root)
+    ):
+        return repo_root
+    return root
+
+
 def path_source_from_metadata(
     finding: RuleFinding, ctx: HookContext
 ) -> tuple[Path, str] | None:
     path_str = metadata_str(finding.metadata, METADATA_PATH)
     if path_str is None:
         return None
+    root = enrichment_root(ctx)
+    loaded = loaded_source_at_path(path_str, root)
+    if loaded is not None or root == ctx.config.root:
+        return loaded
     return loaded_source_at_path(path_str, ctx.config.root)

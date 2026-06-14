@@ -17,7 +17,7 @@ from slopgate.constants import (
     TOOL_WEB_FETCH,
     UNKNOWN_VALUE,
 )
-from slopgate.adapters import get_adapter
+from slopgate.adapters import PlatformAdapter, get_adapter
 from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
 from slopgate.lint._helpers import reset_request_analysis_cache
@@ -53,6 +53,13 @@ class _EvaluationMetadata:
     @property
     def repo_root_text(self) -> str | None:
         return str(self.resolved_repo_root) if self.resolved_repo_root else None
+
+
+@dataclass(frozen=True, slots=True)
+class _EvaluationTraceContext:
+    ctx: HookContext
+    metadata: _EvaluationMetadata
+    started_at: float
 
 
 def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata:
@@ -195,44 +202,79 @@ def _payload_for_done(
     }
 
 
+def _trace_evaluation_failure(
+    trace_context: _EvaluationTraceContext, exc: Exception
+) -> None:
+    timing: dict[str, object] = {
+        "evaluation_ms": int((monotonic() - trace_context.started_at) * 1000)
+    }
+    result = EngineResult(
+        event_name=trace_context.ctx.event_name,
+        errors=[f"{exc.__class__.__name__}: {exc}"],
+    )
+    trace_context.ctx.trace.result(
+        _payload_for_done(trace_context.ctx, trace_context.metadata, result, timing)
+    )
+
+
+def _evaluate_rules(
+    ctx: HookContext,
+    trace_platform: str,
+    metadata: _EvaluationMetadata,
+    adapter: PlatformAdapter,
+) -> tuple[EngineResult, int]:
+    capture_repair_plan_signal(ctx)
+    rule_engine_start = monotonic()
+    acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
+    rule_engine_ms = int((monotonic() - rule_engine_start) * 1000)
+    enforce_retry_budget(ctx, acc.findings)
+    apply_loop_aware_steering(ctx, acc.findings)
+    inject_recent_failure_context(ctx, acc.findings)
+    acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
+    acc.findings = dedupe_findings(acc.findings)
+    output = render_output(ctx, acc.findings, adapter=adapter)
+    result = EngineResult(
+        event_name=ctx.event_name,
+        findings=acc.findings,
+        output=output,
+        errors=acc.errors,
+    )
+    return result, rule_engine_ms
+
+
 def evaluate_payload(
     payload_dict: Mapping[str, object],
     platform: str = UNKNOWN_VALUE,
 ) -> EngineResult:
     reset_request_analysis_cache()
     evaluation_start = monotonic()
+    ctx: HookContext | None = None
+    trace_context: _EvaluationTraceContext | None = None
     try:
         trace_platform = platform.strip().lower() or UNKNOWN_VALUE
         adapter_platform = (
             PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
         )
         adapter = get_adapter(adapter_platform)
-        ctx = build_context(adapter.normalize_payload(payload_dict))
+        ctx = build_context(
+            adapter.normalize_payload(payload_dict), buffered_trace=True
+        )
         metadata = _evaluation_metadata(ctx, trace_platform)
+        trace_context = _EvaluationTraceContext(ctx, metadata, evaluation_start)
         ctx.trace.event(_payload_for_start(ctx, metadata))
 
-        capture_repair_plan_signal(ctx)
-        rule_engine_start = monotonic()
-        acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
-        rule_engine_ms = int((monotonic() - rule_engine_start) * 1000)
-        enforce_retry_budget(ctx, acc.findings)
-        apply_loop_aware_steering(ctx, acc.findings)
-        inject_recent_failure_context(ctx, acc.findings)
-        acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
-        acc.findings = dedupe_findings(acc.findings)
-        output = render_output(ctx, acc.findings, adapter=adapter)
-
-        result = EngineResult(
-            event_name=ctx.event_name,
-            findings=acc.findings,
-            output=output,
-            errors=acc.errors,
-        )
+        result, rule_engine_ms = _evaluate_rules(ctx, trace_platform, metadata, adapter)
         timing: dict[str, object] = {
-            "evaluation_ms": int((monotonic() - evaluation_start) * 1000),
+            "evaluation_ms": int((monotonic() - trace_context.started_at) * 1000),
             "rule_engine_ms": rule_engine_ms,
         }
         ctx.trace.result(_payload_for_done(ctx, metadata, result, timing))
         return result
+    except Exception as exc:
+        if trace_context is not None:
+            _trace_evaluation_failure(trace_context, exc)
+        raise
     finally:
+        if ctx is not None:
+            ctx.trace.flush()
         reset_request_analysis_cache()
