@@ -7,21 +7,32 @@ from pathlib import Path
 
 import pytest
 
+from slopgate.config import load_config
+from slopgate.context import HookContext
+from slopgate.lint._collector_groups.integrity import (
+    full_integrity_collectors,
+    touched_integrity_collectors,
+)
 from slopgate.lint._detectors.test_smells import (
+    IntegrityIndex,
+    build_test_integrity_index,
     detect_hypothesis_candidates,
     detect_missing_integration_tests,
     detect_stale_test_references,
     detect_untested_production_code,
-)
-from slopgate.lint._detectors.test_smells._integrity_index import (
-    IntegrityIndex,
-    build_test_integrity_index,
 )
 from slopgate.lint._helpers import (
     ParsedFile,
     build_parent_map,
     compute_string_line_ranges,
 )
+from slopgate.rules.common.quality.lint import collect_touched_lint_failures
+from slopgate.state import HookStateStore
+from slopgate.trace import TraceWriter
+from slopgate.util.payloads import HookPayload
+
+TOUCHED_SOURCE_PATH = "src/sample.py"
+TOUCHED_SOURCE_CONTENT = "value = 1\n"
 
 
 def _parsed(source: str, rel: str) -> ParsedFile:
@@ -67,6 +78,61 @@ def _sample_inputs() -> tuple[list[ParsedFile], list[ParsedFile]]:
         )
     ]
     return parsed_src, parsed_tests
+
+
+def _post_tool_context_for_touched_source(tmp_path: Path) -> tuple[HookContext, Path]:
+    source_file = tmp_path / TOUCHED_SOURCE_PATH
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(TOUCHED_SOURCE_CONTENT, encoding="utf-8")
+    config = load_config(
+        root=tmp_path,
+        repo_root=tmp_path,
+        ensure_enrollment=False,
+        ensure_trace=False,
+    )
+    trace = TraceWriter(tmp_path / ".slopgate" / "trace")
+    payload = HookPayload(
+        {
+            "session_id": "test-session",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": TOUCHED_SOURCE_PATH,
+                "content": TOUCHED_SOURCE_CONTENT,
+            },
+        },
+        config,
+    )
+    return (
+        HookContext(
+            payload=payload,
+            config=config,
+            trace=trace,
+            state=HookStateStore(trace.trace_dir),
+        ),
+        source_file.resolve(),
+    )
+
+
+def _record_touched_collector_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[list[Path], list[Path], object]]:
+    captured: list[tuple[list[Path], list[Path], object]] = []
+
+    def fake_run_touched_collectors(
+        src_files: list[Path],
+        test_files: list[Path],
+        *,
+        reference_test_files: object = None,
+    ) -> list[tuple[str, list[object]]]:
+        captured.append((src_files, test_files, reference_test_files))
+        return []
+
+    monkeypatch.setattr(
+        "slopgate.lint._collectors.run_touched_collectors",
+        fake_run_touched_collectors,
+    )
+    return captured
 
 
 def _block_index_rebuild_helpers(
@@ -163,7 +229,6 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
 def test_test_integrity_collectors_build_one_shared_index(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from slopgate.lint import _collectors
     from slopgate.lint._detectors import test_smells
 
     parsed_src, parsed_tests = _sample_inputs()
@@ -176,6 +241,55 @@ def test_test_integrity_collectors_build_one_shared_index(
 
     monkeypatch.setattr(test_smells, "build_test_integrity_index", counted_build)
 
-    _collectors.test_integrity_collectors(parsed_src, parsed_tests)
+    full_integrity_collectors(parsed_src, parsed_tests)
 
     assert calls == 1
+
+
+def test_run_touched_collectors_skips_suite_wide_integrity_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from slopgate.lint import _collectors
+    from slopgate.lint._detectors import test_smells
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("touched collectors should not build suite index")
+
+    monkeypatch.setattr(test_smells, "build_test_integrity_index", fail_build)
+
+    immediate_names = {name for name, _violations in touched_integrity_collectors([])}
+    touched_runner_names = {
+        name for name, _violations in _collectors.run_touched_collectors([], [])
+    }
+    collector_contract = (
+        "untested-production-code" not in touched_runner_names,
+        "weak-test-assertion" in touched_runner_names,
+        "weak-test-assertion" in immediate_names,
+    )
+
+    assert collector_contract == (True, True, True), (
+        "Touched collectors should defer suite-wide checks and keep local checks immediate"
+    )
+
+
+def test_collect_touched_lint_failures_skips_reference_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx, source_file = _post_tool_context_for_touched_source(tmp_path)
+    captured = _record_touched_collector_inputs(monkeypatch)
+
+    def resolve_source_only(_ctx: HookContext) -> tuple[list[Path], list[Path]]:
+        return [source_file], []
+
+    monkeypatch.setattr("slopgate.lint._helpers.test_roots", None)
+    monkeypatch.setattr(
+        "slopgate.rules.common.quality.lint.resolve_python_candidates",
+        resolve_source_only,
+    )
+
+    collect_touched_lint_failures(ctx)
+
+    assert captured == [([source_file], [], None)], (
+        "Touched lint should call collectors without suite reference files"
+    )
