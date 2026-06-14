@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TextIO
@@ -44,7 +44,7 @@ def write_text_atomic_locked(
 
 
 @contextmanager
-def locked_path(path: Path) -> Iterator[None]:
+def locked_path(path: Path) -> Generator[None]:
     """Lock a logical path across threads and cooperating processes."""
 
     lock = _path_lock_for(path)
@@ -65,7 +65,7 @@ def _path_lock_for(path: Path) -> threading.Lock:
 
 
 @contextmanager
-def _locked_file(handle: TextIO) -> Iterator[None]:
+def _locked_file(handle: TextIO) -> Generator[None]:
     if fcntl is not None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
     try:
