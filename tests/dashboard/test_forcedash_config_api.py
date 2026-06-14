@@ -107,10 +107,11 @@ def test_parse_config_payload_rejects_non_object_json() -> None:
 def test_dashboard_config_adds_rule_counterpart_metadata() -> None:
     config = dashboard_config({"enabled_rules": {}})
 
-    counterparts = config.get("rule_counterparts")
-    assert isinstance(counterparts, dict), (
+    counterparts_obj = config.get("rule_counterparts")
+    assert isinstance(counterparts_obj, dict), (
         "Expected dashboard config to include rule counterpart metadata"
     )
+    counterparts = {str(key): value for key, value in counterparts_obj.items()}
     assert counterparts.get("PY-CODE-010") == ["long-line"], (
         "Expected dashboard counterparts to come from Slopgate parity metadata"
     )

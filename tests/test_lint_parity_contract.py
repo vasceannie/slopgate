@@ -28,6 +28,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _collector_names(function_names: set[str]) -> set[str]:
     source_path = Path(inspect.getsourcefile(_collectors) or "")
+    collector_groups = source_path.with_name("_collector_groups")
+    source_paths = (
+        source_path,
+        collector_groups / "integrity.py",
+        collector_groups / "runners.py",
+        collector_groups / "source.py",
+    )
+    candidate_names = function_names | {
+        f"_{name}" for name in function_names if not name.startswith("_")
+    }
+    names: set[str] = set()
+    for path in source_paths:
+        names |= _collector_names_from_path(path, candidate_names)
+    return names
+
+
+def _collector_names_from_path(source_path: Path, function_names: set[str]) -> set[str]:
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
     names: set[str] = set()
     for node in tree.body:
@@ -48,36 +65,56 @@ def _runtime_rule_ids() -> set[str]:
     for path in (ROOT / "src" / "slopgate" / "rules").rglob("*.py"):
         if "_staging" in path.parts:
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            target_name: str | None = None
-            value: ast.expr | None = None
-            if isinstance(node, ast.Assign):
-                value = node.value
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        target_name = target.id
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                target_name = node.target.id
-                value = node.value
-            if (
-                target_name == "rule_id"
-                and isinstance(value, ast.Constant)
-                and isinstance(value.value, str)
-            ):
-                ids.add(value.value)
+        ids |= _rule_ids_from_path(path)
+    ids |= _regex_rule_ids_from_defaults()
+    return ids
 
-    defaults = object_dict(
-        json.loads(
-            (ROOT / "src" / "slopgate" / "resources" / "defaults.json").read_text(
-                encoding="utf-8"
-            )
+
+def _rule_ids_from_path(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {
+        rule_id
+        for node in ast.walk(tree)
+        if (rule_id := _rule_id_assignment(node)) is not None
+    }
+
+
+def _rule_id_assignment(node: ast.AST) -> str | None:
+    target_name: str | None = None
+    value: ast.expr | None = None
+    if isinstance(node, ast.Assign):
+        value = node.value
+        target_name = _assigned_name(node.targets)
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        target_name = node.target.id
+        value = node.value
+    if target_name != "rule_id" or not isinstance(value, ast.Constant):
+        return None
+    return value.value if isinstance(value.value, str) else None
+
+
+def _assigned_name(targets: list[ast.expr]) -> str | None:
+    for target in targets:
+        if isinstance(target, ast.Name):
+            return target.id
+    return None
+
+
+def _regex_rule_ids_from_defaults() -> set[str]:
+    defaults_raw = json.loads(
+        (ROOT / "src" / "slopgate" / "resources" / "defaults.json").read_text(
+            encoding="utf-8"
         )
     )
+    if not is_object_dict(defaults_raw):
+        return set()
+    defaults = object_dict(defaults_raw)
+    ids: set[str] = set()
     for rule in object_list(defaults.get("regex_rules", [])):
         if not is_object_dict(rule):
             continue
-        rule_id = rule.get("rule_id")
+        rule_data = object_dict(rule)
+        rule_id = rule_data.get("rule_id")
         if isinstance(rule_id, str):
             ids.add(rule_id)
     return ids
@@ -139,12 +176,19 @@ def test_lint_collectors_are_baselined_or_classified() -> None:
             "_structure_src_collectors",
             "_ast_src_collectors",
             "_test_collectors",
+            "full_integrity_collectors",
             "test_integrity_collectors",
+            "touched_integrity_collectors",
             "run_all_collectors",
         }
     )
     test_integrity_collectors = _collector_names(
-        {"test_integrity_collectors", "run_test_integrity_collectors"}
+        {
+            "full_integrity_collectors",
+            "test_integrity_collectors",
+            "touched_integrity_collectors",
+            "run_test_integrity_collectors",
+        }
     )
     current_collectors = lint_check_collectors | test_integrity_collectors
     baseline = json.loads((ROOT / "baselines.json").read_text(encoding="utf-8"))

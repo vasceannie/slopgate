@@ -98,6 +98,7 @@ class PythonAstImportFailureRule(Rule):
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
     def __init__(self, error: Exception) -> None:
+        super().__init__()
         self._error = error
 
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:
@@ -126,23 +127,6 @@ class PythonAstImportFailureRule(Rule):
         ]
 
 
-def _trace_python_ast_import_error(ctx: HookContext, error: Exception) -> None:
-    ctx.trace.rule(
-        {
-            "platform": "any",
-            "event_name": ctx.event_name,
-            SESSION_ID: ctx.session_id,
-            "tool_name": ctx.tool_name,
-            "rule_id": "PY-AST-IMPORT-001",
-            "severity": "high",
-            "decision": None,
-            "message": "Python AST rules disabled due to import error",
-            "additional_context": repr(error),
-            "metadata": {"kind": "import_error"},
-        }
-    )
-
-
 def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
     global _python_ast_import_reported
 
@@ -152,7 +136,20 @@ def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
         return None
     if not already_reported:
         _python_ast_import_reported = True
-        _trace_python_ast_import_error(ctx, current_error)
+        ctx.trace.rule(
+            {
+                "platform": "any",
+                "event_name": ctx.event_name,
+                SESSION_ID: ctx.session_id,
+                "tool_name": ctx.tool_name,
+                "rule_id": "PY-AST-IMPORT-001",
+                "severity": "high",
+                "decision": None,
+                "message": "Python AST rules disabled due to import error",
+                "additional_context": repr(current_error),
+                "metadata": {"kind": "import_error"},
+            }
+        )
     return [PythonAstImportFailureRule(current_error)]
 
 

@@ -16,6 +16,7 @@ from tests.daemon_protocol.support import (
     RejectingHookRequestHandler,
     SERVER_JOIN_TIMEOUT_SECONDS,
     DaemonRequest,
+    DaemonResponse,
     UnserializableHookRequestHandler,
     decode_response,
     observe_idle_daemon_response,
@@ -27,6 +28,8 @@ from tests.daemon_protocol.support import (
 )
 
 _daemon_server = importlib.import_module("slopgate.daemon.server")
+_daemon_client = importlib.import_module("slopgate.daemon.client")
+_daemon_protocol = importlib.import_module("slopgate.daemon.protocol")
 
 DAEMON_CLIENT_PROPERTY_EXAMPLES = 5
 
@@ -56,6 +59,9 @@ def test_daemon_request_payload_reaches_handler(tmp_path: Path) -> None:
     assert response.output["event"] == "pre_tool_use", "Daemon should preserve event"
     assert response.output["source"] == "test", (
         "Daemon should preserve request metadata"
+    )
+    assert (response.ok, response.accepted) == (True, True), (
+        "Handled daemon requests should be accepted successes"
     )
 
 
@@ -94,6 +100,14 @@ def test_daemon_returns_error_response_when_runtime_handler_fails(
     )
     assert observation.response.error == "handler exploded", (
         "Daemon should surface the handler failure"
+    )
+    accepted_failure_contract = (
+        observation.response.ok,
+        observation.response.error,
+        observation.response.accepted,
+    )
+    assert accepted_failure_contract == (False, "handler exploded", True), (
+        "Handler failures after request decoding should be accepted failures"
     )
 
 
@@ -148,6 +162,21 @@ def test_daemon_response_preserves_exit_code_and_stderr(tmp_path: Path) -> None:
     thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
     assert response.stderr == "blocked\n", "Daemon response should preserve stderr text"
     assert response.exit_code == 2, "Daemon response should preserve nonzero exit code"
+    assert (response.stderr, response.exit_code, response.accepted) == (
+        "blocked\n",
+        2,
+        True,
+    ), "Rejected handled requests should preserve block response and acceptance"
+
+
+def test_daemon_response_preserves_accepted_flag() -> None:
+    response = DaemonResponse(ok=False, error="blocked", accepted=True)
+
+    decoded = decode_response(_daemon_protocol.encode_response(response))
+
+    assert (decoded.ok, decoded.error, decoded.accepted) == (False, "blocked", True), (
+        "Daemon protocol should round-trip accepted failures"
+    )
 
 
 def test_daemon_rejects_malformed_request_frame(tmp_path: Path) -> None:
@@ -199,6 +228,14 @@ def test_daemon_times_out_idle_client_without_hanging(tmp_path: Path) -> None:
     assert observation.response.error == "timed out", (
         "Idle client timeout should preserve the socket timeout reason"
     )
+    idle_failure_contract = (
+        observation.response.ok,
+        observation.response.error,
+        observation.response.accepted,
+    )
+    assert idle_failure_contract == (False, "timed out", False), (
+        "Idle clients should fail before request acceptance"
+    )
 
 
 def test_daemon_survives_unserializable_handler_response(tmp_path: Path) -> None:
@@ -214,9 +251,14 @@ def test_daemon_survives_unserializable_handler_response(tmp_path: Path) -> None
     assert observation.response.ok is False, (
         "Unserializable handler output should be returned as an error response"
     )
-    assert observation.response.error == "daemon response serialization failed", (
-        "Unserializable handler output should not leak raw response payloads"
+    serialization_failure_contract = (
+        observation.response.error,
+        observation.response.accepted,
     )
+    assert serialization_failure_contract == (
+        "daemon response serialization failed",
+        True,
+    ), "Unserializable handler output should be an accepted serialization failure"
 
 
 def test_daemon_client_reports_missing_socket(tmp_path: Path) -> None:
@@ -265,8 +307,12 @@ def test_daemon_client_reports_malformed_response_frame(tmp_path: Path) -> None:
 
     thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
     assert not thread.is_alive(), "Malformed-response test server should stop"
-    assert response.ok is False, "Malformed daemon responses should fail closed"
-    assert response.error, "Malformed daemon response should include parse detail"
+    accepted_failure_contract = (response.ok, response.error, response.accepted)
+    assert accepted_failure_contract == (
+        False,
+        _daemon_client.DAEMON_ACCEPTED_FAILURE_ERROR,
+        True,
+    ), "Malformed responses after sending a request should be accepted failures"
 
 
 def test_daemon_retains_only_pending_worker_futures() -> None:
