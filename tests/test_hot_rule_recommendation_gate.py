@@ -91,6 +91,20 @@ def _assert_context_only_advisory(result: EngineResult, rule_id: str) -> None:
     assert finding.decision == "context"
     assert result.output is None
     message = finding.message or ""
+    if rule_id == "PY-CODE-012":
+        assert message.startswith("Feature envy:"), (
+            f"PY-CODE-012 should use terse feature-envy facts: {message}"
+        )
+        assert "Advisory only" not in message, (
+            "PY-CODE-012 should not repeat advisory boilerplate in every finding"
+        )
+        assert "do not retry the write solely for this" not in message, (
+            "PY-CODE-012 retry guidance should live in static prompt context"
+        )
+        assert finding.additional_context is None, (
+            "PY-CODE-012 should not add dynamic additionalContext by itself"
+        )
+        return
     assert "Advisory only" in message
     assert "do not retry the write solely for this" in message
 
@@ -163,8 +177,10 @@ def test_quality_lint_posttool_reason_marks_already_mutated_repair(
     result = evaluate_payload(post_write_payload(tmp_path, "src/post_soft.py", content))
     support.assert_blocked(result, "QUALITY-LINT-001")
     context = additional_context(result)
-    assert "Blocking lint collector details" in str(result.output)
-    _assert_quality_lint_repair_context(context, str(result.output))
+    output_text = str(result.output)
+    assert "Blocking lint collector details" in output_text
+    assert "First lint target: src/post_soft.py" in output_text
+    _assert_quality_lint_repair_context(context, output_text)
 
 
 def test_quality_lint_pathless_reason_names_last_edit_fallback(tmp_path: Path) -> None:
@@ -253,7 +269,18 @@ def test_thin_wrapper_reason_lists_real_boundary_allowlist(tmp_path: Path) -> No
     result = evaluate_payload(write_payload(tmp_path, "src/wrap.py", content))
     support.assert_denied_by(result, "PY-CODE-013")
     context = additional_context(result)
-    assert "validates/normalizes" in context
+    required_fragments = (
+        "Bad: `def as_payload(value): return dict(value)`",
+        "Good: validate required keys",
+        "tuple/dict fixture shape",
+        "`str(...)` wrappers are still denied",
+        "validates/normalizes",
+    )
+    missing = [fragment for fragment in required_fragments if fragment not in context]
+    assert "Recovery skill: load `code-hygiene-refactor`" not in context, (
+        "PY-CODE-013 guidance should not require one brittle skill name"
+    )
+    assert missing == [], f"thin-wrapper context lost examples: {missing}"
     _assert_boundary_allowlist_context(context)
 
 
@@ -295,7 +322,9 @@ def test_context_only_hot_rules_say_advisory_not_retry_now(tmp_path: Path) -> No
     import_result = evaluate_payload(
         write_payload(tmp_path, "src/imports.py", import_fanout)
     )
-    envy_result = evaluate_payload(write_payload(tmp_path, "src/envy.py", feature_envy))
+    envy_result = evaluate_payload(
+        post_write_payload(tmp_path, "src/envy.py", feature_envy)
+    )
     assert any((item.rule_id == "PY-IMPORT-001" for item in import_result.findings))
     assert any((item.rule_id == "PY-CODE-012" for item in envy_result.findings))
     _assert_context_only_advisory(import_result, "PY-IMPORT-001")

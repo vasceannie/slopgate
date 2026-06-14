@@ -24,7 +24,7 @@ class PythonFeatureEnvyRule(Rule):
     """PY-CODE-012: Detect functions where >60% of attribute accesses target one external object."""
 
     rule_id = "PY-CODE-012"
-    title = "Block feature envy"
+    title = "Feature envy advisory"
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
     _IGNORE_NAMES = frozenset(
         {
@@ -157,7 +157,10 @@ class PythonFeatureEnvyRule(Rule):
                     title=self.title,
                     severity=Severity.LOW,
                     decision="context",
-                    message=f"Function `{node.name}` in `{path_value}` has feature envy: {count}/{total} attribute accesses target `{obj_name}`. Advisory only: this is context for a future design pass; do not retry the write solely for this. Consider moving this logic to {obj_name}'s class when you are already touching that boundary.",
+                    message=(
+                        f"Feature envy: {path_value}:{node.name} overuses "
+                        f"{obj_name} ({count}/{total} attrs)."
+                    ),
                     metadata={
                         METADATA_PATH: path_value,
                         METADATA_FUNCTION: node.name,

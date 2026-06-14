@@ -35,7 +35,7 @@
 | PY-CODE-009 | MEDIUM | Pre/Post ToolUse | Functions with N+ params (default: 4) |
 | PY-CODE-010 | MEDIUM | Pre/Post ToolUse | Lines over N chars (default: 120) |
 | PY-CODE-011 | HIGH | Pre/Post ToolUse | Nesting depth over N (default: 4) |
-| PY-CODE-012 | LOW | Pre/Post ToolUse | Feature envy (>60% accesses on one object) |
+| PY-CODE-012 | LOW | PostToolUse | Feature envy advisory (>60% accesses on one object) |
 | PY-CODE-013 | MEDIUM | Pre/Post ToolUse | Thin wrappers (single delegating call) |
 | PY-CODE-014 | HIGH | Pre/Post ToolUse | God class (>10 non-dunder methods) |
 | PY-CODE-015 | HIGH | Pre/Post ToolUse | Cyclomatic complexity >N (default: 10) |
@@ -82,6 +82,10 @@
 
 Configured in `config.json` under `regex_rules`. Each rule specifies patterns, target, and action.
 
+File-backed regex findings populate `metadata.path` with the primary target path
+and keep every matched path in `metadata.hits` for multi-hit diagnostics. Command
+and prompt regex denials may remain pathless when no reliable file target exists.
+
 ### Categories
 
 - **Python types** — PY-TYPE-001 (Any ban), PY-TYPE-002 (suppression ban)
@@ -106,7 +110,7 @@ Several rules have automatic enrichment that adds project-specific context to fi
 - **PY-TYPE-***: suggests TypedDict, Protocol, Callable based on content
 - **PY-CODE-008**: shows function structure with extraction points
 - **PY-CODE-009**: lists parameters, finds existing dataclass patterns
-- **PY-CODE-012**: shows envied object context and import location
+- **PY-CODE-012**: stores envied object context and import location in finding metadata
 - **PY-CODE-015**: breaks down complexity sources (ifs, loops, excepts, boolops)
 - **PY-EXC-002**: lists functions called in try blocks, suggests specific exceptions
 - **PY-LOG-001**: finds project logger module, detects structlog/loguru usage

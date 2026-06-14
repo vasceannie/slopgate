@@ -60,9 +60,6 @@ _RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
 
 
 class InspectableHookStateStore(HookStateStore):
-    def full_read_key(self, session_id: str, path: str) -> str:
-        return self._full_read_key(session_id, path)
-
     def save_state_for_test(self, state: Mapping[str, object]) -> None:
         self._save_state(state)
 

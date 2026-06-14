@@ -29,6 +29,7 @@ def _run_cmd_handle(
     def fake_evaluate_payload(
         payload: object, platform: str = "claude"
     ) -> EngineResult:
+        _ = payload
         if platform != "claude":
             pytest.fail(f"unexpected platform: {platform}")
         return EngineResult(
@@ -38,9 +39,14 @@ def _run_cmd_handle(
         )
 
     import slopgate.engine
+    import slopgate.cli.hook_runtime
 
     import slopgate.util.logger
-    monkeypatch.setattr(slopgate.util.logger, "_emit", lambda *args, **kwargs: None)
+
+    monkeypatch.setattr(slopgate.util.logger, "_emit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        slopgate.cli.hook_runtime, "_try_handle_via_daemon", lambda *_args: None
+    )
     monkeypatch.setattr(slopgate.engine, "evaluate_payload", fake_evaluate_payload)
     payload = {"hook_event_name": case.event_name, "cwd": "/tmp"}
     monkeypatch.setattr(

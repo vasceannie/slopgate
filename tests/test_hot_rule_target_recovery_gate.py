@@ -89,6 +89,26 @@ def test_content_target_finding_promotes_first_metadata_hit_as_display_target(
     assert "PY-QUALITY-010" in _pretool_value(output, "permissionDecisionReason")
 
 
+def test_repeated_regex_content_denial_routes_to_real_metadata_path(
+    tmp_path: Path,
+) -> None:
+    enroll_repo(tmp_path)
+    large_literal = "10" + "00"
+    content = f"def is_large(value):\n    return value > {large_literal}\n"
+    first = evaluate_payload(write_payload(tmp_path, "src/retry_magic.py", content))
+    second = evaluate_payload(write_payload(tmp_path, "src/retry_magic.py", content))
+    support.assert_denied_by(first, "PY-QUALITY-010")
+    support.assert_denied_by(second, "PY-QUALITY-010")
+
+    context = additional_context(second)
+
+    _assert_contains_all(
+        context,
+        ["Repeated deny detected", "target: src/retry_magic.py"],
+    )
+    assert "target: __pathless__" not in context
+
+
 def test_repeated_thin_wrapper_denial_routes_to_recovery_playbook(
     tmp_path: Path,
 ) -> None:
@@ -104,7 +124,7 @@ def test_repeated_thin_wrapper_denial_routes_to_recovery_playbook(
         context,
         [
             "Repeated deny detected",
-            "load `code-hygiene-refactor`",
+            "Prefer small helper extractions",
             "inline pass-throughs",
         ],
     )

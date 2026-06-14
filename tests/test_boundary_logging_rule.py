@@ -35,6 +35,55 @@ def _rule_ids(result: EngineResult) -> set[str]:
     return {finding.rule_id for finding in result.findings}
 
 
+GROUPED_BOUNDARY_SOURCE = """
+def normalize(gateway, payload: dict[str, str]) -> object:
+    return gateway.send(payload)
+
+
+def publish_event(bus, payload: dict[str, str]) -> None:
+    bus.publish_event("order.normalized", payload)
+
+
+class Client:
+    def send(self, payload: dict[str, str]) -> object:
+        return self.http.post("/orders", json=payload)
+""".lstrip()
+
+
+def test_multiple_boundaries_in_one_file_emit_one_finding(tmp_path: Path) -> None:
+    repo = _enrolled_repo(tmp_path)
+    result = evaluate_payload(
+        write_payload(
+            repo,
+            "src/orders/normalize.py",
+            GROUPED_BOUNDARY_SOURCE,
+        )
+    )
+
+    findings = [item for item in result.findings if item.rule_id == "PY-LOG-002"]
+    assert len(findings) == 1, "multiple boundaries should collapse into one finding"
+    finding = findings[0]
+    output = str(result.output)
+    required_fragments = (
+        "3 boundaries in normalize.py need structured logging",
+        "normalize, publish_event, Client.send",
+    )
+    missing = [fragment for fragment in required_fragments if fragment not in output]
+    metadata = finding.metadata
+    expected_metadata = {
+        "boundary_count": 3,
+        "functions": ["normalize", "publish_event", "Client.send"],
+        "function": "normalize",
+        "line": 1,
+    }
+    actual_metadata = {key: metadata.get(key) for key in expected_metadata}
+    assert missing == [], f"grouped boundary output missing fragments: {missing}"
+    assert output.count("Boundary logging required") == 1, (
+        "long boundary guidance should be attached once per grouped finding"
+    )
+    assert actual_metadata == expected_metadata, "grouped metadata should preserve boundaries"
+
+
 def test_event_boundary_publish_requires_log(tmp_path: Path) -> None:
     repo = _enrolled_repo(tmp_path)
     result = evaluate_payload(

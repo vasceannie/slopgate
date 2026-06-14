@@ -24,6 +24,7 @@ from slopgate.lint._helpers import reset_request_analysis_cache
 from slopgate.models import EngineResult
 
 from .._types import is_object_dict, object_dict
+from .advisories import compact_context_advisories
 from ._render import serialize_findings, render_output
 from ._retry import (
     apply_loop_aware_steering,
@@ -220,6 +221,7 @@ def evaluate_payload(
         inject_recent_failure_context(ctx, acc.findings)
         acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
         acc.findings = dedupe_findings(acc.findings)
+        compact_context_advisories(ctx, acc.findings)
         output = render_output(ctx, acc.findings, adapter=adapter)
 
         result = EngineResult(

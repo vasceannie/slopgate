@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from slopgate._types import ObjectDict, bool_value, object_list, string_value
 from ._keys import (
+    AdvisoryHitStateMixin,
     DenyHitStateMixin,
     FullReadStateMixin,
     SearchReminderStateMixin,
@@ -28,7 +29,7 @@ class RetryLockStateMixin(SessionStateMutationMixin):
 
     def get_retry_lock(self, session_id: str) -> ObjectDict | None:
         state = self._load_state()
-        raw = self._object_state_entry(state, "retry_locks", session_id)
+        raw = state["retry_locks"].get(session_id.strip())
         if raw is None:
             return None
         result: ObjectDict = {}
@@ -79,7 +80,7 @@ class RepairPlanStateMixin(SessionStateMutationMixin):
 
     def has_repair_plan(self, session_id: str) -> bool:
         state = self._load_state()
-        raw = self._object_state_entry(state, "repair_plans", session_id)
+        raw = state["repair_plans"].get(session_id.strip())
         if raw is None:
             return False
         return (
@@ -91,6 +92,7 @@ class RepairPlanStateMixin(SessionStateMutationMixin):
 class HookStateStore(
     FullReadStateMixin,
     SearchReminderStateMixin,
+    AdvisoryHitStateMixin,
     DenyHitStateMixin,
     RetryLockStateMixin,
     RepairPlanStateMixin,

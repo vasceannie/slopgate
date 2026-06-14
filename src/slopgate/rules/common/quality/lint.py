@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,14 @@ if TYPE_CHECKING:
     from slopgate.lint._baseline import Violation
 
 LINT_DETAIL_LIMIT = 3
+
+
+@dataclass(frozen=True, slots=True)
+class _TouchedLintReport:
+    failures: list[str]
+    details: list[list[str]]
+    targets: list[str]
+    first_diagnostic: dict[str, object] | None = None
 
 
 class SearchReminderRule(Rule):
@@ -106,16 +115,40 @@ def _violation_details(rule_name: str, violations: list[Violation]) -> list[list
     ]
     remaining = len(violations) - LINT_DETAIL_LIMIT
     if remaining > 0 and groups:
-        groups[-1].append(f"    +{remaining} more {rule_name} violation(s) not shown.")
+        groups[-1].append(
+            f"    +{remaining} more {rule_name} violation(s) not shown."
+        )
     return groups
 
 
-def collect_touched_lint_failures(
-    ctx: HookContext,
-) -> tuple[list[str], list[list[str]], list[str]]:
+def _first_lint_diagnostic(rule_name: str, violation: Violation) -> dict[str, object]:
+    from slopgate.lint._details import line_number, location
+
+    diagnostic: dict[str, object] = {
+        "collector": rule_name,
+        "location": location(violation),
+        METADATA_PATH: violation.relative_path,
+    }
+    line = line_number(violation)
+    if line is not None:
+        diagnostic["line"] = line
+    return diagnostic
+
+
+def _first_lint_diagnostic_text(diagnostic: dict[str, object] | None) -> str:
+    if diagnostic is None:
+        return ""
+    location_value = diagnostic.get("location")
+    collector = diagnostic.get("collector")
+    if not isinstance(location_value, str) or not isinstance(collector, str):
+        return ""
+    return f"First lint target: {location_value} ({collector}). "
+
+
+def _collect_touched_lint_report(ctx: HookContext) -> _TouchedLintReport:
     src_files, test_files = resolve_python_candidates(ctx)
     if not src_files and not test_files:
-        return ([], [], [])
+        return _TouchedLintReport([], [], [])
     from slopgate.lint._collectors import run_touched_collectors
     from slopgate.lint._config import load_config, set_config
 
@@ -125,13 +158,23 @@ def collect_touched_lint_failures(
     lint_targets = sorted(path for path in touched_paths if path != "<project>")
     failures: list[str] = []
     details: list[list[str]] = []
+    first_diagnostic: dict[str, object] | None = None
     for rule_name, violations in run_touched_collectors(src_files, test_files):
         scoped = [item for item in violations if item.relative_path in touched_paths]
         if not scoped:
             continue
+        if first_diagnostic is None:
+            first_diagnostic = _first_lint_diagnostic(rule_name, scoped[0])
         failures.append(f"{rule_name}: {len(scoped)}")
         details.extend(_violation_details(rule_name, scoped))
-    return (failures, details, lint_targets)
+    return _TouchedLintReport(failures, details, lint_targets, first_diagnostic)
+
+
+def collect_touched_lint_failures(
+    ctx: HookContext,
+) -> tuple[list[str], list[list[str]], list[str]]:
+    report = _collect_touched_lint_report(ctx)
+    return (report.failures, report.details, report.targets)
 
 
 def python_lint_targets(ctx: HookContext) -> list[str]:
@@ -150,12 +193,16 @@ def _lint_detail_text(details: list[list[str]]) -> str:
 
 
 def _lint_message(
-    failures: list[str], details: list[list[str]], targets: list[str]
+    failures: list[str],
+    details: list[list[str]],
+    targets: list[str],
+    first_diagnostic: dict[str, object] | None,
 ) -> str:
     target_summary = lint_target_summary(targets)
     instruction = lint_check_instruction(targets)
     message = (
         f"Touched-file lint detectors found issues{target_summary}. "
+        f"{_first_lint_diagnostic_text(first_diagnostic)}"
         f"{preview_with_overflow(failures, limit=QUALITY_FAILURE_PREVIEW_LIMIT)}. "
         f"{instruction} "
         "Repair touched files before continuing."
@@ -177,16 +224,20 @@ class PostEditLintRule(Rule):
             return []
         if not is_mutating_tool_use(ctx):
             return []
-        failures, details, lint_targets = collect_touched_lint_failures(ctx)
-        if not failures:
+        report = _collect_touched_lint_report(ctx)
+        if not report.failures:
             return []
-        targets = lint_targets or python_lint_targets(ctx)
-        message = _lint_message(failures, details, targets)
+        targets = report.targets or python_lint_targets(ctx)
+        message = _lint_message(
+            report.failures, report.details, targets, report.first_diagnostic
+        )
         metadata: dict[str, object] = {
-            "failing_collectors": failures,
-            "collector_details": details,
+            "failing_collectors": report.failures,
+            "collector_details": report.details,
             "paths": targets,
         }
+        if report.first_diagnostic is not None:
+            metadata["first_diagnostic"] = report.first_diagnostic
         if targets:
             metadata[METADATA_PATH] = targets[0]
         return [

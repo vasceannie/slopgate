@@ -2,11 +2,31 @@ from __future__ import annotations
 
 from tests.test_ast_rules import (
     BUNDLE_ROOT,
+    Path,
+    TemporaryDirectory,
     assert_denied_by,
     assert_not_denied,
     evaluate_payload,
     unittest,
 )
+
+FEATURE_ENVY_PATH = "src/main.py"
+
+
+def _post_write_payload(root: Path, code: str) -> dict[str, object]:
+    (root / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
+    target = root / FEATURE_ENVY_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(code, encoding="utf-8")
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Write",
+        "tool_input": {"file_path": FEATURE_ENVY_PATH, "content": code},
+        "tool_response": {"filePath": FEATURE_ENVY_PATH, "success": True},
+        "cwd": str(root),
+    }
 
 
 class TestFeatureEnvy(unittest.TestCase):
@@ -22,36 +42,27 @@ class TestFeatureEnvy(unittest.TestCase):
             "    f = order.created\n"
             "    return a"
         )
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "src/main.py", "new_string": code},
-            "cwd": str(BUNDLE_ROOT),
-        }
-        result = evaluate_payload(payload)
+        with TemporaryDirectory() as tmp_dir:
+            result = evaluate_payload(_post_write_payload(Path(tmp_dir), code))
         assert_not_denied(result)
         assert all(finding.rule_id != "PY-CODE-012" for finding in result.findings)
 
     def test_envy_nonparam_context(self) -> None:
         """Accessing a non-param object heavily should produce context, not deny."""
         code = (
+            "service = object()\n\n"
             "def f():\n"
-            "    import db\n"
-            "    a = db.total\n"
-            "    b = db.items\n"
-            "    c = db.status\n"
-            "    d = db.customer\n"
-            "    e = db.address\n"
-            "    f = db.created\n"
-            "    return a"
+            "    return (\n"
+            "        service.total\n"
+            "        + service.items\n"
+            "        + service.status\n"
+            "        + service.customer\n"
+            "        + service.address\n"
+            "        + service.created\n"
+            "    )"
         )
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "src/main.py", "new_string": code},
-            "cwd": str(BUNDLE_ROOT),
-        }
-        result = evaluate_payload(payload)
+        with TemporaryDirectory() as tmp_dir:
+            result = evaluate_payload(_post_write_payload(Path(tmp_dir), code))
         # Should NOT be denied (decision is now context, not deny)
         assert_not_denied(result)
         assert any(finding.rule_id == "PY-CODE-012" for finding in result.findings)
@@ -166,6 +177,84 @@ class TestThinWrapper(unittest.TestCase):
         assert "PY-CODE-013" not in rule_ids, (
             "test helper list wrapper should stay exempt"
         )
+
+    def test_test_helper_tuple_wrapper_exempt(self) -> None:
+        code = (
+            "def order_case(order_id: str, expected: int) -> tuple[str, int]:\n"
+            "    return tuple((order_id, expected))\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "tests/orders/test_cases.py",
+                "new_string": code,
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-CODE-013" not in rule_ids, (
+            "test helper tuple fixture-shape wrapper should be allowed"
+        )
+
+    def test_test_helper_dict_wrapper_exempt(self) -> None:
+        code = (
+            "def order_payload(order_id: str) -> dict[str, str]:\n"
+            "    return dict(order_id=order_id)\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "tests/orders/conftest.py", "new_string": code},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        assert_not_denied(result)
+        rule_ids = {finding.rule_id for finding in result.findings}
+        assert "PY-CODE-013" not in rule_ids, (
+            "test helper dict fixture-shape wrapper should be allowed"
+        )
+
+    def test_test_helper_str_wrapper_is_still_denied(self) -> None:
+        code = "def order_id_text(order_id: object) -> str:\n    return str(order_id)\n"
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "tests/orders/test_cases.py",
+                "new_string": code,
+            },
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        assert_denied_by(result, "PY-CODE-013")
+        assert any(finding.rule_id == "PY-CODE-013" for finding in result.findings), (
+            "str wrapper should produce a PY-CODE-013 finding"
+        )
+
+    def test_production_tuple_and_dict_wrappers_are_denied(self) -> None:
+        code = (
+            "def order_tuple(order_id: str) -> tuple[str]:\n"
+            "    return tuple((order_id,))\n\n"
+            "def order_dict(order_id: str) -> dict[str, str]:\n"
+            "    return dict(order_id=order_id)\n"
+        )
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/orders/cases.py", "new_string": code},
+            "cwd": str(BUNDLE_ROOT),
+        }
+        result = evaluate_payload(payload)
+        assert_denied_by(result, "PY-CODE-013")
+        wrappers = {
+            finding.metadata.get("function")
+            for finding in result.findings
+            if finding.rule_id == "PY-CODE-013"
+        }
+        assert wrappers == {"order_tuple", "order_dict"}
 
 
 class TestGodClass(unittest.TestCase):

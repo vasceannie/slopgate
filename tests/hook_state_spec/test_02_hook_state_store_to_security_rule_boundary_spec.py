@@ -53,7 +53,13 @@ class _DirectClearStore(InspectableHookStateStore):
 class TestHookStateStore:
     def test_ttl_expiry_filters_stale_full_reads(self, tmp_path: Path) -> None:
         store = InspectableHookStateStore(tmp_path)
-        key = store.full_read_key("session-a", str(tmp_path / "module.py"))
+        key = json.dumps(
+            {
+                "path": str((tmp_path / "module.py").resolve(strict=False)),
+                "session_id": "session-a",
+            },
+            sort_keys=True,
+        )
         store.save_state_for_test(
             {"full_reads": {key: int(time()) - store.ttl_seconds - 5}}
         )

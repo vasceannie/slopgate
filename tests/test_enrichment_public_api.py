@@ -165,11 +165,12 @@ def test_feature_envy_enricher_reports_local_classes_and_import(tmp_path: Path) 
 
     enrich_feature_envy(item, ctx)
 
-    assert item.message == (
-        "\n\nClasses in this file: `UserParams`, `LocalRecord`"
-        "\n\nImport of `envied`: `from service import envied`"
-        "\n\nConsider moving this logic to `envied`'s class as a method, "
-        "or restructuring so `envied` exposes a higher-level API."
+    assert item.message is None, "feature-envy enrichment should not append prose"
+    assert item.metadata["local_classes"] == ["UserParams", "LocalRecord"], (
+        "local class names should be preserved as structured metadata"
+    )
+    assert item.metadata["envied_import"] == "from service import envied", (
+        "envied import should be preserved as structured metadata"
     )
 
 

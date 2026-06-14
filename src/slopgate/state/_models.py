@@ -43,6 +43,7 @@ class HookStateSnapshot(TypedDict):
     full_reads: dict[str, int]
     search_reminders: dict[str, int]
     deny_hits: dict[str, int]
+    advisory_hits: dict[str, ObjectDict]
     retry_locks: dict[str, ObjectDict]
     repair_plans: dict[str, ObjectDict]
 

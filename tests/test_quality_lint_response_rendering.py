@@ -10,7 +10,7 @@ from slopgate.context import HookContext, build_context
 from slopgate.engine import evaluate_payload, render_output
 from slopgate.engine import _retry
 from slopgate.lint._baseline import Violation
-from slopgate.rules.common.quality.lint import _violation_details
+from slopgate.rules.common.quality.lint import _lint_message, _violation_details
 from slopgate.models import RuleFinding, Severity
 from tests import support
 
@@ -21,6 +21,7 @@ QUALITY_LINT_FINDING = RuleFinding(
     decision="block",
     message=(
         "Touched-file lint detectors found issues for src/session.py. "
+        "First lint target: src/session.py:42 (long-line). "
         "untested-production-code: 1, duplicate-call-sequence: 1. "
         "Repair touched files before continuing.\n"
         "Blocking lint collector details:\n"
@@ -39,6 +40,12 @@ QUALITY_LINT_FINDING = RuleFinding(
         "path": "src/session.py",
         "paths": ["src/session.py"],
         "symbols": ["next_status", "add_session_parser", "cmd_session"],
+        "first_diagnostic": {
+            "collector": "long-line",
+            "location": "src/session.py:42",
+            "path": "src/session.py",
+            "line": 42,
+        },
     },
 )
 
@@ -198,6 +205,22 @@ def test_blocking_quality_lint_context_precedes_and_labels_advisory_design_debt(
     assert "Later design debt / not the immediate unblock action" in context
     _assert_immediate_context_precedes_advisory_context(context)
 
+
+
+
+def test_quality_lint_message_uses_path_only_first_diagnostic_fallback() -> None:
+    message = _lint_message(
+        ["oversized-module-soft: 1"],
+        [],
+        ["src/session.py"],
+        {
+            "collector": "oversized-module-soft",
+            "location": "src/session.py",
+            "path": "src/session.py",
+        },
+    )
+
+    assert "First lint target: src/session.py (oversized-module-soft)." in message
 
 def test_quality_lint_detail_rendering_shows_three_hits_and_overflow() -> None:
     violations = [

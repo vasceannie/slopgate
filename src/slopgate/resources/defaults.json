@@ -168,6 +168,15 @@
     "PY-IMPORT-002": true,
     "PY-IMPORT-003": true
   },
+  "rule_surfaces": {
+    "PY-CODE-012": {
+      "hook": {
+        "events": [
+          "PostToolUse"
+        ]
+      }
+    }
+  },
   "regex_rules": [
     {
       "rule_id": "PY-LOG-001",

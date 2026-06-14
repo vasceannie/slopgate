@@ -79,6 +79,43 @@ class PythonBoundaryLoggingRule(Rule):
             },
         )
 
+    def grouped_finding(
+        self, ctx: HookContext, path_value: str, boundaries: list[BoundaryFunction]
+    ) -> RuleFinding:
+        if len(boundaries) == 1:
+            return self.finding(ctx, path_value, boundaries[0])
+        owners = [
+            f"{boundary.class_name}.{boundary.node.name}"
+            if boundary.class_name
+            else boundary.node.name
+            for boundary in boundaries
+        ]
+        first_boundary = boundaries[0]
+        file_name = path_value.rsplit("/", maxsplit=1)[-1]
+        return RuleFinding(
+            rule_id=self.rule_id,
+            title=self.title,
+            severity=Severity.HIGH,
+            decision=decision_for_context(ctx),
+            message=(
+                f"{len(boundaries)} boundaries in {file_name} need structured "
+                "logging. "
+                "Add a module-level logger and log before the exported boundary "
+                f"methods: {', '.join(owners)}."
+            ),
+            additional_context=self._boundary_context(ctx),
+            metadata={
+                METADATA_PATH: path_value,
+                METADATA_FUNCTION: owners[0],
+                "line": first_boundary.node.lineno,
+                "kind": first_boundary.kind,
+                "functions": owners,
+                "lines": [boundary.node.lineno for boundary in boundaries],
+                "kinds": [boundary.kind for boundary in boundaries],
+                "boundary_count": len(boundaries),
+            },
+        )
+
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
@@ -87,7 +124,7 @@ class PythonBoundaryLoggingRule(Rule):
         module = parse_module(source, ctx.config.python_ast_max_parse_chars)
         if module is None:
             return []
-        findings: list[RuleFinding] = []
+        boundaries: list[BoundaryFunction] = []
         for node, class_name in iter_public_boundary_functions(module.body):
             kind = boundary_kind_for_function(path_value, node, class_name)
             if kind is None:
@@ -99,8 +136,10 @@ class PythonBoundaryLoggingRule(Rule):
                 kind=kind,
                 class_name=class_name,
             )
-            findings.append(self.finding(ctx, path_value, boundary))
-        return findings
+            boundaries.append(boundary)
+        if not boundaries:
+            return []
+        return [self.grouped_finding(ctx, path_value, boundaries)]
 
     @override
     def evaluate(self, ctx: HookContext) -> list[RuleFinding]:

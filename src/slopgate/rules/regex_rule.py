@@ -13,6 +13,7 @@ from slopgate.rules.regex_rule_matching import (
     RegexRuleMatcher,
     compile_regex_patterns,
 )
+from slopgate.util.metadata_paths import quality_metadata_path
 from slopgate.util.payloads import is_mutating_tool_use
 
 if TYPE_CHECKING:
@@ -65,9 +66,6 @@ class RegexRule(Rule):
                 hits.append(hit)
         return hits
 
-    def _collect_command_hits(self, ctx: HookContext) -> list[RegexHit]:
-        return self._matcher.scalar_hit(ctx.shell_command)
-
     def _collect_path_hits(self, ctx: HookContext) -> list[RegexHit]:
         if self.rule_id in EDIT_ONLY_PATH_RULE_IDS and not is_mutating_tool_use(ctx):
             return []
@@ -78,11 +76,19 @@ class RegexRule(Rule):
                 hits.append(hit)
         return hits
 
-    def _collect_prompt_hits(self, ctx: HookContext) -> list[RegexHit]:
-        return self._matcher.scalar_hit(ctx.user_prompt)
-
     def _build_finding(self, hits: list[RegexHit]) -> RuleFinding:
         is_context = self.config.action == "context"
+        hit_paths = [hit.path for hit in hits if hit.path]
+        metadata: dict[str, object] = {
+            "target": self.config.target,
+            "hits": hit_paths,
+        }
+        if hit_paths and self.config.target in {"content", METADATA_PATH}:
+            for hit_path in hit_paths:
+                display_path = quality_metadata_path(hit_path)
+                if display_path:
+                    metadata[METADATA_PATH] = display_path
+                    break
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
@@ -90,10 +96,7 @@ class RegexRule(Rule):
             decision=None if is_context else self.config.action,
             message=None if is_context else self._render_message(hits),
             additional_context=self.config.additional_context,
-            metadata={
-                "target": self.config.target,
-                "hits": [hit.path for hit in hits if hit.path],
-            },
+            metadata=metadata,
         )
 
     @override
@@ -103,16 +106,16 @@ class RegexRule(Rule):
         if not self._matcher.tool_matches(ctx.tool_name):
             return []
 
-        collectors = {
-            "content": self._collect_content_hits,
-            "command": self._collect_command_hits,
-            METADATA_PATH: self._collect_path_hits,
-            "prompt": self._collect_prompt_hits,
-        }
-        collector = collectors.get(self.config.target)
-        if collector is None:
+        if self.config.target == "content":
+            hits = self._collect_content_hits(ctx)
+        elif self.config.target == "command":
+            hits = self._matcher.scalar_hit(ctx.shell_command)
+        elif self.config.target == METADATA_PATH:
+            hits = self._collect_path_hits(ctx)
+        elif self.config.target == "prompt":
+            hits = self._matcher.scalar_hit(ctx.user_prompt)
+        else:
             return []
-        hits = collector(ctx)
         if not hits:
             return []
         return [self._build_finding(hits)]

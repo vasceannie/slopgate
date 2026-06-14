@@ -179,12 +179,9 @@ class TestPYCODE015Enrichment:
 
 class TestPYCODE012Enrichment:
     def test_shows_envied_object_context(self, tmp_project: Path) -> None:
-        """Denial should include advice about the envied object."""
+        """Finding should include terse context and structured envied-object data."""
         src_dir = tmp_project / "src"
         mkdir(src_dir, exist_ok=True)
-        # Feature envy rule excludes parameters — use a module-level object
-        # and access it enough times (>= min_accesses, default 6) with
-        # >60% of total accesses targeting one object
         code = (
             "import config\n\n"
             "def process():\n"
@@ -200,17 +197,20 @@ class TestPYCODE012Enrichment:
         write_text(src_dir / "envy.py", code)
 
         payload = pretool_write_payload("src/envy.py", code, str(tmp_project))
+        payload["hook_event_name"] = "PostToolUse"
         result = evaluate_payload(payload)
 
-        # Feature envy is decision="context", not deny — check findings directly
         envy_findings = [f for f in result.findings if f.rule_id == "PY-CODE-012"]
         assert len(envy_findings) >= 1, (
             f"Expected PY-CODE-012 finding, got: {[f.rule_id for f in result.findings]}"
         )
         msg = envy_findings[0].message
         assert msg is not None
-        assert "moving" in msg.lower() or "restructur" in msg.lower(), (
-            f"Expected refactoring advice: {msg}"
+        assert msg.startswith("Feature envy: src/envy.py:process overuses config"), (
+            f"Expected terse feature-envy advisory: {msg}"
+        )
+        assert envy_findings[0].metadata["envied_object"] == "config", (
+            "envied object should remain available in finding metadata"
         )
 
 

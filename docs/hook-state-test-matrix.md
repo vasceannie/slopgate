@@ -76,9 +76,9 @@ Goal: do not hide preexisting debt, but stop blasting the same advisory text on 
 
 ### Primary cases
 
-- First `PY-CODE-012` or `PY-CODE-013` hit on a given `(session, rule, path)` emits an advisory finding.
-- Second hit on the same `(session, rule, path)` includes repeat metadata instead of emitting an indistinguishable first-hit message.
-- Third hit on the same `(session, rule, path)` escalates severity or decision.
+- First `PY-CODE-012` hit on a given `(session, rule, path)` emits a terse advisory message.
+- Later `PY-CODE-012` hits on the same `(session, rule, path)` suppress repeated message text while preserving repeat metadata in findings and traces.
+- `PY-CODE-012` does not escalate to a block/deny decision solely because repeats accumulate; repeated-denial escalation remains covered by blocking debt rules such as `PY-CODE-013`.
 - Repeats on different files are tracked independently.
 - Repeats for different rules on the same file are tracked independently.
 - A new session resets the repeat counter.

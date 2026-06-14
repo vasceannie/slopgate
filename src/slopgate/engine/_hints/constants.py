@@ -22,14 +22,18 @@ RULE_HINTS: dict[str, str] = {
         "adding more conditionals."
     ),
     "PY-CODE-013": (
-        "Recovery skill: load `code-hygiene-refactor` before retrying. "
         "Next step: inline pass-throughs unless the wrapper owns a real "
-        "domain boundary. A real wrapper does at least one job: validates/normalizes "
-        "inputs, changes abstraction level with a domain name, centralizes policy, "
-        "caching, permission, or logging, adapts one interface to another, or hides "
-        "unstable third-party API details. If it is a real boundary, make the "
-        "behavior explicit in the body/name; otherwise replace calls with the target "
-        "and delete the wrapper."
+        "domain boundary. Bad: `def as_payload(value): return dict(value)` "
+        "only delegates/converts without policy. Good: validate required keys, "
+        "normalize aliases, or enforce permissions before returning. A real wrapper "
+        "validates/normalizes inputs, centralizes policy, adapts one interface to "
+        "another, or hides unstable third-party API details. Allowed test "
+        "helper carve-out: a `tests/**` or `conftest.py` helper may name a tuple/dict "
+        "fixture shape, e.g. `def order_case(...): return tuple(...)` or "
+        "`return dict(...)`; `str(...)` wrappers are still denied unless they do real "
+        "validation or normalization. Optional local recovery playbooks can help with "
+        "larger refactors, but the immediate fix is to make behavior explicit or delete "
+        "the wrapper."
     ),
     "PY-CODE-014": (
         "Recovery skill: load `code-hygiene-refactor` before retrying. "

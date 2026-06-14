@@ -102,7 +102,12 @@ def is_exempt_test_helper_wrapper(
 ) -> bool:
     if not is_test_helper_path(path_value):
         return False
-    if isinstance(call_node.func, ast.Name) and call_node.func.id in {"list", "cast"}:
+    if isinstance(call_node.func, ast.Name) and call_node.func.id in {
+        "cast",
+        "dict",
+        "list",
+        "tuple",
+    }:
         return True
     return thin_wrapper_has_self_or_cls_receiver(node, call_node)
 
@@ -145,7 +150,11 @@ class PythonThinWrapperRule(Rule):
                     title=self.title,
                     severity=Severity.MEDIUM,
                     decision=decision_for_context(ctx),
-                    message=f"Function `{node.name}` in `{path_value}` is a thin wrapper around `{wrapped}`. Consider calling the wrapped function directly.",
+                    message=(
+                        f"Function `{node.name}` in `{path_value}` is a thin wrapper "
+                        f"around `{wrapped}`. Consider calling the wrapped function "
+                        "directly."
+                    ),
                     metadata={
                         METADATA_PATH: path_value,
                         METADATA_FUNCTION: node.name,

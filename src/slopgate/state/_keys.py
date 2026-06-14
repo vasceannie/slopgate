@@ -6,6 +6,7 @@ from pathlib import Path
 from time import time
 from slopgate.constants import METADATA_PATH, SESSION_ID
 from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate.util import logger
 from ._files import StateSnapshotMixin
 from ._models import (
     DenyKeyPattern,
@@ -21,32 +22,21 @@ def failure_count(item: ObjectDict) -> int:
 
 
 class StateKeyMixin:
-    def _full_read_key(self, session_id: str, path: str) -> str:
-        return json.dumps(
-            {
-                SESSION_ID: session_id.strip(),
-                METADATA_PATH: self._normalize_path(path.strip()),
-            },
-            sort_keys=True,
-        )
-
-    def _deny_key(
+    def _rule_path_state_key(
         self,
         session_id: str,
         rule_id: str,
         path: str | None,
-        attempt_fingerprint: str | None,
+        extra: ObjectMapping | None = None,
     ) -> str:
         normalized_path = self._normalize_path(path) if path else "__pathless__"
-        return json.dumps(
-            {
-                SESSION_ID: session_id.strip(),
-                "rule_id": rule_id.strip(),
-                METADATA_PATH: normalized_path,
-                "attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__",
-            },
-            sort_keys=True,
-        )
+        data: ObjectDict = {
+            SESSION_ID: session_id.strip(),
+            "rule_id": rule_id.strip(),
+            METADATA_PATH: normalized_path,
+        }
+        data.update(object_dict(extra))
+        return json.dumps(data, sort_keys=True)
 
     def _deny_key_matches(self, key: str, pattern: DenyKeyPattern) -> bool:
         try:
@@ -69,11 +59,6 @@ class StateKeyMixin:
             == pattern.attempt_fingerprint
         )
 
-    def _object_state_entry(
-        self, state: HookStateSnapshot, section: ObjectStateSection, session_id: str
-    ) -> ObjectDict | None:
-        return state[section].get(session_id.strip())
-
     def _mark_recent_int_entry(
         self, state: HookStateSnapshot, section: IntStateSection, session_id: str
     ) -> None:
@@ -87,6 +72,7 @@ class StateKeyMixin:
 
 
 __all__ = [
+    "AdvisoryHitStateMixin",
     "DenyHitStateMixin",
     "FullReadStateMixin",
     "SearchReminderStateMixin",
@@ -109,7 +95,13 @@ class SessionStateMutationMixin(StateKeyMixin, StateSnapshotMixin):
 
 class FullReadStateMixin(StateKeyMixin, StateSnapshotMixin):
     def has_full_read(self, session_id: str, path: str) -> bool:
-        key = self._full_read_key(session_id, path)
+        key = json.dumps(
+            {
+                SESSION_ID: session_id.strip(),
+                METADATA_PATH: self._normalize_path(path.strip()),
+            },
+            sort_keys=True,
+        )
         state = self._load_state()
         return key in state["full_reads"]
 
@@ -117,7 +109,13 @@ class FullReadStateMixin(StateKeyMixin, StateSnapshotMixin):
         normalized_path = self._normalize_path(path)
         if not Path(normalized_path).exists():
             return
-        key = self._full_read_key(session_id, normalized_path)
+        key = json.dumps(
+            {
+                SESSION_ID: session_id.strip(),
+                METADATA_PATH: normalized_path,
+            },
+            sort_keys=True,
+        )
         with self._locked_state():
             state = self._load_state()
             state["full_reads"][key] = int(time())
@@ -130,7 +128,11 @@ class SearchReminderStateMixin(StateKeyMixin, StateSnapshotMixin):
     def should_emit_search_reminder(self, session_id: str) -> bool:
         key = session_id.strip()
         state = self._load_state()
-        return key not in state["search_reminders"]
+        should_emit = key not in state["search_reminders"]
+        logger.debug(
+            "search reminder state checked", session_id=key, should_emit=should_emit
+        )
+        return should_emit
 
     def record_search_reminder(self, session_id: str) -> None:
         with self._locked_state():
@@ -144,7 +146,11 @@ class SearchReminderStateMixin(StateKeyMixin, StateSnapshotMixin):
     def should_emit_stop_quality_reminder(self, session_id: str) -> bool:
         key = self._stop_quality_reminder_key(session_id)
         state = self._load_state()
-        return key not in state["search_reminders"]
+        should_emit = key not in state["search_reminders"]
+        logger.debug(
+            "stop quality reminder state checked", key=key, should_emit=should_emit
+        )
+        return should_emit
 
     def record_stop_quality_reminder(self, session_id: str) -> None:
         key = self._stop_quality_reminder_key(session_id)
@@ -152,6 +158,23 @@ class SearchReminderStateMixin(StateKeyMixin, StateSnapshotMixin):
             state = self._load_state()
             self._mark_recent_int_entry(state, "search_reminders", key)
             self._save_state(state)
+
+
+class AdvisoryHitStateMixin(StateKeyMixin, StateSnapshotMixin):
+    def record_advisory_hit(
+        self, session_id: str, rule_id: str, path: str | None = None
+    ) -> int:
+        key = self._rule_path_state_key(session_id, rule_id, path)
+        with self._locked_state():
+            state = self._load_state()
+            advisory_hits = state["advisory_hits"]
+            raw_entry = object_dict(advisory_hits.get(key))
+            raw_count = raw_entry.get("count")
+            count = (raw_count if isinstance(raw_count, int) else 0) + 1
+            advisory_hits[key] = {"count": count, "timestamp": int(time())}
+            state["advisory_hits"] = advisory_hits
+            self._save_state(state)
+        return count
 
 
 class DenyHitStateMixin(StateKeyMixin, StateSnapshotMixin):
@@ -162,7 +185,12 @@ class DenyHitStateMixin(StateKeyMixin, StateSnapshotMixin):
         path: str | None = None,
         attempt_fingerprint: str | None = None,
     ) -> int:
-        key = self._deny_key(session_id, rule_id, path, attempt_fingerprint)
+        key = self._rule_path_state_key(
+            session_id,
+            rule_id,
+            path,
+            {"attempt_fingerprint": attempt_fingerprint or "__unknown_attempt__"},
+        )
         with self._locked_state():
             state = self._load_state()
             deny_hits = state["deny_hits"]
@@ -183,7 +211,12 @@ class DenyHitStateMixin(StateKeyMixin, StateSnapshotMixin):
             state = self._load_state()
             deny_hits = state["deny_hits"]
             if attempt_fingerprint is not None:
-                key = self._deny_key(session_id, rule_id, path, attempt_fingerprint)
+                key = self._rule_path_state_key(
+                    session_id,
+                    rule_id,
+                    path,
+                    {"attempt_fingerprint": attempt_fingerprint},
+                )
                 _ = deny_hits.pop(key, None)
                 state["deny_hits"] = self._prune_counter_map(deny_hits)
                 self._save_state(state)

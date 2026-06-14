@@ -88,12 +88,14 @@ class StateSnapshotMixin(StateFileMixin):
             state.get("search_reminders"), cutoff
         )
         deny_hits = self._coerce_counter_map(state.get("deny_hits"))
+        advisory_hits = self._coerce_object_map(state.get("advisory_hits"), cutoff)
         retry_locks = self._coerce_object_map(state.get("retry_locks"), cutoff)
         repair_plans = self._coerce_object_map(state.get("repair_plans"), cutoff)
         return {
             "full_reads": full_reads,
             "search_reminders": search_reminders,
             "deny_hits": deny_hits,
+            "advisory_hits": advisory_hits,
             "retry_locks": retry_locks,
             "repair_plans": repair_plans,
         }

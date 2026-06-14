@@ -268,31 +268,23 @@ def enrich_cyclomatic_complexity(finding: RuleFinding, ctx: HookContext) -> None
 
 
 def enrich_feature_envy(finding: RuleFinding, ctx: HookContext) -> None:
-    """Enrich feature-envy findings with local class/import clues."""
+    """Enrich feature-envy findings with structured local class/import clues."""
     envied = metadata_str(finding.metadata, "envied_object")
     loaded = path_source_from_metadata(finding, ctx)
     if envied is None or loaded is None:
         return
     _, source = loaded
-    extras: list[str] = []
     tree = safe_parse(source)
     if tree is not None:
         local_classes = [
             node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
         ]
         if local_classes:
-            extras.append(
-                f"\nClasses in this file: {', '.join(f'`{name}`' for name in local_classes[:5])}"
-            )
+            finding.metadata["local_classes"] = local_classes[:5]
     for line in source.splitlines()[:50]:
         stripped = line.strip()
         if envied in stripped and (
             stripped.startswith("from ") or stripped.startswith("import ")
         ):
-            extras.append(f"\nImport of `{envied}`: `{stripped}`")
+            finding.metadata["envied_import"] = stripped
             break
-    extras.append(
-        f"\nConsider moving this logic to `{envied}`'s class as a method, "
-        + f"or restructuring so `{envied}` exposes a higher-level API."
-    )
-    append_enrichment_message(finding, extras)

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from slopgate._types import object_dict, object_list, string_value
+from slopgate._types import object_dict, object_list
 from slopgate.constants import (
-    METADATA_PATH,
     POST_TOOL_USE,
     PRODUCTION_SYMBOL_PREVIEW_LIMIT,
 )
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding
+from slopgate.util.metadata_paths import metadata_hit_paths, quality_metadata_path
 
 from .constants import QUALITY_COLLECTOR_HINTS
-from .paths import finding_path, quality_display_path
+from .paths import finding_path
 
 QUALITY_SYMBOL_KEYS = {
     "symbol",
@@ -66,14 +66,11 @@ def _quality_lint_paths(item: RuleFinding) -> list[str]:
     if path:
         _append_unique(paths, path)
     for value in _flatten_strings(item.metadata.get("paths")):
-        display_path = quality_display_path(value)
+        display_path = quality_metadata_path(value)
         if display_path:
             _append_unique(paths, display_path)
-    for hit in object_list(item.metadata.get("hits")):
-        hit_path = string_value(object_dict(hit).get(METADATA_PATH))
-        display_path = quality_display_path(hit_path)
-        if display_path:
-            _append_unique(paths, display_path)
+    for display_path in metadata_hit_paths(item.metadata):
+        _append_unique(paths, display_path)
     return paths[:PRODUCTION_SYMBOL_PREVIEW_LIMIT]
 
 

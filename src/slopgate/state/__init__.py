@@ -12,6 +12,7 @@ __all__ = [
     "msvcrt",
     "StateFileMixin",
     "StateSnapshotMixin",
+    "AdvisoryHitStateMixin",
     "DenyHitStateMixin",
     "FullReadStateMixin",
     "SearchReminderStateMixin",
@@ -33,6 +34,7 @@ from ._models import (
 )
 from ._files import StateFileMixin, StateSnapshotMixin
 from ._keys import (
+    AdvisoryHitStateMixin,
     DenyHitStateMixin,
     FullReadStateMixin,
     SearchReminderStateMixin,

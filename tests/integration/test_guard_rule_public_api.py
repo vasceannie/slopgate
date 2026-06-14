@@ -7,6 +7,7 @@ import pytest
 from slopgate import rules
 from slopgate.config import load_config
 from slopgate.context import HookContext
+from slopgate.rules.common.quality.lint import _TouchedLintReport
 from slopgate.rules.python_ast import PythonPytestAsyncioRule
 from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
@@ -59,6 +60,21 @@ def bash_payload(command: str, event: str = "PreToolUse") -> dict[str, object]:
         "tool_name": "Bash",
         "tool_input": {"command": command},
     }
+
+
+def touched_lint_report_stub(ctx: HookContext) -> _TouchedLintReport:
+    _ = ctx
+    return _TouchedLintReport(
+        ["long-test: 1"],
+        [["[HOOK] long-test", "file: tests/test_sample.py"]],
+        ["tests/test_sample.py"],
+        {
+            "collector": "long-test",
+            "location": "tests/test_sample.py:1",
+            "path": "tests/test_sample.py",
+            "line": 1,
+        },
+    )
 
 
 def test_baseline_guard_blocks_populated_baseline_creation(tmp_path: Path) -> None:
@@ -123,19 +139,9 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_collect_touched_lint_failures(
-        ctx: HookContext,
-    ) -> tuple[list[str], list[list[str]], list[str]]:
-        _ = ctx
-        return (
-            ["long-test: 1"],
-            [["[HOOK] long-test", "file: tests/test_sample.py"]],
-            ["tests/test_sample.py"],
-        )
-
     monkeypatch.setattr(
-        "slopgate.rules.common.quality.lint.collect_touched_lint_failures",
-        fake_collect_touched_lint_failures,
+        "slopgate.rules.common.quality.lint._collect_touched_lint_report",
+        touched_lint_report_stub,
     )
     ctx = context_for_payload(
         tmp_path,
@@ -150,7 +156,13 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
 
     assert [(item.rule_id, item.metadata.get("paths")) for item in findings] == [
         ("QUALITY-LINT-001", ["tests/test_sample.py"])
-    ]
+    ], "post-edit lint rule should keep reporting touched paths"
+    assert findings[0].metadata.get("first_diagnostic") == {
+        "collector": "long-test",
+        "location": "tests/test_sample.py:1",
+        "path": "tests/test_sample.py",
+        "line": 1,
+    }, "post-edit lint rule should expose first diagnostic metadata"
 
 
 def test_pytest_asyncio_rule_reports_unmarked_async_test(tmp_path: Path) -> None:

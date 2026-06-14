@@ -41,10 +41,17 @@ Do not use for repo-wide lint orchestration; use `slopgate-hygiene-orchestrator`
 
 ### 1. Discover Existing Tests
 
-Run analysis script to find tests and identify issues:
+Run analysis script to find tests and identify issues. **The script path is relative to the skill directory**, not your current working directory — resolve it through `SKILL_DIR`:
 
 ```bash
-python scripts/analyze_tests.py tests/ --json
+# Claude Code
+SKILL_DIR="$HOME/.claude/skills/slopgate-test-extender"
+# OpenCode
+SKILL_DIR="$HOME/.config/opencode/skills/slopgate-test-extender"
+# Codex
+SKILL_DIR="$HOME/.codex/skills/slopgate-test-extender"
+
+python3 "$SKILL_DIR/scripts/analyze_tests.py" tests/ --json
 ```
 
 Or search with ripgrep for specific patterns:

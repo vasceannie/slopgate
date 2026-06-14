@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from slopgate._types import ObjectDict, object_dict, object_list, string_value
-from slopgate.constants import METADATA_PATH, SESSION_ID
+from slopgate._types import ObjectDict, object_dict, object_list
+from slopgate.constants import SESSION_ID
+from slopgate.util.metadata_paths import effective_metadata_path, metadata_hit_paths
 
 UNKNOWN_STATS_VALUE = "unknown"
 
@@ -61,11 +62,13 @@ def _record_deny_metadata(meta: object, counters: _Counters) -> None:
     meta_dict = object_dict(meta)
     if not meta_dict:
         return
-    path_val = string_value(meta_dict.get(METADATA_PATH))
+    seen_paths: set[str] = set()
+    path_val = effective_metadata_path(meta_dict)
     if path_val is not None:
         counters.denies_by_file[path_val] += 1
-    for hit in object_list(meta_dict.get("hits")):
-        if isinstance(hit, str):
+        seen_paths.add(path_val)
+    for hit in metadata_hit_paths(meta_dict):
+        if hit not in seen_paths:
             counters.denies_by_file[hit] += 1
 
 
@@ -95,7 +98,7 @@ def _process_finding(
 
     counters.denies_by_rule[rule_id] += 1
     metadata = object_dict(finding.get("metadata", {}))
-    path_val = string_value(metadata.get(METADATA_PATH)) or "__pathless__"
+    path_val = effective_metadata_path(metadata) or "__pathless__"
     counters.session_deny_seq[ectx.session].append((rule_id, ectx.tool, ectx.ts_str))
     counters.deny_counts_by_key[(ectx.session, rule_id, path_val)] += 1
     _record_deny_metadata(metadata, counters)
