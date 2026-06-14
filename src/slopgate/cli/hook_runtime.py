@@ -97,11 +97,9 @@ def _try_handle_via_daemon(payload: dict[str, object], platform: str) -> int | N
         DaemonRequest(payload=payload, platform=platform, event=HOOK_HANDLE_EVENT),
     )
     if not response.ok:
-        if response.accepted or response.error == DAEMON_ACCEPTED_FAILURE_ERROR:
+        if response.error == DAEMON_ACCEPTED_FAILURE_ERROR:
             if response.stderr:
                 _ = sys.stderr.write(response.stderr)
-            elif response.error:
-                _ = sys.stderr.write(response.error.rstrip() + "\n")
             return response.exit_code or 1
         logger.warning(
             "hook cli daemon fallback",

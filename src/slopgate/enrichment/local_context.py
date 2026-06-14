@@ -5,15 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from slopgate.enrichment._helpers import enrichment_root, relative_path, safe_read
+from slopgate.enrichment._helpers import relative_path, safe_read
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
 def _lookup_root(ctx: HookContext, current_path: Path | None) -> Path:
-    root = enrichment_root(ctx)
-    roots = (root, ctx.config.root)
+    roots = (ctx.config.repo_root, ctx.config.root)
     if current_path is not None:
         for root in roots:
             try:
@@ -22,7 +21,7 @@ def _lookup_root(ctx: HookContext, current_path: Path | None) -> Path:
                 continue
             return root
         return current_path.parent
-    return root
+    return ctx.config.repo_root
 
 
 def find_local_call_sites(

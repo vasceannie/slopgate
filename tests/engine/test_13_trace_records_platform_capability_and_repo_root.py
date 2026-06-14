@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import json
-
-import pytest
-
 from tests.test_engine import (
     MonkeyPatch,
     Path,
@@ -14,34 +10,6 @@ from tests.test_engine import (
     write_slopgate,
     evaluate_payload,
 )
-
-
-def _trace_opencode_git_status(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    repo = write_slopgate(tmp_path / "repo_trace_timing")
-    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
-    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
-    _ = evaluate_payload(pretool_bash_payload(repo, "git status"), platform="opencode")
-
-
-def _latest_result_has_timing(tmp_path: Path) -> bool:
-    results_path = tmp_path / "vf-root" / "logs" / "results.jsonl"
-    records = [
-        json.loads(line)
-        for line in results_path.read_text(encoding="utf-8").splitlines()
-    ]
-    timing = records[-1]["timing"]
-    timing_contract = {
-        "has_evaluation_ms": isinstance(timing["evaluation_ms"], int),
-        "has_rule_engine_ms": isinstance(timing["rule_engine_ms"], int),
-        "non_negative_eval": timing["evaluation_ms"] >= 0,
-        "non_negative_rules": timing["rule_engine_ms"] >= 0,
-    }
-    return timing_contract == {
-        "has_evaluation_ms": True,
-        "has_rule_engine_ms": True,
-        "non_negative_eval": True,
-        "non_negative_rules": True,
-    }
 
 
 def test_trace_records_platform_capability_and_repo_root(
@@ -78,45 +46,4 @@ def test_trace_records_omitted_platform_as_unknown(
     )
     assert record["platform_capability"] == "unknown", (
         "Unknown platform should not inherit Claude's full capability label"
-    )
-
-
-def test_results_trace_records_aggregate_timing_metadata(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
-    _trace_opencode_git_status(tmp_path, monkeypatch)
-    assert _latest_result_has_timing(tmp_path), (
-        "results trace should include non-negative aggregate timing metadata"
-    )
-
-
-def _failure_trace_records(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> list[dict[str, object]]:
-    repo = write_slopgate(tmp_path / "repo_trace_failure")
-    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
-    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
-
-    def fail_rules(*_args: object, **_kwargs: object) -> object:
-        raise RuntimeError("forced trace failure")
-
-    monkeypatch.setattr("slopgate.engine._evaluation.run_rules", fail_rules)
-
-    with pytest.raises(RuntimeError, match="forced trace failure"):
-        evaluate_payload(pretool_bash_payload(repo, "git status"), platform="opencode")
-
-    results_path = tmp_path / "vf-root" / "logs" / "results.jsonl"
-    return [
-        json.loads(line)
-        for line in results_path.read_text(encoding="utf-8").splitlines()
-    ]
-
-
-def test_results_trace_flushes_failure_metadata(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
-    records = _failure_trace_records(tmp_path, monkeypatch)
-
-    assert records[-1]["errors"] == ["RuntimeError: forced trace failure"], (
-        "Unhandled evaluation failures should flush a result trace record"
     )

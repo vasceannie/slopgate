@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, cast
 
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
-    enrichment_root,
     relative_path,
     resolve_path,
     safe_parse,
@@ -187,10 +186,10 @@ def _append_triggered_magic_number_hints(
 def _constant_search_root(ctx: HookContext) -> Path:
     """Return the project root that should own constants for hook feedback."""
 
-    repo_root = enrichment_root(ctx)
-    if iter_constant_candidate_paths(repo_root):
-        return repo_root
-    return ctx.config.root
+    config_root = ctx.config.root
+    if iter_constant_candidate_paths(config_root):
+        return config_root
+    return ctx.config.repo_root
 
 
 def enrich_magic_numbers(finding: RuleFinding, ctx: HookContext) -> None:

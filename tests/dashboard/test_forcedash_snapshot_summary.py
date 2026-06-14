@@ -5,7 +5,6 @@ import json
 import posixpath
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "dashboard" / "scripts"
@@ -28,7 +27,6 @@ LINEAGE_ALIAS_FIELDS: dict[str, object] = {
     "spawnDescription": "Find lineage",
     "lineageRole": "child_mirror",
 }
-RECENT_TRACE_TIMESTAMP = datetime.now(timezone.utc).isoformat()
 
 
 def run_trace_snapshot_script(tmp_path: Path) -> dict[str, object]:
@@ -46,7 +44,7 @@ def run_trace_snapshot_script(tmp_path: Path) -> dict[str, object]:
 
 def base_event(**extra: object) -> dict[str, object]:
     event: dict[str, object] = {
-        "timestamp": RECENT_TRACE_TIMESTAMP,
+        "timestamp": "2026-06-12T00:00:00+00:00",
         "event_name": "PreToolUse",
         "session_id": "session-a",
         "tool_name": "Bash",
@@ -79,7 +77,7 @@ def test_trace_snapshot_script_labels_home_repo_paths_by_repo_name(
     log_dir = tmp_path / ".config" / "slopgate" / "logs"
     log_dir.mkdir(parents=True)
     event = {
-        "timestamp": RECENT_TRACE_TIMESTAMP,
+        "timestamp": "2026-06-12T00:00:00+00:00",
         "platform": "codex",
         "event_name": "PreToolUse",
         "session_id": "session-a",
@@ -108,7 +106,7 @@ def test_trace_snapshot_script_preserves_apply_patch_tool_input(
     log_dir = tmp_path / ".config" / "slopgate" / "logs"
     log_dir.mkdir(parents=True)
     event = {
-        "timestamp": RECENT_TRACE_TIMESTAMP,
+        "timestamp": "2026-06-12T00:00:00+00:00",
         "platform": "opencode",
         "event_name": "PreToolUse",
         "session_id": "session-a",

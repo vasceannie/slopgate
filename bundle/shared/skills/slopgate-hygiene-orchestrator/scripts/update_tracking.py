@@ -47,7 +47,7 @@ def count_issues_from_unified(unified_path: Path) -> dict[str, int]:
         source = issue.get("source", "")
         severity = issue.get("severity", "warning")
 
-        if source in ("pyrefly", "basedpyright"):
+        if source == "pyrefly":
             key = f"python_{severity}s"
         elif source in ("biome", "tsc"):
             key = f"typescript_{severity}s"

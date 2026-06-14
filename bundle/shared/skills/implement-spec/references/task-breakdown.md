@@ -162,7 +162,7 @@ depends: []
 
 ```yaml
 task: Define [Entity]Repository port interface
-verify: Type check passes (basedpyright)
+verify: Type check passes (pyrefly check)
 steps:
   - Add Protocol to domain/ports/repositories/[module].py
   - Define CRUD method signatures

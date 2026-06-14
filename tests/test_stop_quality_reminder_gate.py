@@ -75,7 +75,6 @@ def test_stop_quality_reminder_uses_configured_command(tmp_path: Path) -> None:
 
     output = require_output(result)
     assert "uv run pytest -q" in str(output)
-    assert "slopgate lint test-integrity" in str(output)
     assert "STOP-002" in finding_ids(result)
 
 

@@ -331,7 +331,7 @@ Project-specific tools (discover, don't assume):
 | Tool | Typical invocation |
 |------|-------------------|
 | ruff | `python3 -m ruff check .` |
-| basedpyright | `basedpyright --outputjson src/` |
+| pyrefly | `pyrefly check --output-format json pyproject.toml` |
 | biome | `npx biome check .` |
 | tsc | `npx tsc --noEmit` |
 | clippy | `cargo clippy --all-targets` |
@@ -359,7 +359,7 @@ Always remind dispatched agents:
 - `oversized-module` — Module exceeds line threshold; split by responsibility
 - `god-class` — Class has too many methods; extract collaborators
 
-### Python (pyrefly/basedpyright)
+### Python (pyrefly)
 - `unbound-name` — Variable may be uninitialized
 - `missing-attribute` — Method called on None
 - `bad-argument-type` — Type mismatch in function call

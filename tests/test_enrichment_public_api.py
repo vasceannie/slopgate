@@ -81,7 +81,7 @@ def context_for_source(
         ensure_trace=False,
     )
     payload = HookPayload(
-        {"cwd": str(tmp_path), "tool_input": {"file_path": path, "content": source}},
+        {"tool_input": {"file_path": path, "content": source}},
         config,
     )
     trace = TraceWriter(tmp_path / ".slopgate" / "trace")

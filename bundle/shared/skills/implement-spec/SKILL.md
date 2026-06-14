@@ -315,7 +315,7 @@ Call these before major actions:
 ### After Every Task
 
 1. Run tests for that component
-2. Check types (`basedpyright`)
+2. Check types (`pyrefly check`)
 3. Run quality checks
 4. Mark task complete in TodoWrite
 

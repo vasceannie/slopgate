@@ -99,9 +99,7 @@ class HookContext(_TargetContextProperties):
     state: HookStateStore
 
 
-def build_context(
-    payload_dict: ObjectMapping, *, buffered_trace: bool = False
-) -> HookContext:
+def build_context(payload_dict: ObjectMapping) -> HookContext:
     payload_cwd = payload_dict.get("cwd")
     repo_root = (
         Path(payload_cwd).resolve()
@@ -109,7 +107,7 @@ def build_context(
         else None
     )
     config = load_config(repo_root=repo_root)
-    trace = TraceWriter(config.trace_dir, buffered=buffered_trace)
+    trace = TraceWriter(config.trace_dir)
     payload = HookPayload(payload_dict, config)
     state = HookStateStore(config.trace_dir)
     return HookContext(payload=payload, config=config, trace=trace, state=state)

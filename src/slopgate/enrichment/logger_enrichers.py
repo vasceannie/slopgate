@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
-    enrichment_root,
     path_source_from_metadata,
     relative_path,
     safe_read,
@@ -109,7 +108,7 @@ def enrich_stdlib_logger(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich PY-LOG-001 by finding project logging abstractions."""
 
     extras: list[str] = []
-    root = enrichment_root(ctx)
+    root = ctx.config.root
 
     _append_dependency_hints(extras, _dependency_hints(root))
     _append_logger_path_hints(extras, root)

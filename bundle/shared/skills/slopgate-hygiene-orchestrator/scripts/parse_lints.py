@@ -22,7 +22,7 @@ class LintIssue:
     severity: str  # "error" | "warning" | "info"
     code: str  # e.g., "unbound-name", "noExplicitAny"
     message: str
-    source: str  # "pyrefly" | "basedpyright" | "biome" | "clippy" | "tsc"
+    source: str  # "pyrefly" | "biome" | "clippy" | "tsc"
     category: str = ""  # Grouping category
     fixable: bool = False
 
@@ -42,54 +42,25 @@ class UnifiedOutput:
 
 
 def parse_pyrefly(content: str) -> list[LintIssue]:
-    """Parse pyrefly output format."""
+    """Parse pyrefly JSON output format (pyrefly check --output-format json)."""
     issues: list[LintIssue] = []
 
-    # Pattern: ERROR|WARN `message` [code]\n --> file:line:col
-    pattern = re.compile(
-        r"(ERROR|WARN)\s+(.+?)\s+\[([^\]]+)\]\s*\n\s*-->\s*([^:]+):(\d+):(\d+)",
-        re.MULTILINE,
-    )
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return issues
 
-    for match in pattern.finditer(content):
-        severity = "error" if match.group(1) == "ERROR" else "warning"
+    for err in data.get("errors", []):
         issues.append(
             LintIssue(
-                file=match.group(4).strip(),
-                line=int(match.group(5)),
-                column=int(match.group(6)),
-                severity=severity,
-                code=match.group(3).strip(),
-                message=match.group(2).strip(),
+                file=err.get("path", "unknown"),
+                line=err.get("line", 1),
+                column=err.get("column", 1),
+                severity=err.get("severity", "error"),
+                code=err.get("name", "unknown"),
+                message=err.get("concise_description", err.get("description", "")),
                 source="pyrefly",
-                category=categorize_python_issue(match.group(3).strip()),
-            )
-        )
-
-    return issues
-
-
-def parse_basedpyright(content: str) -> list[LintIssue]:
-    """Parse basedpyright output format."""
-    issues: list[LintIssue] = []
-
-    # Pattern: file:line:col - (error|warning): message (code)
-    pattern = re.compile(
-        r"([^:\s]+):(\d+):(\d+)\s*-\s*(error|warning):\s*(.+?)\s*\(([^)]+)\)",
-        re.MULTILINE,
-    )
-
-    for match in pattern.finditer(content):
-        issues.append(
-            LintIssue(
-                file=match.group(1).strip(),
-                line=int(match.group(2)),
-                column=int(match.group(3)),
-                severity=match.group(4),
-                code=match.group(6).strip(),
-                message=match.group(5).strip(),
-                source="basedpyright",
-                category=categorize_python_issue(match.group(6).strip()),
+                category=categorize_python_issue(err.get("name", "")),
             )
         )
 
@@ -243,14 +214,9 @@ def parse_directory(hygiene_dir: Path) -> UnifiedOutput:
     all_issues: list[LintIssue] = []
 
     # Parse pyrefly
-    pyrefly_path = hygiene_dir / "pyrefly.txt"
+    pyrefly_path = hygiene_dir / "pyrefly.json"
     if pyrefly_path.exists():
         all_issues.extend(parse_pyrefly(pyrefly_path.read_text()))
-
-    # Parse basedpyright (if captured)
-    basedpyright_path = hygiene_dir / "basedpyright.txt"
-    if basedpyright_path.exists():
-        all_issues.extend(parse_basedpyright(basedpyright_path.read_text()))
 
     # Parse biome
     biome_path = hygiene_dir / "biome.json"

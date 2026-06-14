@@ -33,7 +33,6 @@ class DaemonResponse:
     error: str | None = None
     stderr: str | None = None
     exit_code: int = 0
-    accepted: bool = False
 
 
 def encode_request(request: DaemonRequest) -> bytes:
@@ -60,7 +59,6 @@ def decode_request(frame: bytes) -> DaemonRequest:
 
 def encode_response(response: DaemonResponse) -> bytes:
     payload: ObjectDict = {
-        "accepted": response.accepted,
         "exit_code": response.exit_code,
         "ok": response.ok,
         "output": response.output,
@@ -81,7 +79,6 @@ def decode_response(frame: bytes) -> DaemonResponse:
         error=string_value(data.get("error")),
         stderr=string_value(data.get("stderr")),
         exit_code=_int_value(data.get("exit_code")),
-        accepted=data.get("accepted") is True,
     )
 
 

@@ -7,7 +7,7 @@ description: |
   (3) User requests type fixes or type strictness enforcement
   (4) Importing from untyped third-party libraries
   (5) User asks to "fix types", "remove Any", or "add proper typing"
-  (6) Pyright or mypy reports type errors that need resolution
+  (6) Pyrefly or mypy reports type errors that need resolution
   (7) Code review reveals weak typing patterns
   Follows hierarchical resolution: codebase inference → type stubs → library inspection → type guards → casting (last resort).
 ---
@@ -74,8 +74,13 @@ The type system exists to catch bugs. Suppressing errors with `Any`, `# type: ig
 Run type checker to identify issues:
 
 ```bash
-# Pyright (preferred)
-basedpyright --outputjson src/ 2>/dev/null | jq '.generalDiagnostics[]'
+# Pyrefly (preferred)
+pyrefly check src/ --output-format json 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for e in d.get('errors', []):
+    print(f\"{e['path']}:{e['line']}:{e['column']} [{e['severity']}] {e['name']} - {e['concise_description']}\")
+"
 
 # Mypy alternative
 mypy src/ --show-error-codes 2>&1 | grep -E "(Any|type: ignore)"
@@ -181,7 +186,7 @@ config = cast(dict[str, int], load_config())
 
 | Tool | Purpose |
 |------|---------|
-| `basedpyright` / `mypy` | Identify type errors |
+| `pyrefly check` / `mypy` | Identify type errors |
 | `find_symbol` | Find existing type definitions |
 | `find_referencing_symbols` | Infer types from usage |
 | `search_for_pattern` | Find Protocol/TypeVar patterns |
@@ -196,7 +201,7 @@ After fixing, verify:
 - [ ] No `# type: ignore` comments
 - [ ] No `# pyright: ignore` comments
 - [ ] No linter config modifications that weaken type checking
-- [ ] Type checker passes: `basedpyright src/`
+- [ ] Type checker passes: `pyrefly check src/`
 - [ ] If cast used, justification comment present
 - [ ] Stubs installed for all third-party imports
 
@@ -204,7 +209,7 @@ After fixing, verify:
 
 | Reference | Contents |
 |-----------|----------|
-| `references/error-code-fixes.md` | Pyright/Mypy error codes with specific fix strategies |
+| `references/error-code-fixes.md` | Pyrefly/Mypy error codes with specific fix strategies |
 | `references/resolution-patterns.md` | Advanced typing patterns: TypeGuard, Protocol, TypeVarTuple, Self, etc. |
 | `references/common-stubs.md` | Type stub packages for popular libraries |
 | `references/third-party-typing.md` | Strategies for typing untyped library code |

@@ -13,15 +13,7 @@ from .ast_utils import (
 )
 from .discovery import find_all_python_files, find_source_files, find_test_files
 from .models import ParsedFile
-from .parsing import (
-    ensure_parsed,
-    parse_file,
-    parse_files,
-    read_lines,
-    request_analysis_cache_stats,
-    reset_request_analysis_cache,
-    safe_parse,
-)
+from .parsing import ensure_parsed, parse_file, parse_files, read_lines, safe_parse
 from .paths import (
     project_root,
     relative_path,
@@ -48,8 +40,6 @@ __all__ = [
     "project_root",
     "read_lines",
     "relative_path",
-    "request_analysis_cache_stats",
-    "reset_request_analysis_cache",
     "safe_parse",
     "src_root",
     "src_roots",

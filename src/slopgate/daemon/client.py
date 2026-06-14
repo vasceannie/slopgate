@@ -74,5 +74,4 @@ def _accepted_failure_response(exc: BaseException) -> DaemonResponse:
         error=DAEMON_ACCEPTED_FAILURE_ERROR,
         stderr=f"{DAEMON_ACCEPTED_FAILURE_ERROR}: {exc}\n",
         exit_code=DAEMON_ACCEPTED_FAILURE_EXIT_CODE,
-        accepted=True,
     )

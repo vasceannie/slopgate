@@ -9,7 +9,6 @@ from typing import cast
 
 from slopgate.enrichment._helpers import (
     append_enrichment_message,
-    enrichment_root,
     relative_path,
     resolve_path,
     safe_read,
@@ -67,12 +66,11 @@ def _append_fixture_enrichment(
     ctx: HookContext,
     build_extras: FixtureExtrasBuilder,
 ) -> None:
-    root = enrichment_root(ctx)
-    hit = _hit_path_and_fixtures(finding, root)
+    hit = _hit_path_and_fixtures(finding, ctx.config.root)
     if hit is None:
         return
     _, fixtures = hit
-    append_enrichment_message(finding, build_extras(root, fixtures))
+    append_enrichment_message(finding, build_extras(ctx.config.root, fixtures))
 
 
 def _project_mentions(root: Path, dependency: str) -> bool:
@@ -177,11 +175,10 @@ def _build_test_smell_extras(
 
 def enrich_test_loop(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich loop-based tests with fixture and parametrize context."""
-    root = enrichment_root(ctx)
-    hit = _hit_path_and_fixtures(finding, root)
+    hit = _hit_path_and_fixtures(finding, ctx.config.root)
     if hit is not None:
         test_path, fixtures = hit
-        examples = find_parametrize_examples(test_path, root)
+        examples = find_parametrize_examples(test_path, ctx.config.root)
         append_enrichment_message(
             finding, _build_test_loop_message_extras(fixtures, examples)
         )
@@ -200,20 +197,21 @@ def enrich_test_smells(finding: RuleFinding, ctx: HookContext) -> None:
 
 def enrich_fixture_outside_conftest(finding: RuleFinding, ctx: HookContext) -> None:
     """Enrich fixture-placement findings with the nearest conftest target."""
-    root = enrichment_root(ctx)
-    test_path = _resolve_hit_path(finding, root)
+    test_path = _resolve_hit_path(finding, ctx.config.root)
     if test_path is None:
         return
     conftest = test_path.parent / "conftest.py"
     extras: list[str] = []
     if conftest.exists():
-        fixtures = discover_fixtures(test_path, root)
+        fixtures = discover_fixtures(test_path, ctx.config.root)
         if fixtures:
             names = ", ".join(f"`{fixture['name']}`" for fixture in fixtures[:6])
             extras.append(f"\nExisting fixtures in conftest.py: {names}")
-        extras.append(f"\nSurface the fixture through: {relative_path(conftest, root)}")
+        extras.append(
+            f"\nSurface the fixture through: {relative_path(conftest, ctx.config.root)}"
+        )
     else:
-        directory = relative_path(test_path.parent, root)
+        directory = relative_path(test_path.parent, ctx.config.root)
         extras.append(
             f"\nNo conftest.py exists yet in {directory}/. Create one as a thin fixture "
             "registry. If the fixture implementation is large, put the heavy "
