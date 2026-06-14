@@ -1,7 +1,11 @@
 import { useMemo } from "react";
 import { useTraceDataSource } from "@/context/useTraceDataSource";
 import { mockConfig } from "@/data/mockTraces";
-import type { SessionData, SessionGroup } from "@/lib/sessionHelpers";
+import type {
+	NativeSessionIds,
+	SessionData,
+	SessionGroup,
+} from "@/lib/sessionHelpers";
 import type {
 	Decision,
 	EventName,
@@ -54,6 +58,14 @@ function filterByPath<T extends { session_id: string }>(
 ): T[] {
 	if (!pathFilter || !sessionIdsTouchingPath) return items;
 	return items.filter((i) => sessionIdsTouchingPath.has(i.session_id));
+}
+
+function isSelfTestSessionId(sessionId: string): boolean {
+	return sessionId.startsWith("self-test-");
+}
+
+function filterOutSelfTestSessions<T extends { session_id: string }>(items: T[]): T[] {
+	return items.filter((item) => !isSelfTestSessionId(item.session_id));
 }
 
 export function resolveDecision(
@@ -295,6 +307,44 @@ function firstString(
 	return undefined;
 }
 
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+	const seen = new Set<string>();
+	for (const value of values) {
+		const trimmed = value?.trim();
+		if (trimmed) seen.add(trimmed);
+	}
+	return Array.from(seen);
+}
+
+function traceSecondaryIds(records: LineageRecord[]): string[] {
+	return uniqueStrings(
+		records.flatMap((record) => record.secondary_session_ids ?? []),
+	);
+}
+
+function mergeSecondaryIds(sessions: SessionData[]): string[] {
+	return uniqueStrings(sessions.flatMap((session) => session.secondaryIds ?? []));
+}
+
+function nativeSessionIds(records: LineageRecord[]): NativeSessionIds | undefined {
+	const opencode = firstString(records, "opencode_session_id");
+	const codex = firstString(records, "codex_session_id");
+	return opencode || codex ? { opencode, codex } : undefined;
+}
+
+function mergeNativeSessionIds(sessions: SessionData[]): NativeSessionIds | undefined {
+	const opencode = uniqueStrings(
+		sessions.map((session) => session.nativeSessionIds?.opencode),
+	)[0];
+	const codex = uniqueStrings(
+		sessions.map((session) => session.nativeSessionIds?.codex),
+	)[0];
+	const claude = uniqueStrings(
+		sessions.map((session) => session.nativeSessionIds?.claude),
+	)[0];
+	return opencode || codex || claude ? { opencode, codex, claude } : undefined;
+}
+
 function firstPlatform(records: LineageRecord[]): Platform | null | undefined {
 	for (const record of records) {
 		const value = record.origin_platform;
@@ -498,6 +548,49 @@ function preferredInferredPrimary(
 	return left.id.localeCompare(right.id) <= 0 ? left : right;
 }
 
+function nativeIdentityKeys(session: SessionSummary): string[] {
+	return uniqueStrings([
+		session.nativeSessionIds?.opencode
+			? `opencode:${session.nativeSessionIds.opencode}`
+			: null,
+		session.nativeSessionIds?.codex
+			? `codex:${session.nativeSessionIds.codex}`
+			: null,
+	]);
+}
+
+function sharedNativeIdentityRoots(
+	sessions: SessionSummary[],
+): Map<string, string> {
+	const sessionsByNativeId = new Map<string, SessionSummary[]>();
+	for (const session of sessions) {
+		for (const nativeId of nativeIdentityKeys(session)) {
+			const matching = sessionsByNativeId.get(nativeId) ?? [];
+			matching.push(session);
+			sessionsByNativeId.set(nativeId, matching);
+		}
+	}
+
+	const roots = new Map<string, string>();
+	for (const matching of sessionsByNativeId.values()) {
+		if (matching.length < 2) continue;
+		const primary = matching.reduce(preferredInferredPrimary);
+		for (const session of matching) roots.set(session.id, primary.id);
+	}
+	return roots;
+}
+
+function hasSharedNativeIdentity(sessions: SessionSummary[]): boolean {
+	const seen = new Set<string>();
+	for (const session of sessions) {
+		for (const nativeId of nativeIdentityKeys(session)) {
+			if (seen.has(nativeId)) return true;
+			seen.add(nativeId);
+		}
+	}
+	return false;
+}
+
 function canInferMirrorRelation(
 	left: SessionSummary,
 	right: SessionSummary,
@@ -666,6 +759,8 @@ function mergeGroupSession(
 		...results.map(traceDecision),
 		...findings.map((finding) => finding.decision ?? "context"),
 	];
+	const titledSession = sessionsToMerge.find((session) => session.title);
+	const secondaryIds = mergeSecondaryIds(sessionsToMerge);
 	const platform =
 		primary.platform === "unknown"
 			? (group.platforms.find((item) => item !== "unknown") ?? primary.platform)
@@ -673,6 +768,15 @@ function mergeGroupSession(
 
 	return {
 		...primary,
+		title: primary.title ?? titledSession?.title ?? null,
+		titleSource: primary.titleSource ?? titledSession?.titleSource ?? null,
+		sessionIdentitySource:
+			primary.sessionIdentitySource ??
+			sessionsToMerge.find((session) => session.sessionIdentitySource)
+				?.sessionIdentitySource ??
+			null,
+		secondaryIds,
+		nativeSessionIds: mergeNativeSessionIds(sessionsToMerge),
 		platform,
 		events,
 		findings,
@@ -695,11 +799,13 @@ function mergeGroupSession(
 
 function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
 	const inferredRelations = inferHistoricalRelations(sessions);
+	const nativeIdentityRoots = sharedNativeIdentityRoots(sessions);
 	const buckets = new Map<string, SessionSummary[]>();
 	for (const session of sessions) {
 		const root = hasExplicitLineage(session)
 			? lineageRootFor(session)
-			: inferredRootFor(session.id, inferredRelations);
+			: nativeIdentityRoots.get(session.id) ??
+				inferredRootFor(session.id, inferredRelations);
 		const bucket = buckets.get(root) ?? [];
 		bucket.push(session);
 		buckets.set(root, bucket);
@@ -732,7 +838,7 @@ function buildSessionGroups(sessions: SessionSummary[]): SessionGroup[] {
 			).sort();
 			const confidence: LineageConfidence = groupedSessions.some(
 				(session) => session.lineageConfidence === "explicit",
-			)
+			) || hasSharedNativeIdentity(groupedSessions)
 				? "explicit"
 				: groupedSessions.length > 1
 					? "inferred"
@@ -773,6 +879,7 @@ export function buildTraceSessionIndexes(
 	const sessionDecisions = new Map<string, Decision[]>();
 
 	for (const event of events) {
+		if (isSelfTestSessionId(event.session_id)) continue;
 		sessionBucket(sessionMap, event.session_id, event.platform).events.push(
 			event,
 		);
@@ -786,11 +893,13 @@ export function buildTraceSessionIndexes(
 		}
 	}
 	for (const rule of rules) {
+		if (isSelfTestSessionId(rule.session_id)) continue;
 		sessionBucket(sessionMap, rule.session_id, rule.platform).findings.push(rule);
 	}
 	for (const result of [...results].sort((a, b) =>
 		a.timestamp.localeCompare(b.timestamp),
 	)) {
+		if (isSelfTestSessionId(result.session_id)) continue;
 		sessionBucket(sessionMap, result.session_id, result.platform).results.push(
 			result,
 		);
@@ -799,11 +908,14 @@ export function buildTraceSessionIndexes(
 		sessionDecisions.set(result.session_id, decisions);
 	}
 	for (const subprocess of subprocesses) {
+		if (isSelfTestSessionId(subprocess.session_id)) continue;
 		sessionMap.get(subprocess.session_id)?.subprocesses.push(subprocess);
 	}
 	const sessions = Array.from(sessionMap.entries())
 		.map(([id, data]) => {
 				const records = sessionRecords(data);
+				const sessionTitle = firstString(records, "session_title");
+				const secondaryIds = traceSecondaryIds(records);
 				const parentSessionId = firstString(records, "parent_session_id");
 				const rootSessionId = firstString(records, "root_session_id");
 				const originSessionId = firstString(records, "origin_session_id");
@@ -831,6 +943,14 @@ export function buildTraceSessionIndexes(
 
 				return {
 					id,
+					title: sessionTitle,
+					titleSource: firstString(records, "session_title_source"),
+					sessionIdentitySource: firstString(
+						records,
+						"session_identity_source",
+					),
+					secondaryIds,
+					nativeSessionIds: nativeSessionIds(records),
 					...data,
 					platforms: sessionPlatformList(records, data.platform),
 					...lineageFields,
@@ -906,10 +1026,18 @@ export function useTraceData(filters: FilterState) {
 		);
 
 		return {
-			timeEvents: filterByPlatform(filteredTimeEvents, filters.platforms),
-			timeRules: filterByPlatform(filteredTimeRules, filters.platforms),
-			timeResults: filterByPlatform(filteredTimeResults, filters.platforms),
-			timeSubprocesses: filterByTime(rawData.subprocesses, windowMs),
+			timeEvents: filterOutSelfTestSessions(
+				filterByPlatform(filteredTimeEvents, filters.platforms),
+			),
+			timeRules: filterOutSelfTestSessions(
+				filterByPlatform(filteredTimeRules, filters.platforms),
+			),
+			timeResults: filterOutSelfTestSessions(
+				filterByPlatform(filteredTimeResults, filters.platforms),
+			),
+			timeSubprocesses: filterOutSelfTestSessions(
+				filterByTime(rawData.subprocesses, windowMs),
+			),
 		};
 	}, [filters.platforms, rawData, windowMs]);
 
@@ -1211,7 +1339,7 @@ export function useTraceData(filters: FilterState) {
 			});
 
 		const nextFireCounts = new Map<string, number>();
-		for (const r of rawData.rules)
+		for (const r of rules)
 			nextFireCounts.set(r.rule_id, (nextFireCounts.get(r.rule_id) ?? 0) + 1);
 
 		return {
@@ -1220,7 +1348,7 @@ export function useTraceData(filters: FilterState) {
 			asyncByCommand: nextAsyncByCommand,
 			fireCounts: nextFireCounts,
 		};
-	}, [rawData.rules, subprocesses]);
+	}, [rules, subprocesses]);
 
 	const operationalContext = useMemo<OperationalContext>(() => {
 		const traceRecords: TraceMetadata[] =

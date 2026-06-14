@@ -180,6 +180,30 @@ def test_opencode_plugin_preserves_input_side_tool_arguments_for_traces() -> Non
     assert missing_sources == [], "OpenCode plugin must preserve tool call bodies"
 
 
+def test_opencode_plugin_preserves_session_created_identity_for_traces() -> None:
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    expected_fragments = [
+        "function eventIdentityFields(",
+        'const data = objectValue(event, "data")',
+        'const dataInfo = data ? objectValue(data, "info") : null',
+        "const directSessionIdKeys = [",
+        "const infoSessionIdKeys = [",
+        '"sessionID"',
+        '"id"',
+        '"threadTitle"',
+        '"conversationTitle"',
+        'session_title_source: "opencode-event"',
+        'session_identity_source: "opencode-event"',
+        'payloadForEvent("session.created", "", {}, eventIdentityFields(event, true))',
+    ]
+    missing_fragments = [
+        fragment for fragment in expected_fragments if fragment not in plugin
+    ]
+    assert missing_fragments == [], (
+        "OpenCode plugin should preserve session-created identity metadata for traces"
+    )
+
+
 def test_opencode_plugin_cache_is_bounded_ttl_scoped_and_consumed() -> None:
     plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     assert "POST_TOOL_ARG_CACHE_TTL_MS" in plugin

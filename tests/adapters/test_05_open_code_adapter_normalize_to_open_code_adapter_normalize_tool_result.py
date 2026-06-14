@@ -159,6 +159,58 @@ class TestOpenCodeAdapterNormalize:
         assert canonical["tool_name"] == "", "empty tool name should remain empty"
 
 
+class TestOpenCodeAdapterIdentity:
+    def test_normalize_adds_nested_native_opencode_identity_metadata(self) -> None:
+        adapter = OpenCodeAdapter()
+        raw: ObjectDict = {
+            "hook_event_name": "session.created",
+            "cwd": "/tmp",
+            "session_id": "opencode-plugin-synthetic",
+            "properties": {
+                "info": {
+                    "id": "ses_139981ae7ffeOKOMbswUJdo3Oy",
+                    "title": "Hide self-test sessions from dashboard",
+                }
+            },
+        }
+
+        canonical = adapter.normalize_payload(raw)
+
+        assert canonical["session_id"] == "opencode-plugin-synthetic", (
+            "primary Slopgate session id should remain canonical"
+        )
+        assert canonical["opencode_session_id"] == "ses_139981ae7ffeOKOMbswUJdo3Oy", (
+            "native OpenCode session id should be preserved separately"
+        )
+        assert canonical["session_identity_source"] == "opencode-event", (
+            "identity provenance should record explicit OpenCode event evidence"
+        )
+        assert canonical["session_title"] == "Hide self-test sessions from dashboard", (
+            "nested OpenCode session title should be preserved"
+        )
+        assert canonical["session_title_source"] == "opencode-event", (
+            "title provenance should record explicit OpenCode event evidence"
+        )
+
+    def test_normalize_ignores_unrelated_top_level_event_id(self) -> None:
+        adapter = OpenCodeAdapter()
+        raw: ObjectDict = {
+            "hook_event_name": "command.executed",
+            "cwd": "/tmp",
+            "session_id": "opencode-plugin-synthetic",
+            "id": "evt_opaque_event_id",
+        }
+
+        canonical = adapter.normalize_payload(raw)
+
+        assert canonical["session_id"] == "opencode-plugin-synthetic", (
+            "primary Slopgate session id should remain canonical"
+        )
+        assert "opencode_session_id" not in canonical, (
+            "generic top-level event ids are not native OpenCode session ids"
+        )
+
+
 class TestOpenCodeAdapterNormalizeToolResult:
     """tool_result / tool_response aliasing behavior."""
 

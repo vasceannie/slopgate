@@ -45,6 +45,12 @@ TRACE_META_KEYS = (
     "degraded_reason",
     "enforcement_mode",
     "resolved_repo_root",
+    "session_title",
+    "session_title_source",
+    "session_identity_source",
+    "opencode_session_id",
+    "codex_session_id",
+    "secondary_session_ids",
     "parent_session_id",
     "root_session_id",
     "origin_platform",
@@ -55,6 +61,33 @@ TRACE_META_KEYS = (
     "lineage_role",
 )
 TRACE_META_ALIASES: dict[str, tuple[str, ...]] = {
+    "session_title": (
+        "session_title",
+        "sessionTitle",
+        "thread_title",
+        "threadTitle",
+        "conversation_title",
+        "conversationTitle",
+    ),
+    "session_title_source": ("session_title_source", "sessionTitleSource"),
+    "session_identity_source": ("session_identity_source", "sessionIdentitySource"),
+    "opencode_session_id": (
+        "opencode_session_id",
+        "opencodeSessionId",
+        "opencodeSessionID",
+    ),
+    "codex_session_id": (
+        "codex_session_id",
+        "codexSessionId",
+        "codexSessionID",
+        "thread_id",
+        "threadId",
+        "threadID",
+        "conversation_id",
+        "conversationId",
+        "conversationID",
+    ),
+    "secondary_session_ids": ("secondary_session_ids", "secondarySessionIds"),
     "parent_session_id": ("parent_session_id", "parentSessionId", "parentSessionID"),
     "root_session_id": ("root_session_id", "rootSessionId", "rootSessionID"),
     "origin_platform": ("origin_platform", "originPlatform"),
@@ -94,11 +127,16 @@ def _trim_text(value: object, limit: int) -> str | None:
     return value[:limit] + "…[trimmed]"
 
 
-def _trace_metadata(obj: Mapping[str, object]) -> JSONDict:
+def _trace_metadata(
+    obj: Mapping[str, object], *, include_bare_title: bool = False
+) -> JSONDict:
     """Preserve small, non-payload trace context already emitted by the engine."""
     meta: JSONDict = {}
     for key in TRACE_META_KEYS:
-        for source_key in TRACE_META_ALIASES.get(key, (key,)):
+        aliases = TRACE_META_ALIASES.get(key, (key,))
+        if key == "session_title" and include_bare_title:
+            aliases = (*aliases, "title")
+        for source_key in aliases:
             if source_key not in obj:
                 continue
             value = _trace_metadata_value(key, obj[source_key])
@@ -110,15 +148,32 @@ def _trace_metadata(obj: Mapping[str, object]) -> JSONDict:
 
 
 def _trace_metadata_value(key: str, value: object) -> object:
+    if key == "secondary_session_ids":
+        return _trace_string_list_value(value)
     if key == "origin_platform":
-        return (
-            _platform_value(value) if isinstance(value, str) else _nullable_value(value)
-        )
+        return _trace_platform_value(value)
     if key == "platform_source":
-        if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
-            return value
-        return _nullable_value(value)
+        return _trace_platform_source_value(value)
     return value if isinstance(value, str) or value is None else METADATA_VALUE_OMITTED
+
+
+def _trace_string_list_value(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value] if value.strip() else METADATA_VALUE_OMITTED
+    string_values = coerce_str_list(value)
+    return string_values if string_values else METADATA_VALUE_OMITTED
+
+
+def _trace_platform_value(value: object) -> object:
+    return _platform_value(value) if isinstance(value, str) else _nullable_value(value)
+
+
+def _trace_platform_source_value(value: object) -> object:
+    if isinstance(value, str) and value in KNOWN_PLATFORM_SOURCES:
+        return value
+    return _nullable_value(value)
 
 
 def _nullable_value(value: object) -> object:
@@ -167,7 +222,7 @@ def _format_e(obj: Mapping[str, object]) -> JSONDict:
         "command": _trim_text(obj.get("command"), 1000),
         "tool_output": _trim_text(obj.get("tool_output"), 1000),
         "tool_input": _format_tool_input(obj.get("tool_input")),
-        **_trace_metadata(obj),
+        **_trace_metadata(obj, include_bare_title=True),
     }
 
 

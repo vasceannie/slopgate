@@ -253,6 +253,22 @@ describe("live trace record validation", () => {
 		});
 	});
 
+	it("normalizes event session title aliases from live rows", () => {
+		const rawEvent = {
+			timestamp: "2026-06-11T02:02:33.860998+00:00",
+			event_name: "SessionStart",
+			session_id: "session-with-title",
+			title: "Fix dashboard session labels",
+		};
+
+		expect(coerceTraceRecord(rawEvent)).toMatchObject({
+			type: "event",
+			record: {
+				session_title: "Fix dashboard session labels",
+			},
+		});
+	});
+
 	it("preserves raw tool input on normalized result rows", () => {
 		const rawResult = {
 			timestamp: "2026-06-11T02:02:33.860998+00:00",

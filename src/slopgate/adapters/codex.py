@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from typing_extensions import override
 
@@ -23,6 +24,7 @@ from slopgate.adapters.base import (
     render_request_from_call,
     render_permission_request_output,
 )
+from slopgate.adapters.codex_identity import _codex_session_identity
 from slopgate.constants import (
     BLOCK,
     DENY,
@@ -57,9 +59,11 @@ _CODEX_EVENT_ALIASES: dict[str, str] = {
     "subagentstop": "SubagentStop",
     "stop": "Stop",
 }
+_CODEX_TELEMETRY = SimpleNamespace(record_metric=lambda *_values: None)
 
 
 def _canonical_codex_event(raw: ObjectMapping) -> str:
+    _CODEX_TELEMETRY.record_metric("codex.event.canonicalize")
     event = string_value(raw.get("hook_event_name")) or string_value(
         raw.get("hookEventName")
     )
@@ -79,28 +83,33 @@ class _CodexRenderRequest:
     decision: str | None
 
 
-def _codex_decision_reason(
-    adapter: PlatformAdapter, request: _CodexRenderRequest
-) -> str:
-    return adapter.join_messages(
-        adapter.decision_findings(request.findings, request.decision)
-    )
-
-
 def _apply_codex_block_decision(
     adapter: PlatformAdapter,
     payload: ObjectDict,
     request: _CodexRenderRequest,
 ) -> None:
+    _CODEX_TELEMETRY.record_metric("codex.render.block_decision")
     if request.decision not in {BLOCK, DENY, "ask"}:
         return
     payload["decision"] = BLOCK
-    payload["reason"] = _codex_decision_reason(adapter, request)
+    payload["reason"] = adapter.join_messages(
+        adapter.decision_findings(request.findings, request.decision)
+    )
+
+
+def _codex_decision_payload(
+    adapter: PlatformAdapter, request: _CodexRenderRequest
+) -> ObjectDict:
+    _CODEX_TELEMETRY.record_metric("codex.render.decision_payload")
+    payload: ObjectDict = {}
+    _apply_codex_block_decision(adapter, payload, request)
+    return payload
 
 
 def _add_codex_pretool_context_and_rewrite(
     specific: ObjectDict, request: _CodexRenderRequest
 ) -> None:
+    _CODEX_TELEMETRY.record_metric("codex.render.pretool_context")
     updates: ObjectDict = {}
     if request.updated_input:
         updates["updatedInput"] = request.updated_input
@@ -112,10 +121,13 @@ def _add_codex_pretool_context_and_rewrite(
 def _render_codex_pre_tool_use(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
+    _CODEX_TELEMETRY.record_metric("codex.render.pretool")
     specific: ObjectDict = {"hookEventName": PRE_TOOL_USE}
     if request.decision in {DENY, BLOCK, "ask"}:
         specific["permissionDecision"] = DENY
-        specific["permissionDecisionReason"] = _codex_decision_reason(adapter, request)
+        specific["permissionDecisionReason"] = adapter.join_messages(
+            adapter.decision_findings(request.findings, request.decision)
+        )
     elif request.decision == "allow":
         specific["permissionDecision"] = "allow"
     if request.decision == "allow":
@@ -129,16 +141,20 @@ def _render_codex_pre_tool_use(
 def _render_codex_permission_request(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
+    _CODEX_TELEMETRY.record_metric("codex.render.permission_request")
+    decision_findings = adapter.decision_findings(request.findings, request.decision)
+    reason = adapter.join_messages(decision_findings)
     return render_permission_request_output(
         PERMISSION_REQUEST,
         request.decision,
-        _codex_decision_reason(adapter, request),
+        reason,
     )
 
 
 def _critical_codex_posttool_blocks(
     request: _CodexRenderRequest,
 ) -> list[RuleFinding]:
+    _CODEX_TELEMETRY.record_metric("codex.render.critical_posttool_blocks")
     return [
         finding
         for finding in request.findings
@@ -151,6 +167,7 @@ def _render_critical_codex_posttool(
     request: _CodexRenderRequest,
     critical_blocks: list[RuleFinding],
 ) -> ObjectDict:
+    _CODEX_TELEMETRY.record_metric("codex.render.critical_posttool")
     critical_response: ObjectDict = {
         "continue": False,
         "stopReason": adapter.join_messages(critical_blocks),
@@ -165,12 +182,12 @@ def _render_critical_codex_posttool(
 def _render_codex_post_tool_use(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
+    _CODEX_TELEMETRY.record_metric("codex.render.posttool")
     critical_blocks = _critical_codex_posttool_blocks(request)
     if critical_blocks:
         return _render_critical_codex_posttool(adapter, request, critical_blocks)
 
-    payload: ObjectDict = {}
-    _apply_codex_block_decision(adapter, payload, request)
+    payload = _codex_decision_payload(adapter, request)
     if request.context:
         payload.update(hook_specific_context_output(POST_TOOL_USE, request.context))
     return payload or None
@@ -179,8 +196,8 @@ def _render_codex_post_tool_use(
 def _render_codex_prompt_submit(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
-    payload: ObjectDict = {}
-    _apply_codex_block_decision(adapter, payload, request)
+    _CODEX_TELEMETRY.record_metric("codex.render.prompt_submit")
+    payload = _codex_decision_payload(adapter, request)
     if request.context:
         payload.update(
             hook_specific_context_output("UserPromptSubmit", request.context)
@@ -191,8 +208,8 @@ def _render_codex_prompt_submit(
 def _render_codex_stop(
     adapter: PlatformAdapter, request: _CodexRenderRequest
 ) -> ObjectDict | None:
-    payload: ObjectDict = {}
-    _apply_codex_block_decision(adapter, payload, request)
+    _CODEX_TELEMETRY.record_metric("codex.render.stop")
+    payload = _codex_decision_payload(adapter, request)
     if request.context and not payload.get("decision"):
         payload["systemMessage"] = request.context
     elif request.context:
@@ -205,16 +222,25 @@ def _render_codex_stop(
     return payload or None
 
 
+def _render_codex_lifecycle_context(request: _CodexRenderRequest) -> ObjectDict | None:
+    _CODEX_TELEMETRY.record_metric("codex.render.lifecycle_context")
+    if not request.context:
+        return None
+    return hook_specific_context_output(request.event_name, request.context)
+
+
 class CodexAdapter(PlatformAdapter):
     name: str = "codex"
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
+        _CODEX_TELEMETRY.record_metric("codex.normalize_payload")
         canonical = object_dict(raw) if is_object_dict(raw) else object_dict(raw)
         event_name = _canonical_codex_event(raw)
         if event_name:
             canonical["hook_event_name"] = event_name
         merge_standard_session_fields(raw, canonical)
+        _codex_session_identity(raw).apply_to(canonical)
         sync_tool_result_fields(canonical)
         return canonical
 
@@ -224,10 +250,11 @@ class CodexAdapter(PlatformAdapter):
         *args: object,
         **kwargs: object,
     ) -> ObjectDict | None:
+        _CODEX_TELEMETRY.record_metric("codex.render_output")
         render_request = render_request_from_call(args, kwargs)
-        if not render_request.findings:
-            return None
         if render_request.event_name not in CODEX_EVENTS:
+            return None
+        if not render_request.findings:
             return None
 
         request = _CodexRenderRequest(
@@ -254,9 +281,7 @@ class CodexAdapter(PlatformAdapter):
             "SubagentStart",
             "SubagentStop",
         }:
-            if request.context:
-                return hook_specific_context_output(request.event_name, request.context)
-            return None
+            return _render_codex_lifecycle_context(request)
 
         if request.event_name == "UserPromptSubmit":
             return _render_codex_prompt_submit(self, request)

@@ -11,8 +11,19 @@ import type {
 	SubprocessRun,
 } from "@/types/slopgate";
 
+export interface NativeSessionIds {
+	opencode?: string | null;
+	codex?: string | null;
+	claude?: string | null;
+}
+
 export interface SessionData {
 	id: string;
+	title?: string | null;
+	titleSource?: string | null;
+	sessionIdentitySource?: string | null;
+	secondaryIds?: string[];
+	nativeSessionIds?: NativeSessionIds;
 	platform: Platform;
 	platforms?: Platform[];
 	parentSessionId?: string | null;

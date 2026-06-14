@@ -4,6 +4,7 @@ import {
     type ReactNode,
     useCallback,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -23,6 +24,10 @@ import type { Decision, Platform } from "@/types/slopgate";
 import { FlagButton } from "./FlagButton";
 import { SessionOutcomeSummary } from "./SessionOutcomeSummary";
 import { SessionTimeline } from "./SessionTimeline";
+import {
+    calculateScrollAdjustment,
+    determineAnchor,
+} from "./sessionExplorerAnchoring";
 
 interface Props {
     sessions: SessionData[];
@@ -93,13 +98,22 @@ function matchesSearchQuery(session: SessionData, query: string): boolean {
 	if (!query.trim()) return true;
 	const q = query.toLowerCase().trim();
 
+	if (session.title?.toLowerCase().includes(q)) return true;
+
 	// Session ID
 	const sessionIds = [
 		session.id,
+		session.parentSessionId,
+		session.rootSessionId,
+		session.originSessionId,
+		...(session.secondaryIds ?? []),
+		session.nativeSessionIds?.opencode,
+		session.nativeSessionIds?.codex,
+		session.nativeSessionIds?.claude,
 		...(session.rawSessionIds ?? []),
-		...(session.childSessions ?? []).map((child) => child.id),
-		...(session.mirrorSessions ?? []).map((mirror) => mirror.id),
-	];
+		...(session.childSessions ?? []).flatMap(identitySearchIds),
+		...(session.mirrorSessions ?? []).flatMap(identitySearchIds),
+	].filter((id): id is string => Boolean(id));
 	if (sessionIds.some((id) => id.toLowerCase().includes(q))) return true;
 
 	// Platform
@@ -158,6 +172,19 @@ function matchesSearchQuery(session: SessionData, query: string): boolean {
     return false;
 }
 
+function identitySearchIds(session: SessionData): Array<string | null | undefined> {
+	return [
+		session.id,
+		session.parentSessionId,
+		session.rootSessionId,
+		session.originSessionId,
+		...(session.secondaryIds ?? []),
+		session.nativeSessionIds?.opencode,
+		session.nativeSessionIds?.codex,
+		session.nativeSessionIds?.claude,
+	];
+}
+
 function matchesSessionFilters(
     session: SessionData,
     selectedOutcomes: Set<Decision>,
@@ -182,6 +209,20 @@ function matchesSessionFilters(
     );
 }
 
+function sessionFallbackLabel(sessionId: string): string {
+	return `${sessionId.slice(0, 16)}…`;
+}
+
+function sessionDisplayName(session: SessionData): string {
+	const title = session.title?.trim();
+	return title || sessionFallbackLabel(session.id);
+}
+
+function sessionTitleText(session: SessionData): string {
+	const title = session.title?.trim();
+	return title ? `${title} (${session.id})` : session.id;
+}
+
 export function SessionExplorer({ sessions }: Props) {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
@@ -198,6 +239,83 @@ export function SessionExplorer({ sessions }: Props) {
     );
     const [dateRange, setDateRange] = useState<DateRangeFilter>("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+    const isUserActionRef = useRef(false);
+    const anchorRef = useRef<{ id: string; top: number } | null>(null);
+    const lastAnchorIdRef = useRef<string | null>(null);
+
+    const [updatedSessionIds, setUpdatedSessionIds] = useState<Set<string>>(new Set());
+    const prevSignaturesRef = useRef<Record<string, string>>({});
+
+    useEffect(() => {
+        const nextSignatures: Record<string, string> = {};
+        const updatedIds = new Set<string>();
+        const hasPrev = Object.keys(prevSignaturesRef.current).length > 0;
+
+        for (const s of sessions) {
+            const sig = [
+                s.title ?? "",
+                s.finalOutcome,
+                s.duration,
+                s.eventCount,
+                s.tools.join(","),
+                s.platforms?.join(",") ?? s.platform,
+                s.findings.length,
+                s.results.length,
+                s.subprocesses.length
+            ].join("|");
+            
+            nextSignatures[s.id] = sig;
+
+            if (hasPrev) {
+                const prevSig = prevSignaturesRef.current[s.id];
+                if (prevSig === undefined || prevSig !== sig) {
+                    updatedIds.add(s.id);
+                }
+            }
+        }
+
+        prevSignaturesRef.current = nextSignatures;
+
+        if (updatedIds.size > 0) {
+            setUpdatedSessionIds((prev) => {
+                const next = new Set(prev);
+                for (const id of updatedIds) {
+                    next.add(id);
+                }
+                return next;
+            });
+            const timer = setTimeout(() => {
+                setUpdatedSessionIds(new Set());
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [sessions]);
+
+    // Determine the anchor before DOM updates.
+    useLayoutEffect(() => {
+        const tableBody = tableBodyRef.current;
+        return () => {
+            if (isUserActionRef.current) return;
+
+            const anchor = determineAnchor({
+                expanded,
+                tableBody,
+            });
+            if (anchor) {
+                anchorRef.current = anchor;
+                lastAnchorIdRef.current = anchor.id;
+            }
+        };
+	}, [expanded]);
+
+
+    // Reset user action flag at the end of the render/commit phase
+    useEffect(() => {
+        if (isUserActionRef.current) {
+            isUserActionRef.current = false;
+        }
+    });
     const perPage = 15;
     const outcomes = useMemo(
         () =>
@@ -248,6 +366,45 @@ export function SessionExplorer({ sessions }: Props) {
         (page + 1) * perPage,
     );
 
+    // Handle page state anchoring
+    useEffect(() => {
+        if (isUserActionRef.current) {
+            return;
+        }
+
+        if (lastAnchorIdRef.current) {
+            const index = filteredSessions.findIndex((s) => s.id === lastAnchorIdRef.current);
+            if (index !== -1) {
+                const newPage = Math.floor(index / 15);
+                if (newPage !== page) {
+                    setPage(newPage);
+                }
+            }
+        }
+    }, [filteredSessions, page]);
+
+    // Handle scroll position anchoring.
+    useLayoutEffect(() => {
+        if (isUserActionRef.current) {
+            return;
+        }
+
+        if (anchorRef.current) {
+            const { id, top: oldTop } = anchorRef.current;
+            anchorRef.current = null; // Clear it
+
+            const adj = calculateScrollAdjustment(
+                id,
+                oldTop,
+                tableBodyRef.current,
+                window.scrollY
+            );
+            if (adj !== 0) {
+                window.scrollBy({ top: adj, behavior: "auto" });
+            }
+        }
+	}, []);
+
     const copyId = useCallback((id: string) => {
         navigator.clipboard.writeText(id);
         setCopied(id);
@@ -271,9 +428,10 @@ export function SessionExplorer({ sessions }: Props) {
                         placeholder="Search sessions..."
                         value={searchQuery}
                         onChange={(e) => {
-                            setSearchQuery(e.target.value);
-                            resetSessionPaging();
-                        }}
+                            isUserActionRef.current = true;
+setSearchQuery(e.target.value);
+resetSessionPaging();
+}}
                         className="w-full bg-background/50 border border-border rounded px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                     />
                 </div>
@@ -288,11 +446,12 @@ export function SessionExplorer({ sessions }: Props) {
                             options={outcomes}
                             selected={selectedOutcomes}
                             onToggle={(outcome) => {
-                                setSelectedOutcomes((current) =>
-                                    toggleSetValue(current, outcome),
-                                );
-                                resetSessionPaging();
-                            }}
+                                isUserActionRef.current = true;
+setSelectedOutcomes((current) =>
+toggleSetValue(current, outcome),
+);
+resetSessionPaging();
+}}
                         />
                     </FilterGroup>
                     <FilterGroup label="Platform">
@@ -303,11 +462,12 @@ export function SessionExplorer({ sessions }: Props) {
                             options={platforms}
                             selected={selectedPlatforms}
                             onToggle={(platform) => {
-                                setSelectedPlatforms((current) =>
-                                    toggleSetValue(current, platform),
-                                );
-                                resetSessionPaging();
-                            }}
+                                isUserActionRef.current = true;
+setSelectedPlatforms((current) =>
+toggleSetValue(current, platform),
+);
+resetSessionPaging();
+}}
                         />
                     </FilterGroup>
                     <FilterGroup label="Range">
@@ -316,9 +476,10 @@ export function SessionExplorer({ sessions }: Props) {
                                 key={range}
                                 active={dateRange === range}
                                 onClick={() => {
-                                    setDateRange(range);
-                                    resetSessionPaging();
-                                }}
+                                    isUserActionRef.current = true;
+setDateRange(range);
+resetSessionPaging();
+}}
                             >
                                 {DATE_RANGE_LABELS[range]}
                             </FilterChip>
@@ -332,57 +493,58 @@ export function SessionExplorer({ sessions }: Props) {
                             options={languages}
                             selected={selectedLanguages}
                             onToggle={(language) => {
-                                setSelectedLanguages((current) =>
-                                    toggleSetValue(current, language),
-                                );
-                                resetSessionPaging();
-                            }}
+                                isUserActionRef.current = true;
+setSelectedLanguages((current) =>
+toggleSetValue(current, language),
+);
+resetSessionPaging();
+}}
                         />
                     </FilterGroup>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-xs table-fixed" style={{ tableLayout: "fixed" }}>
+                        <colgroup>
+                            <col style={{ width: "32px" }} />
+                            <col style={{ width: "180px" }} />
+                            <col style={{ width: "90px" }} />
+                            <col style={{ width: "220px" }} />
+                            <col style={{ width: "110px" }} />
+                            <col style={{ width: "130px" }} />
+                            <col style={{ width: "200px" }} />
+                            <col style={{ width: "70px" }} />
+                            <col style={{ width: "40px" }} />
+                        </colgroup>
                         <thead>
                             <tr className="border-b border-border text-muted-foreground select-none">
-                                <th className="px-3 py-2 text-left w-8" />
+                                <th className="px-3 py-2 text-left" />
                                 <th className="px-3 py-2 text-left">Session</th>
-                                <th className="px-3 py-2 text-center">
-                                    Outcome
-                                </th>
-                                <th className="px-3 py-2 text-left">
-                                    Primary cause
-                                </th>
-                                <th className="px-3 py-2 text-left">
-                                    Platform
-                                </th>
-                                <th className="px-3 py-2 text-left">
-                                    Agent activity
-                                </th>
-                                <th className="px-3 py-2 text-left">
-                                    Files / paths
-                                </th>
-                                <th className="px-3 py-2 text-right">
-                                    Duration
-                                </th>
-                                <th className="px-3 py-2 w-8" />
+                                <th className="px-3 py-2 text-center">Outcome</th>
+                                <th className="px-3 py-2 text-left">Primary cause</th>
+                                <th className="px-3 py-2 text-left">Platform</th>
+                                <th className="px-3 py-2 text-left">Agent activity</th>
+                                <th className="px-3 py-2 text-left">Files / paths</th>
+                                <th className="px-3 py-2 text-right">Duration</th>
+                                <th className="px-3 py-2" />
                             </tr>
                         </thead>
-                        <tbody>
-                            {paginated.map((s, index) => (
-                                <SessionRow
-                                    key={s.id}
-                                    session={s}
-                                    isExpanded={expanded === s.id}
+                        <tbody ref={tableBodyRef}>
+					{paginated.map((s) => (
+						<SessionRow
+							key={s.id}
+							session={s}
+isExpanded={expanded === s.id}
                                     isCopied={copied === s.id}
-                                    onToggle={() =>
-                                        setExpanded(
-                                            expanded === s.id ? null : s.id,
-                                        )
-                                    }
-                                    onCopy={() => copyId(s.id)}
-                                    index={index}
-                                />
-                            ))}
+                                    isUpdated={updatedSessionIds.has(s.id)}
+                                    onToggle={() => {
+                                        isUserActionRef.current = true;
+setExpanded(
+expanded === s.id ? null : s.id,
+                                        );
+                                    }}
+							onCopy={() => copyId(s.id)}
+						/>
+						))}
                             {paginated.length === 0 && (
                                 <tr>
                                     <td
@@ -404,12 +566,15 @@ export function SessionExplorer({ sessions }: Props) {
                         <button
                             type="button"
                             disabled={page === 0}
-                            onClick={() => setPage((p) => p - 1)}
-                            className="hover:text-foreground disabled:opacity-30"
+                            onClick={() => {
+                                isUserActionRef.current = true;
+                                setPage((p) => p - 1);
+                            }}
+                            className="hover:text-foreground disabled:opacity-30 font-mono"
                         >
                             ← Prev
                         </button>
-                        <span>
+                        <span className="font-mono tabular-nums">
                             {page + 1}/
                             {Math.max(
                                 1,
@@ -421,8 +586,11 @@ export function SessionExplorer({ sessions }: Props) {
                             disabled={
                                 (page + 1) * perPage >= filteredSessions.length
                             }
-                            onClick={() => setPage((p) => p + 1)}
-                            className="hover:text-foreground disabled:opacity-30"
+                            onClick={() => {
+                                isUserActionRef.current = true;
+                                setPage((p) => p + 1);
+                            }}
+                            className="hover:text-foreground disabled:opacity-30 font-mono"
                         >
                             Next →
                         </button>
@@ -437,16 +605,16 @@ const SessionRow = memo(function SessionRow({
     session: s,
     isExpanded,
     isCopied,
-    onToggle,
-    onCopy,
-    index,
+	isUpdated,
+	onToggle,
+	onCopy,
 }: {
-    session: SessionData;
-    isExpanded: boolean;
-    isCopied: boolean;
-    onToggle: () => void;
-    onCopy: () => void;
-    index: number;
+	session: SessionData;
+	isExpanded: boolean;
+	isCopied: boolean;
+	isUpdated: boolean;
+	onToggle: () => void;
+	onCopy: () => void;
 }) {
 	const cause = useMemo(() => primarySessionCause(s), [s]);
 	const activity = useMemo(() => sessionActivitySummary(s), [s]);
@@ -459,6 +627,8 @@ const SessionRow = memo(function SessionRow({
 		(session) => !childSessionIds.has(session.id),
 	);
 	const rawSessionIds = s.rawSessionIds ?? [s.id];
+	const displayName = sessionDisplayName(s);
+	const hasTitle = Boolean(s.title?.trim());
 	const childMirrorCount = childSessions.filter(
 		(session) => session.lineageRole === "child_mirror",
 	).length;
@@ -472,16 +642,14 @@ const SessionRow = memo(function SessionRow({
         <>
             <tr
                 className={cn(
-                    "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-all duration-150 animate-in fade-in slide-in-from-bottom-1 fill-mode-both",
+                    "border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-all duration-150 h-[40px] align-middle",
                     isExpanded && "bg-muted/10",
+                    isUpdated && "session-row-updated"
                 )}
-                style={{
-                    animationDelay: `${index * 25}ms`,
-                    animationFillMode: "both",
-                }}
                 onClick={onToggle}
+                data-session-id={s.id}
             >
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
                     <button
                         type="button"
                         onClick={(e) => {
@@ -499,9 +667,17 @@ const SessionRow = memo(function SessionRow({
                         )}
                     </button>
                 </td>
-				<td className="px-3 py-2 font-mono">
-					<span className="flex items-center gap-1">
-						{s.id.slice(0, 16)}…
+				<td className="px-3 py-2 font-mono align-middle whitespace-nowrap overflow-hidden">
+					<span className="flex items-center gap-1 min-w-0" title={sessionTitleText(s)}>
+						<span
+							className={cn(
+								"truncate",
+								hasTitle ? "font-sans font-medium text-foreground" : "font-mono"
+							)}
+							style={{ maxWidth: "110px" }}
+						>
+							{displayName}
+						</span>
 						{lineageCount > 0 && (
 							<span className="rounded border border-primary/30 bg-primary/10 px-1 py-0.5 text-[9px] font-sans uppercase text-primary">
 								+{lineageCount} linked
@@ -513,7 +689,7 @@ const SessionRow = memo(function SessionRow({
                                 e.stopPropagation();
                                 onCopy();
                             }}
-                            className="hover:text-primary"
+                            className="hover:text-primary shrink-0"
                         >
                             {isCopied ? (
                                 <Check className="w-3 h-3" />
@@ -523,10 +699,10 @@ const SessionRow = memo(function SessionRow({
                         </button>
                     </span>
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-3 py-2 text-center align-middle whitespace-nowrap overflow-hidden">
                     <span
                         className={cn(
-                            "px-1.5 py-0.5 rounded border text-[10px] uppercase font-bold",
+                            "inline-block px-1.5 py-0.5 rounded border text-[10px] uppercase font-bold text-center w-16 shrink-0",
                             DECISION_BADGE_STYLE[s.finalOutcome],
                         )}
                     >
@@ -534,19 +710,19 @@ const SessionRow = memo(function SessionRow({
                     </span>
                 </td>
                 <td
-                    className="px-3 py-2 truncate max-w-[200px]"
+                    className="px-3 py-2 align-middle truncate whitespace-nowrap overflow-hidden"
                     title={cause.message || ""}
                 >
                     {cause.decision === "allow" ? (
-                        <span className="text-signal-allow font-medium text-[10px]">
+                        <span className="text-signal-allow font-medium text-[10px] truncate block">
                             Clean allow
                         </span>
                     ) : (
-                        <span className="flex items-center gap-1 text-[10px] truncate">
+                        <span className="flex items-center gap-1 text-[10px] truncate w-full">
                             {cause.severity && (
                                 <span
                                     className={cn(
-                                        "font-bold",
+                                        "font-bold shrink-0",
                                         SEVERITY_TEXT_STYLE[cause.severity],
                                     )}
                                 >
@@ -554,128 +730,178 @@ const SessionRow = memo(function SessionRow({
                                 </span>
                             )}
                             {cause.ruleId && (
-                                <strong className="text-foreground">
+                                <strong className="text-foreground shrink-0 truncate max-w-[100px]">
                                     {cause.ruleId}:{" "}
                                 </strong>
                             )}
-                            <span className="text-muted-foreground truncate">
+                            <span className="text-muted-foreground truncate min-w-0">
                                 {cause.message}
                             </span>
                         </span>
                     )}
                 </td>
-				<td className="px-3 py-2">
-					<div className="flex flex-wrap gap-1">
-						{(s.platforms ?? [s.platform]).map((platform) => (
-							<span
-								key={platform}
-								className={cn(
-									"px-1.5 py-0.5 rounded text-[10px] uppercase font-medium",
-									PLATFORM_BADGE_STYLE[platform],
-								)}
-							>
-								{platform}
-							</span>
-						))}
+				<td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
+					<div className="flex items-center gap-1 select-none">
+						{(() => {
+							const allPlatforms = s.platforms ?? [s.platform];
+							const firstPlatform = allPlatforms[0];
+							const extraPlatformsCount = allPlatforms.length - 1;
+							const fullListStr = allPlatforms.join(", ");
+							return (
+								<>
+									{firstPlatform ? (
+										<span
+											className={cn(
+												"px-1.5 py-0.5 rounded text-[10px] uppercase font-medium truncate inline-block text-center shrink-0",
+												PLATFORM_BADGE_STYLE[firstPlatform],
+											)}
+											style={{ width: "64px" }}
+											title={fullListStr}
+										>
+											{firstPlatform}
+										</span>
+									) : (
+										<span className="text-muted-foreground text-[10px] italic shrink-0">None</span>
+									)}
+									{extraPlatformsCount > 0 ? (
+										<span
+											className="text-muted-foreground text-[10px] font-semibold tabular-nums shrink-0 w-6 text-right"
+											title={fullListStr}
+										>
+											+{extraPlatformsCount}
+										</span>
+									) : (
+										<span className="shrink-0 w-6" />
+									)}
+								</>
+							);
+						})()}
 					</div>
 				</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
                     <div className="flex items-center gap-1 select-none">
                         {activity.lastTool ? (
-                            <span className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-medium text-foreground">
+                            <span 
+                                className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-medium text-foreground truncate inline-block text-center shrink-0 w-20"
+                                title={activity.lastTool}
+                            >
                                 {activity.lastTool}
                             </span>
                         ) : (
-                            <span className="text-muted-foreground text-[10px] italic">
+                            <span className="text-muted-foreground text-[10px] italic inline-block w-20 text-center shrink-0">
                                 None
                             </span>
                         )}
-                        {activity.toolCount > 1 && (
-                            <span className="text-muted-foreground text-[10px] font-semibold">
+                        {activity.toolCount > 1 ? (
+                            <span
+                                className="text-muted-foreground text-[10px] font-semibold tabular-nums shrink-0 w-6 text-right"
+                                title={`${activity.toolCount} tools used`}
+                            >
                                 +{activity.toolCount - 1}
                             </span>
+                        ) : (
+                            <span className="shrink-0 w-6" />
                         )}
                     </div>
                 </td>
-                <td className="px-3 py-2">
-                    <div className="flex gap-1 flex-wrap max-w-[200px]">
-                        {displayPaths.slice(0, 3).map((p) => (
-                            <span
-                                key={p}
-                                className={cn(
-                                    "px-1 py-0.5 bg-muted rounded text-[10px] font-mono truncate max-w-[120px]",
-                                    causePaths.includes(p) &&
-                                        "border border-primary/20 bg-primary/5 text-primary",
-                                )}
-                                title={p}
-                            >
-                                {p.split("/").pop()}
-                            </span>
-                        ))}
-                        {displayPaths.length > 3 && (
-                            <span className="text-muted-foreground text-[10px]">
-                                +{displayPaths.length - 3}
-                            </span>
-                        )}
+                <td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
+                    <div className="flex items-center gap-1 select-none">
+                        {(() => {
+                            const firstPath = displayPaths[0];
+                            const extraPathsCount = displayPaths.length - 1;
+                            const fullPathsList = displayPaths.join("\n");
+                            return (
+                                <>
+                                    {firstPath ? (
+                                        <span
+                                            className={cn(
+                                                "px-1 py-0.5 bg-muted rounded text-[10px] font-mono truncate inline-block shrink-0 w-32 text-left",
+                                                causePaths.includes(firstPath) &&
+                                                    "border border-primary/20 bg-primary/5 text-primary",
+                                            )}
+                                            title={firstPath}
+                                        >
+                                            {firstPath.split("/").pop()}
+                                        </span>
+                                    ) : (
+                                        <span className="text-muted-foreground text-[10px] italic inline-block w-32 shrink-0">
+                                            None
+                                        </span>
+                                    )}
+                                    {extraPathsCount > 0 ? (
+										<span
+											className="text-muted-foreground text-[10px] font-semibold tabular-nums shrink-0 w-6 text-right"
+											title={fullPathsList}
+										>
+											+{extraPathsCount}
+                                        </span>
+									) : (
+										<span className="shrink-0 w-6" />
+									)}
+                                </>
+                            );
+                        })()}
                     </div>
                 </td>
-                <td className="px-3 py-2 text-right text-muted-foreground">
+                <td className="px-3 py-2 text-right text-muted-foreground align-middle whitespace-nowrap tabular-nums font-mono">
                     {s.duration > 60000
                         ? `${(s.duration / 60000).toFixed(1)}m`
                         : `${(s.duration / 1000).toFixed(0)}s`}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
                     <FlagButton
                         itemType="session"
                         itemId={s.id}
-                        label={`Session ${s.id.slice(0, 12)} (${s.platform}, ${s.finalOutcome})`}
+                        label={`${displayName} (${s.platform}, ${s.finalOutcome})`}
                         compact
                     />
                 </td>
             </tr>
 			{isExpanded && (
 				<tr>
-					<td colSpan={9} className="max-w-0 overflow-hidden p-0">
-						{(lineageCount > 0 || (s.rawSessionIds ?? []).length > 1) && (
-							<div className="border-b border-border bg-background/40 px-4 py-3 text-[10px] text-muted-foreground">
-								<div className="flex flex-wrap items-center gap-2">
-									<span className="font-semibold uppercase tracking-wide text-foreground">
-										Lineage
-									</span>
-									<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
-										{s.lineageConfidence ?? "none"}
-									</span>
-									{rawSessionIds.length > 1 && (
-										<span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-primary">
-											{rawSessionIds.length} grouped sessions
+					<td colSpan={9} className="p-0">
+						<div className="max-h-[60vh] overflow-y-auto border-b border-border bg-background/10">
+							{(lineageCount > 0 || (s.rawSessionIds ?? []).length > 1) && (
+								<div className="border-b border-border bg-background/40 px-4 py-3 text-[10px] text-muted-foreground">
+									<div className="flex flex-wrap items-center gap-2">
+										<span className="font-semibold uppercase tracking-wide text-foreground">
+											Lineage
 										</span>
-									)}
-									{childOnlyCount > 0 && (
 										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
-											{childOnlyCount} child
+											{s.lineageConfidence ?? "none"}
 										</span>
-									)}
-									{childMirrorCount > 0 && (
-										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
-											{childMirrorCount} child + mirror
-										</span>
-									)}
-									{mirrorOnlyCount > 0 && (
-										<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
-											{mirrorOnlyCount} mirror
-										</span>
-									)}
+										{rawSessionIds.length > 1 && (
+											<span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-primary">
+												{rawSessionIds.length} grouped sessions
+											</span>
+										)}
+										{childOnlyCount > 0 && (
+											<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+												{childOnlyCount} child
+											</span>
+										)}
+										{childMirrorCount > 0 && (
+											<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+												{childMirrorCount} child + mirror
+											</span>
+										)}
+										{mirrorOnlyCount > 0 && (
+											<span className="rounded border border-border/40 bg-muted/20 px-1.5 py-0.5">
+												{mirrorOnlyCount} mirror
+											</span>
+										)}
+									</div>
 								</div>
-							</div>
-						)}
-						<SessionOutcomeSummary session={s} />
-						<SessionTimeline session={s} />
-                    </td>
-                </tr>
-            )}
+							)}
+							<SessionOutcomeSummary session={s} />
+							<SessionTimeline session={s} />
+						</div>
+					</td>
+				</tr>
+			)}
         </>
     );
-});
+})
 
 function FilterGroup({
     label,

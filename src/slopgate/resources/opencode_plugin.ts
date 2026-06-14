@@ -199,6 +199,100 @@ function firstString(value: Record<string, unknown>, ...keys: string[]): string 
   return ""
 }
 
+function objectValue(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const candidate = value[key]
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return null
+  }
+  return Object.fromEntries(Object.entries(candidate))
+}
+
+function sessionTitleFields(
+  value: Record<string, unknown>,
+  includeBareTitle: boolean = false,
+): Record<string, unknown> {
+  const keys = [
+    "session_title",
+    "sessionTitle",
+    "thread_title",
+    "threadTitle",
+    "conversation_title",
+    "conversationTitle",
+    ...(includeBareTitle ? ["title"] : []),
+  ]
+  const title = firstString(value, ...keys)
+  return title ? { session_title: title } : {}
+}
+
+function eventIdentityFields(
+  event: Record<string, unknown>,
+  includeBareTitle: boolean = false,
+): Record<string, unknown> {
+  const properties = objectValue(event, "properties")
+  const data = objectValue(event, "data")
+  const eventInfo = objectValue(event, "info")
+  const propertiesInfo = properties ? objectValue(properties, "info") : null
+  const dataInfo = data ? objectValue(data, "info") : null
+  const directSources = [event, properties, data].filter(
+    (source): source is Record<string, unknown> => source !== null,
+  )
+  const infoSources = [eventInfo, propertiesInfo, dataInfo].filter(
+    (source): source is Record<string, unknown> => source !== null,
+  )
+  const directSessionIdKeys = [
+    "opencode_session_id",
+    "opencodeSessionId",
+    "opencodeSessionID",
+    "sessionID",
+    "sessionId",
+    "aggregate_id",
+    "aggregateId",
+  ]
+  const infoSessionIdKeys = [
+    ...directSessionIdKeys,
+    "id",
+  ]
+  const directTitleKeys = [
+    "session_title",
+    "sessionTitle",
+    "thread_title",
+    "threadTitle",
+    "conversation_title",
+    "conversationTitle",
+  ]
+  const infoTitleKeys = [
+    ...directTitleKeys,
+    ...(includeBareTitle ? ["title"] : []),
+  ]
+  const opencodeSessionId =
+    directSources
+      .map((source) => firstString(source, ...directSessionIdKeys))
+      .find(Boolean) ||
+    infoSources
+      .map((source) => firstString(source, ...infoSessionIdKeys))
+      .find(Boolean)
+  const title =
+    directSources
+      .map((source) => firstString(source, ...directTitleKeys))
+      .find(Boolean) ||
+    infoSources
+      .map((source) => firstString(source, ...infoTitleKeys))
+      .find(Boolean)
+
+  return {
+    ...(title ? { session_title: title, session_title_source: "opencode-event" } : {}),
+    ...(opencodeSessionId
+      ? {
+          opencode_session_id: opencodeSessionId,
+          session_identity_source: "opencode-event",
+        }
+      : {}),
+  }
+}
+
 function eventToolArgs(event: Record<string, unknown>): Record<string, unknown> {
   return mergeToolArgs(
     event.args,
@@ -493,7 +587,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
 
       // -- SessionStart (session.created) ------------------------------------
       if (event.type === "session.created") {
-        const payload = payloadForEvent("session.created")
+        const payload = payloadForEvent("session.created", "", {}, eventIdentityFields(event, true))
 
         const result = await callEnforcer(
           payload,
@@ -504,7 +598,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
 
       // -- Stop (session.idle) -----------------------------------------------
       if (event.type === "session.idle") {
-        const payload = payloadForEvent("session.idle")
+        const payload = payloadForEvent("session.idle", "", {}, eventIdentityFields(event))
 
         const result = await callEnforcer(
           payload,
@@ -537,7 +631,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
         const toolName = typeof event.tool === "string" ? event.tool : ""
         const toolArgs = eventToolArgs(event)
 
-        const payload = payloadForEvent("permission.asked", toolName, toolArgs)
+        const payload = payloadForEvent("permission.asked", toolName, toolArgs, eventIdentityFields(event))
 
         const result = await callEnforcer(
           payload,
@@ -562,6 +656,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
           path: filePath,
           tool_result: event,
           tool_response: event,
+          ...eventIdentityFields(event),
         })
 
         const result = await callEnforcer(payload, managedRepo())
@@ -580,6 +675,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
         const payload = payloadForEvent(event.type, toolName, eventToolArgs(event), {
           tool_result: event,
           tool_response: event,
+          ...eventIdentityFields(event),
         })
         const result = await callEnforcer(payload, managedRepo())
         await logAdvisoryResult(event.type, result)

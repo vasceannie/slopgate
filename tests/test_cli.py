@@ -94,13 +94,63 @@ def test_enroll_allows_disabling_worktree_propagation() -> None:
     )
 
 
+def test_test_parser_defaults_to_changed_test_workflow() -> None:
+    parsed = build_parser().parse_args(["test"])
+    assert (
+        parsed.command,
+        parsed.smoke,
+        parsed.since,
+        parsed.files,
+        parsed.list_only,
+    ) == ("test", False, None, None, False)
+
+
+def test_test_parser_preserves_runner_args_after_separator() -> None:
+    parsed = build_parser().parse_args(["test", "--since", "HEAD", "--", "--maxfail=1"])
+    assert parsed.runner_args == ["--", "--maxfail=1"]
+
+
+def test_test_parser_rejects_combined_changed_file_sources() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["test", "--since", "HEAD", "--files", "src/foo.py"])
+
+
+def test_test_parser_rejects_smoke_with_since() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["test", "--smoke", "--since", "HEAD"])
+
+
 def test_self_test_smoke_passes_all_cases(capsys: pytest.CaptureFixture[str]) -> None:
-    assert cmd_test(argparse.Namespace()) == 0, "self-test smoke command should pass"
+    args = argparse.Namespace(
+        smoke=True,
+        since=None,
+        files=None,
+        list_only=False,
+        runner=None,
+        runner_args=[],
+    )
+    assert cmd_test(args) == 0, "self-test smoke command should pass"
     captured = capsys.readouterr()
     assert "All tests passed." in captured.out, captured.out
     assert "git --no-verify → deny" in captured.out, captured.out
     assert "codex adapter → deny" in captured.out, captured.out
     assert "opencode adapter → deny" in captured.out, captured.out
+
+
+def test_self_test_rejects_list_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    args = argparse.Namespace(
+        smoke=True,
+        since=None,
+        files=None,
+        list_only=True,
+        runner=None,
+        runner_args=[],
+    )
+    assert cmd_test(args) == 1, "smoke mode should reject changed-test flags"
+    captured = capsys.readouterr()
+    assert "--smoke cannot be combined" in captured.err
 
 
 def test_cmd_migrate_reports_nothing_for_clean_repo(

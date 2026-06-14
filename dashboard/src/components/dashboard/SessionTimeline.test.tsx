@@ -382,7 +382,8 @@ describe("SessionTimeline", () => {
 		expect(screen.queryByText("child-union-ses…")).not.toBeInTheDocument();
 		expect(screen.getByText("deny")).toBeInTheDocument();
 		expect(screen.getByText("claude")).toBeInTheDocument();
-		expect(screen.getByText("cursor")).toBeInTheDocument();
+		expect(screen.getByText("claude")).toHaveAttribute("title", "claude, cursor, opencode");
+		expect(screen.queryByText("cursor")).not.toBeInTheDocument();
 		expect(screen.getAllByText("opencode").length).toBeGreaterThan(0);
 		expect(screen.getByText("Write")).toBeInTheDocument();
 		expect(screen.getAllByText("+3").length).toBeGreaterThan(0);
@@ -1183,8 +1184,9 @@ describe("SessionExplorer", () => {
 
 		expect(screen.getByText("+2 linked")).toBeInTheDocument();
 		expect(screen.getByText("claude")).toBeInTheDocument();
-		expect(screen.getByText("cursor")).toBeInTheDocument();
-		expect(screen.getByText("opencode")).toBeInTheDocument();
+		expect(screen.getByText("claude")).toHaveAttribute("title", "claude, cursor, opencode");
+		expect(screen.queryByText("cursor")).not.toBeInTheDocument();
+		expect(screen.queryByText("opencode")).not.toBeInTheDocument();
 
 		fireEvent.click(screen.getByText("parent-session-a…"));
 

@@ -64,6 +64,12 @@ export interface TraceMetadata {
 	degraded_reason?: string | null;
 	enforcement_mode?: EnforcementMode | string | null;
 	resolved_repo_root?: string | null;
+	session_title?: string | null;
+	session_title_source?: string | null;
+	session_identity_source?: string | null;
+	opencode_session_id?: string | null;
+	codex_session_id?: string | null;
+	secondary_session_ids?: string[];
 	parent_session_id?: string | null;
 	root_session_id?: string | null;
 	origin_platform?: Platform | null;

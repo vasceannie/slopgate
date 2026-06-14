@@ -250,9 +250,48 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 
 def cmd_test(args: argparse.Namespace) -> int:
-    from slopgate.cli._self_test import cmd_test
+    from slopgate.cli.io import report_cli_input_error
+    from slopgate.cli.changed_tests import (
+        TestSelectionRequest,
+        normalize_runner_args,
+        parse_test_runner,
+        run_changed_test_workflow,
+    )
 
-    return cmd_test(args)
+    if _bool_arg(args, "smoke"):
+        smoke_conflicts = bool(
+            string_arg(args, "since")
+            or _string_tuple_arg(args, "files")
+            or _bool_arg(args, "list_only")
+            or string_arg(args, "runner")
+            or normalize_runner_args(_string_tuple_arg(args, "runner_args"))
+        )
+        if smoke_conflicts:
+            return report_cli_input_error(
+                CliInputError("--smoke cannot be combined with changed-test flags")
+            )
+        from slopgate.cli import _self_test
+
+        return _self_test.cmd_test(args)
+    try:
+        request = TestSelectionRequest(
+            since_ref=string_arg(args, "since") or None,
+            files=_string_tuple_arg(args, "files"),
+            list_only=_bool_arg(args, "list_only"),
+            smoke=False,
+            runner=parse_test_runner(string_arg(args, "runner")),
+            runner_args=normalize_runner_args(_string_tuple_arg(args, "runner_args")),
+        )
+        return run_changed_test_workflow(request)
+    except CliInputError as exc:
+        return report_cli_input_error(exc)
+
+
+def _string_tuple_arg(args: argparse.Namespace, name: str) -> tuple[str, ...]:
+    value = getattr(args, name, None)
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def cmd_version(_args: argparse.Namespace) -> int:

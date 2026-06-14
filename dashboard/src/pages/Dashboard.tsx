@@ -172,7 +172,7 @@ export default function Dashboard() {
 							value="fp-analysis"
 							className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary rounded-md"
 						>
-							FP / FN Analysis
+							Rule Calibration Triage
 						</TabsTrigger>
 						<TabsTrigger
 							value="paths"

@@ -169,6 +169,44 @@ def test_format_item_event_preserves_lineage_metadata_aliases() -> None:
     assert {key: formatted.get(key) for key in expected} == expected
 
 
+def test_format_item_event_preserves_session_title_aliases() -> None:
+    record: dict[str, object] = {
+        "timestamp": "2026-06-11T00:00:00+00:00",
+        "platform": "codex",
+        "event_name": "SessionStart",
+        "session_id": "session-with-title",
+        "title": "Fix dashboard session labels",
+    }
+
+    formatted = format_item(record)
+
+    assert formatted is not None, "event records should format for projection"
+    assert formatted["session_title"] == "Fix dashboard session labels", (
+        "standalone projection should canonicalize explicit session title aliases"
+    )
+
+
+def test_format_item_event_preserves_codex_native_identity_aliases() -> None:
+    record: dict[str, object] = {
+        "timestamp": "2026-06-11T00:00:00+00:00",
+        "platform": "codex",
+        "event_name": "SessionStart",
+        "session_id": "codex-hook-session",
+        "threadId": "thr_native_codex",
+        "sessionIdentitySource": "codex-thread",
+    }
+
+    formatted = format_item(record)
+
+    assert formatted is not None, "event records should format for projection"
+    assert formatted["codex_session_id"] == "thr_native_codex", (
+        "standalone projection should canonicalize native Codex thread ids"
+    )
+    assert formatted["session_identity_source"] == "codex-thread", (
+        "standalone projection should preserve Codex identity provenance"
+    )
+
+
 def test_format_item_event_normalizes_invalid_lineage_platform_metadata() -> None:
     record: dict[str, object] = {
         "timestamp": "2026-06-11T00:00:00+00:00",

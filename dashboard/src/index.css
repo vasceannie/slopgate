@@ -94,3 +94,26 @@
 .glow-blue {
 	box-shadow: 0 0 12px -3px hsl(var(--signal-warn) / 0.3);
 }
+
+/* Motion-safe fade transition for updated rows */
+@keyframes session-row-update {
+	0% {
+		background-color: hsl(var(--primary) / 0.15);
+		border-color: hsl(var(--primary) / 0.3);
+	}
+	100% {
+		background-color: transparent;
+		border-color: hsl(var(--border) / 0.5);
+	}
+}
+
+.session-row-updated {
+	animation: session-row-update 1.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.session-row-updated {
+		animation: none;
+		background-color: hsl(var(--primary) / 0.05);
+	}
+}

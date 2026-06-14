@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TraceDataContextValue } from "@/context/traceDataContext";
+import { useTraceDataSource } from "@/context/useTraceDataSource";
 import type {
+	FilterState,
 	HookEvent,
 	HookResult,
 	Platform,
@@ -10,7 +14,59 @@ import {
 	buildTraceSessionIndexes,
 	streamSchemaValidationWarning,
 	summarizeTopRules,
+	useTraceData,
 } from "./useTraceData";
+
+vi.mock("@/context/useTraceDataSource", () => ({
+	useTraceDataSource: vi.fn(),
+}));
+
+const mockedUseTraceDataSource = vi.mocked(useTraceDataSource);
+
+const DEFAULT_FILTERS: FilterState = {
+	timeWindow: "30d",
+	platforms: [],
+	pathFilter: null,
+};
+
+function sourceContext(
+	data: TraceDataContextValue["data"],
+): TraceDataContextValue {
+	return {
+		data,
+		sourceMode: "uploaded",
+		streamState: "idle",
+		sourceMeta: {
+			initialDataLatestAt: null,
+			latestDataAt: null,
+			snapshotLoadedAt: null,
+			snapshotLookbackHours: null,
+			snapshotError: null,
+			snapshotTruncated: {},
+			snapshotSummary: null,
+			isSnapshotLoading: false,
+			streamConnectedAt: null,
+			lastAcceptedStreamRecordAt: null,
+			acceptedStreamRecords: 0,
+			rejectedStreamRecords: 0,
+			totalRecords:
+				data.events.length +
+				data.rules.length +
+				data.results.length +
+				data.subprocesses.length,
+		},
+		isStreaming: false,
+		isLive: false,
+		lastStreamEventAt: null,
+		ingestFiles: async () => ({ accepted: 0, rejected: [] }),
+		refreshSnapshot: async () => {},
+		resetToMock: () => {},
+	};
+}
+
+afterEach(() => {
+	mockedUseTraceDataSource.mockReset();
+});
 
 function finding(
 	rule_id: string,
@@ -139,6 +195,96 @@ describe("stream schema validation warning", () => {
 	});
 });
 
+describe("useTraceData", () => {
+	it("filters self-test records out of dashboard aggregates", () => {
+		const realEvent = traceEvent(
+			"session-real",
+			"2026-05-27T12:00:00.000Z",
+			"opencode",
+			["/repos/slopgate/src/real.py"],
+			"Bash",
+		);
+		const selfTestSessionId = "self-test-opencode-GIT-001";
+		const selfTestEvent = traceEvent(
+			selfTestSessionId,
+			"2026-05-27T12:00:01.000Z",
+			"opencode",
+			["/repos/slopgate/src/self_test.py"],
+			"Bash",
+		);
+		const selfTestFinding = finding("GIT-001", "deny");
+		selfTestFinding.session_id = selfTestSessionId;
+		const realResult: HookResult = {
+			timestamp: "2026-05-27T12:00:02.000Z",
+			platform: "opencode",
+			event_name: "PostToolUse",
+			session_id: "session-real",
+			tool_name: "Bash",
+			findings: [],
+			errors: null,
+			output: null,
+		};
+		const selfTestResult: HookResult = {
+			timestamp: "2026-05-27T12:00:03.000Z",
+			platform: "opencode",
+			event_name: "PostToolUse",
+			session_id: selfTestSessionId,
+			tool_name: "Bash",
+			findings: [
+				{
+					rule_id: "GIT-001",
+					severity: "HIGH",
+					decision: "deny",
+					message: "self-test denial",
+				},
+			],
+			errors: null,
+			output: null,
+		};
+		const selfTestSubprocess: SubprocessRun = {
+			timestamp: "2026-05-27T12:00:04.000Z",
+			event_name: "PostToolUse",
+			session_id: selfTestSessionId,
+			command: "slopgate test",
+			cwd: "/repos/slopgate",
+			returncode: 0,
+			stdout: "",
+			stderr: "",
+			duration_ms: 10,
+		};
+		mockedUseTraceDataSource.mockReturnValue(
+			sourceContext({
+				events: [realEvent, selfTestEvent],
+				rules: [selfTestFinding],
+				results: [realResult, selfTestResult],
+				subprocesses: [selfTestSubprocess],
+			}),
+		);
+
+		const { result } = renderHook(() => useTraceData(DEFAULT_FILTERS));
+
+		expect(result.current.events.map((item) => item.session_id)).toEqual([
+			"session-real",
+		]);
+		expect(result.current.rules).toEqual([]);
+		expect(result.current.results.map((item) => item.session_id)).toEqual([
+			"session-real",
+		]);
+		expect(result.current.subprocesses).toEqual([]);
+		expect(result.current.posture.totalInvocations).toBe(1);
+		expect(result.current.posture.decisionCounts).toMatchObject({
+			allow: 1,
+			deny: 0,
+		});
+		expect(result.current.topRules).toEqual([]);
+		expect(result.current.sessions.map((session) => session.id)).toEqual([
+			"session-real",
+		]);
+		expect(result.current.async.passCount).toBe(0);
+		expect(result.current.fireCounts.has("GIT-001")).toBe(false);
+	});
+});
+
 describe("trace session indexes", () => {
 	it("centralizes session, repo, and decision indexes in one pass", () => {
 		const events: HookEvent[] = [
@@ -208,6 +354,187 @@ describe("trace session indexes", () => {
 		expect(indexes.sessionPathCounts.get("session-a")).toBe(1);
 		expect(indexes.sessionDecisions.get("session-a")).toEqual(["deny"]);
 		expect(indexes.hottestRepos).toEqual([{ repo: "slopgate", count: 2 }]);
+	});
+
+	it("carries session titles from trace metadata into session rows", () => {
+		const titledEvent: HookEvent = {
+			...event("session-with-title", "codex"),
+			session_title: "Fix dashboard session labels",
+		};
+
+		const indexes = buildTraceSessionIndexes([titledEvent], [], [], []);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "session-with-title",
+			title: "Fix dashboard session labels",
+		});
+	});
+
+	it("carries native and secondary session identities into session rows", () => {
+		const identityEvent: HookEvent = {
+			...event("opencode-plugin-synthetic", "opencode"),
+			opencode_session_id: "ses_139981ae7ffeOKOMbswUJdo3Oy",
+			session_identity_source: "opencode-event",
+			secondary_session_ids: ["opencode-plugin-synthetic"],
+		};
+
+		const indexes = buildTraceSessionIndexes([identityEvent], [], [], []);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "opencode-plugin-synthetic",
+			sessionIdentitySource: "opencode-event",
+			secondaryIds: ["opencode-plugin-synthetic"],
+			nativeSessionIds: {
+				opencode: "ses_139981ae7ffeOKOMbswUJdo3Oy",
+			},
+		});
+	});
+
+	it("groups synthetic OpenCode rows by exact shared native session identity", () => {
+		const firstSynthetic: HookEvent = {
+			...event("opencode-plugin-a", "opencode"),
+			opencode_session_id: "ses_native_shared",
+			session_identity_source: "opencode-event",
+		};
+		const secondSynthetic: HookEvent = {
+			...event("opencode-plugin-b", "opencode"),
+			opencode_session_id: "ses_native_shared",
+			session_identity_source: "opencode-event",
+		};
+
+		const indexes = buildTraceSessionIndexes(
+			[firstSynthetic, secondSynthetic],
+			[],
+			[],
+			[],
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "opencode-plugin-a",
+			lineageConfidence: "explicit",
+			nativeSessionIds: {
+				opencode: "ses_native_shared",
+			},
+		});
+		expect(indexes.sessions[0].childSessions).toEqual([]);
+		expect(indexes.sessions[0].mirrorSessions).toEqual([]);
+		expect([...indexes.sessions[0].rawSessionIds].sort()).toEqual([
+			"opencode-plugin-a",
+			"opencode-plugin-b",
+		]);
+		expect(indexes.sessionGroups[0]).toMatchObject({
+			id: "opencode-plugin-a",
+			lineageConfidence: "explicit",
+			rawSessionIds: ["opencode-plugin-a", "opencode-plugin-b"],
+		});
+	});
+
+	it("groups synthetic Codex rows by exact shared native thread identity", () => {
+		const firstSynthetic: HookEvent = {
+			...event("codex-hook-a", "codex"),
+			codex_session_id: "thr_native_shared",
+			session_identity_source: "codex-thread",
+		};
+		const secondSynthetic: HookEvent = {
+			...event("codex-hook-b", "codex"),
+			codex_session_id: "thr_native_shared",
+			session_identity_source: "codex-thread",
+		};
+
+		const indexes = buildTraceSessionIndexes(
+			[firstSynthetic, secondSynthetic],
+			[],
+			[],
+			[],
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "codex-hook-a",
+			lineageConfidence: "explicit",
+			nativeSessionIds: {
+				codex: "thr_native_shared",
+			},
+		});
+		expect([...indexes.sessions[0].rawSessionIds].sort()).toEqual([
+			"codex-hook-a",
+			"codex-hook-b",
+		]);
+		expect(indexes.sessionGroups[0]).toMatchObject({
+			id: "codex-hook-a",
+			lineageConfidence: "explicit",
+			rawSessionIds: ["codex-hook-a", "codex-hook-b"],
+		});
+	});
+
+	it("excludes self-test sessions from dashboard session indexes", () => {
+		const realEvent = traceEvent(
+			"session-real",
+			"2026-05-27T12:00:00.000Z",
+			"opencode",
+			["/repos/slopgate/src/real.py"],
+			"Bash",
+		);
+		const selfTestSessionId = "self-test-opencode-GIT-001";
+		const selfTestEvent = traceEvent(
+			selfTestSessionId,
+			"2026-05-27T12:00:01.000Z",
+			"opencode",
+			["/repos/slopgate/src/self_test.py"],
+			"Bash",
+		);
+		const selfTestFinding = finding("GIT-001", "deny");
+		selfTestFinding.session_id = selfTestSessionId;
+		const selfTestResult: HookResult = {
+			timestamp: "2026-05-27T12:00:02.000Z",
+			platform: "opencode",
+			event_name: "PostToolUse",
+			session_id: selfTestSessionId,
+			tool_name: "Bash",
+			findings: [
+				{
+					rule_id: "GIT-001",
+					severity: "HIGH",
+					decision: "deny",
+					message: "self-test denial",
+				},
+			],
+			errors: null,
+			output: null,
+		};
+		const selfTestSubprocess: SubprocessRun = {
+			timestamp: "2026-05-27T12:00:03.000Z",
+			event_name: "PostToolUse",
+			session_id: selfTestSessionId,
+			command: "slopgate test",
+			cwd: "/repos/slopgate",
+			returncode: 0,
+			stdout: "",
+			stderr: "",
+			duration_ms: 10,
+		};
+
+		const indexes = buildTraceSessionIndexes(
+			[realEvent, selfTestEvent],
+			[selfTestFinding],
+			[selfTestResult],
+			[selfTestSubprocess],
+		);
+
+		expect(indexes.sessions).toHaveLength(1);
+		expect(indexes.sessions[0]).toMatchObject({
+			id: "session-real",
+			eventCount: 1,
+			finalOutcome: "allow",
+			pathCount: 1,
+		});
+		expect(indexes.sessionGroups).toHaveLength(1);
+		expect(indexes.sessionPathCounts.has(selfTestSessionId)).toBe(false);
+		expect(indexes.sessionDecisions.has(selfTestSessionId)).toBe(false);
+		expect(indexes.hottestRepos).toEqual([{ repo: "slopgate", count: 1 }]);
 	});
 
 	it("handles large sessions without spreading timestamp arrays", () => {

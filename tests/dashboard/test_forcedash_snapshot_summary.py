@@ -28,6 +28,9 @@ LINEAGE_ALIAS_FIELDS: dict[str, object] = {
     "spawnDescription": "Find lineage",
     "lineageRole": "child_mirror",
 }
+SESSION_TITLE_ALIAS_FIELDS: dict[str, object] = {
+    "title": "Fix dashboard session labels",
+}
 RECENT_TRACE_TIMESTAMP = datetime.now(timezone.utc).isoformat()
 
 
@@ -200,6 +203,57 @@ def test_trace_snapshot_script_preserves_lineage_metadata_aliases(
 
     assert {key: projected.get(key) for key in expected} == expected, (
         "Remote snapshot projection should canonicalize lineage aliases for grouped sessions"
+    )
+
+
+def test_trace_snapshot_script_preserves_session_title_aliases(
+    tmp_path: Path,
+) -> None:
+    event = base_event(
+        platform="opencode",
+        sessionTitleSource="opencode-event",
+        sessionIdentitySource="opencode-event",
+        opencodeSessionId="ses_139981ae7ffeOKOMbswUJdo3Oy",
+        secondarySessionIds=["opencode-plugin-synthetic"],
+        **SESSION_TITLE_ALIAS_FIELDS,
+    )
+
+    projected = projected_event(tmp_path, event)
+
+    assert projected["session_title"] == "Fix dashboard session labels", (
+        "Remote snapshot projection should canonicalize explicit session title aliases"
+    )
+    assert projected["session_title_source"] == "opencode-event", (
+        "Remote snapshot projection should preserve title provenance"
+    )
+    assert projected["session_identity_source"] == "opencode-event", (
+        "Remote snapshot projection should preserve native identity provenance"
+    )
+    assert projected["opencode_session_id"] == "ses_139981ae7ffeOKOMbswUJdo3Oy", (
+        "Remote snapshot projection should preserve native OpenCode ids"
+    )
+    assert projected["secondary_session_ids"] == ["opencode-plugin-synthetic"], (
+        "Remote snapshot projection should preserve secondary identity ids"
+    )
+
+
+def test_trace_snapshot_script_preserves_codex_native_identity_aliases(
+    tmp_path: Path,
+) -> None:
+    event = base_event(
+        platform="codex",
+        session_id="codex-hook-session",
+        threadId="thr_native_codex",
+        sessionIdentitySource="codex-thread",
+    )
+
+    projected = projected_event(tmp_path, event)
+
+    assert projected["codex_session_id"] == "thr_native_codex", (
+        "Remote snapshot projection should preserve native Codex thread ids"
+    )
+    assert projected["session_identity_source"] == "codex-thread", (
+        "Remote snapshot projection should preserve Codex identity provenance"
     )
 
 

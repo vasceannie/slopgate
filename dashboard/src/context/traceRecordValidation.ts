@@ -86,6 +86,16 @@ function normalizeStringArray(value: unknown): string[] {
 	return isStringArray(value) ? value : [];
 }
 
+function optionalAliasedStringArray(
+	obj: Record<string, unknown>,
+	keys: string[],
+): string[] | undefined {
+	const value = aliasedValue(obj, keys);
+	if (typeof value === "string" && value.trim()) return [value.trim()];
+	if (isStringArray(value)) return value.filter((item) => item.trim());
+	return undefined;
+}
+
 function normalizePlatform(value: unknown): Platform {
 	switch (value) {
 		case "claude":
@@ -185,7 +195,10 @@ function normalizeDecision(value: unknown): Decision | null {
 	}
 }
 
-function traceMetadata(obj: Record<string, unknown>) {
+function traceMetadata(
+	obj: Record<string, unknown>,
+	includeBareTitle = false,
+) {
 	const originPlatform = optionalAliasedPlatform(obj, [
 		"origin_platform",
 		"originPlatform",
@@ -198,6 +211,43 @@ function traceMetadata(obj: Record<string, unknown>) {
 		degraded_reason: optionalString(obj.degraded_reason),
 		enforcement_mode: optionalString(obj.enforcement_mode),
 		resolved_repo_root: optionalString(obj.resolved_repo_root),
+		session_title: optionalAliasedString(obj, [
+			"session_title",
+			"sessionTitle",
+			"thread_title",
+			"threadTitle",
+			"conversation_title",
+			"conversationTitle",
+			...(includeBareTitle ? ["title"] : []),
+		]),
+		session_title_source: optionalAliasedString(obj, [
+			"session_title_source",
+			"sessionTitleSource",
+		]),
+		session_identity_source: optionalAliasedString(obj, [
+			"session_identity_source",
+			"sessionIdentitySource",
+		]),
+		opencode_session_id: optionalAliasedString(obj, [
+			"opencode_session_id",
+			"opencodeSessionId",
+			"opencodeSessionID",
+		]),
+		codex_session_id: optionalAliasedString(obj, [
+			"codex_session_id",
+			"codexSessionId",
+			"codexSessionID",
+			"thread_id",
+			"threadId",
+			"threadID",
+			"conversation_id",
+			"conversationId",
+			"conversationID",
+		]),
+		secondary_session_ids: optionalAliasedStringArray(obj, [
+			"secondary_session_ids",
+			"secondarySessionIds",
+		]),
 		parent_session_id: optionalAliasedString(obj, [
 			"parent_session_id",
 			"parentSessionId",
@@ -278,7 +328,7 @@ function normalizeEventRecord(obj: Record<string, unknown>): HookEvent | null {
 			objectRecord(obj.input) ??
 			objectRecord(obj.args) ??
 			objectRecord(obj.arguments),
-		...traceMetadata(obj),
+		...traceMetadata(obj, true),
 	};
 }
 

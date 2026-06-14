@@ -1,4 +1,4 @@
-.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump
+.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump quality test ci
 
 SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
@@ -76,3 +76,32 @@ publish:
 	git push origin v$$NEW && git push github v$$NEW; \
 	git push origin $$BRANCH && git push github $$BRANCH; \
 	echo "Done. v$$NEW is live on PyPI."
+
+quality:
+	@failed=0; \
+	echo "=== pyrefly check ==="; \
+	pyrefly check || failed=1; \
+	echo ""; \
+	echo "=== ruff check ==="; \
+	ruff check || failed=1; \
+	echo ""; \
+	echo "=== biome lint ==="; \
+	(cd dashboard && npx biome lint) || failed=1; \
+	echo ""; \
+	echo "=== tsc --noEmit ==="; \
+	(cd dashboard && npx tsc --noEmit) || failed=1; \
+	echo ""; \
+	if [ $$failed -ne 0 ]; then echo "!!! Some quality checks failed"; exit 1; fi; \
+	echo "=== All quality checks passed ==="
+
+test:
+	uv run slopgate test
+
+ci:
+	@echo "=== CI: quality checks ===" && \
+	$(MAKE) quality && \
+	echo "" && \
+	echo "=== CI: tests (blast-radius selected) ===" && \
+	$(MAKE) test && \
+	echo "" && \
+	echo "=== CI passed ==="

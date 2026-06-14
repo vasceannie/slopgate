@@ -22,7 +22,6 @@ from slopgate.cli.commands import (
     cmd_install_suite,
     cmd_replay,
     cmd_stats,
-    cmd_test,
     cmd_uninstall,
     cmd_update_suite,
     cmd_version,
@@ -273,6 +272,8 @@ def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
 
 
 def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
+    from slopgate.cli.changed_tests_parser import add_changed_test_parser
+
     stats = _add_command_parser(
         sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
     )
@@ -280,9 +281,7 @@ def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     _ = stats.add_argument("--days", type=int)
     _ = stats.add_argument("--json", action="store_true")
 
-    _add_command_parser(
-        sub, "test", help_text="Run self-test / smoke test", func=cmd_test
-    )
+    add_changed_test_parser(sub)
 
     migrate = _add_path_command_parser(
         sub,

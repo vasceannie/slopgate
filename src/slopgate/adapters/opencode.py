@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from typing_extensions import override
 
@@ -12,6 +13,7 @@ from slopgate.adapters._payload_fields import (
     sync_tool_result_fields,
 )
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
+from slopgate.adapters.opencode_identity import _opencode_session_identity
 from slopgate.models import RuleFinding
 
 from slopgate.constants import (
@@ -52,6 +54,7 @@ OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
 }
 
 OPENCODE_MUTATION_EVENTS = frozenset({"file.edited"})
+_ADAPTER_TELEMETRY = SimpleNamespace(record_metric=lambda *_values: None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +71,7 @@ class OpenCodeAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
+        _ADAPTER_TELEMETRY.record_metric("opencode.normalize_payload")
         canonical = object_dict(raw)
         oc_event = string_value(raw.get("hook_event_name")) or ""
         canonical_event = OPENCODE_EVENT_MAP.get(oc_event, oc_event)
@@ -83,26 +87,28 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
 
         merge_standard_session_fields(raw, canonical, cwd_extra_keys=("directory",))
+        _opencode_session_identity(raw).apply_to(canonical)
         sync_tool_result_fields(canonical)
         return canonical
-
-    def _decision_reason(self, request: _OpenCodeRenderRequest) -> str:
-        return self.join_messages(
-            self.decision_findings(request.findings, request.decision)
-        )
 
     def _block_output(
         self, request: _OpenCodeRenderRequest, action: str = BLOCK
     ) -> ObjectDict:
-        return {"action": action, "reason": self._decision_reason(request)}
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.block")
+        reason = self.join_messages(
+            self.decision_findings(request.findings, request.decision)
+        )
+        return {"action": action, "reason": reason}
 
     @staticmethod
     def _context_output(context: str) -> ObjectDict:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.context")
         return {"action": "context", "context": context}
 
     def _render_pre_tool_use(
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.pre_tool_use")
         if request.decision in {DENY, BLOCK, "ask"}:
             result = self._block_output(request)
             if request.context:
@@ -123,6 +129,7 @@ class OpenCodeAdapter(PlatformAdapter):
     def _render_permission_request(
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.permission_request")
         if request.decision in {DENY, BLOCK, "ask"}:
             return self._block_output(request)
         if request.decision == "allow" and request.updated_input:
@@ -132,6 +139,7 @@ class OpenCodeAdapter(PlatformAdapter):
     def _render_post_tool_use(
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.post_tool_use")
         payload: ObjectDict = {}
         if request.decision in {BLOCK, DENY}:
             payload.update(self._block_output(request))
@@ -144,15 +152,20 @@ class OpenCodeAdapter(PlatformAdapter):
     def _render_session_start(
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.session_start")
         if request.context:
             return self._context_output(request.context)
         return None
 
     def _render_stop(self, request: _OpenCodeRenderRequest) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render.stop")
         if request.decision in {BLOCK, DENY, "ask"}:
+            reason = self.join_messages(
+                self.decision_findings(request.findings, request.decision)
+            )
             return {
                 "action": "continue",
-                "reason": self._decision_reason(request),
+                "reason": reason,
             }
         if request.context:
             return self._context_output(request.context)
@@ -164,6 +177,7 @@ class OpenCodeAdapter(PlatformAdapter):
         *args: object,
         **kwargs: object,
     ) -> ObjectDict | None:
+        _ADAPTER_TELEMETRY.record_metric("opencode.render_output")
         render_request = render_request_from_call(args, kwargs)
         if not render_request.findings:
             return None
