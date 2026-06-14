@@ -9,6 +9,7 @@ export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface RulesConfigContextValue {
 	config: SlopgateConfig;
+	savedConfig: SlopgateConfig;
 	pendingCount: number;
 	toggleRule: (rule_id: string) => void;
 	toggleCliRule: (rule_id: string) => void;

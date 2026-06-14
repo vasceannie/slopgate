@@ -25,6 +25,7 @@ function renderRuleManager(
 ) {
 	const value: RulesConfigContextValue = {
 		config,
+		savedConfig: config,
 		pendingCount: 0,
 		toggleRule: vi.fn(),
 		toggleCliRule: vi.fn(),
@@ -54,8 +55,12 @@ describe("RuleManager", () => {
 	it("routes hook and CLI surfaces through the canonical rule row", () => {
 		const value = renderRuleManager();
 
+		fireEvent.click(screen.getAllByText("PY-CODE-008")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-CODE-008 hook enablement" }),
+		);
+		fireEvent.click(
+			screen.getByRole("switch", { name: "PY-CODE-008 CLI enablement" }),
 		);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-CODE-008 CLI enablement" }),
@@ -77,7 +82,7 @@ describe("RuleManager", () => {
 	it("folds mapped CLI checks into their hook rule row", () => {
 		renderRuleManager();
 
-		fireEvent.click(screen.getByRole("button", { name: "PY-CODE-008" }));
+		fireEvent.click(screen.getAllByText("PY-CODE-008")[0]);
 		expect(screen.getByText("CLI checks: long-method")).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "long-method" }),
@@ -95,6 +100,7 @@ describe("RuleManager", () => {
 			new Map([["PY-CODE-012", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("PY-CODE-012")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-CODE-012 CLI enablement" }),
 		);
@@ -120,6 +126,7 @@ describe("RuleManager", () => {
 			new Map([["PY-IMPORT-002", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("PY-IMPORT-002")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-IMPORT-002 CLI enablement" }),
 		);
@@ -145,6 +152,7 @@ describe("RuleManager", () => {
 			new Map([["PY-LOG-002", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("PY-LOG-002")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-LOG-002 CLI enablement" }),
 		);
@@ -170,6 +178,7 @@ describe("RuleManager", () => {
 			new Map([["PY-TEST-005", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("PY-TEST-005")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "PY-TEST-005 CLI enablement" }),
 		);
@@ -197,6 +206,7 @@ describe("RuleManager", () => {
 			new Map([["LG-API-001", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("LG-API-001")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", { name: "LG-API-001 CLI enablement" }),
 		);
@@ -221,10 +231,11 @@ describe("RuleManager", () => {
 			new Map([["CONFIG-001", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("CONFIG-001")[0]);
 		expect(
 			screen.getByRole("switch", { name: "CONFIG-001 hook enablement" }),
 		).toBeInTheDocument();
-		expect(screen.getByText("config safety")).toBeInTheDocument();
+		expect(screen.getAllByText("config safety")[0]).toBeInTheDocument();
 		expect(
 			screen.queryByRole("switch", { name: "CONFIG-001 CLI enablement" }),
 		).not.toBeInTheDocument();
@@ -298,6 +309,7 @@ describe("RuleManager", () => {
 			new Map([["CUSTOM-CONTENT-001", 1]]),
 		);
 
+		fireEvent.click(screen.getAllByText("CUSTOM-CONTENT-001")[0]);
 		fireEvent.click(
 			screen.getByRole("switch", {
 				name: "CUSTOM-CONTENT-001 CLI enablement",
@@ -326,7 +338,7 @@ describe("RuleManager", () => {
 			},
 		});
 
-		fireEvent.click(screen.getByRole("button", { name: "PY-CODE-008" }));
+		fireEvent.click(screen.getAllByText("PY-CODE-008")[0]);
 		fireEvent.change(screen.getByRole("combobox"), {
 			target: { value: "deny" },
 		});

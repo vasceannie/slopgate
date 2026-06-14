@@ -278,6 +278,7 @@ export function RulesConfigProvider({ children }: { children: ReactNode }) {
 		<RulesConfigContext.Provider
 			value={{
 				config,
+				savedConfig,
 				pendingCount,
 				toggleRule,
 				toggleCliRule,
