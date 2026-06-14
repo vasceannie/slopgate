@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import slopgate.daemon.paths
 from slopgate.cli.commands import cmd_daemon, cmd_handle
 from slopgate.cli.parsers import build_parser
 
@@ -18,6 +19,7 @@ _cli_io = importlib.import_module("slopgate.cli.io")
 default_daemon_socket_path = _hook_runtime.default_daemon_socket_path
 report_cli_input_error = _cli_io.report_cli_input_error
 EXPECTED_SERIAL_ENABLED = True
+LINUX_RUNTIME_TEST_UID = "1000"
 
 
 @dataclass(slots=True)
@@ -251,6 +253,34 @@ def test_cmd_handle_uses_default_socket_when_present(
 
     assert daemon_client.socket_path == tmp_path / ("slopgate-hookd.sock"), (
         "Handle should use the standard daemon socket when it exists"
+    )
+
+
+def test_cmd_handle_uses_linux_runtime_socket_when_env_is_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("SLOPGATE_DAEMON_SOCKET", raising=False)
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.setattr(slopgate.daemon.paths, "LINUX_RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(
+        slopgate.daemon.paths.os,
+        "getuid",
+        lambda: LINUX_RUNTIME_TEST_UID,
+    )
+    runtime_dir = tmp_path / LINUX_RUNTIME_TEST_UID
+    runtime_dir.mkdir()
+    socket_path = runtime_dir / slopgate.daemon.paths.DEFAULT_DAEMON_SOCKET_NAME
+    socket_path.touch()
+
+    _exit_code, daemon_client = _run_handle_with_daemon(
+        monkeypatch,
+        {"command": "pytest tests/test_example.py"},
+        _DaemonResponseStub(ok=True, output={"decision": "allow"}),
+        use_env_socket=False,
+    )
+
+    assert daemon_client.socket_path == socket_path, (
+        "Handle should discover the resident Linux runtime socket without XDG env"
     )
 
 

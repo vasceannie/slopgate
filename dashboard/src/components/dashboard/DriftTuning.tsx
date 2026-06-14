@@ -54,6 +54,23 @@ function compactList(values: string[], limit = 3): string {
 	return values.length > limit ? `${head}, +${values.length - limit}` : head;
 }
 
+interface OpenCodeLiveConfigStatus {
+	url: string;
+	reachable: boolean;
+	plugin_registered: boolean;
+	error?: string | null;
+}
+
+type HarnessPlatformStatusWithLiveConfig = HarnessPlatformStatus & {
+	live_config?: OpenCodeLiveConfigStatus;
+};
+
+function harnessPlatforms(
+	status: HarnessStatusResponse | null,
+): HarnessPlatformStatusWithLiveConfig[] {
+	return (status?.platforms ?? []) as HarnessPlatformStatusWithLiveConfig[];
+}
+
 interface Props {
 	config: RuntimeConfig;
 	hottestRepos: Array<{ repo: string; count: number }>;
@@ -157,7 +174,7 @@ function HarnessStatusPanel() {
 		};
 	}, []);
 
-	const platforms = status?.platforms ?? [];
+	const platforms = harnessPlatforms(status);
 
 	return (
 		<div className="space-y-2">
@@ -284,6 +301,28 @@ function HarnessStatusPanel() {
 							<div className="text-[10px] text-signal-ask">
 								disabled plugin copy exists outside the auto-loaded plugin
 								directory.
+							</div>
+						)}
+						{platform.id === "opencode" && platform.live_config && (
+							<div className="text-[10px] text-muted-foreground">
+								live config{" "}
+								<span className="font-mono">{platform.live_config.url}</span>: {" "}
+								<span
+									className={cn(
+										"font-mono",
+										platform.live_config.reachable
+											? "text-signal-allow"
+											: "text-signal-ask",
+									)}
+								>
+									{platform.live_config.reachable ? "reachable" : "unreachable"}
+								</span>
+								{" · "}
+								plugin {platform.live_config.plugin_registered ? "registered" : "not registered"}
+								{platform.live_config.reachable
+									? " · provider settings redacted"
+									: " · provider settings unavailable"}
+								{platform.live_config.error ? ` · ${platform.live_config.error}` : ""}
 							</div>
 						)}
 						{platform.error && (

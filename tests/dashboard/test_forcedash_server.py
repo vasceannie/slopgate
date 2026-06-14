@@ -40,6 +40,7 @@ JSON_OBJECT_STRATEGY = strategies.dictionaries(
     JSON_SCALAR_STRATEGY,
     max_size=8,
 )
+SNAPSHOT_LOOKBACK_HOURS = 42
 
 
 class _StreamHandler:
@@ -180,15 +181,17 @@ def test_parse_snapshot_payload_rejects_malformed_json(payload: str) -> None:
 
 
 def test_build_trace_snapshot_script_substitutes_runtime_tokens() -> None:
-    script = build_trace_snapshot_script(42)
+    script = build_trace_snapshot_script(SNAPSHOT_LOOKBACK_HOURS)
 
-    assert "LOOKBACK_HOURS = 42" in script, "Expected lookback token to be replaced"
+    assert f"LOOKBACK_HOURS = {SNAPSHOT_LOOKBACK_HOURS}" in script, (
+        "Expected lookback token to be replaced"
+    )
     assert "__LOOKBACK_HOURS__" not in script, "Expected no unresolved lookback token"
     assert "__SSH_HOST__" not in script, "Expected no unresolved SSH host token"
 
 
 def test_trace_snapshot_script_emits_server_side_summaries(tmp_path: Path) -> None:
-    script = build_trace_snapshot_script(42)
+    script = build_trace_snapshot_script(SNAPSHOT_LOOKBACK_HOURS)
     result = subprocess.run(
         [sys.executable, "-c", script],
         check=True,
@@ -197,9 +200,18 @@ def test_trace_snapshot_script_emits_server_side_summaries(tmp_path: Path) -> No
         text=True,
     )
     payload = json.loads(result.stdout)
+    assert isinstance(payload, dict), "Expected snapshot script to return an object"
+    summaries = cast(dict[str, object], payload["summaries"])
 
-    assert payload["summaries"] == {
+    assert summaries == {
         "session_count": 0,
+        "platform_counts": {},
+        "opencode_trace_ack": {
+            "event_count": 0,
+            "session_count": 0,
+            "prefixed_session_count": 0,
+            "latest_event_at": None,
+        },
         "decision_counts": {
             "allow": 0,
             "deny": 0,

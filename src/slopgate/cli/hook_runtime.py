@@ -16,7 +16,10 @@ from slopgate.cli.io import (
     string_arg,
 )
 from slopgate.constants import PLATFORM_CLAUDE, UNKNOWN_VALUE
-from slopgate.daemon.paths import default_daemon_socket_path
+from slopgate.daemon.paths import (
+    daemon_socket_path_candidates,
+    default_daemon_socket_path,
+)
 from slopgate.util import logger
 
 SLOPGATE_DAEMON_SOCKET_ENV = "SLOPGATE_DAEMON_SOCKET"
@@ -131,8 +134,15 @@ def _daemon_socket_path_for_handle() -> Path | None:
             socket_path=socket_path,
         )
         return Path(socket_path)
-    default_path = default_daemon_socket_path()
-    return default_path if default_path.exists() else None
+    for default_path in daemon_socket_path_candidates():
+        if default_path.exists():
+            logger.info(
+                "hook cli daemon socket selected",
+                source="default",
+                socket_path=str(default_path),
+            )
+            return default_path
+    return None
 
 
 def _positive_int_arg(args: argparse.Namespace, name: str) -> int | None:

@@ -79,6 +79,10 @@ def top_counts(counts, limit):
     ]
 
 
+def sorted_counts(counts):
+    return {label: count for label, count in sorted(counts.items())}
+
+
 def repo_label_for_path(path):
     if not isinstance(path, str) or not path:
         return "unknown"
@@ -346,13 +350,29 @@ def truncate_data(data):
 def summarize_snapshot(data):
     session_ids = set()
     repo_counts = {}
+    platform_counts = {}
+    opencode_session_ids = set()
+    opencode_prefixed_sessions = set()
+    latest_opencode_event_at = None
     decision_counts = {decision: 0 for decision in DECISIONS}
     rule_counts = {}
     rule_decisions = {}
     subprocess_failures = 0
 
     for event in data["events"]:
-        session_ids.add(event.get("session_id", ""))
+        platform = event.get("platform", "unknown")
+        session_id = event.get("session_id", "")
+        timestamp = event.get("timestamp", "")
+        session_ids.add(session_id)
+        bump_count(platform_counts, platform)
+        if platform == "opencode":
+            opencode_session_ids.add(session_id)
+            if isinstance(session_id, str) and session_id.startswith("opencode-"):
+                opencode_prefixed_sessions.add(session_id)
+            if isinstance(timestamp, str) and (
+                latest_opencode_event_at is None or timestamp > latest_opencode_event_at
+            ):
+                latest_opencode_event_at = timestamp
         for path in event.get("candidate_paths", []):
             bump_count(repo_counts, repo_label_for_path(path))
 
@@ -383,6 +403,13 @@ def summarize_snapshot(data):
 
     return {
         "session_count": len({item for item in session_ids if item}),
+        "platform_counts": sorted_counts(platform_counts),
+        "opencode_trace_ack": {
+            "event_count": platform_counts.get("opencode", 0),
+            "session_count": len({item for item in opencode_session_ids if item}),
+            "prefixed_session_count": len({item for item in opencode_prefixed_sessions if item}),
+            "latest_event_at": latest_opencode_event_at,
+        },
         "decision_counts": decision_counts,
         "hottest_repos": top_counts(repo_counts, 10),
         "top_rules": top_rules,

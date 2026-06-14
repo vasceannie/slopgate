@@ -2,8 +2,24 @@ import json
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+OPENCODE_CONFIG_URL = "http://localhost:4096/config"
+OPENCODE_CONFIG_TIMEOUT_SECONDS = 2
+REDACTED = "[redacted]"
+SENSITIVE_CONFIG_TOKENS = (
+    "api_key",
+    "apikey",
+    "auth",
+    "bearer",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
 
 home = Path.home()
 expected = {
@@ -22,7 +38,14 @@ expected = {
         "InstructionsLoaded",
         "ConfigChange",
     ],
-    "codex": ["SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"],
+    "codex": [
+        "SessionStart",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "UserPromptSubmit",
+        "Stop",
+    ],
 }
 
 
@@ -35,6 +58,89 @@ def read_json(path):
         return None, f"json_parse_error: {exc.msg}"
     except OSError as exc:
         return None, f"read_error: {type(exc).__name__}"
+
+
+def sensitive_key(key):
+    normalized = re.sub(r"[^a-z0-9]+", "_", key.lower())
+    return any(token in normalized for token in SENSITIVE_CONFIG_TOKENS)
+
+
+def redact_config(value, key=""):
+    if sensitive_key(key):
+        return REDACTED
+    if isinstance(value, dict):
+        return {
+            str(item_key): redact_config(item_value, str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_config(item, key) for item in value]
+    return value
+
+
+def string_leaves(value):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        leaves = []
+        for item in value.values():
+            leaves.extend(string_leaves(item))
+        return leaves
+    if isinstance(value, list):
+        leaves = []
+        for item in value:
+            leaves.extend(string_leaves(item))
+        return leaves
+    return []
+
+
+def opencode_plugin_entries(config):
+    entries = []
+    for key in ("plugin", "plugins"):
+        if isinstance(config, dict) and key in config:
+            entries.extend(string_leaves(config[key]))
+    return sorted({entry for entry in entries if "slopgate" in entry.lower()})
+
+
+def fetch_opencode_live_config():
+    try:
+        with urllib.request.urlopen(
+            OPENCODE_CONFIG_URL,
+            timeout=OPENCODE_CONFIG_TIMEOUT_SECONDS,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (
+        TimeoutError,
+        UnicodeDecodeError,
+        urllib.error.URLError,
+        json.JSONDecodeError,
+    ) as exc:
+        return {
+            "url": OPENCODE_CONFIG_URL,
+            "reachable": False,
+            "plugin_registered": False,
+            "plugin_entries": [],
+            "redacted_config": None,
+            "error": type(exc).__name__,
+        }
+    if not isinstance(payload, dict):
+        return {
+            "url": OPENCODE_CONFIG_URL,
+            "reachable": True,
+            "plugin_registered": False,
+            "plugin_entries": [],
+            "redacted_config": None,
+            "error": "config payload is not an object",
+        }
+    plugin_entries = opencode_plugin_entries(payload)
+    return {
+        "url": OPENCODE_CONFIG_URL,
+        "reachable": True,
+        "plugin_registered": bool(plugin_entries),
+        "plugin_entries": plugin_entries,
+        "redacted_config": redact_config(payload),
+        "error": None,
+    }
 
 
 def commands_in(value):
@@ -62,9 +168,12 @@ def summarize_hooks(hooks, expected_events):
         "configured_events": present,
         "missing_events": missing,
         "expected_events": expected_events,
-        "hook_entry_count": sum(len(v) if isinstance(v, list) else 1 for v in hooks.values()),
+        "hook_entry_count": sum(
+            len(v) if isinstance(v, list) else 1 for v in hooks.values()
+        ),
         "slopgate_command_count": len(vf_commands),
-        "all_commands_reference_slopgate": bool(commands) and len(vf_commands) == len(commands),
+        "all_commands_reference_slopgate": bool(commands)
+        and len(vf_commands) == len(commands),
     }
 
 
@@ -85,7 +194,7 @@ def dry_run(platform):
         return {"available": True, "ok": proc.returncode == 0, "returncode": proc.returncode}
     except subprocess.TimeoutExpired:
         return {"available": True, "ok": False, "note": "dry-run timeout"}
-    except Exception as exc:
+    except OSError as exc:
         return {"available": True, "ok": False, "note": type(exc).__name__}
 
 
@@ -102,8 +211,15 @@ def status_from(installed, partial=False, error=None):
 claude_path = home / ".claude" / "settings.json"
 claude_data, claude_err = read_json(claude_path)
 claude_hooks = summarize_hooks(claude_data.get("hooks") if isinstance(claude_data, dict) else {}, expected["claude"])
-claude_installed = claude_err is None and not claude_hooks["missing_events"] and claude_hooks["slopgate_command_count"] > 0
-claude_partial = claude_err is None and (bool(claude_hooks["configured_events"]) or claude_hooks["slopgate_command_count"] > 0)
+claude_installed = (
+    claude_err is None
+    and not claude_hooks["missing_events"]
+    and claude_hooks["slopgate_command_count"] > 0
+)
+claude_partial = claude_err is None and (
+    bool(claude_hooks["configured_events"])
+    or claude_hooks["slopgate_command_count"] > 0
+)
 
 codex_hooks_path = home / ".codex" / "hooks.json"
 codex_data, codex_err = read_json(codex_hooks_path)
@@ -119,8 +235,17 @@ except FileNotFoundError:
 except OSError as exc:
     codex_feature = False
     codex_feature_error = type(exc).__name__
-codex_installed = codex_err is None and codex_feature and not codex_hooks["missing_events"] and codex_hooks["slopgate_command_count"] > 0
-codex_partial = codex_err is None and (bool(codex_hooks["configured_events"]) or codex_hooks["slopgate_command_count"] > 0 or codex_feature)
+codex_installed = (
+    codex_err is None
+    and codex_feature
+    and not codex_hooks["missing_events"]
+    and codex_hooks["slopgate_command_count"] > 0
+)
+codex_partial = codex_err is None and (
+    bool(codex_hooks["configured_events"])
+    or codex_hooks["slopgate_command_count"] > 0
+    or codex_feature
+)
 
 opencode_plugin = home / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
 opencode_disabled = home / ".config" / "opencode" / "plugins.disabled" / "slopgate-plugin.ts"
@@ -138,6 +263,7 @@ except OSError as exc:
     plugin_error = type(exc).__name__
 opencode_marker = "slopgate" in plugin_text and "handle" in plugin_text
 opencode_disabled_present = opencode_disabled.exists()
+opencode_live_config = fetch_opencode_live_config()
 
 platforms = [
     {
@@ -175,6 +301,7 @@ platforms = [
         "config_path": "~/.config/opencode/plugins/slopgate-plugin.ts",
         "config_exists": plugin_present,
         "plugin_contains_slopgate": opencode_marker,
+        "live_config": opencode_live_config,
         "disabled_plugin_present": opencode_disabled_present,
         "error": None if plugin_error in (None, "missing") else plugin_error,
         "dry_run": dry_run("opencode"),
