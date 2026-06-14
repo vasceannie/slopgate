@@ -5,6 +5,7 @@ import importlib
 import io
 import json
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -19,21 +20,14 @@ report_cli_input_error = _cli_io.report_cli_input_error
 EXPECTED_SERIAL_ENABLED = True
 
 
+@dataclass(slots=True)
 class _DaemonResponseStub:
-    def __init__(
-        self,
-        *,
-        ok: bool,
-        output: dict[str, object] | None = None,
-        error: str | None = None,
-        stderr: str | None = None,
-        exit_code: int = 0,
-    ) -> None:
-        self.ok = ok
-        self.output = output or {}
-        self.error = error
-        self.stderr = stderr
-        self.exit_code = exit_code
+    ok: bool
+    output: dict[str, object] = field(default_factory=dict)
+    error: str | None = None
+    stderr: str | None = None
+    exit_code: int = 0
+    accepted: bool = False
 
 
 class _DaemonClientStub:
@@ -296,3 +290,30 @@ def test_cmd_handle_does_not_fallback_after_daemon_accept_failure(
     assert captured.err.endswith("daemon accepted request timed out\n"), (
         "Accepted daemon failures should preserve daemon stderr"
     )
+
+
+def test_cmd_handle_fails_closed_for_accepted_daemon_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code, _daemon_client = _run_handle_with_daemon(
+        monkeypatch,
+        {"cwd": "workspace"},
+        _DaemonResponseStub(
+            ok=False,
+            error="resident handler failed",
+            exit_code=1,
+            accepted=True,
+        ),
+    )
+    captured = capsys.readouterr()
+
+    accepted_error_contract = (
+        exit_code,
+        captured.err.endswith("resident handler failed\n"),
+        captured.out,
+    )
+    assert accepted_error_contract == (
+        1,
+        True,
+        "",
+    ), "Accepted daemon errors should fail closed without direct fallback"

@@ -12,6 +12,7 @@ from slopgate.config import resolve_repo_root
 from slopgate.constants import UNKNOWN_VALUE
 from slopgate.daemon.protocol import DaemonRequest, DaemonResponse
 from slopgate.lint._config import reset_config, set_quality_scope
+from slopgate.lint._helpers import reset_request_analysis_cache
 from slopgate.quality.constant_index import reset_session_constant_index
 from slopgate.util import logger
 
@@ -72,12 +73,29 @@ class DaemonRequestScheduler:
         with lock:
             wait_ms = int((time.monotonic() - wait_start) * 1000)
             eval_start = time.monotonic()
-            _log_evaluate_start(log_context, wait_ms)
+            logger.info(
+                "hook daemon evaluate start",
+                socket_path=str(log_context.socket_path),
+                platform=log_context.request.platform or UNKNOWN_VALUE,
+                event_name=log_context.request.event or UNKNOWN_VALUE,
+                repo_key=log_context.repo_key,
+                request_id=log_context.request_id,
+                wait_ms=wait_ms,
+            )
             _reset_daemon_request_context()
             try:
                 response = self._handler(request)
                 duration_ms = int((time.monotonic() - eval_start) * 1000)
-                _log_evaluate_done(log_context, response, duration_ms)
+                logger.info(
+                    "hook daemon evaluate done",
+                    socket_path=str(log_context.socket_path),
+                    platform=log_context.request.platform or UNKNOWN_VALUE,
+                    event_name=log_context.request.event or UNKNOWN_VALUE,
+                    repo_key=log_context.repo_key,
+                    request_id=log_context.request_id,
+                    duration_ms=duration_ms,
+                    status="ok" if response.ok else "error",
+                )
                 return response
             finally:
                 _reset_daemon_request_context()
@@ -108,33 +126,5 @@ def _payload_string(
 def _reset_daemon_request_context() -> None:
     reset_config()
     _ = set_quality_scope(None)
+    reset_request_analysis_cache()
     reset_session_constant_index()
-
-
-def _log_evaluate_start(log_context: EvaluationLogContext, wait_ms: int) -> None:
-    logger.info(
-        "hook daemon evaluate start",
-        socket_path=str(log_context.socket_path),
-        platform=log_context.request.platform or UNKNOWN_VALUE,
-        event_name=log_context.request.event or UNKNOWN_VALUE,
-        repo_key=log_context.repo_key,
-        request_id=log_context.request_id,
-        wait_ms=wait_ms,
-    )
-
-
-def _log_evaluate_done(
-    log_context: EvaluationLogContext,
-    response: DaemonResponse,
-    duration_ms: int,
-) -> None:
-    logger.info(
-        "hook daemon evaluate done",
-        socket_path=str(log_context.socket_path),
-        platform=log_context.request.platform or UNKNOWN_VALUE,
-        event_name=log_context.request.event or UNKNOWN_VALUE,
-        repo_key=log_context.repo_key,
-        request_id=log_context.request_id,
-        duration_ms=duration_ms,
-        status="ok" if response.ok else "error",
-    )

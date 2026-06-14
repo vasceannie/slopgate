@@ -86,25 +86,6 @@ def resolve_python_candidates(ctx: HookContext) -> tuple[list[Path], list[Path]]
     return (src_files, test_files)
 
 
-def _touched_reference_test_files(
-    src_files: list[Path], test_files: list[Path]
-) -> list[Path] | None:
-    if not src_files:
-        return None
-    from slopgate.lint._helpers import test_roots
-
-    by_resolved: dict[Path, Path] = {}
-    for tests_root in test_roots():
-        if not tests_root.exists():
-            continue
-        for path in tests_root.rglob("*.py"):
-            if path.is_file():
-                by_resolved.setdefault(path.resolve(), path)
-    for path in test_files:
-        by_resolved.setdefault(path.resolve(), path)
-    return sorted(by_resolved.values())
-
-
 def _touched_lint_relative_paths(
     src_files: list[Path], test_files: list[Path]
 ) -> set[str]:
@@ -140,14 +121,11 @@ def collect_touched_lint_failures(
 
     lint_cfg = load_config(ctx.config.repo_root)
     set_config(lint_cfg)
-    reference_test_files = _touched_reference_test_files(src_files, test_files)
     touched_paths = _touched_lint_relative_paths(src_files, test_files)
     lint_targets = sorted(path for path in touched_paths if path != "<project>")
     failures: list[str] = []
     details: list[list[str]] = []
-    for rule_name, violations in run_touched_collectors(
-        src_files, test_files, reference_test_files=reference_test_files
-    ):
+    for rule_name, violations in run_touched_collectors(src_files, test_files):
         scoped = [item for item in violations if item.relative_path in touched_paths]
         if not scoped:
             continue

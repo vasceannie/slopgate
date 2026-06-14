@@ -261,13 +261,11 @@ class IgnorePreexistingRule(Rule):
         return []
 
 
+DEFERRED_TEST_INTEGRITY_COMMAND = "slopgate lint test-integrity"
 QUALITY_REMINDER = (
-    "Before stopping, run quality check `{command}` or report exactly why it cannot run."
+    "Before stopping, run quality check `{command}` or report exactly why it cannot run. "
+    f"Deferred suite-wide test-integrity collectors run through `{DEFERRED_TEST_INTEGRITY_COMMAND}`."
 )
-
-
-def quality_reminder(ctx: HookContext) -> str:
-    return QUALITY_REMINDER.format(command=ctx.config.hook_quality_check_command)
 
 
 class RequireQualityCheckRule(Rule):
@@ -292,7 +290,9 @@ class RequireQualityCheckRule(Rule):
                 rule_id=self.rule_id,
                 title=self.title,
                 severity=Severity.LOW,
-                additional_context=quality_reminder(ctx),
+                additional_context=QUALITY_REMINDER.format(
+                    command=ctx.config.hook_quality_check_command
+                ),
             )
         ]
 
@@ -313,12 +313,16 @@ class WarnLargeFileRule(Rule):
         for target in ctx.content_targets:
             char_count = len(target.content)
             if char_count > self.MAX_CHARS:
+                message = (
+                    f"WARNING: File {target.path} content is {char_count:,} characters. "
+                    "Consider splitting into smaller modules."
+                )
                 findings.append(
                     RuleFinding(
                         rule_id=self.rule_id,
                         title=self.title,
                         severity=Severity.MEDIUM,
-                        additional_context=f"WARNING: File {target.path} content is {char_count:,} characters. Consider splitting into smaller modules.",
+                        additional_context=message,
                         metadata={METADATA_PATH: target.path, "chars": char_count},
                     )
                 )

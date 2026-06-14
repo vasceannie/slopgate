@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 from slopgate.constants import (
     SESSION_ID,
@@ -19,9 +20,10 @@ from slopgate.constants import (
 from slopgate.adapters import get_adapter
 from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
+from slopgate.lint._helpers import reset_request_analysis_cache
 from slopgate.models import EngineResult
 
-from .._types import is_object_dict
+from .._types import is_object_dict, object_dict
 from ._render import serialize_findings, render_output
 from ._retry import (
     apply_loop_aware_steering,
@@ -59,7 +61,7 @@ def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata
         platform=platform,
         platform_source=platform,
         enforcement_mode=resolve_enforcement_mode(ctx),
-        resolved_repo_root=resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd()),
+        resolved_repo_root=resolve_repo_root(Path(ctx.cwd)),
         platform_capability=capability,
         degraded_reason=degraded_reason,
     )
@@ -121,8 +123,9 @@ def _extract_tool_output(payload: Mapping[str, object]) -> str | None:
     if tool_output is None:
         return None
     if is_object_dict(tool_output):
-        stdout = tool_output.get("stdout")
-        stderr = tool_output.get("stderr")
+        output_data = object_dict(tool_output)
+        stdout = output_data.get("stdout")
+        stderr = output_data.get("stderr")
         if stdout or stderr:
             parts: list[str] = [f"stdout:\n{stdout or ''}"]
             if stderr:
@@ -132,9 +135,7 @@ def _extract_tool_output(payload: Mapping[str, object]) -> str | None:
     return str(tool_output)
 
 
-def _trace_drilldown_fields(
-    ctx: HookContext, metadata: _EvaluationMetadata
-) -> dict[str, object]:
+def _trace_drilldown_fields(ctx: HookContext) -> dict[str, object]:
     model, provider = _extract_model_provider(ctx.payload.payload)
     return {
         "model": model,
@@ -166,7 +167,7 @@ def _payload_for_start(
         "languages": sorted(ctx.languages),
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
-        **_trace_drilldown_fields(ctx, metadata),
+        **_trace_drilldown_fields(ctx),
     }
 
 
@@ -174,6 +175,7 @@ def _payload_for_done(
     ctx: HookContext,
     metadata: _EvaluationMetadata,
     result: EngineResult,
+    timing: dict[str, object],
 ) -> dict[str, object]:
     return {
         "platform": metadata.platform,
@@ -186,9 +188,10 @@ def _payload_for_done(
         "findings": serialize_findings(result.findings),
         "errors": result.errors,
         "output": result.output,
+        "timing": timing,
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
-        **_trace_drilldown_fields(ctx, metadata),
+        **_trace_drilldown_fields(ctx),
     }
 
 
@@ -196,29 +199,40 @@ def evaluate_payload(
     payload_dict: Mapping[str, object],
     platform: str = UNKNOWN_VALUE,
 ) -> EngineResult:
-    trace_platform = platform.strip().lower() or UNKNOWN_VALUE
-    adapter_platform = (
-        PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
-    )
-    adapter = get_adapter(adapter_platform)
-    ctx = build_context(adapter.normalize_payload(payload_dict))
-    metadata = _evaluation_metadata(ctx, trace_platform)
-    ctx.trace.event(_payload_for_start(ctx, metadata))
+    reset_request_analysis_cache()
+    evaluation_start = monotonic()
+    try:
+        trace_platform = platform.strip().lower() or UNKNOWN_VALUE
+        adapter_platform = (
+            PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
+        )
+        adapter = get_adapter(adapter_platform)
+        ctx = build_context(adapter.normalize_payload(payload_dict))
+        metadata = _evaluation_metadata(ctx, trace_platform)
+        ctx.trace.event(_payload_for_start(ctx, metadata))
 
-    capture_repair_plan_signal(ctx)
-    acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
-    enforce_retry_budget(ctx, acc.findings)
-    apply_loop_aware_steering(ctx, acc.findings)
-    inject_recent_failure_context(ctx, acc.findings)
-    acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
-    acc.findings = dedupe_findings(acc.findings)
-    output = render_output(ctx, acc.findings, adapter=adapter)
+        capture_repair_plan_signal(ctx)
+        rule_engine_start = monotonic()
+        acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
+        rule_engine_ms = int((monotonic() - rule_engine_start) * 1000)
+        enforce_retry_budget(ctx, acc.findings)
+        apply_loop_aware_steering(ctx, acc.findings)
+        inject_recent_failure_context(ctx, acc.findings)
+        acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
+        acc.findings = dedupe_findings(acc.findings)
+        output = render_output(ctx, acc.findings, adapter=adapter)
 
-    result = EngineResult(
-        event_name=ctx.event_name,
-        findings=acc.findings,
-        output=output,
-        errors=acc.errors,
-    )
-    ctx.trace.result(_payload_for_done(ctx, metadata, result))
-    return result
+        result = EngineResult(
+            event_name=ctx.event_name,
+            findings=acc.findings,
+            output=output,
+            errors=acc.errors,
+        )
+        timing: dict[str, object] = {
+            "evaluation_ms": int((monotonic() - evaluation_start) * 1000),
+            "rule_engine_ms": rule_engine_ms,
+        }
+        ctx.trace.result(_payload_for_done(ctx, metadata, result, timing))
+        return result
+    finally:
+        reset_request_analysis_cache()
