@@ -15,17 +15,29 @@ interface Props {
 
 const TABLE_DEFAULT_LIMIT = 10;
 
+function lensLabel(tab: CalibrationMode): string {
+	if (tab === "advisory") return "Advisory pressure";
+	if (tab === "error") return "Runtime/repeat score";
+	return "Persistence score";
+}
+
+function lensName(tab: CalibrationMode): string {
+	if (tab === "advisory") return "Advisory";
+	if (tab === "error") return "Runtime/repeat";
+	return "Persistence";
+}
+
 export function FalsePositiveAnalysis({ rules, results }: Props) {
 	const [tab, setTab] = useState<CalibrationMode>("advisory");
 	const [showAll, setShowAll] = useState(false);
 	const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
 
-// Reset showAll when tab changes
+	// Reset showAll when tab changes
 	useEffect(() => {
 		if (tab) {
-		setShowAll(false);
+			setShowAll(false);
 		}
-}, [tab]);
+	}, [tab]);
 
 	const signals = useMemo(
 		() => computeCalibrationSignals(rules, results),
@@ -62,8 +74,8 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 
 	const {
 		needsReviewCount,
-		runtimeErrorsCount,
-		variableDecisionsCount,
+		repeatFireRulesCount,
+		persistentRulesCount,
 		highConfidenceCount,
 		mediumConfidenceCount,
 		lowConfidenceCount,
@@ -72,8 +84,8 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 			needsReviewCount: signals.filter(
 				(s) => s.isAdvisorySuspect || s.isRuntimeErrorSuspect || s.isVariableSuspect,
 			).length,
-			runtimeErrorsCount: signals.filter((s) => s.isRuntimeErrorSuspect).length,
-			variableDecisionsCount: signals.filter((s) => s.isVariableSuspect).length,
+			repeatFireRulesCount: signals.filter((s) => s.isRuntimeErrorSuspect).length,
+			persistentRulesCount: signals.filter((s) => s.isVariableSuspect).length,
 			highConfidenceCount: signals.filter((s) => s.confidence === "high").length,
 			mediumConfidenceCount: signals.filter((s) => s.confidence === "medium").length,
 			lowConfidenceCount: signals.filter((s) => s.confidence === "low").length,
@@ -85,15 +97,18 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 	}, [signals, selectedRuleId]);
 
 	const top5Rules = useMemo(() => {
-		return activeSignals.slice(0, 5).map((s) => ({
-			rule_id: s.rule_id,
-			score:
-				tab === "advisory"
-					? s.advisoryPressure
-					: tab === "error"
-						? s.runtimeErrorPressure
-						: s.decisionVariance,
-		}));
+		return activeSignals
+			.map((s) => ({
+				rule_id: s.rule_id,
+				score:
+					tab === "advisory"
+						? s.advisoryPressure
+						: tab === "error"
+							? s.runtimeErrorPressure
+							: s.decisionVariance,
+			}))
+			.filter((row) => row.score > 0)
+			.slice(0, 5);
 	}, [activeSignals, tab]);
 
 	const maxBarScore = Math.max(...top5Rules.map((row) => row.score), 1);
@@ -101,8 +116,8 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
-				<h3 className="text-xs text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-2">
-					<Eye className="w-3.5 h-3.5" />
+				<h3 className="text-sm font-semibold text-foreground px-1 flex items-center gap-2">
+					<Eye className="w-4 h-4 text-primary" />
 					Rule Calibration Triage
 				</h3>
 				<div className="flex gap-1" role="tablist" aria-label="Calibration Modes">
@@ -111,19 +126,19 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 							key: "advisory" as CalibrationMode,
 							label: "Advisory pressure",
 							icon: ShieldX,
-							description: "Review rules that warning/context trigger often but allow sessions",
+							description: "Review rules that warn often but are usually allowed",
 						},
 						{
 							key: "error" as CalibrationMode,
-							label: "Runtime error pressure",
+							label: "Runtime/repeat score",
 							icon: ShieldCheck,
-							description: "Review rules causing exact or structured runtime errors",
+							description: "Rank raw detectors by repeated firing, runtime errors, finding volume, and session breadth",
 						},
 						{
 							key: "variance" as CalibrationMode,
-							label: "Decision variance",
+							label: "Persistence score",
 							icon: AlertTriangle,
-							description: "Review rules with highly inconsistent allow/block choices",
+							description: "Rank delivered findings by persistence, finding volume, and session breadth",
 						},
 					].map(({ key, label, icon: Icon, description }) => (
 						<button
@@ -135,7 +150,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 							title={description}
 							onClick={() => setTab(key)}
 							className={cn(
-								"px-2 py-0.5 text-[10px] rounded-sm transition-colors uppercase flex items-center gap-1",
+								"px-2.5 py-1 text-xs rounded-md transition-colors font-medium flex items-center gap-1.5",
 								tab === key
 									? "bg-primary text-primary-foreground"
 									: "text-muted-foreground hover:bg-muted",
@@ -149,7 +164,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 			</div>
 
 			{/* Horizontal Diagnostic Strip */}
-			<div className="grid grid-cols-4 gap-3">
+			<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 				<SummaryCard
 					icon={ShieldX}
 					label="Needs Review"
@@ -158,14 +173,14 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 				/>
 				<SummaryCard
 					icon={ShieldCheck}
-					label="Runtime Errors"
-					value={runtimeErrorsCount}
+					label="Runtime/Repeat Rules"
+					value={repeatFireRulesCount}
 					color="text-signal-block"
 				/>
 				<SummaryCard
 					icon={AlertTriangle}
-					label="Variable Decisions"
-					value={variableDecisionsCount}
+					label="Persistent Rules"
+					value={persistentRulesCount}
 					color="text-signal-error"
 				/>
 				<SummaryCard
@@ -177,39 +192,39 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 			</div>
 
 			{/* Operator Summary & Selected Evidence Panel */}
-			<div className="grid grid-cols-5 gap-3">
+			<div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
 				{/* Left side: Triage queue summary and confidence distribution */}
-				<div className="col-span-3 min-h-[260px] border border-border rounded-md bg-card/30 p-3 flex flex-col justify-between">
+				<div className="col-span-1 lg:col-span-3 min-h-[260px] border border-border rounded-md bg-card/30 p-3 flex flex-col justify-between">
 					<div className="space-y-2">
 						<div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
 							<Info className="w-3.5 h-3.5 text-primary" />
 							Triage Queue Overview
 						</div>
-						<p className="text-[10px] text-muted-foreground leading-normal">
-							Review rules flagged by the calibration engine. Set your triage lens to spot high advisory pressure, runtime error pressure, or decision variance. Click any row in the queue table below to inspect its supporting evidence in detail.
+						<p className="text-xs text-muted-foreground leading-normal font-sans">
+							Tune policy enforcement by reviewing flagged rules. Select a lens to rank warning mismatches, repeated raw detector firings, or delivered findings that persisted across comparable hook runs, then click any row to inspect session evidence.
 						</p>
 
 						{/* Confidence Distribution */}
 						<div className="pt-2 border-t border-border/30">
-							<div className="text-[10px] text-muted-foreground uppercase font-semibold">
+							<div className="text-xs font-semibold text-foreground">
 								Evidence Confidence Distribution
 							</div>
 							<div className="flex gap-4 mt-1">
-								<div className="flex items-center gap-1.5 text-[10px]">
+								<div className="flex items-center gap-1.5 text-xs">
 									<span className="w-1.5 h-1.5 rounded-full bg-signal-block" />
 									<span className="text-muted-foreground">High:</span>
 									<span className="font-mono text-foreground font-semibold">
 										{highConfidenceCount}
 									</span>
 								</div>
-								<div className="flex items-center gap-1.5 text-[10px]">
+								<div className="flex items-center gap-1.5 text-xs">
 									<span className="w-1.5 h-1.5 rounded-full bg-signal-ask" />
 									<span className="text-muted-foreground">Medium:</span>
 									<span className="font-mono text-foreground font-semibold">
 										{mediumConfidenceCount}
 									</span>
 								</div>
-								<div className="flex items-center gap-1.5 text-[10px]">
+								<div className="flex items-center gap-1.5 text-xs">
 									<span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
 									<span className="text-muted-foreground">Low:</span>
 									<span className="font-mono text-foreground font-semibold">
@@ -222,23 +237,23 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 
 					{/* Mini Bar Chart of Top Rules */}
 					<div className="pt-3 border-t border-border/30 mt-2">
-						<div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1.5">
-							Top Rules under {tab === "advisory" ? "Advisory" : tab === "error" ? "Error" : "Variance"} Lens
+						<div className="text-xs font-semibold text-foreground mb-1.5">
+							Top Rules under {lensName(tab)} Lens
 						</div>
 						{top5Rules.length > 0 ? (
 							<div className="space-y-1.5">
 								{top5Rules.map((row) => (
 									<div
 										key={row.rule_id}
-										className="grid grid-cols-[120px_minmax(0,1fr)_30px] items-center gap-2 text-[9px]"
+										className="grid grid-cols-[120px_minmax(0,1fr)_30px] items-center gap-2 text-xs"
 									>
-										<span className="truncate font-mono text-muted-foreground" title={row.rule_id}>
+										<span className="truncate font-mono text-muted-foreground/80" title={row.rule_id}>
 											{row.rule_id}
 										</span>
 										<div className="h-2 rounded-sm bg-muted/40">
 											<div
 												className={cn(
-													"h-full rounded-sm",
+													"h-full rounded-sm transition-all duration-300 ease-out-quart",
 													tab === "advisory"
 														? "bg-signal-ask"
 														: tab === "error"
@@ -260,7 +275,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 								))}
 							</div>
 						) : (
-							<div className="text-[10px] text-muted-foreground italic">
+							<div className="text-xs text-muted-foreground italic">
 								No suspect rules found for the active lens.
 							</div>
 						)}
@@ -268,20 +283,20 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 				</div>
 
 				{/* Right side: Selected rule evidence panel */}
-				<div className="col-span-2 min-h-[260px]">
+				<div className="col-span-1 lg:col-span-2 min-h-[260px]">
 					{selectedSignal ? (
-						<div className="flex flex-col h-full bg-card border border-border rounded-md p-3 text-xs space-y-2">
+						<div key={selectedSignal.rule_id} className="flex flex-col h-full bg-card border border-border rounded-md p-3 text-xs space-y-2 animate-fade-in">
 							<div className="flex justify-between items-start border-b border-border pb-2">
 								<div className="min-w-0 flex-1 pr-2">
 									<div className="font-mono font-bold text-foreground truncate" title={selectedSignal.rule_id}>
 										{selectedSignal.rule_id}
 									</div>
-									<div className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5" title={getRuleDescription(selectedSignal.rule_id) || undefined}>
+									<div className="text-xs text-muted-foreground line-clamp-2 mt-0.5" title={getRuleDescription(selectedSignal.rule_id) || undefined}>
 										{getRuleDescription(selectedSignal.rule_id) || "No description available"}
 									</div>
 								</div>
 								<span className={cn(
-									"text-[9px] px-1.5 py-0.5 rounded-sm shrink-0",
+									"text-xs px-2.5 py-0.5 rounded-md font-semibold shrink-0",
 									selectedSignal.severity === "CRITICAL"
 										? "bg-signal-block/20 text-signal-block"
 										: selectedSignal.severity === "HIGH"
@@ -295,20 +310,20 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 							</div>
 
 							<div className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2">
-								<div className="text-center p-1 bg-muted/20 rounded">
-									<div className="text-[9px] text-muted-foreground uppercase">Advisory</div>
+								<div className="text-center p-1.5 bg-muted/20 rounded">
+									<div className="text-xs font-semibold text-muted-foreground">Advisory</div>
 									<div className="font-mono text-sm font-bold text-signal-ask">
-										{selectedSignal.advisoryPressure}
+										{selectedSignal.advisoryPressure}%
 									</div>
 								</div>
-								<div className="text-center p-1 bg-muted/20 rounded">
-									<div className="text-[9px] text-muted-foreground uppercase">Errors</div>
+								<div className="text-center p-1.5 bg-muted/20 rounded">
+									<div className="text-xs font-semibold text-muted-foreground">Runtime score</div>
 									<div className="font-mono text-sm font-bold text-signal-block">
 										{selectedSignal.runtimeErrorPressure}
 									</div>
 								</div>
-								<div className="text-center p-1 bg-muted/20 rounded">
-									<div className="text-[9px] text-muted-foreground uppercase">Variance</div>
+								<div className="text-center p-1.5 bg-muted/20 rounded">
+									<div className="text-xs font-semibold text-muted-foreground">Persist score</div>
 									<div className="font-mono text-sm font-bold text-signal-error">
 										{selectedSignal.decisionVariance}
 									</div>
@@ -316,37 +331,41 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 							</div>
 
 							<div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1">
-								<div className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+								<div className="text-xs font-semibold text-foreground">
 									Evidence Details
 								</div>
-								<div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-									<div>Findings Count:</div>
+								<div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+									<div>Raw Findings:</div>
 									<div className="font-mono text-right text-foreground">{selectedSignal.totalFindings}</div>
 									<div>Unique Sessions:</div>
 									<div className="font-mono text-right text-foreground">{selectedSignal.sessionsCount}</div>
-									<div>Allow After Advisory:</div>
+									<div>Allowed After Warning:</div>
 									<div className="font-mono text-right text-foreground">{selectedSignal.allowAfterWarn}</div>
-									<div>Errors Linked:</div>
-									<div className="font-mono text-right text-foreground">{selectedSignal.errorCount}</div>
+									<div>Repeat-fire Sessions:</div>
+									<div className="font-mono text-right text-foreground">{selectedSignal.repeatFireSessions}</div>
+									<div>Delivered Sessions:</div>
+									<div className="font-mono text-right text-foreground">{selectedSignal.deliveredSessions}</div>
+									<div>Later Comparable Findings:</div>
+									<div className="font-mono text-right text-foreground">{selectedSignal.persistentDeliveredFindings}</div>
 								</div>
 
 								<div className="border-t border-border/30 pt-1.5 mt-1">
-									<div className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+									<div className="text-xs font-semibold text-foreground">
 										Decision Mix
 									</div>
-									<div className="flex gap-1.5 items-center mt-1 text-[9px]">
-										<span className="text-signal-block font-mono">Blocks: {selectedSignal.blockCount}</span>
-										<span className="text-signal-ask font-mono">Warns: {selectedSignal.warnCount}</span>
-										<span className="text-muted-foreground font-mono">Allows: {selectedSignal.allowCount}</span>
+									<div className="flex gap-2.5 items-center mt-1 text-xs">
+										<span className="text-signal-block font-mono">Blocked: {selectedSignal.blockCount}</span>
+										<span className="text-signal-ask font-mono">Warned: {selectedSignal.warnCount}</span>
+										<span className="text-muted-foreground font-mono">Allowed: {selectedSignal.allowCount}</span>
 									</div>
 								</div>
 
 								{selectedSignal.recentExampleMessage && (
 									<div className="border-t border-border/30 pt-1.5 mt-1">
-										<div className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+										<div className="text-xs font-semibold text-foreground">
 											Recent Finding Message
 										</div>
-										<div className="bg-muted/30 border border-border/50 rounded p-1.5 mt-1 font-mono text-[9px] break-all leading-normal text-muted-foreground max-h-16 overflow-y-auto">
+										<div className="bg-muted/30 border border-border/50 rounded p-1.5 mt-1 font-mono text-xs break-all leading-normal text-muted-foreground max-h-16 overflow-y-auto">
 											{selectedSignal.recentExampleMessage}
 										</div>
 									</div>
@@ -354,10 +373,10 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 
 								{selectedSignal.recentExampleError && (
 									<div className="border-t border-border/30 pt-1.5 mt-1">
-										<div className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+										<div className="text-xs font-semibold text-foreground">
 											Recent Error Message
 										</div>
-										<div className="bg-muted/30 border border-border/50 rounded p-1.5 mt-1 font-mono text-[9px] break-all leading-normal text-muted-foreground max-h-16 overflow-y-auto">
+										<div className="bg-muted/30 border border-border/50 rounded p-1.5 mt-1 font-mono text-xs break-all leading-normal text-muted-foreground max-h-16 overflow-y-auto">
 											{selectedSignal.recentExampleError}
 										</div>
 									</div>
@@ -365,7 +384,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 							</div>
 						</div>
 					) : (
-						<div className="flex flex-col items-center justify-center h-full bg-card border border-border border-dashed rounded-md p-4 text-center text-muted-foreground text-[10px]">
+						<div className="flex flex-col items-center justify-center h-full bg-card border border-border border-dashed rounded-md p-4 text-center text-muted-foreground text-xs">
 							<Eye className="w-5 h-5 mb-1 text-muted-foreground/60 animate-pulse" />
 							Select a rule from the triage queue to inspect evidence
 						</div>
@@ -375,34 +394,24 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 
 			{/* Primary Table */}
 			<div className="border border-border rounded-md bg-card/30 overflow-hidden">
-				<table className="w-full text-xs">
+				<div className="overflow-x-auto">
+					<table className="w-full text-xs min-w-[800px]">
 					<thead>
-						<tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-							<th className="text-left px-3 py-2">Rule</th>
-							<th className="text-left px-3 py-2">Reason</th>
-							<th className="text-left px-3 py-2">Evidence</th>
-							<th className="text-left px-3 py-2">Decision Mix</th>
-							<th className="text-right px-3 py-2">Sessions</th>
-							<th className="text-right px-3 py-2">Score</th>
-							<th className="text-left px-3 py-2">Confidence</th>
-							<th className="px-3 py-2 w-8" />
-							<th className="px-3 py-2 text-right">
-								{activeSignals.length > TABLE_DEFAULT_LIMIT && (
-									<button
-										type="button"
-										onClick={() => setShowAll((v) => !v)}
-										className="text-[10px] text-primary hover:underline whitespace-nowrap"
-									>
-										{showAll ? "Show less" : `Show all ${activeSignals.length}`}
-									</button>
-								)}
-							</th>
+						<tr className="border-b border-border text-muted-foreground text-xs font-semibold">
+							<th className="text-left px-3 py-2.5">Rule</th>
+							<th className="text-left px-3 py-2.5">Reason</th>
+							<th className="text-left px-3 py-2.5">Evidence</th>
+							<th className="text-left px-3 py-2.5">Decision Mix</th>
+							<th className="text-right px-3 py-2.5">Sessions</th>
+							<th className="text-right px-3 py-2.5">Score</th>
+							<th className="text-left px-3 py-2.5">Confidence</th>
+							<th className="px-3 py-2.5 w-12 text-right">Actions</th>
 						</tr>
 					</thead>
 					<tbody>
 						{active.length === 0 ? (
 							<tr>
-								<td colSpan={9} className="text-center py-8 text-muted-foreground text-xs italic">
+								<td colSpan={8} className="text-center py-8 text-muted-foreground text-xs italic">
 									Not enough evidence for calibration.
 								</td>
 							</tr>
@@ -415,70 +424,85 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 										? s.runtimeErrorPressure
 										: s.decisionVariance;
 
-							const label = `Rule ${s.rule_id} (${tab === "advisory" ? "Advisory pressure" : tab === "error" ? "Runtime error pressure" : "Decision variance"} suspect, score ${currentScore})`;
+							const label = `Rule ${s.rule_id} (${lensLabel(tab)} suspect, score ${currentScore})`;
 
 							return (
 								<tr
 									key={s.rule_id}
 									onClick={() => setSelectedRuleId(s.rule_id)}
 									className={cn(
-										"border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer",
-										selectedRuleId === s.rule_id && "bg-muted/30 border-l-2 border-l-primary"
+										"border-b border-border/50 transition-all duration-200 ease-out-quart cursor-pointer hover:bg-muted/10",
+										selectedRuleId === s.rule_id
+											? "bg-primary/5 text-foreground font-medium"
+											: "text-muted-foreground/90 hover:text-foreground"
 									)}
 								>
 									<td
-										className="px-3 py-1.5 font-medium"
+										className="px-3 py-2 font-medium"
 										title={getRuleDescription(s.rule_id) || s.rule_id}
 									>
-										<div className="font-mono">{s.rule_id}</div>
+										<button
+											type="button"
+											onClick={(event) => {
+												event.stopPropagation();
+												setSelectedRuleId(s.rule_id);
+											}}
+											aria-pressed={selectedRuleId === s.rule_id}
+											className="flex items-center gap-2 font-mono text-foreground text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+										>
+											{selectedRuleId === s.rule_id && (
+												<span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+											)}
+											{s.rule_id}
+										</button>
 										{getRuleDescription(s.rule_id) && (
-											<div className="text-[10px] text-muted-foreground font-normal leading-tight mt-0.5">
+											<div className="text-xs text-muted-foreground font-normal leading-tight mt-0.5">
 												{getRuleDescription(s.rule_id)}
 											</div>
 										)}
 									</td>
-									<td className="px-3 py-1.5">
+									<td className="px-3 py-2">
 										<div className="flex flex-wrap gap-1">
 											{s.isAdvisorySuspect && (
-												<span className="text-[9px] px-1 py-0.5 rounded-sm bg-signal-ask/20 text-signal-ask font-semibold">
+												<span className="text-xs px-2 py-0.5 rounded-md bg-signal-ask/15 text-signal-ask font-semibold">
 													Advisory
 												</span>
 											)}
-											{s.isRuntimeErrorSuspect && (
-												<span className="text-[9px] px-1 py-0.5 rounded-sm bg-signal-block/20 text-signal-block font-semibold">
-													Runtime Error
-												</span>
+								{s.isRuntimeErrorSuspect && (
+									<span className="text-xs px-2 py-0.5 rounded-md bg-signal-block/15 text-signal-block font-semibold">
+										Runtime/repeat
+									</span>
 											)}
 											{s.isVariableSuspect && (
-												<span className="text-[9px] px-1 py-0.5 rounded-sm bg-signal-error/20 text-signal-error font-semibold">
-													Variable
+												<span className="text-xs px-2 py-0.5 rounded-md bg-signal-error/15 text-signal-error font-semibold">
+													Persistent
 												</span>
 											)}
 											{s.isClean && (
-												<span className="text-[9px] px-1 py-0.5 rounded-sm bg-muted text-muted-foreground font-semibold">
+												<span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-semibold">
 													Clean
 												</span>
 											)}
 										</div>
 									</td>
-									<td className="px-3 py-1.5 text-muted-foreground font-mono text-[10px]">
+									<td className="px-3 py-2 text-muted-foreground font-mono text-xs">
 										{s.totalFindings > 0 ? (
 											<span>{s.totalFindings} findings</span>
-										) : s.errorCount > 0 ? (
-											<span>{s.errorCount} errors</span>
+										) : s.runtimeErrorCount > 0 ? (
+											<span>{s.runtimeErrorCount} runtime errors</span>
 										) : (
 											<span>0 findings</span>
 										)}
 									</td>
-									<td className="px-3 py-1.5">
-										<div className="flex gap-1 text-[10px] font-mono">
-											<span className="text-signal-block" title="Blocks">B:{s.blockCount}</span>
-											<span className="text-signal-ask" title="Warns">W:{s.warnCount}</span>
-											<span className="text-muted-foreground" title="Allows">A:{s.allowCount}</span>
+									<td className="px-3 py-2">
+										<div className="flex gap-2 text-xs font-mono">
+											<span className="text-signal-block font-semibold" title="Blocked">B:{s.blockCount}</span>
+											<span className="text-signal-ask font-semibold" title="Warned">W:{s.warnCount}</span>
+											<span className="text-muted-foreground" title="Allowed">A:{s.allowCount}</span>
 										</div>
 									</td>
-									<td className="px-3 py-1.5 text-right font-mono">{s.sessionsCount}</td>
-									<td className="px-3 py-1.5 text-right font-semibold">
+									<td className="px-3 py-2 text-right font-mono text-xs">{s.sessionsCount}</td>
+									<td className="px-3 py-2 text-right font-semibold text-xs">
 										<span
 											className={cn(
 												tab === "advisory" && s.isAdvisorySuspect
@@ -493,10 +517,10 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 											{currentScore}
 										</span>
 									</td>
-									<td className="px-3 py-1.5">
+									<td className="px-3 py-2">
 										<span
 											className={cn(
-												"text-[9px] px-1.5 py-0.5 rounded-sm uppercase font-semibold",
+												"text-xs px-2 py-0.5 rounded-md font-semibold capitalize",
 												s.confidence === "high"
 													? "bg-signal-block/20 text-signal-block"
 													: s.confidence === "medium"
@@ -508,7 +532,7 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 										</span>
 									</td>
 									<td
-										className="px-3 py-1.5"
+										className="px-3 py-2 text-right"
 										onClick={(e) => e.stopPropagation()}
 										onKeyDown={(e) => e.stopPropagation()}
 									>
@@ -519,12 +543,23 @@ export function FalsePositiveAnalysis({ rules, results }: Props) {
 											compact
 										/>
 									</td>
-									<td />
 								</tr>
 							);
 						}))}
 					</tbody>
 				</table>
+			</div>
+				{activeSignals.length > TABLE_DEFAULT_LIMIT && (
+					<div className="flex justify-end p-2 border-t border-border/50 bg-card/10">
+						<button
+							type="button"
+							onClick={() => setShowAll((v) => !v)}
+							className="text-xs font-semibold text-primary hover:underline px-2 py-1"
+						>
+							{showAll ? "Show less" : `Show all ${activeSignals.length} rules`}
+						</button>
+					</div>
+				)}
 			</div>
 		</div>
 	);
@@ -542,13 +577,13 @@ const SummaryCard = memo(function SummaryCard({
 	color: string;
 }) {
 	return (
-		<div className="flex items-center gap-2.5 px-3 py-2.5 rounded-md border border-border bg-card">
-			<Icon className={cn("w-4 h-4 shrink-0", color)} />
+		<div className="flex items-center gap-3 px-3.5 py-3 rounded-lg border border-border bg-card/40 transition-colors hover:bg-card/60">
+			<Icon className={cn("w-4 h-4 shrink-0 opacity-75", color)} />
 			<div>
-				<div className={cn("text-lg font-semibold leading-tight", color)}>
+				<div className="text-xl font-bold font-sans tracking-tight text-foreground leading-none mb-0.5">
 					{value}
 				</div>
-				<div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+				<div className="text-[11px] font-medium text-muted-foreground leading-none">
 					{label}
 				</div>
 			</div>

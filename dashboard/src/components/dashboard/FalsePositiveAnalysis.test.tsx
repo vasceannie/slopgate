@@ -58,6 +58,8 @@ describe("FalsePositiveAnalysis Component", () => {
 		expect(screen.getByText("Rule Calibration Triage")).toBeInTheDocument();
 		expect(screen.getByText("Triage Queue Overview")).toBeInTheDocument();
 		expect(screen.getByText("Needs Review")).toBeInTheDocument();
+		expect(screen.getByText("Runtime/Repeat Rules")).toBeInTheDocument();
+		expect(screen.getByText("Persistent Rules")).toBeInTheDocument();
 		expect(screen.getAllByText("PY-CODE-010")[0]).toBeInTheDocument();
 	});
 
@@ -85,8 +87,8 @@ describe("FalsePositiveAnalysis Component", () => {
 			</FlagProvider>
 		);
 
-		// Switch to Runtime error pressure lens
-		const errorTabButton = screen.getByRole("tab", { name: /Runtime error pressure/i });
+		// Switch to Runtime/repeat score lens
+		const errorTabButton = screen.getByRole("tab", { name: /Runtime\/repeat score/i });
 		fireEvent.click(errorTabButton);
 
 		// Now check selected rule/signals in the table

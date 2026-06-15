@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { lazy, memo, Suspense, useCallback, useState } from "react";
 import { DecisionFunnel } from "@/components/dashboard/DecisionFunnel";
 import { FileDropZone } from "@/components/dashboard/FileDropZone";
+import { OpsPostureStrip } from "@/components/dashboard/OpsPostureStrip";
 import { PostureStrip } from "@/components/dashboard/PostureStrip";
 import { TimeWindowSelector } from "@/components/dashboard/TimeWindowSelector";
 import { TopRules } from "@/components/dashboard/TopRules";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHarnessStatus } from "@/hooks/useHarnessStatus";
 import { useTraceData } from "@/hooks/useTraceData";
 import type { FilterState } from "@/types/slopgate";
 
@@ -110,6 +112,8 @@ export default function Dashboard() {
 	});
 
 	const data = useTraceData(filters);
+	const harnessStatus = useHarnessStatus();
+	const hasAsyncJobs = data.async.passCount + data.async.failCount > 0;
 	const isInitialSnapshotLoading =
 		data.sourceStatus.isSnapshotLoading &&
 		data.sourceStatus.meta.totalRecords === 0;
@@ -248,13 +252,27 @@ export default function Dashboard() {
 
 					<TabsContent value="ops" className="mt-4">
 						<LazyTab>
-							<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-								<LazyAsyncJobs {...data.async} />
-								<LazyDriftTuning
+							<div className="space-y-6">
+								<OpsPostureStrip
+									asyncFailCount={data.async.failCount}
 									config={data.drift.config}
-									hottestRepos={data.drift.hottestRepos}
-									operationalContext={data.drift.operationalContext}
+									harnessStatus={harnessStatus}
 								/>
+								<div
+									className={
+										hasAsyncJobs
+											? "grid grid-cols-1 items-start gap-6 lg:grid-cols-2"
+											: "grid grid-cols-1 gap-6"
+									}
+								>
+									{hasAsyncJobs && <LazyAsyncJobs {...data.async} />}
+									<LazyDriftTuning
+										config={data.drift.config}
+										harnessStatus={harnessStatus}
+										hottestRepos={data.drift.hottestRepos}
+										operationalContext={data.drift.operationalContext}
+									/>
+								</div>
 							</div>
 						</LazyTab>
 					</TabsContent>

@@ -16,6 +16,14 @@ _resources = importlib.import_module("forcedash_server.resources")
 read_remote_script = _resources.read_remote_script
 
 HARNESS_STATUS_SCRIPT = "harness_status.py.txt"
+CODEX_EVENTS = [
+    "SessionStart",
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "Stop",
+]
 FAKE_OPENCODE_CONFIG = {
     "plugin": ["slopgate-plugin.ts"],
     "provider": {"api_key": "live-secret", "name": "example"},
@@ -61,6 +69,25 @@ def _opencode_platform(payload: dict[str, object]) -> dict[str, object]:
     return opencode
 
 
+def _codex_platform(payload: dict[str, object]) -> dict[str, object]:
+    platforms = cast(list[dict[str, object]], payload["platforms"])
+    codex = platforms[1]
+    assert codex["id"] == "codex", "Expected Codex platform entry"
+    return codex
+
+
+def _write_codex_install(home: Path, config_text: str) -> None:
+    codex_dir = home / ".codex"
+    codex_dir.mkdir()
+    hook_command = "slopgate handle --platform codex"
+    hooks = {event: [{"hooks": [{"command": hook_command}]}] for event in CODEX_EVENTS}
+    (codex_dir / "hooks.json").write_text(
+        json.dumps({"hooks": hooks}),
+        encoding="utf-8",
+    )
+    (codex_dir / "config.toml").write_text(config_text, encoding="utf-8")
+
+
 def test_harness_status_checks_live_opencode_config_and_redacts_provider_secret(
     tmp_path: Path,
 ) -> None:
@@ -79,4 +106,22 @@ def test_harness_status_checks_live_opencode_config_and_redacts_provider_secret(
     )
     assert provider["name"] == "example", (
         "Expected non-sensitive provider settings to remain visible"
+    )
+
+
+def test_harness_status_accepts_current_codex_hooks_feature_key(
+    tmp_path: Path,
+) -> None:
+    _write_codex_install(tmp_path, "[features]\nhooks = true\n")
+    payload = _run_harness_status_with_fake_opencode_config(tmp_path)
+    codex = _codex_platform(payload)
+
+    assert codex["status"] == "installed", (
+        "Expected canonical features.hooks=true to mark installed Codex hooks"
+    )
+    assert codex["feature_flag_enabled"] is True, (
+        "Expected harness status to recognize the current Codex hooks flag"
+    )
+    assert codex["missing_events"] == [], (
+        "Expected complete Codex hook event coverage in the synthetic install"
     )

@@ -208,6 +208,23 @@ def status_from(installed, partial=False, error=None):
     return "missing"
 
 
+def feature_flag_enabled(toml_text, key):
+    in_features = False
+    for raw_line in toml_text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_features = line == "[features]"
+            continue
+        if not in_features:
+            continue
+        name, separator, value = line.partition("=")
+        if separator and name.strip() == key:
+            return value.strip().lower() == "true"
+    return False
+
+
 claude_path = home / ".claude" / "settings.json"
 claude_data, claude_err = read_json(claude_path)
 claude_hooks = summarize_hooks(claude_data.get("hooks") if isinstance(claude_data, dict) else {}, expected["claude"])
@@ -227,7 +244,9 @@ codex_hooks = summarize_hooks(codex_data.get("hooks") if isinstance(codex_data, 
 codex_toml = home / ".codex" / "config.toml"
 try:
     codex_toml_text = codex_toml.read_text(encoding="utf-8")
-    codex_feature = bool(re.search(r"(?m)^\s*codex_hooks\s*=\s*true\b", codex_toml_text))
+    codex_feature = feature_flag_enabled(
+        codex_toml_text, "hooks"
+    ) or feature_flag_enabled(codex_toml_text, "codex_hooks")
     codex_feature_error = None
 except FileNotFoundError:
     codex_feature = False
@@ -282,7 +301,7 @@ platforms = [
         "id": "codex",
         "label": "Codex",
         "capability": "partial",
-        "support": "partial hooks; requires codex_hooks feature flag",
+        "support": "partial hooks; requires features.hooks flag",
         "status": status_from(codex_installed, codex_partial, codex_err or codex_feature_error),
         "config_path": "~/.codex/hooks.json",
         "config_exists": codex_err is None,

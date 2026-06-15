@@ -5,18 +5,30 @@ export type CalibrationMode = "advisory" | "error" | "variance";
 
 export type CalibrationConfidence = "low" | "medium" | "high";
 
+const RECURRENCE_BASE_WEIGHT = 45;
+const RECURRENCE_INTENSITY_WEIGHT = 35;
+const RECURRENCE_BREADTH_WEIGHT = 20;
+const FINDINGS_PER_SESSION_SCORE_SCALE = 20;
+const SESSION_BREADTH_SCORE_SCALE = 20;
+const RUNTIME_ERROR_BASE_SCORE = 30;
+const RUNTIME_ERROR_WEIGHT = 70;
+const RUNTIME_ERROR_SCORE_SCALE = 5;
+
 export interface RuleCalibrationSignal {
 	rule_id: string;
-	advisoryPressure: number;      // 0-100
-	runtimeErrorPressure: number;  // 0-100
-	decisionVariance: number;      // 0-100
+	advisoryPressure: number; // 0-100
+	runtimeErrorPressure: number; // 0-100, raw repeat-firing triage score
+	decisionVariance: number; // 0-100, delivered persistence triage score
 	confidence: CalibrationConfidence;
 	totalFindings: number;
 	blockCount: number;
 	warnCount: number;
 	allowCount: number;
 	allowAfterWarn: number;
-	errorCount: number;
+	repeatFireSessions: number;
+	deliveredSessions: number;
+	persistentDeliveredFindings: number;
+	runtimeErrorCount: number;
 	severity: Severity;
 	sessionsCount: number;
 	isAdvisorySuspect: boolean;
@@ -27,6 +39,64 @@ export interface RuleCalibrationSignal {
 	recentExampleError?: string | null;
 }
 
+function stableValue(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(stableValue);
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value as Record<string, unknown>)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([key, child]) => [key, stableValue(child)]),
+		);
+	}
+	return value;
+}
+
+function resultScopeKey(result: HookResult): string {
+	return JSON.stringify({
+		event_name: result.event_name,
+		tool_name: result.tool_name,
+		command: result.command ?? null,
+		tool_input: stableValue(result.tool_input ?? null),
+	});
+}
+
+function findingsForRule(result: HookResult, ruleId: string) {
+	return result.findings.filter((finding) => finding.rule_id === ruleId);
+}
+
+function asymptoticRatio(value: number, scale: number): number {
+	if (value <= 0 || scale <= 0) return 0;
+	return 1 - Math.exp(-value / scale);
+}
+
+function recurrenceScore({
+	rate,
+	averageFindingsPerSession,
+	sessions,
+}: {
+	rate: number;
+	averageFindingsPerSession: number;
+	sessions: number;
+}): number {
+	if (rate <= 0) return 0;
+	const intensity = asymptoticRatio(
+		averageFindingsPerSession,
+		FINDINGS_PER_SESSION_SCORE_SCALE,
+	);
+	const breadth = asymptoticRatio(sessions, SESSION_BREADTH_SCORE_SCALE);
+	return Math.min(
+		100,
+		Math.round(
+			rate *
+				(
+					RECURRENCE_BASE_WEIGHT +
+					intensity * RECURRENCE_INTENSITY_WEIGHT +
+					breadth * RECURRENCE_BREADTH_WEIGHT
+				),
+		),
+	);
+}
+
 export function computeCalibrationSignals(
 	rules: RuleFinding[],
 	results: HookResult[],
@@ -34,6 +104,17 @@ export function computeCalibrationSignals(
 	const byRule = new Map<string, RuleFinding[]>();
 	const knownRuleIds = new Set<string>();
 	const upperToOriginalRuleId = new Map<string, string>();
+	const resultsBySession = new Map<string, HookResult[]>();
+
+	for (const r of results) {
+		if (!resultsBySession.has(r.session_id)) {
+			resultsBySession.set(r.session_id, []);
+		}
+		resultsBySession.get(r.session_id)?.push(r);
+	}
+	for (const sessionResults of resultsBySession.values()) {
+		sessionResults.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+	}
 
 	for (const r of rules) {
 		if (!byRule.has(r.rule_id)) byRule.set(r.rule_id, []);
@@ -142,33 +223,93 @@ export function computeCalibrationSignals(
 			Math.round((allowAfterWarnRatio * 60 + warnRatio * 40) * sampleSizeConfidence),
 		);
 
-		// 2. runtimeErrorPressure
-		const errorCount = errorsByRule.get(rule_id) || 0;
-		let runtimeErrorPressure = 0;
-		if (errorCount > 0) {
-			if (totalFindings > 0) {
-				runtimeErrorPressure = Math.min(
-					100,
-					Math.round((errorCount / totalFindings) * 100),
-				);
-			} else {
-				runtimeErrorPressure = Math.min(100, errorCount * 20);
+		// Group findings of this rule by session_id
+		const findingsBySession = new Map<string, RuleFinding[]>();
+		for (const f of findings) {
+			if (!findingsBySession.has(f.session_id)) {
+				findingsBySession.set(f.session_id, []);
 			}
+			findingsBySession.get(f.session_id)?.push(f);
 		}
 
-		// 3. decisionVariance
-		let decisionVariance = 0;
-		if (totalFindings > 0) {
-			const p_allow = allowCount / totalFindings;
-			const p_block = blockCount / totalFindings;
-			const p_warn = warnCount / totalFindings;
-			const varianceVal = 1 - (p_allow * p_allow + p_block * p_block + p_warn * p_warn);
-			// Max varianceVal for 3 categories is 2/3 (when each is 1/3).
-			// To normalize to 0-100, multiply by 150.
-			const rawVariance = varianceVal * 150;
-			const varianceSampleSizeFactor = sessionsCount >= 5 ? 1.0 : sessionsCount >= 3 ? 0.5 : 0.0;
-			decisionVariance = Math.min(100, Math.round(rawVariance * varianceSampleSizeFactor));
+		let activeSessionsCount = 0;
+		let multiWarnSessionsCount = 0;
+		let deliveredSessions = 0;
+		let totalDeliveredCreated = 0;
+		let totalPersistentDelivered = 0;
+
+		for (const [sid, sessionFindings] of findingsBySession.entries()) {
+			activeSessionsCount++;
+
+			// Sort findings in this session by timestamp
+			sessionFindings.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+			// Unique runs where the rule fired in this session (by timestamp)
+			const uniqueRunTimes = [...new Set(sessionFindings.map((f) => f.timestamp))];
+			if (uniqueRunTimes.length > 1) {
+				multiWarnSessionsCount++;
+			}
+
+
+			const deliveredResults = (resultsBySession.get(sid) || []).filter(
+				(result) => findingsForRule(result, rule_id).length > 0,
+			);
+			if (deliveredResults.length === 0) continue;
+
+			deliveredSessions++;
+			const firstDelivered = deliveredResults[0];
+			const firstDeliveredFindings = findingsForRule(firstDelivered, rule_id).length;
+			const scopeKey = resultScopeKey(firstDelivered);
+			const comparableResults = (resultsBySession.get(sid) || []).filter(
+				(result) => resultScopeKey(result) === scopeKey,
+			);
+			const lastComparableResult = comparableResults[comparableResults.length - 1];
+			const persistentFindings = lastComparableResult
+				? findingsForRule(lastComparableResult, rule_id).length
+				: firstDeliveredFindings;
+
+			totalDeliveredCreated += firstDeliveredFindings;
+			totalPersistentDelivered += persistentFindings;
 		}
+
+		// 2. runtimeErrorPressure (repurposed as raw repeat-firing triage score)
+		const repeatFireRate = activeSessionsCount > 0
+			? multiWarnSessionsCount / activeSessionsCount
+			: 0;
+		const repeatFirePressure = recurrenceScore({
+			rate: repeatFireRate,
+			averageFindingsPerSession: activeSessionsCount > 0
+				? totalFindings / activeSessionsCount
+				: 0,
+			sessions: activeSessionsCount,
+		});
+		const runtimeErrorCount = errorsByRule.get(rule_id) || 0;
+		const runtimeErrorRatio = asymptoticRatio(
+			runtimeErrorCount,
+			RUNTIME_ERROR_SCORE_SCALE,
+		);
+		const runtimeErrorPressureFromErrors = runtimeErrorCount > 0
+			? Math.min(
+				100,
+				RUNTIME_ERROR_BASE_SCORE +
+					Math.round(runtimeErrorRatio * RUNTIME_ERROR_WEIGHT),
+			)
+			: 0;
+		const runtimeErrorPressure = Math.max(
+			repeatFirePressure,
+			runtimeErrorPressureFromErrors,
+		);
+		// 3. decisionVariance (repurposed as delivered persistence triage score)
+		const persistenceRate = totalDeliveredCreated > 0
+			? Math.min(1, totalPersistentDelivered / totalDeliveredCreated)
+			: 0;
+		const decisionVariance = recurrenceScore({
+			rate: persistenceRate,
+			averageFindingsPerSession: deliveredSessions > 0
+				? totalPersistentDelivered / deliveredSessions
+				: 0,
+			sessions: deliveredSessions,
+		});
 
 		// 4. confidence
 		let confidence: CalibrationConfidence = "low";
@@ -222,7 +363,10 @@ export function computeCalibrationSignals(
 			warnCount,
 			allowCount,
 			allowAfterWarn,
-			errorCount,
+			repeatFireSessions: multiWarnSessionsCount,
+			deliveredSessions,
+			persistentDeliveredFindings: totalPersistentDelivered,
+			runtimeErrorCount,
 			severity,
 			sessionsCount,
 			isAdvisorySuspect,

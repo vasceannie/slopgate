@@ -59,17 +59,18 @@ export function FlagButton({ itemType, itemId, label, compact }: Props) {
 	}, []);
 	if (compact) {
 		return (
-			<div className="relative">
+			<div className="relative inline-flex h-8 w-8 items-center justify-center">
 				<button
 					type="button"
 					ref={triggerRef}
 					onClick={togglePanel}
 					className={cn(
-						"p-0.5 rounded transition-colors",
+						"flex h-8 w-8 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 						flagged
 							? "text-signal-ask"
 							: "text-muted-foreground/40 hover:text-signal-ask",
 					)}
+					aria-label="Flag for investigation"
 					title="Flag for investigation"
 				>
 					<Flag className="w-3 h-3" fill={flagged ? "currentColor" : "none"} />

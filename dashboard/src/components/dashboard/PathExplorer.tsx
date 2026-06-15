@@ -36,13 +36,22 @@ interface Props {
 interface PathNode {
 	name: string;
 	fullPath: string;
+	filterPath: string;
 	eventCount: number;
 	findingCount: number;
 	blockCount: number;
+	eventIds: Set<string>;
+	findingIds: Set<string>;
+	blockFindingIds: Set<string>;
 	decisions: Partial<Record<Decision, number>>;
 	severities: Partial<Record<Severity, number>>;
 	rules: Record<string, number>;
 	children: Map<string, PathNode>;
+}
+
+interface ScopedPath {
+	displayPath: string;
+	filterPath: string;
 }
 
 const COMMON_EXTENSIONS = new Set([
@@ -106,15 +115,85 @@ function isValidPath(p: string): boolean {
 	return true;
 }
 
-function normalizePath(p: string, repoRoot?: string | null): string {
-	let rel = p;
-	if (repoRoot && p.startsWith(repoRoot)) {
-		rel = p.slice(repoRoot.length);
+function createPathNode(name: string, fullPath: string, filterPath: string): PathNode {
+	return {
+		name,
+		fullPath,
+		filterPath,
+		eventCount: 0,
+		findingCount: 0,
+		blockCount: 0,
+		eventIds: new Set(),
+		findingIds: new Set(),
+		blockFindingIds: new Set(),
+		decisions: {},
+		severities: {},
+		rules: {},
+		children: new Map(),
+	};
+}
+
+function cleanPathSegments(path: string): string[] {
+	return path.split("/").filter((part) => part && part !== ".");
+}
+
+function trimTrailingSlash(path: string): string {
+	return path.replace(/\/+$/, "");
+}
+
+function isAbsolutePath(path: string): boolean {
+	return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function compactUnscopedPath(path: string): string {
+	const segments = cleanPathSegments(path);
+	if (segments.length <= 3) return segments.join("/");
+
+	for (const marker of ["repos", "workspace-hooker", "worktrees", "projects"]) {
+		const markerIndex = segments.indexOf(marker);
+		if (markerIndex >= 0 && markerIndex + 1 < segments.length) {
+			return segments.slice(markerIndex + 1).join("/");
+		}
 	}
-	return rel
-		.split("/")
-		.filter((part) => part && part !== ".")
-		.join("/");
+
+	return segments.slice(-3).join("/");
+}
+
+function normalizePath(p: string, repoRoot?: string | null): ScopedPath | null {
+	const rawPath = p.trim();
+	if (!rawPath) return null;
+
+	if (repoRoot) {
+		const root = trimTrailingSlash(repoRoot.trim());
+		if (!root) return null;
+		if (rawPath === root) return null;
+
+		if (rawPath.startsWith(`${root}/`)) {
+			const displayPath = cleanPathSegments(rawPath.slice(root.length)).join("/");
+			return displayPath ? { displayPath, filterPath: rawPath } : null;
+		}
+
+		if (isAbsolutePath(rawPath)) return null;
+	}
+
+	const displayPath = isAbsolutePath(rawPath)
+		? compactUnscopedPath(rawPath)
+		: cleanPathSegments(rawPath).join("/");
+	return displayPath ? { displayPath, filterPath: rawPath } : null;
+}
+
+function pathMatchesQuery(path: ScopedPath, query: string): boolean {
+	const normalized = path.displayPath.toLowerCase();
+	if (query.startsWith(".")) return normalized.endsWith(query);
+	return normalized.includes(query);
+}
+
+function eventKey(event: HookEvent, index: number): string {
+	return `${event.session_id}\x00${event.timestamp}\x00${event.event_name}\x00${event.tool_name}\x00${index}`;
+}
+
+function findingKey(finding: RuleFinding, index: number): string {
+	return `${finding.session_id}\x00${finding.timestamp}\x00${finding.rule_id}\x00${finding.decision ?? "context"}\x00${index}`;
 }
 
 function sortAlpha(children: PathNode[]): PathNode[] {
@@ -142,21 +221,9 @@ function buildTree(
 	sessionIndex: Map<string, HookEvent[]>,
 	repoRoot?: string | null,
 ): PathNode {
-	const root: PathNode = {
-		name: "/",
-		fullPath: "",
-		eventCount: 0,
-		findingCount: 0,
-		blockCount: 0,
-		decisions: {},
-		severities: {},
-		rules: {},
-		children: new Map(),
-	};
+	const root = createPathNode("/", "", repoRoot ?? "");
 
-	const resolvePath = (p: string) => {
-		return normalizePath(p, repoRoot);
-	};
+	const resolvePath = (path: string): ScopedPath | null => normalizePath(path, repoRoot);
 
 	const sessionPaths = new Map<string, string[]>();
 	const neededSessions = new Set(rules.map((r) => r.session_id));
@@ -165,81 +232,96 @@ function buildTree(
 		const paths = sessionEvs
 			.flatMap((e) => e.candidate_paths ?? [])
 			.map(resolvePath)
-			.filter(isValidPath);
+			.filter((path): path is ScopedPath =>
+				Boolean(path && isValidPath(path.displayPath)),
+			)
+			.map((path) => path.displayPath);
 		sessionPaths.set(sessionId, [...new Set(paths)]);
 	}
 
-	const pathFindings = new Map<string, RuleFinding[]>();
-	for (const r of rules) {
+	const pathFindings = new Map<
+		string,
+		Array<{ finding: RuleFinding; key: string }>
+	>();
+	for (const [index, r] of rules.entries()) {
 		const paths = sessionPaths.get(r.session_id) || [];
+		const key = findingKey(r, index);
 		for (const p of paths) {
 			if (!pathFindings.has(p)) pathFindings.set(p, []);
-			pathFindings.get(p)?.push(r);
+			pathFindings.get(p)?.push({ finding: r, key });
 		}
 	}
 
-	const pathEvents = new Map<string, number>();
-	for (const e of events) {
-		for (const p of (e.candidate_paths ?? [])
+	const pathEvents = new Map<string, { filterPath: string; eventIds: Set<string> }>();
+	for (const [index, e] of events.entries()) {
+		const key = eventKey(e, index);
+		for (const scopedPath of (e.candidate_paths ?? [])
 			.map(resolvePath)
-			.filter(isValidPath)) {
-			pathEvents.set(p, (pathEvents.get(p) || 0) + 1);
+			.filter((path): path is ScopedPath =>
+				Boolean(path && isValidPath(path.displayPath)),
+			)) {
+			const bucket = pathEvents.get(scopedPath.displayPath) ?? {
+				filterPath: scopedPath.filterPath,
+				eventIds: new Set<string>(),
+			};
+			bucket.eventIds.add(key);
+			pathEvents.set(scopedPath.displayPath, bucket);
 		}
 	}
 
-	for (const [path, count] of pathEvents) {
+	for (const [path, { filterPath, eventIds }] of pathEvents) {
 		const parts = path.split("/").filter(Boolean);
 		let node = root;
 		let fullPath = "";
-		for (const part of parts) {
+		let currentFilterPath = "";
+		for (const [index, part] of parts.entries()) {
 			fullPath += (fullPath ? "/" : "") + part;
+			currentFilterPath =
+				index === parts.length - 1
+					? filterPath
+					: repoRoot
+						? `${trimTrailingSlash(repoRoot)}/${fullPath}`
+						: fullPath;
 			let child = node.children.get(part);
 			if (!child) {
-				child = {
-					name: part,
-					fullPath,
-					eventCount: 0,
-					findingCount: 0,
-					blockCount: 0,
-					decisions: {},
-					severities: {},
-					rules: {},
-					children: new Map(),
-				};
+				child = createPathNode(part, fullPath, currentFilterPath);
 				node.children.set(part, child);
 			}
 			node = child;
 		}
-		node.eventCount += count;
+		for (const eventId of eventIds) node.eventIds.add(eventId);
 		const findings = pathFindings.get(path) || [];
-		node.findingCount += findings.length;
-		for (const f of findings) {
+		for (const { finding: f, key } of findings) {
+			node.findingIds.add(key);
 			const dec = f.decision ?? "context";
 			node.decisions[dec] = (node.decisions[dec] || 0) + 1;
 			node.severities[f.severity] = (node.severities[f.severity] || 0) + 1;
 			node.rules[f.rule_id] = (node.rules[f.rule_id] || 0) + 1;
-			if (dec === "block" || dec === "deny") node.blockCount++;
+			if (dec === "block" || dec === "deny") node.blockFindingIds.add(key);
 		}
 	}
 
 	function propagate(node: PathNode): {
-		events: number;
-		findings: number;
-		blocks: number;
+		events: Set<string>;
+		findings: Set<string>;
+		blocks: Set<string>;
 	} {
-		let ev = node.eventCount,
-			fi = node.findingCount,
-			bl = node.blockCount;
 		for (const child of node.children.values()) {
 			const c = propagate(child);
-			ev += c.events;
-			fi += c.findings;
-			bl += c.blocks;
+			for (const eventId of c.events) node.eventIds.add(eventId);
+			for (const findingId of c.findings) node.findingIds.add(findingId);
+			for (const blockFindingId of c.blocks) {
+				node.blockFindingIds.add(blockFindingId);
+			}
 		}
-		node.eventCount = ev;
-		node.findingCount = fi;
-		node.blockCount = bl;
-		return { events: ev, findings: fi, blocks: bl };
+		node.eventCount = node.eventIds.size;
+		node.findingCount = node.findingIds.size;
+		node.blockCount = node.blockFindingIds.size;
+		return {
+			events: node.eventIds,
+			findings: node.findingIds,
+			blocks: node.blockFindingIds,
+		};
 	}
 	propagate(root);
 
@@ -253,12 +335,13 @@ function buildHeatmapData(
 	sessionIndex: Map<string, HookEvent[]>,
 ): {
 	files: string[];
+	filterPaths: Map<string, string>;
 	buckets: string[];
 	cellMap: Map<string, { findings: number; blocks: number }>;
 } {
 	const allTimestamps = rules.map((r) => new Date(r.timestamp).getTime());
 	if (allTimestamps.length === 0)
-		return { files: [], buckets: [], cellMap: new Map() };
+		return { files: [], filterPaths: new Map(), buckets: [], cellMap: new Map() };
 	const minT = allTimestamps.reduce((a, b) => Math.min(a, b), Infinity);
 	const maxT = allTimestamps.reduce((a, b) => Math.max(a, b), -Infinity);
 	const range = maxT - minT || 1;
@@ -279,18 +362,35 @@ function buildHeatmapData(
 
 	const cellMap = new Map<string, { findings: number; blocks: number }>();
 	const fileSet = new Set<string>();
+	const fileFilterPaths = new Map<string, string>();
+	const sessionRepoRoots = new Map<string, string | null | undefined>();
+	for (const rule of rules) {
+		if (!sessionRepoRoots.has(rule.session_id)) {
+			sessionRepoRoots.set(rule.session_id, rule.resolved_repo_root);
+		}
+	}
 
 	const sessionPaths = new Map<string, Set<string>>();
 	const neededSessions = new Set(rules.map((r) => r.session_id));
 	for (const sessionId of neededSessions) {
 		const sessionEvents = sessionIndex.get(sessionId) || [];
+		const repoRoot =
+			sessionEvents.find((event) => event.resolved_repo_root)?.resolved_repo_root ??
+			sessionRepoRoots.get(sessionId);
+		const scopedPaths = sessionEvents
+			.flatMap((e) => e.candidate_paths ?? [])
+			.map((path) => normalizePath(path, repoRoot))
+			.filter((path): path is ScopedPath =>
+				Boolean(path && isValidPath(path.displayPath)),
+			);
+		for (const scopedPath of scopedPaths) {
+			if (!fileFilterPaths.has(scopedPath.displayPath)) {
+				fileFilterPaths.set(scopedPath.displayPath, scopedPath.filterPath);
+			}
+		}
 		sessionPaths.set(
 			sessionId,
-			new Set(
-				sessionEvents
-					.flatMap((e) => e.candidate_paths ?? [])
-					.filter(isValidPath),
-			),
+			new Set(scopedPaths.map((path) => path.displayPath)),
 		);
 	}
 
@@ -327,7 +427,7 @@ function buildHeatmapData(
 		(a, b) => (fileTotals.get(b) || 0) - (fileTotals.get(a) || 0),
 	);
 
-	return { files, buckets: bucketLabels, cellMap };
+	return { files, filterPaths: fileFilterPaths, buckets: bucketLabels, cellMap };
 }
 
 const TreeRow = memo(function TreeRow({
@@ -373,8 +473,8 @@ const TreeRow = memo(function TreeRow({
 		}
 	}, [node.children, sortKey]);
 	const absolutePath = repoRoot
-		? `${repoRoot}/${node.fullPath}`
-		: node.fullPath;
+		? node.filterPath
+		: node.filterPath || node.fullPath;
 	const isActive = activePathFilter === absolutePath;
 
 	const handleClick = useCallback(() => {
@@ -393,48 +493,103 @@ const TreeRow = memo(function TreeRow({
 		<>
 			<tr
 				className={cn(
-					"border-b border-border/30 hover:bg-muted/20 cursor-pointer transition-colors",
+					"border-b border-border/30 hover:bg-muted/10 transition-colors animate-fade-in",
 					isActive && "bg-primary/5 border-primary/20",
 				)}
-				onClick={handleClick}
 			>
 				<td
-					className="px-2 py-1.5"
+					className="px-2 py-1.5 text-xs text-left"
 					style={{ paddingLeft: `${depth * 16 + 8}px` }}
 				>
 					<div className="flex items-center gap-1.5">
 						{hasChildren ? (
-							isOpen ? (
-								<ChevronDown className="w-3 h-3 text-muted-foreground" />
-							) : (
-								<ChevronRight className="w-3 h-3 text-muted-foreground" />
-							)
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									handleClick();
+								}}
+								className="p-0.5 hover:bg-muted rounded text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/80 transition-transform duration-200"
+								aria-label={isOpen ? "Collapse directory" : "Expand directory"}
+							>
+								<ChevronRight
+									className={cn(
+										"w-3.5 h-3.5 transition-transform duration-200 ease-out-quart motion-reduce:transition-none",
+										isOpen && "transform rotate-90"
+									)}
+								/>
+							</button>
 						) : (
-							<span className="w-3" />
+							<span className="w-4.5" />
 						)}
 						{isFile ? (
-							<FileText className="w-3.5 h-3.5 text-muted-foreground" />
+							<FileText className="w-3.5 h-3.5 text-muted-foreground/80" />
 						) : (
-							<Folder className="w-3.5 h-3.5 text-signal-ask" />
+							<Folder className="w-3.5 h-3.5 text-signal-ask/90" />
 						)}
-						<span
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								if (hasChildren) {
+									handleClick();
+								} else {
+									onPathFilter(isActive ? null : absolutePath);
+								}
+							}}
 							className={cn(
-								"text-xs",
+								"font-mono text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/80 rounded px-1 py-0.5 hover:text-primary transition-colors select-text",
 								node.blockCount > 0
-									? "text-signal-block font-medium"
+									? "text-signal-block font-semibold"
 									: "text-foreground",
+								isActive && "text-primary font-bold bg-primary/5 border border-primary/20"
 							)}
 						>
 							{node.name}
-						</span>
+						</button>
+					</div>
+				</td>
+				<td className="px-2 py-1.5 text-right text-xs font-mono text-muted-foreground/90">
+					<span key={node.eventCount} className="animate-count-pulse">
+						{node.eventCount}
+					</span>
+				</td>
+				<td className="px-2 py-1.5 text-right text-xs font-mono">
+					<span
+						key={node.findingCount}
+						className={cn(
+							"animate-count-pulse",
+							node.findingCount > 0
+								? "text-signal-ask font-medium"
+								: "text-muted-foreground/60",
+						)}
+					>
+						{node.findingCount}
+					</span>
+				</td>
+				<td className="px-2 py-1.5 text-right text-xs font-mono">
+					<span
+						key={node.blockCount}
+						className={cn(
+							"animate-count-pulse",
+							node.blockCount > 0
+								? "text-signal-block font-semibold"
+								: "text-muted-foreground/60",
+						)}
+					>
+						{node.blockCount}
+					</span>
+				</td>
+				<td className="px-2 py-1.5 text-center text-xs w-24">
+					<div className="flex items-center justify-center gap-1.5">
 						<button
 							type="button"
 							onClick={handleFilter}
 							className={cn(
-								"ml-1 p-0.5 rounded transition-colors",
+								"p-1 rounded transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-primary border",
 								isActive
-									? "text-primary bg-primary/10"
-									: "text-muted-foreground/0 hover:text-primary group-hover:text-muted-foreground/50",
+									? "text-primary bg-primary/10 border-primary/20 hover:bg-primary/20"
+									: "text-muted-foreground/80 border-border/40 hover:text-primary hover:bg-muted/40"
 							)}
 							title={
 								isActive
@@ -443,52 +598,30 @@ const TreeRow = memo(function TreeRow({
 							}
 						>
 							{isActive ? (
-								<X className="w-3 h-3" />
+								<X className="w-3.5 h-3.5" />
 							) : (
-								<Filter className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+								<Filter className="w-3.5 h-3.5" />
 							)}
 						</button>
 						<FlagButton
 							itemType="path"
 							itemId={absolutePath}
-							label={`Path: ${absolutePath}`}
+							label={`Path: ${node.fullPath}`}
 							compact
 						/>
 					</div>
 				</td>
-				<td className="px-2 py-1.5 text-right text-xs">{node.eventCount}</td>
-				<td className="px-2 py-1.5 text-right text-xs">
-					<span
-						className={cn(
-							node.findingCount > 0
-								? "text-signal-ask"
-								: "text-muted-foreground",
-						)}
-					>
-						{node.findingCount}
-					</span>
-				</td>
-				<td className="px-2 py-1.5 text-right text-xs">
-					<span
-						className={cn(
-							node.blockCount > 0
-								? "text-signal-block font-semibold"
-								: "text-muted-foreground",
-						)}
-					>
-						{node.blockCount}
-					</span>
-				</td>
 				<td className="px-2 py-1.5 text-xs">
 					{Object.entries(node.rules).length > 0 && (
-						<div className="flex gap-1 flex-wrap max-w-[200px]">
+						<div className="flex gap-1 flex-wrap max-w-[220px]">
 							{Object.entries(node.rules)
 								.sort(([, a], [, b]) => b - a)
 								.slice(0, 3)
 								.map(([rule, count]) => (
 									<span
 										key={rule}
-										className="px-1 py-0.5 bg-muted rounded text-[10px] text-muted-foreground"
+										className="px-1.5 py-0.5 bg-muted/60 border border-border/30 rounded-sm text-[10px] text-muted-foreground font-mono transition-all hover:bg-muted hover:text-foreground"
+										title={`${rule}: ${count} findings`}
 									>
 										{rule.length > 18 ? `${rule.slice(0, 16)}…` : rule} ×{count}
 									</span>
@@ -552,7 +685,7 @@ const TreeRowsList = memo(function TreeRowsList({
 			{sorted.length > visibleCount && (
 				<tr>
 					<td
-						colSpan={5}
+						colSpan={6}
 						className="px-2 py-1.5 text-xs text-muted-foreground"
 						style={{ paddingLeft: `${depth * 16 + 8}px` }}
 					>
@@ -650,8 +783,8 @@ const HeatmapView = memo(function HeatmapView({
 									<button
 										type="button"
 										className="font-mono text-foreground hover:text-primary"
-										onClick={() => onPathFilter(file)}
-										title={`Filter to ${file}`}
+										onClick={() => onPathFilter(heatmap.filterPaths.get(file) ?? file)}
+										title={`Filter to ${heatmap.filterPaths.get(file) ?? file}`}
 									>
 										{file}
 									</button>
@@ -736,9 +869,55 @@ export const PathExplorer = memo(function PathExplorer({
 	const [expandOverride, setExpandOverride] = useState<boolean | null>(null);
 	const [sortKey, setSortKey] = useState<SortKey>("alpha");
 	const [nonSlopgateExpanded, setNonSlopgateExpanded] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 
 	// Single shared session index — prevents duplicate map building
 	const sessionIndex = useMemo(() => buildSessionIndex(events), [events]);
+
+	const filteredEvents = useMemo(() => {
+		if (!searchQuery) return events;
+		const q = searchQuery.toLowerCase().trim();
+		return events.filter((e) => {
+			const repoRoot = e.enforcement_mode === "outside_repo"
+				? null
+				: e.resolved_repo_root;
+			return (e.candidate_paths ?? [])
+				.map((path) => normalizePath(path, repoRoot))
+				.some((path) => path !== null && pathMatchesQuery(path, q));
+		});
+	}, [events, searchQuery]);
+
+	const filteredRules = useMemo(() => {
+		if (!searchQuery) return rules;
+		const q = searchQuery.toLowerCase().trim();
+		return rules.filter((r) => {
+			if (r.rule_id.toLowerCase().includes(q)) return true;
+			if (r.decision?.toLowerCase() === q) return true;
+			if (r.severity?.toLowerCase() === q) return true;
+
+			const sessionEvs = sessionIndex.get(r.session_id) || [];
+			return sessionEvs.some((event) => {
+				const repoRoot = event.enforcement_mode === "outside_repo"
+					? null
+					: event.resolved_repo_root ?? r.resolved_repo_root;
+				return (event.candidate_paths ?? [])
+					.map((path) => normalizePath(path, repoRoot))
+					.some((path) => path !== null && pathMatchesQuery(path, q));
+			});
+		});
+	}, [rules, searchQuery, sessionIndex]);
+
+	const { filteredEventsCount, filteredFindingsCount, filteredBlocksCount } = useMemo(() => {
+		const targetEvents = searchQuery ? filteredEvents : events;
+		const targetRules = searchQuery ? filteredRules : rules;
+		return {
+			filteredEventsCount: targetEvents.length,
+			filteredFindingsCount: targetRules.length,
+			filteredBlocksCount: targetRules.filter(
+				(r) => r.decision === "block" || r.decision === "deny",
+			).length,
+		};
+	}, [events, rules, searchQuery, filteredEvents, filteredRules]);
 
 	const sessionMeta = useMemo(() => {
 		const meta = new Map<
@@ -798,7 +977,7 @@ export const PathExplorer = memo(function PathExplorer({
 			rules: [],
 		};
 
-		for (const e of events) {
+		for (const e of filteredEvents) {
 			const { isSlopgate, repoRoot, projectName } = getProjectInfo(
 				e.session_id,
 			);
@@ -817,7 +996,7 @@ export const PathExplorer = memo(function PathExplorer({
 			}
 		}
 
-		for (const r of rules) {
+		for (const r of filteredRules) {
 			const { isSlopgate, repoRoot } = getProjectInfo(r.session_id);
 			if (isSlopgate && repoRoot) {
 				const proj = projectMap.get(repoRoot);
@@ -833,7 +1012,7 @@ export const PathExplorer = memo(function PathExplorer({
 			projectGroups: Array.from(projectMap.values()),
 			nonSlopgateGroup: nonSlop,
 		};
-	}, [events, rules, getProjectInfo]);
+	}, [filteredEvents, filteredRules, getProjectInfo]);
 
 	const projectTrees = useMemo(() => {
 		return projectGroups.map((proj) => {
@@ -984,10 +1163,8 @@ export const PathExplorer = memo(function PathExplorer({
 			{/* Hottest files strip - only on tree tab */}
 			{tab === "tree" && allFiles.length > 0 && (
 				<div className="flex gap-2 flex-wrap">
-					{allFiles.slice(0, 8).map(({ node: f, repoRoot }) => {
-						const absolutePath = repoRoot
-							? `${repoRoot}/${f.fullPath}`
-							: f.fullPath;
+					{allFiles.slice(0, 8).map(({ node: f }) => {
+						const absolutePath = f.filterPath || f.fullPath;
 						return (
 							<button
 								type="button"
@@ -1016,45 +1193,60 @@ export const PathExplorer = memo(function PathExplorer({
 			{/* Tab content */}
 			{tab === "tree" && (
 				<div className="space-y-4">
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 w-full">
 						<button
 							type="button"
 							onClick={() => setExpandOverride((prev) => prev !== true)}
-							className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-sm border border-border text-muted-foreground hover:bg-muted transition-colors"
+							className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-muted/30 border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
 						>
-							<ChevronsUpDown className="w-3 h-3" />
+							<ChevronsUpDown className="w-3.5 h-3.5" />
 							{expandOverride === true ? "Collapse All" : "Expand All"}
 						</button>
 						{expandOverride !== null && (
 							<button
 								type="button"
 								onClick={() => setExpandOverride(null)}
-								className="text-[10px] px-2 py-1 rounded-sm text-muted-foreground hover:bg-muted transition-colors"
+								className="text-[10px] px-2 py-1.5 rounded text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
 							>
 								Reset
 							</button>
 						)}
-						<div className="ml-auto flex items-center gap-1">
-							<ArrowUpDown className="w-3 h-3 text-muted-foreground" />
-							{(
-								["alpha", "findings", "blocks", "events", "name"] as SortKey[]
-							).map((k) => (
+						<div className="ml-auto relative w-72">
+							<Filter className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground/60" />
+							<input
+								type="text"
+								placeholder="Filter paths, rules, extensions..."
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								className="w-full pl-8 pr-8 py-1.5 bg-muted/40 border border-border/80 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground/50 transition-all font-mono"
+							/>
+							{searchQuery && (
 								<button
 									type="button"
-									key={k}
-									onClick={() => setSortKey(k)}
-									className={cn(
-										"px-2 py-0.5 text-[10px] rounded-sm transition-colors capitalize",
-										sortKey === k
-											? "bg-primary text-primary-foreground"
-											: "text-muted-foreground hover:bg-muted",
-									)}
+									onClick={() => setSearchQuery("")}
+									className="absolute right-2.5 top-2 text-muted-foreground/60 hover:text-foreground focus:outline-none"
+									aria-label="Clear filter query"
 								>
-									{k}
+									<X className="w-3.5 h-3.5" />
 								</button>
-							))}
+							)}
 						</div>
 					</div>
+					{searchQuery && (
+						<div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/10 rounded text-xs text-muted-foreground animate-fade-in font-mono">
+							<span className="text-primary font-semibold">Filter active:</span>
+							<span>
+								{filteredEventsCount} events · {filteredFindingsCount} findings · {filteredBlocksCount} blocks matching "{searchQuery}"
+							</span>
+							<button
+								type="button"
+								onClick={() => setSearchQuery("")}
+								className="ml-auto hover:text-foreground text-muted-foreground/60 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1"
+							>
+								Clear
+							</button>
+						</div>
+					)}
 
 					{projectTrees.map((proj) => (
 						<div key={proj.repoRoot} className="space-y-2">
@@ -1073,64 +1265,69 @@ export const PathExplorer = memo(function PathExplorer({
 							<div className="border border-border rounded-md bg-card/30 overflow-hidden">
 								<table className="w-full text-xs">
 									<thead>
-										<tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-											<th
-												className={cn(
-													"px-2 py-2 text-left cursor-pointer hover:text-foreground select-none",
-													sortKey === "name" && "text-primary font-bold",
-												)}
-												onClick={() => setSortKey("name")}
-											>
-												<span className="flex items-center gap-1">
-													Path
-													{sortKey === "name" && (
-														<ArrowUpDown className="w-3 h-3" />
+										<tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-mono bg-muted/20">
+											<th className="px-2 py-2 text-left">
+												<button
+													type="button"
+													onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
+													className={cn(
+														"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+														(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
 													)}
-												</span>
+												>
+													Path
+													{(sortKey === "name" || sortKey === "alpha") && (
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+													)}
+												</button>
 											</th>
-											<th
-												className={cn(
-													"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-													sortKey === "events" && "text-primary font-bold",
-												)}
-												onClick={() => setSortKey("events")}
-											>
-												<span className="flex items-center justify-end gap-1">
+											<th className="px-2 py-2 text-right w-24">
+												<button
+													type="button"
+													onClick={() => setSortKey("events")}
+													className={cn(
+														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+														sortKey === "events" && "text-primary font-bold"
+													)}
+												>
 													Events
 													{sortKey === "events" && (
-														<ArrowUpDown className="w-3 h-3" />
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
 													)}
-												</span>
+												</button>
 											</th>
-											<th
-												className={cn(
-													"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-													sortKey === "findings" && "text-primary font-bold",
-												)}
-												onClick={() => setSortKey("findings")}
-											>
-												<span className="flex items-center justify-end gap-1">
+											<th className="px-2 py-2 text-right w-24">
+												<button
+													type="button"
+													onClick={() => setSortKey("findings")}
+													className={cn(
+														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+														sortKey === "findings" && "text-primary font-bold"
+													)}
+												>
 													Findings
 													{sortKey === "findings" && (
-														<ArrowUpDown className="w-3 h-3" />
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
 													)}
-												</span>
+												</button>
 											</th>
-											<th
-												className={cn(
-													"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-													sortKey === "blocks" && "text-primary font-bold",
-												)}
-												onClick={() => setSortKey("blocks")}
-											>
-												<span className="flex items-center justify-end gap-1">
+											<th className="px-2 py-2 text-right w-24">
+												<button
+													type="button"
+													onClick={() => setSortKey("blocks")}
+													className={cn(
+														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+														sortKey === "blocks" && "text-primary font-bold"
+													)}
+												>
 													Blocks
 													{sortKey === "blocks" && (
-														<ArrowUpDown className="w-3 h-3" />
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
 													)}
-												</span>
+												</button>
 											</th>
-											<th className="px-2 py-2 text-left">Top Rules</th>
+											<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
+											<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -1182,67 +1379,71 @@ export const PathExplorer = memo(function PathExplorer({
 									<div className="border border-border rounded-md bg-card/30 overflow-hidden">
 										<table className="w-full text-xs">
 											<thead>
-												<tr className="border-b border-border text-muted-foreground text-[10px] uppercase">
-													<th
-														className={cn(
-															"px-2 py-2 text-left cursor-pointer hover:text-foreground select-none",
-															sortKey === "name" && "text-primary font-bold",
-														)}
-														onClick={() => setSortKey("name")}
-													>
-														<span className="flex items-center gap-1">
-															Path
-															{sortKey === "name" && (
-																<ArrowUpDown className="w-3 h-3" />
+												<tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-mono bg-muted/20">
+													<th className="px-2 py-2 text-left">
+														<button
+															type="button"
+															onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
+															className={cn(
+																"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
 															)}
-														</span>
+														>
+															Path
+															{(sortKey === "name" || sortKey === "alpha") && (
+																<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+															)}
+														</button>
 													</th>
-													<th
-														className={cn(
-															"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-															sortKey === "events" && "text-primary font-bold",
-														)}
-														onClick={() => setSortKey("events")}
-													>
-														<span className="flex items-center justify-end gap-1">
+													<th className="px-2 py-2 text-right w-24">
+														<button
+															type="button"
+															onClick={() => setSortKey("events")}
+															className={cn(
+																"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																sortKey === "events" && "text-primary font-bold"
+															)}
+														>
 															Events
 															{sortKey === "events" && (
-																<ArrowUpDown className="w-3 h-3" />
+																<ArrowUpDown className="w-3 h-3 animate-fade-in" />
 															)}
-														</span>
+														</button>
 													</th>
-													<th
-														className={cn(
-															"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-															sortKey === "findings" &&
-																"text-primary font-bold",
-														)}
-														onClick={() => setSortKey("findings")}
-													>
-														<span className="flex items-center justify-end gap-1">
+													<th className="px-2 py-2 text-right w-24">
+														<button
+															type="button"
+															onClick={() => setSortKey("findings")}
+															className={cn(
+																"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																sortKey === "findings" && "text-primary font-bold"
+															)}
+														>
 															Findings
 															{sortKey === "findings" && (
-																<ArrowUpDown className="w-3 h-3" />
-															)}
-														</span>
-													</th>
-													<th
-														className={cn(
-															"px-2 py-2 text-right w-20 cursor-pointer hover:text-foreground select-none",
-															sortKey === "blocks" && "text-primary font-bold",
-														)}
-														onClick={() => setSortKey("blocks")}
-													>
-														<span className="flex items-center justify-end gap-1">
-															Blocks
-															{sortKey === "blocks" && (
-																<ArrowUpDown className="w-3 h-3" />
-															)}
-														</span>
-													</th>
-													<th className="px-2 py-2 text-left">Top Rules</th>
-												</tr>
-											</thead>
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+													)}
+												</button>
+											</th>
+											<th className="px-2 py-2 text-right w-24">
+												<button
+													type="button"
+													onClick={() => setSortKey("blocks")}
+													className={cn(
+														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+														sortKey === "blocks" && "text-primary font-bold"
+													)}
+												>
+													Blocks
+													{sortKey === "blocks" && (
+														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+													)}
+												</button>
+											</th>
+											<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
+											<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
+										</tr>
+									</thead>
 											<tbody>
 												<TreeRowsList
 													sorted={nonSlopgateTree.sorted}
@@ -1266,8 +1467,8 @@ export const PathExplorer = memo(function PathExplorer({
 			{tab === "heatmap" && (
 				<div className="border border-border rounded-md bg-card/30 p-3 overflow-hidden">
 					<HeatmapView
-						events={events}
-						rules={rules}
+						events={filteredEvents}
+						rules={filteredRules}
 						onPathFilter={onPathFilter}
 						sessionIndex={sessionIndex}
 					/>
