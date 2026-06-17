@@ -1,6 +1,7 @@
 """Suite-wide install support."""
 
 from __future__ import annotations
+
 import os
 import platform
 import shutil
@@ -8,20 +9,21 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
 from slopgate.cli.commands import VALID_PLATFORMS
-from slopgate.installer.suite import autoupdate
+from slopgate.installer._shared import find_binary, shell_command
 from slopgate.installer.suite import (
+    AUTOUPDATE_MARKER,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DEFAULT_UPDATE_SOURCE,
     SchedulerPlan,
+    autoupdate,
 )
-from slopgate.installer.suite import AUTOUPDATE_MARKER
-from slopgate.installer._shared import find_binary, shell_command
 
 __all__ = ["AUTOUPDATE_MARKER"]
 from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
-_INSTALL_TARGETS = VALID_PLATFORMS
+_INSTALL_TARGETS = VALID_PLATFORMS[:4]
 CLAUDE_PLATFORM, CODEX_PLATFORM, OPENCODE_PLATFORM, CURSOR_PLATFORM = _INSTALL_TARGETS
 
 

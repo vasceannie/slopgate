@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import argparse
 
-from slopgate.constants import LINT_SCOPE_ALL, UNKNOWN_VALUE
+from slopgate.constants import UNKNOWN_VALUE
 
 VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor", "pi")
+INSTALL_TARGETS = VALID_PLATFORMS
 RUNTIME_PLATFORMS = (*VALID_PLATFORMS, UNKNOWN_VALUE)
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(RUNTIME_PLATFORMS)} "
-    f"(default: {UNKNOWN_VALUE})",
+    f"(default: {UNKNOWN_VALUE})"
 )
 
 
