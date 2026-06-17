@@ -18,6 +18,7 @@ __all__ = [
     "CodexAdapter",
     "CursorAdapter",
     "OpenCodeAdapter",
+    "PiAdapter",
 ]
 
 from slopgate.adapters.base import PlatformAdapter
@@ -25,12 +26,14 @@ from slopgate.adapters.claude import ClaudeAdapter
 from slopgate.adapters.codex import CodexAdapter
 from slopgate.adapters.cursor import CursorAdapter
 from slopgate.adapters.opencode import OpenCodeAdapter
+from slopgate.adapters.pi import PiAdapter
 
 ADAPTERS: dict[str, type[PlatformAdapter]] = {
     "claude": ClaudeAdapter,
     "codex": CodexAdapter,
     "cursor": CursorAdapter,
     "opencode": OpenCodeAdapter,
+    "pi": PiAdapter,
 }
 
 _ADAPTER_CACHE: dict[str, PlatformAdapter] = {}

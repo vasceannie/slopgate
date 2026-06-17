@@ -4,12 +4,11 @@ import argparse
 
 from slopgate.constants import LINT_SCOPE_ALL, UNKNOWN_VALUE
 
-VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor")
+VALID_PLATFORMS = ("claude", "codex", "opencode", "cursor", "pi")
 RUNTIME_PLATFORMS = (*VALID_PLATFORMS, UNKNOWN_VALUE)
-INSTALL_TARGETS = (*VALID_PLATFORMS, LINT_SCOPE_ALL)
 PLATFORM_HELP = (
     f"Target platform. Choices: {', '.join(RUNTIME_PLATFORMS)} "
-    f"(default: {UNKNOWN_VALUE})"
+    f"(default: {UNKNOWN_VALUE})",
 )
 
 

@@ -110,6 +110,7 @@ export default function Dashboard() {
 		platforms: [],
 		pathFilter: null,
 	});
+	const [activeTab, setActiveTab] = useState("overview");
 
 	const data = useTraceData(filters);
 	const harnessStatus = useHarnessStatus();
@@ -164,7 +165,7 @@ export default function Dashboard() {
 
 			{/* Tabbed content */}
 			<div className="px-6 pt-4 pb-6">
-				<Tabs defaultValue="overview" className="w-full">
+				<Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
 					<TabsList className="bg-secondary border border-border w-full justify-start gap-0 h-9 rounded-lg">
 						<TabsTrigger
 							value="overview"
@@ -182,7 +183,7 @@ export default function Dashboard() {
 							value="paths"
 							className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary rounded-md"
 						>
-							Paths & Files
+							Project
 						</TabsTrigger>
 						<TabsTrigger
 							value="sessions"
@@ -240,6 +241,8 @@ export default function Dashboard() {
 								rules={data.unfilteredRules}
 								onPathFilter={handlePathFilter}
 								activePathFilter={filters.pathFilter}
+								onOpenRules={() => setActiveTab("rules")}
+								onOpenOps={() => setActiveTab("ops")}
 							/>
 						</LazyTab>
 					</TabsContent>

@@ -1,6 +1,7 @@
 import {
 	AlertTriangle,
 	ArrowUpDown,
+	CheckCircle2,
 	ChevronDown,
 	ChevronRight,
 	ChevronsUpDown,
@@ -9,9 +10,20 @@ import {
 	Flag as FlagIcon,
 	Folder,
 	Grid3X3,
+	Plus,
+	RotateCcw,
+	Save,
+	Settings,
+	Sparkles,
 	TreePine,
 	X,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { RuleIterationModal } from "./RuleIterationModal";
+import { useRulesConfig } from "@/context/useRulesConfig";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type {
@@ -31,6 +43,22 @@ interface Props {
 	rules: RuleFinding[];
 	onPathFilter: (path: string | null) => void;
 	activePathFilter: string | null;
+	onOpenRules?: () => void;
+	onOpenOps?: () => void;
+	defaultTab?: "control-room" | "telemetry" | "recommendations";
+}
+
+type SelectedRepoKey = string | "all" | "outside_repo";
+
+interface RepoOption {
+	key: string;
+	label: string;
+	repoRoot: string | null;
+	mode: "all" | "repo" | "outside_repo";
+	events: HookEvent[];
+	rules: RuleFinding[];
+	tree?: PathNode;
+	sorted?: PathNode[];
 }
 
 interface PathNode {
@@ -620,7 +648,7 @@ const TreeRow = memo(function TreeRow({
 								.map(([rule, count]) => (
 									<span
 										key={rule}
-										className="px-1.5 py-0.5 bg-muted/60 border border-border/30 rounded-sm text-[10px] text-muted-foreground font-mono transition-all hover:bg-muted hover:text-foreground"
+										className="px-1.5 py-0.5 bg-muted/60 border border-border/30 rounded-sm text-xs text-muted-foreground font-mono transition-all hover:bg-muted hover:text-foreground"
 										title={`${rule}: ${count} findings`}
 									>
 										{rule.length > 18 ? `${rule.slice(0, 16)}…` : rule} ×{count}
@@ -760,7 +788,7 @@ const HeatmapView = memo(function HeatmapView({
 	return (
 		<div className="space-y-2">
 			<div className="overflow-x-auto">
-				<table className="text-[10px] border-collapse">
+				<table className="text-xs border-collapse">
 					<thead>
 						<tr>
 							<th className="text-left px-2 py-1 text-muted-foreground sticky left-0 bg-card/90 z-10">
@@ -798,7 +826,7 @@ const HeatmapView = memo(function HeatmapView({
 										<td key={bucket} className="px-0.5 py-0.5">
 											<div
 												className={cn(
-													"w-8 h-6 rounded-sm flex items-center justify-center text-[9px] font-medium transition-colors",
+													"w-8 h-6 rounded-sm flex items-center justify-center text-xs font-medium transition-colors",
 													val === 0
 														? "bg-muted/20 text-muted-foreground/30"
 														: hasBlocks
@@ -826,7 +854,7 @@ const HeatmapView = memo(function HeatmapView({
 				</table>
 			</div>
 			{pageCount > 1 && (
-				<div className="flex items-center justify-between text-[10px] text-muted-foreground px-1 pt-1">
+				<div className="flex items-center justify-between text-xs text-muted-foreground px-1 pt-1">
 					<span>
 						Showing {page * HEATMAP_PAGE_SIZE + 1}–
 						{Math.min((page + 1) * HEATMAP_PAGE_SIZE, heatmap.files.length)} of{" "}
@@ -864,12 +892,34 @@ export const PathExplorer = memo(function PathExplorer({
 	rules,
 	onPathFilter,
 	activePathFilter,
+	defaultTab,
 }: Props) {
+	const [selectedRepoKey, setSelectedRepoKey] = useState<SelectedRepoKey>("all");
+	const [activeExplorerTab, setActiveExplorerTab] = useState<"overview" | "telemetry" | "recommendations">(() => {
+		if (defaultTab === "control-room") return "overview";
+		return defaultTab ?? "overview";
+	});
 	const [tab, setTab] = useState<PathTab>("tree");
 	const [expandOverride, setExpandOverride] = useState<boolean | null>(null);
 	const [sortKey, setSortKey] = useState<SortKey>("alpha");
 	const [nonSlopgateExpanded, setNonSlopgateExpanded] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [newSkipPath, setNewSkipPath] = useState("");
+	const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+
+	// Glob test state
+	const [testPathInput, setTestPathInput] = useState("");
+	const [testResult, setTestResult] = useState<{ matches: boolean; glob: string | null } | null>(null);
+
+	const {
+		config,
+		pendingCount,
+		setSkipPaths,
+		saveConfig,
+		discardChanges,
+		saveStatus,
+		saveError,
+	} = useRulesConfig();
 
 	// Single shared session index — prevents duplicate map building
 	const sessionIndex = useMemo(() => buildSessionIndex(events), [events]);
@@ -1110,376 +1160,1018 @@ export const PathExplorer = memo(function PathExplorer({
 		[allFiles],
 	);
 
+	const getRepoEnforcementMode = useCallback((repoRoot: string): string => {
+		const repoEvents = events.filter((e) => e.resolved_repo_root === repoRoot);
+		for (const e of repoEvents) {
+			if (e.enforcement_mode) return e.enforcement_mode;
+		}
+		return "repo_strict";
+	}, [events]);
+
+	const matchesGlob = useCallback((path: string, glob: string): boolean => {
+		const cleanPath = path.trim();
+		const cleanGlob = glob.trim();
+		if (!cleanGlob) return false;
+
+		try {
+			let regexStr = cleanGlob.replace(/[.+^${}()|\\+]/g, "\\$&");
+			const doublePlaceholder = "___DBL_AST___";
+			regexStr = regexStr.replace(/\*\*/g, doublePlaceholder);
+			regexStr = regexStr.replace(/\*/g, "[^/]*");
+			regexStr = regexStr.replace(new RegExp(doublePlaceholder, "g"), ".*");
+			
+			if (!cleanGlob.includes("/")) {
+				const regex = new RegExp(`(^|/)${regexStr}($|/)`);
+				return regex.test(cleanPath);
+			}
+			const regex = new RegExp(`^${regexStr}$`);
+			return regex.test(cleanPath);
+		} catch {
+			return false;
+		}
+	}, []);
+
+	const handleTestPath = useCallback(() => {
+		const path = testPathInput.trim();
+		if (!path || !config) {
+			setTestResult(null);
+			return;
+		}
+		const skipPaths = config.skip_paths ?? [];
+		for (const glob of skipPaths) {
+			if (matchesGlob(path, glob)) {
+				setTestResult({ matches: true, glob });
+				return;
+			}
+		}
+		setTestResult({ matches: false, glob: null });
+	}, [testPathInput, config, matchesGlob]);
+
+	const findNodeByFilterPath = useCallback((root: PathNode, filterPath: string): PathNode | null => {
+		if (root.filterPath === filterPath) return root;
+		for (const child of root.children.values()) {
+			const found = findNodeByFilterPath(child, filterPath);
+			if (found) return found;
+		}
+		return null;
+	}, []);
+
+	const handleAddSkipPath = useCallback(() => {
+		const path = newSkipPath.trim();
+		if (!path) return;
+		if (config) {
+			const currentSkipPaths = config.skip_paths ?? [];
+			if (!currentSkipPaths.includes(path)) {
+				setSkipPaths([...currentSkipPaths, path]);
+			}
+		}
+		setNewSkipPath("");
+	}, [newSkipPath, config, setSkipPaths]);
+
+	const handleRemoveSkipPath = useCallback((path: string) => {
+		if (config) {
+			const currentSkipPaths = config.skip_paths ?? [];
+			setSkipPaths(currentSkipPaths.filter((p) => p !== path));
+		}
+	}, [config, setSkipPaths]);
+
+	const skipPathRecommendations = useMemo(() => {
+		const candidates: { path: string; eventCount: number }[] = [];
+		for (const file of allFiles) {
+			const path = file.node.filterPath || file.node.fullPath;
+			if (selectedRepoKey !== "all") {
+				if (selectedRepoKey === "outside_repo") {
+					if (projectTrees.some((p) => path.startsWith(p.repoRoot))) continue;
+				} else {
+					if (!path.startsWith(selectedRepoKey)) continue;
+				}
+			}
+
+			if (file.node.eventCount > 0 && file.node.findingCount === 0) {
+				candidates.push({
+					path,
+					eventCount: file.node.eventCount,
+				});
+			}
+		}
+		return candidates
+			.sort((a, b) => b.eventCount - a.eventCount)
+			.slice(0, 4);
+	}, [allFiles, selectedRepoKey, projectTrees]);
+
+	const recommendationsCount = skipPathRecommendations.length;
+
+	const repoOptions = useMemo(() => {
+		const options: RepoOption[] = [
+			{
+				key: "all",
+				label: "All repositories",
+				repoRoot: null,
+				mode: "all",
+				events: filteredEvents,
+				rules: filteredRules,
+			},
+		];
+
+		for (const repo of projectTrees) {
+			options.push({
+				key: repo.repoRoot,
+				label: repo.projectName,
+				repoRoot: repo.repoRoot,
+				mode: "repo",
+				events: repo.events,
+				rules: repo.rules,
+				tree: repo.tree,
+				sorted: repo.sorted,
+			});
+		}
+
+		if (nonSlopgateTree) {
+			options.push({
+				key: "outside_repo",
+				label: "Outside enrolled repos",
+				repoRoot: null,
+				mode: "outside_repo",
+				events: nonSlopgateGroup.events,
+				rules: nonSlopgateGroup.rules,
+				tree: nonSlopgateTree.tree,
+				sorted: nonSlopgateTree.sorted,
+			});
+		}
+
+		return options;
+	}, [projectTrees, nonSlopgateTree, filteredEvents, filteredRules, nonSlopgateGroup]);
+
+	const selectedRepo = useMemo(() => {
+		return repoOptions.find((opt) => opt.key === selectedRepoKey);
+	}, [repoOptions, selectedRepoKey]);
+
+	const treesToRender = useMemo(() => {
+		if (selectedRepoKey === "all") return projectTrees;
+		if (selectedRepoKey === "outside_repo") return [];
+		return projectTrees.filter((p) => p.repoRoot === selectedRepoKey);
+	}, [projectTrees, selectedRepoKey]);
+
+	const heatmapEvents = useMemo(() => {
+		if (selectedRepoKey === "all") return filteredEvents;
+		if (selectedRepoKey === "outside_repo") return nonSlopgateGroup.events;
+		return filteredEvents.filter((e) => e.resolved_repo_root === selectedRepoKey);
+	}, [filteredEvents, selectedRepoKey, nonSlopgateGroup.events]);
+
+	const heatmapRules = useMemo(() => {
+		if (selectedRepoKey === "all") return filteredRules;
+		if (selectedRepoKey === "outside_repo") return nonSlopgateGroup.rules;
+		return filteredRules.filter((r) => r.resolved_repo_root === selectedRepoKey);
+	}, [filteredRules, selectedRepoKey, nonSlopgateGroup.rules]);
+
+	const repoFiles = useMemo(() => {
+		const files: PathNode[] = [];
+		function collect(node: PathNode) {
+			if (node.children.size === 0 && node.eventCount > 0) {
+				files.push(node);
+			}
+			for (const c of node.children.values()) collect(c);
+		}
+
+		if (selectedRepoKey === "all") {
+			for (const proj of projectTrees) {
+				collect(proj.tree);
+			}
+			if (nonSlopgateTree) collect(nonSlopgateTree.tree);
+		} else {
+			const activeTree =
+				selectedRepoKey === "outside_repo"
+					? nonSlopgateTree?.tree
+					: projectTrees.find((p) => p.repoRoot === selectedRepoKey)?.tree;
+			if (activeTree) collect(activeTree);
+		}
+		return files;
+	}, [selectedRepoKey, projectTrees, nonSlopgateTree]);
+
+	const filesTouchedCount = repoFiles.length;
+
+	const hottestPath = useMemo(() => {
+		if (repoFiles.length === 0) return "None";
+		const sorted = [...repoFiles].sort((a, b) => b.eventCount - a.eventCount);
+		return sorted[0].filterPath || sorted[0].fullPath;
+	}, [repoFiles]);
+
+	const repoBlocks = useMemo(() => {
+		if (!selectedRepo) return 0;
+		return selectedRepo.rules.filter((r) => r.decision === "block" || r.decision === "deny").length;
+	}, [selectedRepo]);
+
 	return (
-		<div className="space-y-4">
-			<div className="flex items-center justify-between">
+		<div className="space-y-6">
+			{/* Page Header */}
+			<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
+				<div className="space-y-1">
+					<h1 className="text-xl font-bold tracking-tight">Projects & Repositories</h1>
+						<p className="text-sm text-muted-foreground">
+Path telemetry, repository structure, and skip-path configuration across enrolled repos.
+</p>
+				</div>
 				<div className="flex items-center gap-2">
-					<h3 className="text-xs text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-1.5">
-						<Folder className="w-3.5 h-3.5" />
-						Path & File Explorer
-					</h3>
+					<Button
+						onClick={() => setIsRuleModalOpen(true)}
+						variant="outline"
+						className="flex items-center gap-1.5 text-xs h-9"
+					>
+						<Sparkles className="w-3.5 h-3.5" />
+						Draft Rule with Hermes
+					</Button>
 					{blockedFileCount > 0 && (
-						<span className="text-[10px] px-1.5 py-0.5 rounded bg-signal-block/10 text-signal-block flex items-center gap-1">
+						<Badge variant="destructive" className="bg-signal-block text-black/80 flex items-center gap-1 h-6">
 							<AlertTriangle className="w-3 h-3" />
 							{blockedFileCount} files with blocks
-						</span>
+						</Badge>
 					)}
-					{activePathFilter && (
-						<button
-							type="button"
-							onClick={() => onPathFilter(null)}
-							className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary"
-						>
-							<Filter className="w-3 h-3" />
-							{activePathFilter}
-							<X className="w-3 h-3" />
-						</button>
-					)}
-				</div>
-				<div className="flex gap-1">
-					{[
-						{ key: "tree" as PathTab, label: "Tree", icon: TreePine },
-						{ key: "heatmap" as PathTab, label: "Heatmap", icon: Grid3X3 },
-						{ key: "flagged" as PathTab, label: "Flagged", icon: FlagIcon },
-					].map(({ key, label, icon: Icon }) => (
-						<button
-							type="button"
-							key={key}
-							onClick={() => setTab(key)}
-							className={cn(
-								"px-2 py-0.5 text-[10px] rounded-sm transition-colors uppercase flex items-center gap-1",
-								tab === key
-									? "bg-primary text-primary-foreground"
-									: "text-muted-foreground hover:bg-muted",
-							)}
-						>
-							<Icon className="w-3 h-3" />
-							{label}
-						</button>
-					))}
 				</div>
 			</div>
 
-			{/* Hottest files strip - only on tree tab */}
-			{tab === "tree" && allFiles.length > 0 && (
-				<div className="flex gap-2 flex-wrap">
-					{allFiles.slice(0, 8).map(({ node: f }) => {
-						const absolutePath = f.filterPath || f.fullPath;
-						return (
+			{/* Main Layout Grid */}
+			<div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
+				
+				{/* Sidebar - Mobile Select */}
+				<div className="block xl:hidden space-y-1">
+					<label htmlFor="repo-select" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+						Select Repository
+					</label>
+					<select
+						id="repo-select"
+						value={selectedRepoKey}
+						onChange={(e) => setSelectedRepoKey(e.target.value)}
+						className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+					>
+						{repoOptions.map((opt) => (
+							<option key={opt.key} value={opt.key ?? "outside_repo"}>
+								{opt.label} ({opt.events.length} events)
+						</option>
+					))}
+				</select>
+				</div>
+
+				{/* Sidebar - Desktop List */}
+				<div className="hidden xl:block">
+					<Card>
+						<CardHeader className="py-3 px-4 border-b">
+							<CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+								Repositories
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="p-2 space-y-1">
+							{repoOptions.map((opt) => {
+								const isSelected = selectedRepoKey === opt.key;
+								const modeStr = opt.mode === "outside_repo" 				? "outside_repo" 				: opt.repoRoot 					? getRepoEnforcementMode(opt.repoRoot) 					: null;
+								const blockCount = opt.rules.filter(
+									(r) => r.decision === "block" || r.decision === "deny"
+								).length;
+
+								return (
+									<button
+										key={opt.key}
+										type="button"
+										onClick={() => setSelectedRepoKey(opt.key)}
+										className={cn(
+											"w-full text-left p-2.5 rounded-md transition-all flex flex-col gap-1 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+											isSelected
+												? "bg-primary/10 border border-primary/20 text-primary"
+												: "hover:bg-muted/60 border border-transparent text-foreground"
+										)}
+									>
+										<div className="flex items-center justify-between w-full">
+											<span className="font-semibold text-xs truncate max-w-[150px]">
+												{opt.label}
+											</span>
+											{modeStr && (
+												<Badge 				variant="secondary" 				className={cn(
+														"text-xs px-1 py-0 scale-90 origin-right font-normal",
+														modeStr === "repo_strict" && "bg-signal-block/10 text-signal-block border border-signal-block/20",
+														modeStr === "repo_relaxed" && "bg-signal-ask/10 text-signal-ask border border-signal-ask/20",
+														modeStr === "outside_repo" && "bg-muted text-muted-foreground"
+													)}
+												>
+													{modeStr}
+												</Badge>
+											)}
+										</div>
+										{opt.repoRoot && (
+											<span className="text-xs text-muted-foreground/70 font-mono truncate max-w-[240px]">
+												{opt.repoRoot}
+											</span>
+										)}
+										<div className="flex items-center gap-1.5 text-xs text-muted-foreground/80 mt-1">
+											<span>{opt.events.length} events</span>
+											<span>•</span>
+											<span>{opt.rules.length} findings</span>
+											{blockCount > 0 && (
+												<>
+													<span>•</span>
+													<Badge variant="destructive" className="bg-signal-block text-black/80 text-xs px-1 py-0 scale-95 font-bold">
+														{blockCount} blocks
+													</Badge>
+												</>
+											)}
+										</div>
+									</button>
+								);
+							})}
+						</CardContent>
+					</Card>
+				</div>
+
+				{/* Main Content Area */}
+				<main className="space-y-6">
+					{/* Tab Navigation */}
+					<div className="flex border-b border-border gap-2">
+						{[
+							{ key: "overview" as const, label: "Overview", icon: Settings },
+							{ key: "telemetry" as const, label: "Files & Paths", icon: FileText },
+							{ key: "recommendations" as const, label: "Path Insights", icon: Sparkles },
+						].map(({ key, label, icon: Icon }) => (
 							<button
+								key={key}
 								type="button"
-								key={absolutePath}
-								onClick={() => onPathFilter(absolutePath)}
+								onClick={() => setActiveExplorerTab(key)}
 								className={cn(
-									"px-2.5 py-1.5 rounded-md border text-left text-[10px] font-mono transition-all hover:scale-[1.02]",
-									activePathFilter === absolutePath
-										? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
-										: f.blockCount > 0
-											? "border-signal-block/30 bg-signal-block/5 text-signal-block hover:border-signal-block/50"
-											: "border-border bg-card text-foreground hover:border-muted-foreground",
+									"px-4 py-2 text-xs font-medium border-b-2 transition-all flex items-center gap-2 focus:outline-none",
+									activeExplorerTab === key
+										? "border-primary text-primary"
+										: "border-transparent text-muted-foreground hover:text-foreground"
 								)}
 							>
-								<div className="font-medium">{f.fullPath}</div>
-								<div className="text-muted-foreground mt-0.5">
-									{f.eventCount} events · {f.findingCount} findings ·{" "}
-									{f.blockCount} blocks
-								</div>
-							</button>
-						);
-					})}
-				</div>
-			)}
-
-			{/* Tab content */}
-			{tab === "tree" && (
-				<div className="space-y-4">
-					<div className="flex items-center gap-2 w-full">
-						<button
-							type="button"
-							onClick={() => setExpandOverride((prev) => prev !== true)}
-							className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-muted/30 border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-						>
-							<ChevronsUpDown className="w-3.5 h-3.5" />
-							{expandOverride === true ? "Collapse All" : "Expand All"}
+								<Icon className="w-3.5 h-3.5" />
+								{label}
+								{key === "recommendations" && recommendationsCount > 0 && (
+									<Badge className="ml-1 bg-primary text-primary-foreground text-xs px-1 py-0 h-4 min-w-4 justify-center">
+										{recommendationsCount}
+									</Badge>
+								)}
 						</button>
-						{expandOverride !== null && (
-							<button
-								type="button"
-								onClick={() => setExpandOverride(null)}
-								className="text-[10px] px-2 py-1.5 rounded text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-							>
-								Reset
-							</button>
-						)}
-						<div className="ml-auto relative w-72">
-							<Filter className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground/60" />
-							<input
-								type="text"
-								placeholder="Filter paths, rules, extensions..."
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value)}
-								className="w-full pl-8 pr-8 py-1.5 bg-muted/40 border border-border/80 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground/50 transition-all font-mono"
-							/>
-							{searchQuery && (
-								<button
-									type="button"
-									onClick={() => setSearchQuery("")}
-									className="absolute right-2.5 top-2 text-muted-foreground/60 hover:text-foreground focus:outline-none"
-									aria-label="Clear filter query"
-								>
-									<X className="w-3.5 h-3.5" />
-								</button>
-							)}
-						</div>
-					</div>
-					{searchQuery && (
-						<div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/10 rounded text-xs text-muted-foreground animate-fade-in font-mono">
-							<span className="text-primary font-semibold">Filter active:</span>
-							<span>
-								{filteredEventsCount} events · {filteredFindingsCount} findings · {filteredBlocksCount} blocks matching "{searchQuery}"
-							</span>
-							<button
-								type="button"
-								onClick={() => setSearchQuery("")}
-								className="ml-auto hover:text-foreground text-muted-foreground/60 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1"
-							>
-								Clear
-							</button>
-						</div>
-					)}
-
-					{projectTrees.map((proj) => (
-						<div key={proj.repoRoot} className="space-y-2">
-							<div className="flex items-center gap-2 mt-4 px-1">
-								<Folder className="w-4 h-4 text-signal-ask" />
-								<span className="font-semibold text-xs text-foreground uppercase tracking-wider">
-									{proj.projectName}
-								</span>
-								<span className="text-[10px] text-muted-foreground font-mono">
-									({proj.repoRoot})
-								</span>
-								<span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-auto">
-									{proj.events.length} events · {proj.rules.length} findings
-								</span>
-							</div>
-							<div className="border border-border rounded-md bg-card/30 overflow-hidden">
-								<table className="w-full text-xs">
-									<thead>
-										<tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-mono bg-muted/20">
-											<th className="px-2 py-2 text-left">
-												<button
-													type="button"
-													onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
-													className={cn(
-														"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-														(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
-													)}
-												>
-													Path
-													{(sortKey === "name" || sortKey === "alpha") && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-right w-24">
-												<button
-													type="button"
-													onClick={() => setSortKey("events")}
-													className={cn(
-														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-														sortKey === "events" && "text-primary font-bold"
-													)}
-												>
-													Events
-													{sortKey === "events" && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-right w-24">
-												<button
-													type="button"
-													onClick={() => setSortKey("findings")}
-													className={cn(
-														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-														sortKey === "findings" && "text-primary font-bold"
-													)}
-												>
-													Findings
-													{sortKey === "findings" && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-right w-24">
-												<button
-													type="button"
-													onClick={() => setSortKey("blocks")}
-													className={cn(
-														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-														sortKey === "blocks" && "text-primary font-bold"
-													)}
-												>
-													Blocks
-													{sortKey === "blocks" && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
-											<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
-										</tr>
-									</thead>
-									<tbody>
-										<TreeRowsList
-											sorted={proj.sorted}
-											depth={0}
-											onPathFilter={onPathFilter}
-											activePathFilter={activePathFilter}
-											expandOverride={expandOverride}
-											sortKey={sortKey}
-											repoRoot={proj.repoRoot}
-										/>
-									</tbody>
-								</table>
-							</div>
-						</div>
 					))}
+				</div>
 
-					{projectTrees.length === 0 && (
-						<div className="flex items-center justify-center h-24 border border-dashed border-border rounded-md text-xs text-muted-foreground">
-							No slopgate project roots found
+					{/* Tab Panels */}
+					{activeExplorerTab === "overview" && (
+						<div className="space-y-6 animate-fade-in">
+							{/* Repository Overview Card */}
+							<Card>
+								<CardHeader className="pb-3 border-b">
+									<CardTitle className="text-sm font-semibold">Repository Overview</CardTitle>
+									<CardDescription className="text-xs">
+										Detailed activity statistics and enforcement mode for the selected context.
+									</CardDescription>
+								</CardHeader>
+								<CardContent className="pt-4">
+									<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+										<div className="space-y-1">
+											<div className="text-xs text-muted-foreground uppercase font-mono">Repository root</div>
+											<div className="text-xs font-mono truncate" title={selectedRepo?.repoRoot ?? "All repositories"}>
+											</div>
+										</div>
+										<div className="space-y-1">
+											<div className="text-xs text-muted-foreground uppercase font-mono">Enforcement Mode</div>
+											<div>
+												<Badge 				variant="secondary"
+													className={cn(
+														"text-xs font-semibold px-2 py-0.5",
+														selectedRepo?.mode === "outside_repo" && "bg-muted text-muted-foreground",
+														selectedRepo?.mode === "all" && "bg-primary/15 text-primary border border-primary/20",
+														selectedRepo?.mode === "repo" && selectedRepo.repoRoot && getRepoEnforcementMode(selectedRepo.repoRoot) === "repo_strict" && "bg-signal-block/15 text-signal-block border border-signal-block/20",
+														selectedRepo?.mode === "repo" && selectedRepo.repoRoot && getRepoEnforcementMode(selectedRepo.repoRoot) === "repo_relaxed" && "bg-signal-ask/15 text-signal-ask border border-signal-ask/20"
+													)}
+												>
+													{selectedRepo?.mode === "all" 				? "all_repos" 				: selectedRepo?.mode === "outside_repo" 					? "outside_repo" 					: getRepoEnforcementMode(selectedRepo?.repoRoot ?? "")
+													}
+												</Badge>
+											</div>
+										</div>
+										<div className="space-y-1">
+											<div className="text-xs text-muted-foreground uppercase font-mono">Activity summary</div>
+											<div className="text-xs font-medium text-foreground">
+												{selectedRepo?.events.length ?? 0} events · {selectedRepo?.rules.length ?? 0} findings · {repoBlocks} blocks
+											</div>
+										</div>
+										<div className="space-y-1">
+											<div className="text-xs text-muted-foreground uppercase font-mono">Files & Hot paths</div>
+											<div className="text-xs text-foreground font-medium">
+												{filesTouchedCount} touched · <span className="font-mono text-xs" title={hottestPath}>{hottestPath.split("/").pop()} (hottest)</span>
+											</div>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+
+							{/* Path Settings Card */}
+							<Card>
+								<CardHeader className="pb-3 border-b">
+									<CardTitle className="text-sm font-semibold">Path Settings</CardTitle>
+									<CardDescription className="text-xs">
+									</CardDescription>
+								</CardHeader>
+								<CardContent className="pt-4 space-y-6">
+									<div className="space-y-2">
+										<h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+											Global skip paths
+										</h4>
+										<p className="text-xs text-muted-foreground">
+									</p>
+										
+										{/* Skip paths tags list */}
+										<div className="flex flex-wrap gap-1.5 pt-1">
+											{config?.skip_paths && config.skip_paths.length > 0 ? (
+												config.skip_paths.map((path) => (
+													<Badge 				key={path} 				variant="secondary"
+														className="text-xs font-mono py-1 pl-2.5 pr-1.5 flex items-center gap-1.5"
+													>
+														{path}
+														<button
+															type="button"
+															onClick={() => handleRemoveSkipPath(path)}
+															className="text-muted-foreground hover:text-foreground hover:bg-muted p-0.5 rounded-full focus:outline-none transition-colors"
+															aria-label={`Remove glob ${path}`}
+														>
+															<X className="w-3 h-3" />
+														</button>
+													</Badge>
+												))
+											) : (
+												<span className="text-xs text-muted-foreground italic">No skip paths configured</span>
+											)}
+										</div>
+
+										{/* Skip Path Adder */}
+										<div className="flex gap-2 max-w-md pt-2">
+											<div className="relative flex-1">
+												<Input
+													id="new-skip-path"
+													placeholder="e.g. **/node_modules/**"
+													value={newSkipPath}
+													onChange={(e) => setNewSkipPath(e.target.value)}
+													className="text-xs font-mono h-8"
+												/>
+											</div>
+											<Button
+												onClick={handleAddSkipPath}
+												variant="outline"
+												className="text-xs h-8 px-3 flex items-center gap-1"
+											>
+												<Plus className="w-3.5 h-3.5" />
+												Add Glob
+											</Button>
+										</div>
+									</div>
+
+									{/* Boundary Tester */}
+									<div className="border-t pt-4 space-y-3">
+										<h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+											Client-side Path Skip Boundary Tester
+										</h4>
+										<p className="text-xs text-muted-foreground">
+											Test a custom path instantly to see if it would match the configured skip paths and suppress repository-strict enforcement. Test path description
+										</p>
+										<div className="flex gap-2 max-w-md">
+											<div className="relative flex-1">
+												<Input
+													id="test-path-input"
+													placeholder="Enter path to test, e.g. src/index.ts"
+													value={testPathInput}
+													onChange={(e) => setTestPathInput(e.target.value)}
+													className="text-xs font-mono h-8"
+												/>
+											</div>
+											<Button
+												onClick={handleTestPath}
+												className="text-xs h-8 px-4"
+											>
+												Test
+											</Button>
+										</div>
+
+										{testResult !== null && (
+											<div className={cn(
+												"p-3 rounded-md border text-xs max-w-md animate-fade-in font-mono flex flex-col gap-1",
+												testResult.matches 				? "bg-signal-block/5 border-signal-block/20 text-signal-block" 				: "bg-signal-ask/5 border-signal-ask/20 text-signal-ask"
+											)}>
+												<div className="flex items-center gap-1.5 font-semibold">
+													{testResult.matches ? (
+														<>
+															<CheckCircle2 className="w-4 h-4 text-signal-block" />
+															<span>Matches skip paths (Suppressed)</span>
+														</>
+													) : (
+														<>
+															<AlertTriangle className="w-4 h-4 text-signal-ask" />
+															<span>Does not match skip paths (Enforced)</span>
+														</>
+													)}
+												</div>
+												<div className="text-xs text-muted-foreground mt-1">
+													{testResult.matches 				? `Suppressed by matching glob: "${testResult.glob}"` 				: "This path will be evaluated by all repository-strict rules."}
+												</div>
+											</div>
+										)}
+									</div>
+
+									{/* Save Status and Action bar */}
+									{pendingCount > 0 && (
+										<div className="border-t pt-4 flex items-center justify-between animate-fade-in">
+											<span className="text-xs text-muted-foreground font-medium">
+												{pendingCount} unsaved configuration changes
+											</span>
+											<div className="flex gap-2">
+												<Button
+													onClick={discardChanges}
+													variant="ghost"
+													className="text-xs h-8"
+												>
+													<RotateCcw className="w-3.5 h-3.5 mr-1" />
+													Discard
+												</Button>
+												<Button
+													onClick={saveConfig}
+													className="text-xs h-8 flex items-center gap-1"
+													disabled={saveStatus === "saving"}
+												>
+													<Save className="w-3.5 h-3.5 mr-1" />
+													{saveStatus === "saving" ? "Saving..." : "Save Changes"}
+												</Button>
+											</div>
+										</div>
+									)}
+									{saveStatus === "error" && saveError && (
+										<div className="text-xs text-destructive mt-1 font-mono">
+											Failed to save configuration: {saveError}
+										</div>
+									)}
+								</CardContent>
+							</Card>
 						</div>
 					)}
 
-					{nonSlopgateTree && nonSlopgateTree.tree.children.size > 0 && (
-						<div className="border border-border rounded-md bg-card/10 p-3 mt-4">
-							<button
-								type="button"
-								onClick={() => setNonSlopgateExpanded(!nonSlopgateExpanded)}
-								className="w-full flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-							>
-								<div className="flex items-center gap-2">
-									<ChevronDown
-										className={cn(
-											"w-3.5 h-3.5 transition-transform",
-											!nonSlopgateExpanded && "-rotate-90",
+					{activeExplorerTab === "telemetry" && (
+						<div className="space-y-4 animate-fade-in">
+							{/* Telemetry Inner View Tab switcher */}
+							<div className="flex items-center justify-between border-b pb-3">
+								<div className="flex gap-1">
+									{[
+										{ key: "tree" as PathTab, label: "Tree", icon: TreePine },
+										{ key: "heatmap" as PathTab, label: "Activity Heatmap", icon: Grid3X3 },
+										{ key: "flagged" as PathTab, label: "Flagged Paths", icon: FlagIcon },
+									].map(({ key, label, icon: Icon }) => (
+										<button
+											type="button"
+											key={key}
+											onClick={() => setTab(key)}
+											className={cn(
+												"px-3 py-1 text-xs rounded-sm transition-all flex items-center gap-1.5",
+												tab === key
+													? "bg-secondary text-secondary-foreground font-medium"
+													: "text-muted-foreground hover:bg-muted/60"
+											)}
+										>
+											<Icon className="w-3.5 h-3.5" />
+											{label}
+										</button>
+									))}								</div>
+								
+								{tab === "tree" && (
+									<div className="flex items-center gap-2">
+										<button
+											type="button"
+											onClick={() => setExpandOverride((prev) => prev !== true)}
+											className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-muted/30 border border-border text-muted-foreground hover:text-foreground transition-colors"
+										>
+											<ChevronsUpDown className="w-3 h-3" />
+											{expandOverride === true ? "Collapse All" : "Expand All"}
+										</button>
+										{expandOverride !== null && (
+											<button
+												type="button"
+												onClick={() => setExpandOverride(null)}
+												className="text-xs px-1.5 py-1 text-muted-foreground hover:text-foreground"
+											>
+												Reset
+											</button>
 										)}
-									/>
-									<span>Other / Non-Slopgate Triggers</span>
-									<span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground normal-case font-normal ml-2">
-										{nonSlopgateGroup.events.length} events ·{" "}
-										{nonSlopgateGroup.rules.length} findings
-									</span>
-								</div>
-							</button>
+									</div>
+								)}
+							</div>
 
-							{nonSlopgateExpanded && (
-								<div className="mt-3">
-									<div className="border border-border rounded-md bg-card/30 overflow-hidden">
-										<table className="w-full text-xs">
-											<thead>
-												<tr className="border-b border-border text-muted-foreground text-[10px] uppercase font-mono bg-muted/20">
-													<th className="px-2 py-2 text-left">
-														<button
-															type="button"
-															onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
-															className={cn(
-																"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-																(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
-															)}
-														>
-															Path
-															{(sortKey === "name" || sortKey === "alpha") && (
-																<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-															)}
-														</button>
-													</th>
-													<th className="px-2 py-2 text-right w-24">
-														<button
-															type="button"
-															onClick={() => setSortKey("events")}
-															className={cn(
-																"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-																sortKey === "events" && "text-primary font-bold"
-															)}
-														>
-															Events
-															{sortKey === "events" && (
-																<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-															)}
-														</button>
-													</th>
-													<th className="px-2 py-2 text-right w-24">
-														<button
-															type="button"
-															onClick={() => setSortKey("findings")}
-															className={cn(
-																"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-																sortKey === "findings" && "text-primary font-bold"
-															)}
-														>
-															Findings
-															{sortKey === "findings" && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-right w-24">
-												<button
-													type="button"
-													onClick={() => setSortKey("blocks")}
+							{/* Hottest files strip - only on tree tab */}
+							{tab === "tree" && allFiles.length > 0 && (
+								<div className="space-y-1.5">
+									<h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+										Hottest Active Paths
+									</h4>
+									<div className="flex gap-2 flex-wrap">
+										{allFiles.slice(0, 8).map(({ node: f }) => {
+											const absolutePath = f.filterPath || f.fullPath;
+											const isFiltered = activePathFilter === absolutePath;
+											
+											// Only recommend skip-path if eventCount > 0 and findingCount === 0
+											const isRecommendationCandidate = f.eventCount > 0 && f.findingCount === 0;
+
+											return (
+												<div
+													key={absolutePath}
 													className={cn(
-														"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
-														sortKey === "blocks" && "text-primary font-bold"
+														"rounded-md border p-2 text-left text-xs font-mono transition-all flex flex-col justify-between min-w-[200px] max-w-[260px]",
+														isFiltered
+															? "border-primary bg-primary/5 text-primary"
+															: f.blockCount > 0
+																? "border-signal-block/35 bg-signal-block/5 text-signal-block"
+																: "border-border bg-card text-foreground"
 													)}
 												>
-													Blocks
-													{sortKey === "blocks" && (
-														<ArrowUpDown className="w-3 h-3 animate-fade-in" />
-													)}
-												</button>
-											</th>
-											<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
-											<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
-										</tr>
-									</thead>
-											<tbody>
-												<TreeRowsList
-													sorted={nonSlopgateTree.sorted}
-													depth={0}
-													onPathFilter={onPathFilter}
-													activePathFilter={activePathFilter}
-													expandOverride={expandOverride}
-													sortKey={sortKey}
-													repoRoot={null}
-												/>
-											</tbody>
-										</table>
+													<div>
+														<div className="font-semibold truncate" title={f.fullPath}>
+															{f.fullPath.split("/").pop() || f.fullPath}
+														</div>
+														<div className="text-muted-foreground mt-0.5 text-xs truncate" title={f.fullPath}>
+															{f.fullPath}
+														</div>
+														<div className="text-muted-foreground/80 mt-1">
+															{f.eventCount} events · {f.findingCount} findings · {f.blockCount} blocks
+														</div>
+													</div>
+													<div className="flex gap-1.5 mt-2 justify-end">
+														<Button
+															type="button"
+															variant="ghost"
+															onClick={() => onPathFilter(isFiltered ? null : absolutePath)}
+															className="h-5 px-1.5 text-xs hover:text-primary"
+														>
+															{isFiltered ? "Clear Filter" : "Filter Path"}
+														</Button>
+														{isRecommendationCandidate && (
+															<Button
+																type="button"
+																variant="outline"
+																onClick={() => {
+																	if (config) {
+																		const currentSkipPaths = config.skip_paths ?? [];
+																		if (!currentSkipPaths.includes(absolutePath)) {
+																			setSkipPaths([...currentSkipPaths, absolutePath]);
+																		}
+																	}
+																}}
+																className="h-5 px-1.5 text-xs hover:text-signal-ask hover:border-signal-ask/30"
+															>
+																Skip Path
+															</Button>
+														)}
+													</div>
+												</div>
+											);
+										})}
 									</div>
 								</div>
 							)}
+
+							{/* Search input for Tree */}
+							{tab === "tree" && (
+								<div className="relative max-w-md">
+									<Filter className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground/60" />
+									<input
+										id="search-tree"
+										type="text"
+										placeholder="Search paths, rules, severities, or decisions..."
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										className="w-full pl-8 pr-8 py-1.5 bg-muted/40 border border-border/85 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground/50 transition-all font-mono"
+									/>
+									{searchQuery && (
+										<button
+											type="button"
+											onClick={() => setSearchQuery("")}
+											className="absolute right-2.5 top-2 text-muted-foreground/60 hover:text-foreground focus:outline-none"
+											aria-label="Clear search query"
+										>
+											<X className="w-3.5 h-3.5" />
+										</button>
+									)}
+								</div>
+							)}
+
+							{tab === "tree" && searchQuery && (
+								<div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded text-xs text-muted-foreground animate-fade-in font-mono">
+									<span className="text-primary font-semibold">Search result:</span>
+									<span>
+										{filteredEventsCount} events · {filteredFindingsCount} findings · {filteredBlocksCount} blocks matching "{searchQuery}"
+									</span>
+									<button
+										type="button"
+										onClick={() => setSearchQuery("")}
+										className="ml-auto hover:text-foreground text-muted-foreground/60 transition-colors focus:outline-none rounded px-1"
+									>
+										Clear
+									</button>
+								</div>
+							)}
+
+							{/* Tab Telemetry Content Rendering */}
+							{tab === "tree" && (
+								<div className="space-y-4">
+									{treesToRender.map((proj) => (
+										<div key={proj.repoRoot} className="space-y-2">
+											<div className="flex items-center gap-2 mt-4 px-1">
+												<Folder className="w-4 h-4 text-signal-ask" />
+												<span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+													{proj.projectName}
+												</span>
+												<span className="text-xs text-muted-foreground font-mono">
+													({proj.repoRoot})
+												</span>
+												<Badge variant="outline" className="text-xs normal-case ml-auto font-mono">
+													{proj.events.length} events · {proj.rules.length} findings
+												</Badge>
+											</div>
+											<div className="border border-border rounded-md bg-card/30 overflow-hidden">
+												<table className="w-full text-xs">
+													<thead>
+														<tr className="border-b border-border text-muted-foreground text-xs uppercase font-mono bg-muted/20">
+															<th className="px-2 py-2 text-left">
+																<button
+																	type="button"
+																	onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
+																	className={cn(
+																		"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																		(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
+																	)}
+																>
+																	Path
+																	{(sortKey === "name" || sortKey === "alpha") && (
+																		<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																	)}
+																</button>
+															</th>
+															<th className="px-2 py-2 text-right w-24">
+																<button
+																	type="button"
+																	onClick={() => setSortKey("events")}
+																	className={cn(
+																		"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																		sortKey === "events" && "text-primary font-bold"
+																	)}
+																>
+																	Events
+																	{sortKey === "events" && (
+																		<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																	)}
+																</button>
+															</th>
+															<th className="px-2 py-2 text-right w-24">
+																<button
+																	type="button"
+																	onClick={() => setSortKey("findings")}
+																	className={cn(
+																		"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																		sortKey === "findings" && "text-primary font-bold"
+																	)}
+																>
+																	Findings
+																	{sortKey === "findings" && (
+																		<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																	)}
+																</button>
+															</th>
+															<th className="px-2 py-2 text-right w-24">
+																<button
+																	type="button"
+																	onClick={() => setSortKey("blocks")}
+																	className={cn(
+																		"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																		sortKey === "blocks" && "text-primary font-bold"
+																	)}
+																>
+																	Blocks
+																	{sortKey === "blocks" && (
+																		<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																	)}
+																</button>
+															</th>
+															<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
+															<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
+														</tr>
+													</thead>
+													<tbody>
+														<TreeRowsList
+															sorted={proj.sorted}
+															depth={0}
+															onPathFilter={onPathFilter}
+															activePathFilter={activePathFilter}
+															expandOverride={expandOverride}
+															sortKey={sortKey}
+															repoRoot={proj.repoRoot}
+														/>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									))}
+
+									{treesToRender.length === 0 && selectedRepoKey !== "outside_repo" && (
+										<div className="flex items-center justify-center h-24 border border-dashed border-border rounded-md text-xs text-muted-foreground">
+											No slopgate project roots found
+										</div>
+									)}
+
+									{((selectedRepoKey === "all" || selectedRepoKey === "outside_repo") && nonSlopgateTree && nonSlopgateTree.tree.children.size > 0) && (
+										<div className="border border-border rounded-md bg-card/10 p-3 mt-4">
+											<button
+												type="button"
+												onClick={() => setNonSlopgateExpanded(!nonSlopgateExpanded)}
+												className="w-full flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+											>
+												<div className="flex items-center gap-2">
+													<ChevronDown
+														className={cn(
+															"w-3.5 h-3.5 transition-transform",
+															!nonSlopgateExpanded && "-rotate-90",
+														)}
+													/>
+													<span>Other / Non-Slopgate Triggers</span>
+													<Badge variant="outline" className="text-xs ml-2 normal-case font-normal font-mono">
+														{nonSlopgateGroup.events.length} events · {nonSlopgateGroup.rules.length} findings
+													</Badge>
+												</div>
+											</button>
+
+											{nonSlopgateExpanded && (
+												<div className="mt-3">
+													<div className="border border-border rounded-md bg-card/30 overflow-hidden">
+														<table className="w-full text-xs">
+															<thead>
+																<tr className="border-b border-border text-muted-foreground text-xs uppercase font-mono bg-muted/20">
+																	<th className="px-2 py-2 text-left">
+																		<button
+																			type="button"
+																			onClick={() => setSortKey(sortKey === "alpha" ? "name" : "alpha")}
+																			className={cn(
+																				"flex items-center gap-1 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																				(sortKey === "name" || sortKey === "alpha") && "text-primary font-bold"
+																			)}
+																		>
+																			Path
+																			{(sortKey === "name" || sortKey === "alpha") && (
+																				<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																			)}
+																		</button>
+																	</th>
+																	<th className="px-2 py-2 text-right w-24">
+																		<button
+																			type="button"
+																			onClick={() => setSortKey("events")}
+																			className={cn(
+																				"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																				sortKey === "events" && "text-primary font-bold"
+																			)}
+																		>
+																			Events
+																			{sortKey === "events" && (
+																				<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																			)}
+																		</button>
+																	</th>
+																	<th className="px-2 py-2 text-right w-24">
+																		<button
+																			type="button"
+																			onClick={() => setSortKey("findings")}
+																			className={cn(
+																				"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																				sortKey === "findings" && "text-primary font-bold"
+																			)}
+																		>
+																			Findings
+																			{sortKey === "findings" && (
+																				<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																			)}
+																		</button>
+																	</th>
+																	<th className="px-2 py-2 text-right w-24">
+																		<button
+																			type="button"
+																			onClick={() => setSortKey("blocks")}
+																			className={cn(
+																				"flex items-center justify-end gap-1 w-full hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 py-0.5",
+																				sortKey === "blocks" && "text-primary font-bold"
+																			)}
+																		>
+																			Blocks
+																			{sortKey === "blocks" && (
+																				<ArrowUpDown className="w-3 h-3 animate-fade-in" />
+																			)}
+																		</button>
+																	</th>
+																	<th className="px-2 py-2 text-center w-24 text-muted-foreground font-normal">Actions</th>
+																	<th className="px-2 py-2 text-left text-muted-foreground font-normal">Top Rules</th>
+																</tr>
+															</thead>
+															<tbody>
+																<TreeRowsList
+																	sorted={nonSlopgateTree.sorted}
+																	depth={0}
+															onPathFilter={onPathFilter}
+																	activePathFilter={activePathFilter}
+																	expandOverride={expandOverride}
+																	sortKey={sortKey}
+																	repoRoot={null}
+																/>
+															</tbody>
+														</table>
+													</div>
+												</div>
+											)}
+										</div>
+									)}
+								</div>
+							)}
+
+							{tab === "heatmap" && (
+								<div className="border border-border rounded-md bg-card/30 p-3 overflow-hidden">
+									<HeatmapView
+										events={heatmapEvents}
+										rules={heatmapRules}
+										onPathFilter={onPathFilter}
+										sessionIndex={sessionIndex}
+									/>
+								</div>
+							)}
+
+							{tab === "flagged" && (
+								<div className="border border-border rounded-md bg-card/30 p-3">
+									<FlaggedItemsPanel />
+								</div>
+							)}
 						</div>
 					)}
-				</div>
-			)}
 
-			{tab === "heatmap" && (
-				<div className="border border-border rounded-md bg-card/30 p-3 overflow-hidden">
-					<HeatmapView
-						events={filteredEvents}
-						rules={filteredRules}
-						onPathFilter={onPathFilter}
-						sessionIndex={sessionIndex}
-					/>
-				</div>
-			)}
+					{activeExplorerTab === "recommendations" && (
+						<div className="space-y-4 animate-fade-in">
+							<Card>
+								<CardHeader className="pb-3 border-b">
+									<CardTitle className="text-sm font-semibold">Path Insights</CardTitle>
+									<CardDescription className="text-xs">
+										Automated recommendations for optimizing Slopgate rules based on recent session telemetry and execution speed.
+									</CardDescription>
+								</CardHeader>
+								<CardContent className="pt-4 space-y-4">
+									<p className="text-xs text-muted-foreground">
+										Based on active telemetry, we recommend configuring skip_paths for high-activity paths that have generated zero findings to optimize hook execution speed. Optimize hook speed description
+									</p>
 
-			{tab === "flagged" && (
-				<div className="border border-border rounded-md bg-card/30 p-3">
-					<FlaggedItemsPanel />
-				</div>
-			)}
+									{skipPathRecommendations.length > 0 ? (
+										<div className="space-y-2 pt-2">
+											{skipPathRecommendations.map((rec) => (
+												<div 
+													key={rec.path}
+													className="p-3 border rounded-md bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+												>
+													<div className="space-y-1">
+														<div className="font-semibold font-mono truncate max-w-[450px]" title={rec.path}>
+															{rec.path}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Telemetry: {rec.eventCount} events · 0 findings · 0 blocks
+														</div>
+													</div>
+													<Button
+														onClick={() => {
+															if (config) {
+																const currentSkipPaths = config.skip_paths ?? [];
+																if (!currentSkipPaths.includes(rec.path)) {
+																	setSkipPaths([...currentSkipPaths, rec.path]);
+																}
+															}
+														}}
+														variant="outline"
+														className="text-xs h-7 px-2.5 shrink-0 hover:text-signal-ask hover:border-signal-ask/30"
+													>
+														Add to skip_paths
+													</Button>
+												</div>
+											))}
+										</div>
+									) : (
+										<div className="flex flex-col items-center justify-center h-32 border border-dashed border-border rounded-md text-xs text-muted-foreground p-4 text-center">
+											<CheckCircle2 className="w-8 h-8 text-signal-ask mb-2 opacity-80" />
+											<span className="font-medium">All active paths appear to have relevant findings or low event volume.</span>
+											<span className="text-xs mt-0.5">No skip paths recommended at this time.</span>
+										</div>
+									)}
+								</CardContent>
+							</Card>
+						</div>
+					)}
+				</main>
+			</div>
+
+			<RuleIterationModal
+				isOpen={isRuleModalOpen}
+				onClose={() => setIsRuleModalOpen(false)}
+				projects={projectGroups}
+			/>
 		</div>
 	);
 });
