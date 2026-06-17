@@ -64,12 +64,20 @@ def test_pi_extension_does_not_require_node_buffer_global() -> None:
     assert "Buffer" not in extension
 
 
-def test_pi_extension_has_self_contained_callback_types() -> None:
+def test_pi_extension_suppresses_node_builtin_type_noise_without_require() -> None:
     from slopgate.resources import resource_path
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "@earendil-works/pi-coding-agent" not in extension
-    assert 'from "node:' not in extension
+    assert 'from "node:child_process"' in extension
+    assert 'from "node:fs"' in extension
+    assert 'from "node:path"' in extension
+    assert 'from "node:process"' in extension
+    assert extension.count("@ts-ignore Pi provides Node built-ins at runtime") == 4
+    assert "runtimeRequire" not in extension
+    assert "require(" not in extension
+    assert 'eval)("require")' not in extension
+    assert "require is not defined" not in extension
     assert "interface PiExtensionAPI" in extension
     assert "event: PiEventLike, ctx: PiContextLike" in extension
 

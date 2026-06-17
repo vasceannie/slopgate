@@ -28,47 +28,16 @@ interface NodeProcessLike {
   env: Record<string, string | undefined>
 }
 
-interface ChildProcessModuleLike {
-  spawn(
-    command: string,
-    args: string[],
-    options: {
-      cwd: string
-      env: Record<string, string | undefined>
-      stdio: ["pipe", "pipe", "pipe"]
-    },
-  ): NodeChildProcessLike
-}
+// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
+import { spawn } from "node:child_process"
+// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
+import { existsSync } from "node:fs"
+// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
+import { dirname, join } from "node:path"
+// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
+import runtimeProcessValue from "node:process"
 
-interface FsModuleLike {
-  existsSync(path: string): boolean
-}
-
-interface PathModuleLike {
-  dirname(path: string): string
-  join(...parts: string[]): string
-}
-
-type RuntimeRequire = (moduleName: string) => unknown
-
-interface RuntimeGlobalLike {
-  process?: NodeProcessLike
-  require?: RuntimeRequire
-}
-
-function runtimeRequire<T>(moduleName: string): T {
-  const runtimeGlobal = globalThis as RuntimeGlobalLike
-  const requireFunction =
-    runtimeGlobal.require ?? ((0, eval)("require") as RuntimeRequire)
-  return requireFunction(moduleName) as T
-}
-
-const childProcess = runtimeRequire<ChildProcessModuleLike>("node:child_process")
-const fs = runtimeRequire<FsModuleLike>("node:fs")
-const path = runtimeRequire<PathModuleLike>("node:path")
-const runtimeProcess =
-  (globalThis as RuntimeGlobalLike).process ??
-  runtimeRequire<NodeProcessLike>("node:process")
+const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
 const SLOPGATE_ARGV = runtimeProcess.env.SLOPGATE_BIN ? [runtimeProcess.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SESSION_ID = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -123,10 +92,10 @@ interface PiExtensionAPI {
 function findManagedRepoRoot(start: string): string | null {
   let current = start
   while (true) {
-    if (fs.existsSync(path.join(current, "slopgate.toml"))) {
+    if (existsSync(join(current, "slopgate.toml"))) {
       return current
     }
-    const parent = path.dirname(current)
+    const parent = dirname(current)
     if (parent === current) {
       return null
     }
@@ -192,7 +161,7 @@ function callEnforcer(
 ): Promise<PiEnforcerResult | null> {
   return new Promise((resolve) => {
     const cwd = typeof payload.cwd === "string" ? payload.cwd : runtimeProcess.cwd()
-    const proc = childProcess.spawn(
+    const proc = spawn(
       SLOPGATE_ARGV[0],
       [...SLOPGATE_ARGV.slice(1), "handle", "--platform", "pi"],
       {
