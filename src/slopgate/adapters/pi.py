@@ -14,9 +14,18 @@ from __future__ import annotations
 
 from typing_extensions import override
 
-from slopgate._types import ObjectDict, ObjectMapping, is_object_dict, object_dict, string_value
-from slopgate.adapters._payload_fields import merge_standard_session_fields, sync_tool_result_fields
-from slopgate.adapters.base import PlatformAdapter
+from slopgate._types import (
+    ObjectDict,
+    ObjectMapping,
+    is_object_dict,
+    object_dict,
+    string_value,
+)
+from slopgate.adapters._payload_fields import (
+    merge_standard_session_fields,
+    sync_tool_result_fields,
+)
+from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.constants import (
     BLOCK,
     DENY,
@@ -27,13 +36,13 @@ from slopgate.constants import (
 
 # Pi canonical event names
 PI_EVENT_NAMES: set[str] = {
-    PRE_TOOL_USE,       # tool_call → PreToolUse
+    PRE_TOOL_USE,  # tool_call → PreToolUse
     PERMISSION_REQUEST,  # (not directly used by pi)
-    POST_TOOL_USE,       # tool_result / tool_execution_end → PostToolUse
-    "SessionStart",      # before_agent_start
+    POST_TOOL_USE,  # tool_result / tool_execution_end → PostToolUse
+    "SessionStart",  # before_agent_start
     "UserPromptSubmit",  # input
-    "Stop",              # agent_end
-    "TurnEnd",           # turn_end
+    "Stop",  # agent_end
+    "TurnEnd",  # turn_end
 }
 
 _PI_EVENT_ALIASES: dict[str, str] = {
@@ -107,58 +116,22 @@ class PiAdapter(PlatformAdapter):
         *args: object,
         **kwargs: object,
     ) -> ObjectDict | None:
-        """Render findings as a structured JSON result for the pi extension.
-
-        Returns a dict with:
-          - findings: list of serialized findings
-          - decisions: map of rule_id → decision
-          - has_blockers: whether any finding blocks execution
-          - context: additional context for the agent
-        """
-        from slopgate.adapters.base import render_request_from_call
-        from slopgate.models import RuleFinding
-
+        """Render findings into Pi extension return data."""
         render_request = render_request_from_call(args, kwargs)
         if not render_request.findings:
             return None
 
-        blocking = [f for f in render_request.findings if f.decision in (DENY, BLOCK)]
-        warnings = [f for f in render_request.findings if f.decision is None]
-        decisions_map: dict[str, str | None] = {}
-        for f in render_request.findings:
-            decisions_map[f.rule_id] = f.decision
-
-        serialized = [
-            {
-                "rule_id": f.rule_id,
-                "title": f.title,
-                "severity": f.severity.as_name() if hasattr(f.severity, "as_name") else str(f.severity),
-                "message": f.message,
-                "decision": f.decision,
-                "additional_context": f.additional_context,
-                "metadata": f.metadata,
-            }
-            for f in render_request.findings
-        ]
-
-        out: ObjectDict = {
-            "findings": serialized,
-            "decisions": decisions_map,
-            "has_blockers": len(blocking) > 0,
-            "has_warnings": len(warnings) > 0,
-            "blocking_count": len(blocking),
-            "total_findings": len(render_request.findings),
-        }
-
+        output: ObjectDict = {}
+        can_block = render_request.event_name in {PRE_TOOL_USE, "UserPromptSubmit"}
+        if can_block and render_request.decision in {DENY, BLOCK, "ask"}:
+            output["block"] = True
+            output["reason"] = self.join_messages(
+                self.decision_findings(
+                    render_request.findings, render_request.decision
+                )
+            )
+        if render_request.decision == "allow" and render_request.updated_input:
+            output["updated_input"] = render_request.updated_input
         if render_request.context:
-            out["context"] = render_request.context
-
-        if render_request.decision in (DENY, BLOCK):
-            context_lines = [
-                "[slopgate] Action blocked:",
-            ]
-            for f in blocking:
-                context_lines.append(f"  - {f.rule_id}: {f.message}")
-            out["reason"] = "\n".join(context_lines)
-
-        return out
+            output["context"] = render_request.context
+        return output or None

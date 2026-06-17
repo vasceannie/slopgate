@@ -5,6 +5,7 @@ Supports:
   slopgate install codex     → ~/.codex/hooks.json and/or .codex/hooks.json
   slopgate install opencode  → user plugin dir and/or .opencode/plugins/
   slopgate install cursor    → ~/.cursor/hooks.json and/or .cursor/hooks.json
+  slopgate install pi        → ~/.pi/agent/extensions/slopgate.ts and/or .pi/extensions/slopgate.ts
 
 Use --install-scope {user,project,both} (alias: --cursor-scope) on install/uninstall.
 """
@@ -26,10 +27,12 @@ __all__ = [
     "install_codex",
     "install_cursor",
     "install_opencode",
+    "install_pi",
     "uninstall_claude",
     "uninstall_codex",
     "uninstall_cursor",
     "uninstall_opencode",
+    "uninstall_pi",
     "install_platform",
     "install_suite",
     "SuiteInstallOptions",
@@ -44,6 +47,7 @@ __all__ = [
     "_codex",
     "_cursor",
     "_opencode",
+    "_pi",
     "_suite",
     "find_binary",
     "filter_owned_hook_commands",
@@ -52,7 +56,7 @@ __all__ = [
     "_INSTALLERS",
 ]
 from pathlib import Path
-from slopgate.installer import _claude, _codex, _cursor, _opencode, _suite
+from slopgate.installer import _claude, _codex, _cursor, _opencode, _pi, _suite
 from slopgate.installer._claude import CLAUDE_EVENTS, claude_hooks_block
 from slopgate.installer._codex import (
     CODEX_EVENTS,
@@ -81,6 +85,8 @@ install_opencode = _opencode.install_opencode
 uninstall_opencode = _opencode.uninstall_opencode
 install_cursor = _cursor.install_cursor
 uninstall_cursor = _cursor.uninstall_cursor
+install_pi = _pi.install_pi
+uninstall_pi = _pi.uninstall_pi
 install_suite = _suite.install_suite
 SuiteInstallOptions = _suite.SuiteInstallOptions
 SuiteUninstallOptions = _suite.SuiteUninstallOptions
@@ -93,6 +99,7 @@ _INSTALLERS = {
     "codex": (_codex.install_codex, _codex.uninstall_codex),
     "cursor": (_cursor.install_cursor, _cursor.uninstall_cursor),
     "opencode": (_opencode.install_opencode, _opencode.uninstall_opencode),
+    "pi": (_pi.install_pi, _pi.uninstall_pi),
 }
 
 

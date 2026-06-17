@@ -1,6 +1,6 @@
 # slopgate
 
-Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Cursor, Codex CLI, and OpenCode are supported with platform-specific limitations.
+Global CLI guardrails engine for AI coding agents. **Real-time guardrails where the host platform supports them, plus batch code quality linting.** Claude Code has the richest runtime surface; Cursor, Codex CLI, OpenCode, and Pi are supported with platform-specific limitations.
 
 ![Slopgate analytics dashboard — decision volume, event pipeline, top rules, severity mix](docs/assets/dashboard-overview.png)
 
@@ -31,6 +31,7 @@ slopgate config path   # print the active config.json location
 slopgate install claude    # patches ~/.claude/settings.json
 slopgate install codex     # patches ~/.codex/hooks.json
 slopgate install opencode  # copies plugin to the user OpenCode plugins dir
+slopgate install pi        # copies extension to ~/.pi/agent/extensions/
 
 # Or use the native all-harness installer and OS auto-updater
 slopgate install all                # auto-update is on by default
@@ -110,8 +111,9 @@ make dashboard-dev                # Vite → http://localhost:18835
 | **Cursor** | ⚠️ Partial | `slopgate install cursor [--install-scope user\|project\|both]` |
 | **Codex CLI** | ⚠️ Partial | `slopgate install codex [--install-scope user\|project\|both]` |
 | **OpenCode** | ⚠️ Degraded | `slopgate install opencode [--install-scope user\|project\|both]` |
+| **Pi** | ⚠️ Partial | `slopgate install pi [--install-scope user\|project\|both]` |
 
-`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
+`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode/Pi install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
 
 ## Agent bundle
 
@@ -143,13 +145,14 @@ claude --plugin-dir ./bundle/claude-plugin
 - **Cursor**: native hooks via `~/.cursor/hooks.json` (user) and/or `.cursor/hooks.json` (project). Install with `slopgate install <platform>` (user default), `--install-scope project|both`, and optional `--project-root /path/to/repo`. The same flags apply to `install all`, `setup`, `update`, and `uninstall`. Slopgate maps Cursor events to its canonical model and renders Cursor-native stdout (`permission` gates, `continue` for `beforeSubmitPrompt`, `additional_context` for `postToolUse`/`afterFileEdit`, `followup_message` for `stop`/`subagentStop`). Post-tool hooks cannot hard-block edits the way Claude `PostToolUse` denial does; use `preToolUse`, `beforeShellExecution`, or `beforeReadFile` for enforcement. Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`) are installed for inline-completion policy; `workspaceOpen` is not wired yet.
 - **Codex CLI**: partial hooks via `~/.codex/hooks.json` and/or `.codex/hooks.json`, with `features.hooks = true` enabled in the adjacent `config.toml` when that file exists. Matchers target `Bash|apply_patch|Edit|Write`. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per [Codex hooks docs](https://developers.openai.com/codex/config-reference).
 - **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `file.edited`, `permission.asked`, `permission.replied`, `session.created`, `session.compacted`, `session.idle`, `session.error`, `session.status`, `shell.env`, and `command.executed`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool.execute.before`; `file.edited` is the preferred post-edit quality/lint signal when OpenCode emits it. Lifecycle/telemetry events are replayable and may log advisory context, but do not provide hard enforcement. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
+- **Pi**: extension shim at `~/.pi/agent/extensions/slopgate.ts` and/or `.pi/extensions/slopgate.ts`. Native events (`tool_call`, `tool_result`, `tool_execution_end`, `input`, `before_agent_start`, `turn_end`, and `agent_end`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool_call`, where Pi supports `{ block: true, reason }` and mutable `event.input` for argument patches. The `input` event can return Pi's documented handled action for blocked prompts. Post-tool and lifecycle events surface advisory context because Pi documents result patches for `tool_result`, not hard blocking.
 
 ## Architecture
 
 ```
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Claude Code  │  │   Cursor    │  │  Codex CLI  │  │  OpenCode   │
-│ settings.json│  │ hooks.json  │  │ hooks.json  │  │  TS plugin  │
+│ Claude Code  │  │   Cursor    │  │  Codex CLI  │  │OpenCode/Pi │
+│ settings.json│  │ hooks.json  │  │ hooks.json  │  │TS extension│
 └──────┬───────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
        │                 │                 │                 │
        └─────────────────┴─────────────────┴─────────────────┘
@@ -179,7 +182,7 @@ No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 
 ```bash
 slopgate daemon [--socket PATH] [--max-requests N]
-slopgate handle [--platform claude|cursor|codex|opencode]
+slopgate handle [--platform claude|cursor|codex|opencode|pi]
 slopgate handle-async
 slopgate replay --payload fixture.json [--platform codex] [--pretty]
 ```
@@ -198,8 +201,8 @@ slopgate enroll [path] [--no-worktrees]
 ### Install / update / lifecycle
 
 ```bash
-slopgate install <claude|cursor|codex|opencode|all> [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
-slopgate uninstall <claude|cursor|codex|opencode|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
+slopgate install <claude|cursor|codex|opencode|pi|all> [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate uninstall <claude|cursor|codex|opencode|pi|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
 slopgate setup [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
 slopgate update [--dry-run] [--source URL] [--include-missing] [--refresh-hooks] [--install-scope user|project|both] [--project-root PATH]
 slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
@@ -301,6 +304,7 @@ Availability depends on platform support:
 - **Cursor**: partial — native `hooks.json` with Cursor-specific stdout shapes; strongest blocking on `preToolUse`, `beforeShellExecution`, and `beforeReadFile` (post-tool hooks are advisory/context-only, not hard blocks like Claude `PostToolUse` denial)
 - **Codex CLI**: currently limited by Codex's narrower hook surface
 - **OpenCode**: mediated through plugin event translation with advisory gaps around prompt and stop control
+- **Pi**: mediated through extension event translation; strongest blocking on `tool_call`, with lifecycle and post-tool gaps where Pi only supports result patches or advisory extension behavior
 
 ### Batch lint (38 detectors)
 

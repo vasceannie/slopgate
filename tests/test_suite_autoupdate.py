@@ -91,6 +91,16 @@ def test_native_uninstall_all_parser_supports_autoupdate() -> None:
     ) == ("uninstall", cmd_uninstall, "all", True, True)
 
 
+def test_native_install_parser_supports_pi() -> None:
+    args = build_parser().parse_args(["install", "pi", "--dry-run"])
+    assert (
+        args.command,
+        args.platform,
+        args.with_autoupdate,
+        args.dry_run,
+    ) == ("install", "pi", True, True)
+
+
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
     args = build_parser().parse_args(["update", "--dry-run"])
     assert (args.command, args.func, args.dry_run, hasattr(args, "platform")) == (
@@ -120,7 +130,7 @@ def test_discover_install_sites_respects_current_device_home(
         ],
     ) == (
         [(PLATFORM_CLAUDE, True), ("opencode", True)],
-        [PLATFORM_CLAUDE, "codex", "opencode", "cursor"],
+        [PLATFORM_CLAUDE, "codex", "opencode", "cursor", "pi"],
     )
 
 

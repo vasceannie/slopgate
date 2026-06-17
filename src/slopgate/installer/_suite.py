@@ -23,8 +23,14 @@ from slopgate.installer.suite import (
 __all__ = ["AUTOUPDATE_MARKER"]
 from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
 
-_INSTALL_TARGETS = VALID_PLATFORMS[:4]
-CLAUDE_PLATFORM, CODEX_PLATFORM, OPENCODE_PLATFORM, CURSOR_PLATFORM = _INSTALL_TARGETS
+_INSTALL_TARGETS = VALID_PLATFORMS
+(
+    CLAUDE_PLATFORM,
+    CODEX_PLATFORM,
+    OPENCODE_PLATFORM,
+    CURSOR_PLATFORM,
+    PI_PLATFORM,
+) = _INSTALL_TARGETS
 
 
 @dataclass(frozen=True)
@@ -100,6 +106,11 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
             CURSOR_PLATFORM,
             home / ".cursor" / "hooks.json",
             (home / ".cursor").exists(),
+        ),
+        InstallSite(
+            PI_PLATFORM,
+            home / ".pi" / "agent" / "extensions" / "slopgate.ts",
+            (home / ".pi" / "agent").exists(),
         ),
     ]
     if include_missing:
