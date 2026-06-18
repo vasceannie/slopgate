@@ -120,17 +120,15 @@ def test_discover_install_sites_respects_current_device_home(
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".config" / "opencode").mkdir(parents=True)
     sites = slopgate.installer._suite.discover_install_sites()
+    all_sites = slopgate.installer._suite.discover_install_sites(include_missing=True)
     assert (
         [(site.platform, site.present) for site in sites],
-        [
-            site.platform
-            for site in slopgate.installer._suite.discover_install_sites(
-                include_missing=True
-            )
-        ],
+        [site.platform for site in all_sites],
+        next(site.path for site in all_sites if site.platform == "pi"),
     ) == (
         [(PLATFORM_CLAUDE, True), ("opencode", True)],
         [PLATFORM_CLAUDE, "codex", "opencode", "cursor", "pi"],
+        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
     )
 
 

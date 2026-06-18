@@ -109,7 +109,7 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
         ),
         InstallSite(
             PI_PLATFORM,
-            home / ".pi" / "agent" / "extensions" / "slopgate.ts",
+            home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
             (home / ".pi" / "agent").exists(),
         ),
     ]

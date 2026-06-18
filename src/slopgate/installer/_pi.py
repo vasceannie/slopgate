@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import slopgate.installer._shared
 from slopgate.installer._install_scope import (
@@ -20,23 +21,67 @@ from slopgate.installer._shared import (
     remove_file_with_backup,
 )
 
-__all__ = ["PI_OWNERSHIP_MARKERS", "install_pi", "pi_project_extension_path", "uninstall_pi"]
+__all__ = [
+    "PI_OWNERSHIP_MARKERS",
+    "install_pi",
+    "pi_project_extension_path",
+    "uninstall_pi",
+]
 
-_EXTENSION_NAME = "slopgate.ts"
+_EXTENSION_DIR_NAME = "pi-slopgate"
+_EXTENSION_ENTRY_NAME = "index.ts"
+_LEGACY_EXTENSION_NAME = "slopgate.ts"
+_LEGACY_PACKAGE_ENTRY_NAME = "index.js"
+_CONFIG_NAME = "config.json"
 _PI_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 PI_OWNERSHIP_MARKERS = (
     "Pi Slopgate Extension",
     "const SLOPGATE_ARGV",
     "slopgate handle --platform pi",
 )
+_LEGACY_PACKAGE_OWNERSHIP_MARKERS = (
+    "pi-slopgate",
+    "slopgate handle --platform pi",
+)
+_CONFIG_PAYLOAD = {
+    "name": "pi-slopgate",
+    "description": "Pi Agent extension for slopgate code hygiene enforcement.",
+    "version": "1.0.0",
+    "enabled": True,
+}
 
 
 def pi_user_extension_path() -> Path:
-    return Path.home() / ".pi" / "agent" / "extensions" / _EXTENSION_NAME
+    return (
+        Path.home()
+        / ".pi"
+        / "agent"
+        / "extensions"
+        / _EXTENSION_DIR_NAME
+        / _EXTENSION_ENTRY_NAME
+    )
 
 
 def pi_project_extension_path(project_root: Path) -> Path:
-    return project_root / ".pi" / "extensions" / _EXTENSION_NAME
+    return (
+        project_root
+        / ".pi"
+        / "extensions"
+        / _EXTENSION_DIR_NAME
+        / _EXTENSION_ENTRY_NAME
+    )
+
+
+def _legacy_extension_path_for(target: Path) -> Path:
+    return target.parent.parent / _LEGACY_EXTENSION_NAME
+
+
+def _legacy_package_entry_path_for(target: Path) -> Path:
+    return target.parent / _LEGACY_PACKAGE_ENTRY_NAME
+
+
+def _config_path_for(target: Path) -> Path:
+    return target.parent / _CONFIG_NAME
 
 
 def render_pi_extension(template_text: str, binary: str) -> str:
@@ -51,25 +96,100 @@ def _is_owned_pi_extension(content: str) -> bool:
     return all(marker in content for marker in PI_OWNERSHIP_MARKERS)
 
 
+def _is_owned_legacy_package_extension(content: str) -> bool:
+    return all(marker in content for marker in _LEGACY_PACKAGE_OWNERSHIP_MARKERS)
+
+
+def _is_owned_pi_config(content: str) -> bool:
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(parsed, dict):
+        return False
+    parsed_config = cast("dict[str, object]", parsed)
+    name = parsed_config.get("name")
+    return isinstance(name, str) and name == _CONFIG_PAYLOAD["name"]
+
+
 def pi_extension_has_owned_slopgate(path: Path) -> bool:
     if not path.exists():
         return False
-    return _is_owned_pi_extension(path.read_text(encoding="utf-8", errors="replace"))
+    content = path.read_text(encoding="utf-8", errors="replace")
+    if path.name == _LEGACY_PACKAGE_ENTRY_NAME:
+        return _is_owned_legacy_package_extension(content)
+    if path.name == _CONFIG_NAME:
+        return _is_owned_pi_config(content)
+    return _is_owned_pi_extension(content)
+
+
+def _remove_owned_file(path: Path, label: str, *, dry_run: bool) -> int:
+    if not path.exists():
+        return 0
+    if not pi_extension_has_owned_slopgate(path):
+        print(f"Refusing to remove unrecognized {label}: {path}")
+        return 1
+    if dry_run:
+        print(f"Would back up and delete {label}: {path}")
+        return 0
+    remove_file_with_backup(path, label)
+    return 0
+
+
+def _remove_empty_parent(path: Path, *, dry_run: bool) -> None:
+    parent = path.parent
+    if dry_run or not parent.exists():
+        return
+    try:
+        parent.rmdir()
+    except OSError:
+        return
+
+
+def _write_config(config_path: Path, *, dry_run: bool) -> None:
+    if dry_run:
+        print(f"Would write: {config_path}")
+        return
+    backup_existing_file_and_report(config_path, "file")
+    config_path.write_text(json.dumps(_CONFIG_PAYLOAD, indent=2) + "\n", encoding="utf-8")
+
+
+def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
+    status = 0
+    for stale_path, label in (
+        (_legacy_extension_path_for(target), "legacy Pi extension"),
+        (_legacy_package_entry_path_for(target), "legacy pi-slopgate JavaScript extension"),
+    ):
+        if stale_path == target:
+            continue
+        if stale_path.exists() and not pi_extension_has_owned_slopgate(stale_path):
+            print(f"Warning: unrecognized {label} remains active: {stale_path}")
+            status = 1
+            continue
+        status = _remove_owned_file(stale_path, label, dry_run=dry_run) or status
+    return status
 
 
 def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) -> int:
+    config_path = _config_path_for(target)
     if dry_run:
         print(f"Would write: {target}")
+        print(f"Would write: {config_path}")
         print(f"Binary: {binary}")
         if target.exists():
             print(f"Would back up existing file before writing: {target}")
+        if config_path.exists():
+            print(f"Would back up existing file before writing: {config_path}")
+        _cleanup_migrated_pi_extensions(target, dry_run=True)
         print(content[:500] + "...")
         return 0
     target.parent.mkdir(parents=True, exist_ok=True)
     backup_existing_file_and_report(target, "file")
     target.write_text(content, encoding="utf-8")
+    _write_config(config_path, dry_run=False)
+    status = _cleanup_migrated_pi_extensions(target, dry_run=False)
     print_binary_install_summary(f"Installed slopgate Pi extension to {target}", binary)
-    return 0
+    return status
 
 
 def install_pi(
@@ -106,18 +226,19 @@ def install_pi(
 
 
 def _uninstall_pi_at(target: Path, *, dry_run: bool) -> int:
-    if not target.exists():
-        return 0
-    content = target.read_text(encoding="utf-8", errors="replace")
-    if not _is_owned_pi_extension(content):
-        print(f"Refusing to remove unrecognized Pi extension: {target}")
-        return 1
-    if dry_run:
-        print(f"Would back up and delete: {target}")
-        return 0
-    remove_file_with_backup(target, "file")
-    print(f"Removed slopgate Pi extension from {target}")
-    return 0
+    status = 0
+    for path, label in (
+        (target, "Pi extension"),
+        (_config_path_for(target), "Pi extension config"),
+        (_legacy_extension_path_for(target), "legacy Pi extension"),
+        (_legacy_package_entry_path_for(target), "legacy pi-slopgate JavaScript extension"),
+    ):
+        status = _remove_owned_file(path, label, dry_run=dry_run) or status
+    if status == 0:
+        _remove_empty_parent(target, dry_run=dry_run)
+        if not dry_run:
+            print(f"Removed slopgate Pi extension from {target}")
+    return status
 
 
 def uninstall_pi(

@@ -5,7 +5,7 @@ Supports:
   slopgate install codex     → ~/.codex/hooks.json and/or .codex/hooks.json
   slopgate install opencode  → user plugin dir and/or .opencode/plugins/
   slopgate install cursor    → ~/.cursor/hooks.json and/or .cursor/hooks.json
-  slopgate install pi        → ~/.pi/agent/extensions/slopgate.ts and/or .pi/extensions/slopgate.ts
+  slopgate install pi        → ~/.pi/agent/extensions/pi-slopgate/index.ts and/or .pi/extensions/pi-slopgate/index.ts
 
 Use --install-scope {user,project,both} (alias: --cursor-scope) on install/uninstall.
 """

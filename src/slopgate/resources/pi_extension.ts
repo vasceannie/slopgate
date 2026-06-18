@@ -62,22 +62,37 @@ interface PiEventLike {
   toolName?: string
   toolCallId?: string
   input?: Record<string, unknown>
+  args?: Record<string, unknown>
   content?: unknown
   details?: unknown
   isError?: boolean
   prompt?: string
+  text?: string
+  images?: unknown[]
   message?: unknown
+  result?: unknown
   reason?: string
+  systemPrompt?: string
 }
 
 interface PiContextLike {
   cwd?: string
+  ui?: {
+    notify?(message: string, level?: "info" | "warn" | "error"): void
+  }
 }
 
 interface PiHookResult {
-  action?: "handled"
+  action?: "continue" | "handled" | "transform"
   block?: boolean
+  content?: unknown
+  details?: unknown
+  images?: unknown[]
+  isError?: boolean
+  message?: Record<string, unknown>
   reason?: string
+  systemPrompt?: string
+  text?: string
 }
 
 type PiEventHandler = (
@@ -117,6 +132,49 @@ function applyUpdatedInput(
   Object.assign(event.input, updatedInput)
 }
 
+function toolInputFromEvent(event: PiEventLike): Record<string, unknown> {
+  return event.input || event.args || {}
+}
+
+function promptFromEvent(event: PiEventLike): string {
+  return event.text || event.prompt || ""
+}
+
+function toolResultFromEvent(event: PiEventLike): unknown {
+  return event.content ?? event.result ?? event.message ?? null
+}
+
+function inputTransformFromUpdatedInput(
+  updatedInput: Record<string, unknown> | undefined,
+): PiHookResult | null {
+  if (!updatedInput) {
+    return null
+  }
+  const text = updatedInput.text ?? updatedInput.prompt
+  if (typeof text !== "string") {
+    return null
+  }
+  const result: PiHookResult = { action: "transform", text }
+  if (Array.isArray(updatedInput.images)) {
+    result.images = updatedInput.images
+  }
+  return result
+}
+
+function beforeAgentStartResult(
+  event: PiEventLike,
+  result: PiEnforcerResult | null,
+): PiHookResult | void {
+  if (!result?.context) {
+    advisory(result)
+    return
+  }
+  const systemPrompt = event.systemPrompt || ""
+  return {
+    systemPrompt: `${systemPrompt}\n\n${result.context}`.trim(),
+  }
+}
+
 function advisory(result: PiEnforcerResult | null): void {
   if (!result) {
     return
@@ -144,13 +202,13 @@ function enforcerPayload(
     hook_event_name: eventName,
     tool_name: event.toolName || "",
     tool_call_id: event.toolCallId || "",
-    tool_input: event.input || {},
+    tool_input: toolInputFromEvent(event),
     cwd,
     session_id: SESSION_ID,
     transcript_path: null,
-    prompt: event.prompt || "",
-    tool_result: event.content ?? event.message ?? null,
-    tool_response: event.content ?? event.message ?? null,
+    prompt: promptFromEvent(event),
+    tool_result: toolResultFromEvent(event),
+    tool_response: toolResultFromEvent(event),
     pi_event: event,
   }
 }
@@ -258,13 +316,20 @@ export default function slopgatePiExtension(pi: PiExtensionAPI) {
   pi.on("input", async (event: PiEventLike, ctx: PiContextLike) => {
     const result = await enforce("input", event, ctx)
     if (result?.block) {
+      if (result.reason && ctx.ui?.notify) {
+        ctx.ui.notify(result.reason, "warn")
+      }
       return { action: "handled" }
+    }
+    const transform = inputTransformFromUpdatedInput(result?.updated_input)
+    if (transform) {
+      return transform
     }
     advisory(result)
   })
 
   pi.on("before_agent_start", async (event: PiEventLike, ctx: PiContextLike) => {
-    advisory(await enforce("before_agent_start", event, ctx))
+    return beforeAgentStartResult(event, await enforce("before_agent_start", event, ctx))
   })
 
   pi.on("turn_end", async (event: PiEventLike, ctx: PiContextLike) => {
