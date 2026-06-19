@@ -6,22 +6,6 @@
  * Reference: https://pi.dev/docs/latest/extensions
  */
 
-interface NodeReadableLike {
-  on(eventName: "data", handler: (chunk: string | Uint8Array) => void): void
-}
-
-interface NodeWritableLike {
-  end(): void
-  write(data: string): void
-}
-
-interface NodeChildProcessLike {
-  stderr: NodeReadableLike
-  stdin: NodeWritableLike
-  stdout: NodeReadableLike
-  on(eventName: "close", handler: (code: number | null) => void): void
-  on(eventName: "error", handler: (error: Error) => void): void
-}
 
 interface NodeProcessLike {
   cwd(): string

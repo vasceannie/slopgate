@@ -64,7 +64,7 @@ typeCheckingMode = "strict"
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
 extraPaths = ["src", ".", "dashboard/scripts"]
-reportPrivateUsage = false
+reportPrivateUsage = true
 
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python3"
