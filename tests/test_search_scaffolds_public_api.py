@@ -8,6 +8,9 @@ from hypothesis import given, strategies
 import pytest
 
 from slopgate.search import scaffolds
+from slopgate.search.opencode_scaffold import (
+    render_opencode_plugin as render_opencode_scaffold_plugin,
+)
 from slopgate.search.scaffolds import (
     append_unique_json_list,
     render_isx_skill,
@@ -72,11 +75,11 @@ def test_scaffold_opencode_plugin_writes_plugin_and_registers_config(
 
     assert {
         "result": result,
-        "plugin_content": "isx_search" in plugin_path.read_text(encoding="utf-8"),
+        "plugin_content": plugin_path.read_text(encoding="utf-8"),
         "config": json.loads(config_path.read_text(encoding="utf-8")),
     } == {
         "result": plugin_path,
-        "plugin_content": True,
+        "plugin_content": render_opencode_scaffold_plugin(),
         "config": {
             "$schema": "https://opencode.ai/config.json",
             "plugin": [str(plugin_path)],

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.cli import build_parser
 from slopgate.cli.commands import cmd_test
 from slopgate._types import object_dict, string_value
@@ -92,6 +93,15 @@ def test_enroll_allows_disabling_worktree_propagation() -> None:
         "/tmp/example",
         True,
     )
+
+
+def test_install_scope_arguments_feed_install_parser() -> None:
+    parsed = build_parser().parse_args(
+        ["install", "pi", "--install-scope", "project", "--project-root", "/tmp/repo"]
+    )
+
+    assert callable(add_install_scope_arguments)
+    assert (parsed.install_scope, parsed.project_root) == ("project", "/tmp/repo")
 
 
 def test_test_parser_defaults_to_changed_test_workflow() -> None:

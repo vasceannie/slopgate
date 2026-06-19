@@ -14,6 +14,7 @@ from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     normalize_install_scope,
     resolve_project_root,
+    resolve_scoped_install_paths,
     scope_paths,
     warn_residual_install_scope,
 )
@@ -106,6 +107,19 @@ def test_install_scope_helpers_normalize_and_resolve_paths(tmp_path: Path) -> No
         user_path,
         project_path,
     ]
+
+
+def test_resolve_scoped_install_paths_builds_project_path(tmp_path: Path) -> None:
+    user_path = tmp_path / "user.json"
+    paths = resolve_scoped_install_paths(
+        "project",
+        tmp_path,
+        user_path=user_path,
+        project_path_for_root=lambda root: root / "project.json",
+    )
+    assert paths == [tmp_path.resolve() / "project.json"], (
+        "resolve_scoped_install_paths should normalize scope and resolve project root"
+    )
 
 
 def test_warn_residual_install_scope_notes_project_hooks(

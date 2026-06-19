@@ -254,9 +254,7 @@ class _BaselineLintSyncContext:
 
 
 def _lint_prune_only(totals: LintRunTotals, *, gate: LintGateMode) -> bool:
-    if gate == "new":
-        return totals.new > 0
-    return totals.violations > 0
+    return True
 
 
 def _print_baseline_sync_result(
@@ -272,9 +270,7 @@ def _print_baseline_sync_result(
         parts.append(f"removed {result.stale_removed} stale")
     if result.inherited_added:
         parts.append(f"recorded {result.inherited_added} git-base inherited")
-    if result.wrote and not prune_only and not result.inherited_added:
-        parts.append("mirrored current findings")
-    elif result.wrote and not result.inherited_added:
+    if result.wrote and not result.inherited_added:
         parts.append("pruned fixed debt")
     if parts:
         detail = ", ".join(parts)

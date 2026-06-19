@@ -3,6 +3,9 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
+from typing import cast
+
+from slopgate._types import object_dict
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "dashboard" / "scripts"
 SRC_DIR = Path(__file__).resolve().parents[2] / "src"
@@ -111,7 +114,7 @@ def test_dashboard_config_adds_rule_counterpart_metadata() -> None:
     assert isinstance(counterparts_obj, dict), (
         "Expected dashboard config to include rule counterpart metadata"
     )
-    counterparts = {str(key): value for key, value in counterparts_obj.items()}
+    counterparts = object_dict(cast(object, counterparts_obj))
     assert counterparts.get("PY-CODE-010") == ["long-line"], (
         "Expected dashboard counterparts to come from Slopgate parity metadata"
     )

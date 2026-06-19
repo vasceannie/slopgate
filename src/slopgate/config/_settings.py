@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from slopgate.constants import METADATA_SLOPGATE
 from slopgate.models import RegexRuleConfig, RuleSurfaceConfig, RuntimeConfig
 
 from ._coerce import (
@@ -14,9 +15,9 @@ from ._coerce import (
     string_value,
 )
 from ._io import load_toml
-from ._python_runtime import _python_runtime_settings
+from ._python_runtime import python_runtime_settings
 from ._repo import DISABLE_SENTINELS
-from ._rule_surfaces import _merge_rule_surfaces, _rule_surface_configs
+from ._rule_surfaces import merge_rule_surfaces, rule_surface_configs
 
 
 def _resolve_trace_dir(raw: dict[str, object], root: Path) -> Path:
@@ -100,14 +101,14 @@ class _HookGuidanceSettings:
 
 def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
     toml_data = load_toml(repo_root)
-    qg_section = object_dict(toml_data.get("slopgate", {}))
+    qg_section = object_dict(toml_data.get(METADATA_SLOPGATE, {}))
     return _RepoQualityGateSettings(
         thresholds=object_dict(toml_data.get("thresholds", {})),
         enabled_rules={
             key: bool(value)
             for key, value in object_dict(toml_data.get("enabled_rules", {})).items()
         },
-        rule_surfaces=_rule_surface_configs(toml_data.get("rule_surfaces")),
+        rule_surfaces=rule_surface_configs(toml_data.get("rule_surfaces")),
         post_edit_quality=object_dict(toml_data.get("post_edit_quality", {})),
         hook_guidance=object_dict(toml_data.get("hook_guidance", {})),
         async_jobs=object_dict(toml_data.get("async_jobs", {})),
@@ -165,8 +166,8 @@ def _enabled_rule_settings(
 def _rule_surface_settings(
     raw: dict[str, object], repo_settings: _RepoQualityGateSettings
 ) -> dict[str, RuleSurfaceConfig]:
-    global_surfaces = _rule_surface_configs(raw.get("rule_surfaces"))
-    return _merge_rule_surfaces(global_surfaces, repo_settings.rule_surfaces)
+    global_surfaces = rule_surface_configs(raw.get("rule_surfaces"))
+    return merge_rule_surfaces(global_surfaces, repo_settings.rule_surfaces)
 
 
 def _post_edit_quality_settings(
@@ -222,7 +223,7 @@ def merge_config(
     post_edit = _post_edit_quality_settings(raw, repo_settings)
     hook_guidance = _hook_guidance_settings(raw, repo_settings)
     async_jobs = _async_job_settings(raw, repo_settings)
-    python_runtime = _python_runtime_settings(raw, repo_settings.thresholds)
+    python_runtime = python_runtime_settings(raw, repo_settings.thresholds)
 
     return RuntimeConfig(
         root=actual_root,

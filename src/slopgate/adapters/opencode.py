@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 from typing_extensions import override
 
@@ -13,15 +12,19 @@ from slopgate.adapters._payload_fields import (
     sync_tool_result_fields,
 )
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
-from slopgate.adapters.opencode_identity import _opencode_session_identity
+from slopgate.adapters.opencode_identity import opencode_session_identity
 from slopgate.models import RuleFinding
 
 from slopgate.constants import (
+    ASK,
     BLOCK,
     DENY,
+    METADATA_TOOL_NAME,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
+    SESSION_START,
+    STOP,
 )
 
 OPENCODE_EVENT_MAP: dict[str, str] = {
@@ -32,8 +35,8 @@ OPENCODE_EVENT_MAP: dict[str, str] = {
     "session.compacted": "PostCompact",
     "tool.execute.before": PRE_TOOL_USE,
     "tool.execute.after": POST_TOOL_USE,
-    "session.created": "SessionStart",
-    "session.idle": "Stop",
+    "session.created": SESSION_START,
+    "session.idle": STOP,
     "session.error": "SessionError",
     "session.status": "SessionStatus",
     "permission.asked": PERMISSION_REQUEST,
@@ -54,7 +57,12 @@ OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
 }
 
 OPENCODE_MUTATION_EVENTS = frozenset({"file.edited"})
-_ADAPTER_TELEMETRY = SimpleNamespace(record_metric=lambda *_values: None)
+class _AdapterTelemetry:
+    def record_metric(self, *values: object) -> None:
+        return None
+
+
+_ADAPTER_TELEMETRY = _AdapterTelemetry()
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,15 +87,15 @@ class OpenCodeAdapter(PlatformAdapter):
         if oc_event:
             canonical["opencode_hook_event"] = oc_event
 
-        tool_name = string_value(raw.get("tool_name")) or ""
+        tool_name = string_value(raw.get(METADATA_TOOL_NAME)) or ""
         if not tool_name and oc_event in OPENCODE_MUTATION_EVENTS:
             tool_name = "Write"
         if tool_name:
             lowered = tool_name.strip().lower().replace("-", "_")
-            canonical["tool_name"] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
+            canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
 
         merge_standard_session_fields(raw, canonical, cwd_extra_keys=("directory",))
-        _opencode_session_identity(raw).apply_to(canonical)
+        opencode_session_identity(raw).apply_to(canonical)
         sync_tool_result_fields(canonical)
         return canonical
 
@@ -109,7 +117,7 @@ class OpenCodeAdapter(PlatformAdapter):
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
         _ADAPTER_TELEMETRY.record_metric("opencode.render.pre_tool_use")
-        if request.decision in {DENY, BLOCK, "ask"}:
+        if request.decision in {DENY, BLOCK, ASK}:
             result = self._block_output(request)
             if request.context:
                 result["context"] = request.context
@@ -130,7 +138,7 @@ class OpenCodeAdapter(PlatformAdapter):
         self, request: _OpenCodeRenderRequest
     ) -> ObjectDict | None:
         _ADAPTER_TELEMETRY.record_metric("opencode.render.permission_request")
-        if request.decision in {DENY, BLOCK, "ask"}:
+        if request.decision in {DENY, BLOCK, ASK}:
             return self._block_output(request)
         if request.decision == "allow" and request.updated_input:
             return {"action": "allow", "updated_args": request.updated_input}
@@ -159,7 +167,7 @@ class OpenCodeAdapter(PlatformAdapter):
 
     def _render_stop(self, request: _OpenCodeRenderRequest) -> ObjectDict | None:
         _ADAPTER_TELEMETRY.record_metric("opencode.render.stop")
-        if request.decision in {BLOCK, DENY, "ask"}:
+        if request.decision in {BLOCK, DENY, ASK}:
             reason = self.join_messages(
                 self.decision_findings(request.findings, request.decision)
             )
@@ -199,10 +207,10 @@ class OpenCodeAdapter(PlatformAdapter):
         if request.event_name == POST_TOOL_USE:
             return self._render_post_tool_use(request)
 
-        if request.event_name == "SessionStart":
+        if request.event_name == SESSION_START:
             return self._render_session_start(request)
 
-        if request.event_name == "Stop":
+        if request.event_name == STOP:
             return self._render_stop(request)
 
         return None

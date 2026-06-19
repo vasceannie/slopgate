@@ -26,7 +26,7 @@ def _cli_surface_config(value: object) -> CliSurfaceConfig:
     return CliSurfaceConfig(enabled=enabled if isinstance(enabled, bool) else None)
 
 
-def _rule_surface_configs(value: object) -> dict[str, RuleSurfaceConfig]:
+def rule_surface_configs(value: object) -> dict[str, RuleSurfaceConfig]:
     surfaces: dict[str, RuleSurfaceConfig] = {}
     for rule_id, item in object_dict(value).items():
         data = object_dict(item)
@@ -37,7 +37,7 @@ def _rule_surface_configs(value: object) -> dict[str, RuleSurfaceConfig]:
     return surfaces
 
 
-def _merge_rule_surfaces(
+def merge_rule_surfaces(
     base: dict[str, RuleSurfaceConfig], override: dict[str, RuleSurfaceConfig]
 ) -> dict[str, RuleSurfaceConfig]:
     merged = dict(base)

@@ -8,8 +8,8 @@ from slopgate._types import ObjectDict, ObjectMapping
 from slopgate.adapters._session_identity import (
     SESSION_IDENTITY_TITLE_KEYS,
     SESSION_IDENTITY_TELEMETRY,
-    _first_nested_identity_value,
-    _identity_object_sources,
+    first_nested_identity_value,
+    identity_object_sources,
 )
 
 
@@ -29,7 +29,7 @@ OPENCODE_EVENT_IDENTITY_SOURCE = "opencode-event"
 
 
 @dataclass(frozen=True, slots=True)
-class _OpenCodeSessionIdentity:
+class OpenCodeSessionIdentity:
     session_id: str
     title: str
 
@@ -45,26 +45,26 @@ class _OpenCodeSessionIdentity:
             canonical.setdefault("session_title_source", OPENCODE_EVENT_IDENTITY_SOURCE)
 
 
-def _opencode_session_identity(raw: ObjectMapping) -> _OpenCodeSessionIdentity:
+def opencode_session_identity(raw: ObjectMapping) -> OpenCodeSessionIdentity:
     SESSION_IDENTITY_TELEMETRY.record_metric("opencode.identity.extract")
     direct_sources, info_sources = _identity_sources(raw)
-    return _OpenCodeSessionIdentity(
-        session_id=_first_nested_identity_value(
+    return OpenCodeSessionIdentity(
+        session_id=first_nested_identity_value(
             direct_sources,
             OPENCODE_DIRECT_SESSION_ID_KEYS,
             metric_name="opencode.identity.first_value",
         )
-        or _first_nested_identity_value(
+        or first_nested_identity_value(
             info_sources,
             OPENCODE_INFO_SESSION_ID_KEYS,
             metric_name="opencode.identity.info_value",
         ),
-        title=_first_nested_identity_value(
+        title=first_nested_identity_value(
             direct_sources,
             OPENCODE_DIRECT_SESSION_TITLE_KEYS,
             metric_name="opencode.identity.first_title",
         )
-        or _first_nested_identity_value(
+        or first_nested_identity_value(
             info_sources,
             OPENCODE_INFO_SESSION_TITLE_KEYS,
             metric_name="opencode.identity.info_title",
@@ -74,12 +74,12 @@ def _opencode_session_identity(raw: ObjectMapping) -> _OpenCodeSessionIdentity:
 
 def _identity_sources(raw: ObjectMapping) -> tuple[tuple[ObjectMapping, ...], ...]:
     SESSION_IDENTITY_TELEMETRY.record_metric("opencode.identity.sources")
-    properties, data = _identity_object_sources(raw, ("properties", "data"))
+    properties, data = identity_object_sources(raw, ("properties", "data"))
     return (
         (raw, properties, data),
         (
-            *_identity_object_sources(raw, ("info",)),
-            *_identity_object_sources(properties, ("info",)),
-            *_identity_object_sources(data, ("info",)),
+            *identity_object_sources(raw, ("info",)),
+            *identity_object_sources(properties, ("info",)),
+            *identity_object_sources(data, ("info",)),
         ),
     )

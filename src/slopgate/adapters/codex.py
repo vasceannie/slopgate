@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 from typing_extensions import override
 
@@ -15,6 +14,7 @@ from slopgate._types import (
     string_value,
 )
 from slopgate.adapters._payload_fields import (
+    canonical_event_name,
     merge_standard_session_fields,
     sync_tool_result_fields,
 )
@@ -24,18 +24,21 @@ from slopgate.adapters.base import (
     render_request_from_call,
     render_permission_request_output,
 )
-from slopgate.adapters.codex_identity import _codex_session_identity
+from slopgate.adapters.codex_identity import codex_session_identity
 from slopgate.constants import (
+    ASK,
     BLOCK,
     DENY,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
+    SESSION_START,
+    STOP,
 )
 from slopgate.models import RuleFinding, Severity
 
 CODEX_EVENTS = {
-    "SessionStart",
+    SESSION_START,
     "SubagentStart",
     PRE_TOOL_USE,
     PERMISSION_REQUEST,
@@ -44,34 +47,32 @@ CODEX_EVENTS = {
     "PostCompact",
     "UserPromptSubmit",
     "SubagentStop",
-    "Stop",
+    STOP,
 }
 
 _CODEX_EVENT_ALIASES: dict[str, str] = {
     "postcompact": "PostCompact",
     "precompact": "PreCompact",
-    "sessionstart": "SessionStart",
+    "sessionstart": SESSION_START,
     "subagentstart": "SubagentStart",
     "pretooluse": PRE_TOOL_USE,
     "permissionrequest": PERMISSION_REQUEST,
     "posttooluse": POST_TOOL_USE,
     "userpromptsubmit": "UserPromptSubmit",
     "subagentstop": "SubagentStop",
-    "stop": "Stop",
+    "stop": STOP,
 }
-_CODEX_TELEMETRY = SimpleNamespace(record_metric=lambda *_values: None)
+class _CodexTelemetry:
+    def record_metric(self, *values: object) -> None:
+        return None
+
+
+_CODEX_TELEMETRY = _CodexTelemetry()
 
 
 def _canonical_codex_event(raw: ObjectMapping) -> str:
     _CODEX_TELEMETRY.record_metric("codex.event.canonicalize")
-    event = string_value(raw.get("hook_event_name")) or string_value(
-        raw.get("hookEventName")
-    )
-    if not event:
-        return ""
-    if event in CODEX_EVENTS:
-        return event
-    return _CODEX_EVENT_ALIASES.get(event.lower().replace("-", ""), event)
+    return canonical_event_name(raw, CODEX_EVENTS, _CODEX_EVENT_ALIASES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +90,7 @@ def _apply_codex_block_decision(
     request: _CodexRenderRequest,
 ) -> None:
     _CODEX_TELEMETRY.record_metric("codex.render.block_decision")
-    if request.decision not in {BLOCK, DENY, "ask"}:
+    if request.decision not in {BLOCK, DENY, ASK}:
         return
     payload["decision"] = BLOCK
     payload["reason"] = adapter.join_messages(
@@ -123,7 +124,7 @@ def _render_codex_pre_tool_use(
 ) -> ObjectDict | None:
     _CODEX_TELEMETRY.record_metric("codex.render.pretool")
     specific: ObjectDict = {"hookEventName": PRE_TOOL_USE}
-    if request.decision in {DENY, BLOCK, "ask"}:
+    if request.decision in {DENY, BLOCK, ASK}:
         specific["permissionDecision"] = DENY
         specific["permissionDecisionReason"] = adapter.join_messages(
             adapter.decision_findings(request.findings, request.decision)
@@ -240,7 +241,7 @@ class CodexAdapter(PlatformAdapter):
         if event_name:
             canonical["hook_event_name"] = event_name
         merge_standard_session_fields(raw, canonical)
-        _codex_session_identity(raw).apply_to(canonical)
+        codex_session_identity(raw).apply_to(canonical)
         sync_tool_result_fields(canonical)
         return canonical
 
@@ -277,7 +278,7 @@ class CodexAdapter(PlatformAdapter):
         if request.event_name in {
             "PostCompact",
             "PreCompact",
-            "SessionStart",
+            SESSION_START,
             "SubagentStart",
             "SubagentStop",
         }:
@@ -286,7 +287,7 @@ class CodexAdapter(PlatformAdapter):
         if request.event_name == "UserPromptSubmit":
             return _render_codex_prompt_submit(self, request)
 
-        if request.event_name == "Stop":
+        if request.event_name == STOP:
             return _render_codex_stop(self, request)
 
         return None

@@ -18,6 +18,7 @@ from slopgate.rules.python_ast._pytest_asyncio_ast import (
     string_keyword,
 )
 from slopgate.rules.python_ast._pytest_asyncio_config import (
+    pytest_config_for_root,
     pytest_asyncio_default_fixture_loop_scope,
     pytest_asyncio_mode,
 )
@@ -119,9 +120,11 @@ def test_pytest_asyncio_config_reads_pytest_ini(tmp_path: Path) -> None:
     ctx = replace(ctx, config=replace(ctx.config, repo_root=tmp_path))
 
     assert {
+        "direct_mode": pytest_config_for_root(str(tmp_path)).mode,
         "mode": pytest_asyncio_mode(ctx),
         "loop_scope": pytest_asyncio_default_fixture_loop_scope(ctx),
     } == {
+        "direct_mode": "auto",
         "mode": "auto",
         "loop_scope": "module",
     }

@@ -104,6 +104,7 @@ __all__ = [
     "detect_import_aliases",
     "detect_import_fanout",
     "detect_private_import_chains",
+    "detect_pytest_asyncio_patterns",
     "detect_stale_patterns",
     "detect_direct_get_logger",
     "detect_eager_tests",

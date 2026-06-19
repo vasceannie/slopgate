@@ -26,6 +26,7 @@ from slopgate.cli.commands import (
     cmd_update_suite,
     cmd_version,
 )
+from slopgate.cli._install_scope_args import add_install_scope_arguments
 
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
@@ -94,21 +95,12 @@ def _add_path_command_parser(
 
 
 def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(
-        "--install-scope",
-        "--cursor-scope",
-        dest="install_scope",
-        choices=("user", "project", "both"),
-        default="user",
-        help=(
+    add_install_scope_arguments(
+        parser,
+        help_text=(
             "Hook install target: user config dir, project dir (./.claude, ./.codex, "
             "./.cursor, ./.opencode), or both"
         ),
-    )
-    _ = parser.add_argument(
-        "--project-root",
-        default="",
-        help="Project root for --install-scope project/both (default: current directory)",
     )
 
 

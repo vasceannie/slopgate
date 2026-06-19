@@ -43,9 +43,15 @@ def _run_cmd_handle(
 
     import slopgate.util.logger
 
-    monkeypatch.setattr(slopgate.util.logger, "_emit", lambda *_args, **_kwargs: None)
+    def fake_emit(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    def fake_daemon_handler(*args: object) -> None:
+        _ = args
+
+    monkeypatch.setattr(slopgate.util.logger, "_emit", fake_emit)
     monkeypatch.setattr(
-        slopgate.cli.hook_runtime, "_try_handle_via_daemon", lambda *_args: None
+        slopgate.cli.hook_runtime, "_try_handle_via_daemon", fake_daemon_handler
     )
     monkeypatch.setattr(slopgate.engine, "evaluate_payload", fake_evaluate_payload)
     payload = {"hook_event_name": case.event_name, "cwd": "/tmp"}

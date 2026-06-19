@@ -8,13 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from slopgate.constants import METADATA_COMMAND
+from slopgate.constants import (
+    INSTALL_SCOPE_BOTH,
+    INSTALL_SCOPE_PROJECT,
+    INSTALL_SCOPE_USER,
+    METADATA_COMMAND,
+    REPLACE,
+)
 from slopgate.installer._shared import command_is_slopgate_hook, remove_owned_hooks
 
 InstallScope = Literal["user", "project", "both"]
-INSTALL_SCOPE_USER: InstallScope = "user"
-INSTALL_SCOPE_PROJECT: InstallScope = "project"
-INSTALL_SCOPE_BOTH: InstallScope = "both"
 INSTALL_SCOPES: frozenset[str] = frozenset(
     {INSTALL_SCOPE_USER, INSTALL_SCOPE_PROJECT, INSTALL_SCOPE_BOTH}
 )
@@ -33,6 +36,7 @@ __all__ = [
     "normalize_install_scope",
     "opencode_plugin_has_owned_slopgate",
     "resolve_project_root",
+    "resolve_scoped_install_paths",
     "ResidualInstallScopeWarning",
     "scope_paths",
     "warn_residual_install_scope",
@@ -71,6 +75,21 @@ def scope_paths(
     return paths
 
 
+def resolve_scoped_install_paths(
+    scope: str,
+    project_root: Path | None,
+    *,
+    user_path: Path,
+    project_path_for_root: Callable[[Path], Path],
+) -> list[Path]:
+    root = resolve_project_root(project_root)
+    return scope_paths(
+        normalize_install_scope(scope),
+        user_path=user_path,
+        project_path=project_path_for_root(root),
+    )
+
+
 def _hooks_dict_has_owned_slopgate(hooks: dict[object, object]) -> bool:
     remaining = remove_owned_hooks(hooks)
     if json.dumps(remaining, sort_keys=True) != json.dumps(hooks, sort_keys=True):
@@ -106,7 +125,7 @@ def json_has_owned_slopgate_hooks(path: Path) -> bool:
 def opencode_plugin_has_owned_slopgate(path: Path) -> bool:
     if not path.exists():
         return False
-    content = path.read_text(encoding="utf-8", errors="replace")
+    content = path.read_text(encoding="utf-8", errors=REPLACE)
     if "OpenCode Slopgate Plugin" in content and "const SLOPGATE_BIN" in content:
         return True
     return "OpenCode Slopgate Plugin" in content and "const SLOPGATE_BIN" in content

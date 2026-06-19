@@ -4,7 +4,7 @@ from slopgate.constants import METADATA_PATH
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 
-from ._retry import _normalize_attempt_path
+from ._retry import normalize_attempt_path
 
 COMPACT_CONTEXT_RULE_IDS = frozenset({"PY-CODE-012"})
 SAME_PATH_SUPPRESSION_REASON = "same_path_lower_ratio"
@@ -65,7 +65,7 @@ def compact_context_advisories(ctx: HookContext, findings: list[RuleFinding]) ->
         path_value = _metadata_path(finding)
         if path_value is None:
             continue
-        grouped.setdefault(_normalize_attempt_path(ctx, path_value), []).append(finding)
+        grouped.setdefault(normalize_attempt_path(ctx, path_value), []).append(finding)
 
     for path_key, items in grouped.items():
         _record_path_group(ctx, path_key, items)

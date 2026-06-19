@@ -19,8 +19,8 @@ from slopgate.rules.python_ast._pytest_asyncio_ast import (
     string_keyword,
 )
 from slopgate.rules.python_ast._pytest_asyncio_config import (
-    _PytestAsyncioConfig,
-    _pytest_config_for_root,
+    PytestAsyncioConfig,
+    pytest_config_for_root,
 )
 from slopgate.rules.python_ast._pytest_asyncio_fixture_scope import is_pytest_path
 from slopgate.rules.python_ast._pytest_asyncio_scope import (
@@ -29,8 +29,8 @@ from slopgate.rules.python_ast._pytest_asyncio_scope import (
 )
 
 
-def _pytest_asyncio_config() -> _PytestAsyncioConfig:
-    return _pytest_config_for_root(str(get_config().project_root))
+def _pytest_asyncio_config() -> PytestAsyncioConfig:
+    return pytest_config_for_root(str(get_config().project_root))
 
 
 def _violation(

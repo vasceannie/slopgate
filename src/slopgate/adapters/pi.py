@@ -23,16 +23,24 @@ from slopgate._types import (
     string_value,
 )
 from slopgate.adapters._payload_fields import (
+    canonical_event_name,
+    canonical_payload_with_event,
     merge_standard_session_fields,
     sync_tool_result_fields,
 )
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.constants import (
+    ASK,
     BLOCK,
     DENY,
+    METADATA_COMMAND,
+    METADATA_SLOPGATE,
+    METADATA_TOOL_NAME,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
+    SESSION_START,
+    STOP,
 )
 
 # Pi canonical event names
@@ -40,9 +48,9 @@ PI_EVENT_NAMES: set[str] = {
     PRE_TOOL_USE,  # tool_call → PreToolUse
     PERMISSION_REQUEST,  # (not directly used by pi)
     POST_TOOL_USE,  # tool_result / tool_execution_end → PostToolUse
-    "SessionStart",  # before_agent_start
+    SESSION_START,  # before_agent_start
     "UserPromptSubmit",  # input
-    "Stop",  # agent_end
+    STOP,  # agent_end
     "TurnEnd",  # turn_end
 }
 
@@ -52,9 +60,9 @@ _PI_EVENT_ALIASES: dict[str, str] = {
     "tool_result": POST_TOOL_USE,
     "tool_execution_end": POST_TOOL_USE,
     "input": "UserPromptSubmit",
-    "before_agent_start": "SessionStart",
+    "before_agent_start": SESSION_START,
     "turn_end": "TurnEnd",
-    "agent_end": "Stop",
+    "agent_end": STOP,
 }
 
 # Pi tool names → slopgate constant tool names
@@ -81,20 +89,13 @@ def _raw_event_name(raw: ObjectMapping) -> str:
 
 def _canonical_event_name(raw: ObjectMapping) -> str:
     """Map the pi event name to a slopgate canonical event."""
-    event = string_value(raw.get("hook_event_name")) or string_value(
-        raw.get("hookEventName")
-    )
-    if not event:
-        return ""
-    if event in PI_EVENT_NAMES:
-        return event
-    return _PI_EVENT_ALIASES.get(event.lower().replace("-", ""), event)
+    return canonical_event_name(raw, PI_EVENT_NAMES, _PI_EVENT_ALIASES)
 
 
 def _canonical_tool_name(raw: ObjectMapping) -> str:
     """Map the pi tool name to a slopgate canonical tool name."""
     tool = (
-        string_value(raw.get("tool_name"))
+        string_value(raw.get(METADATA_TOOL_NAME))
         or string_value(raw.get("toolName"))
         or string_value(raw.get("tool"))
         or string_value(raw.get("name"))
@@ -118,12 +119,12 @@ def _sync_tool_input(raw: ObjectMapping, canonical: ObjectDict) -> None:
 def _sync_user_bash_command(raw: ObjectMapping, canonical: ObjectDict) -> None:
     if _raw_event_name(raw) != "user_bash":
         return
-    command = string_value(raw.get("command"))
+    command = string_value(raw.get(METADATA_COMMAND))
     if not command:
         return
-    canonical.setdefault("tool_name", "Bash")
+    canonical.setdefault(METADATA_TOOL_NAME, "Bash")
     tool_input = object_dict(canonical.get("tool_input"))
-    tool_input.setdefault("command", command)
+    tool_input.setdefault(METADATA_COMMAND, command)
     if raw.get("excludeFromContext") is True:
         tool_input.setdefault("exclude_from_context", True)
     canonical["tool_input"] = tool_input
@@ -136,15 +137,11 @@ class PiAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
-        canonical = object_dict(raw) if is_object_dict(raw) else object_dict(raw)
-
-        event_name = _canonical_event_name(raw)
-        if event_name:
-            canonical["hook_event_name"] = event_name
+        canonical = canonical_payload_with_event(raw, _canonical_event_name(raw))
 
         tool_name = _canonical_tool_name(raw)
         if tool_name:
-            canonical["tool_name"] = tool_name
+            canonical[METADATA_TOOL_NAME] = tool_name
 
         _sync_tool_input(raw, canonical)
         _sync_user_bash_command(raw, canonical)
@@ -165,8 +162,8 @@ class PiAdapter(PlatformAdapter):
 
         output: ObjectDict = {}
         can_block = render_request.event_name in {PRE_TOOL_USE, "UserPromptSubmit"}
-        if can_block and render_request.decision in {DENY, BLOCK, "ask"}:
-            output["block"] = True
+        if can_block and render_request.decision in {DENY, BLOCK, ASK}:
+            output[BLOCK] = True
             output["reason"] = self.join_messages(
                 self.decision_findings(render_request.findings, render_request.decision)
             )
@@ -177,7 +174,7 @@ class PiAdapter(PlatformAdapter):
         if render_request.event_name == POST_TOOL_USE and output:
             output["tool_result_patch"] = {
                 "details": {
-                    "slopgate": {
+                    METADATA_SLOPGATE: {
                         "decision": render_request.decision,
                         "context": render_request.context,
                         "reason": output.get("reason"),

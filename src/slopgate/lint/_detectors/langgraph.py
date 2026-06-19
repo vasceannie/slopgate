@@ -11,9 +11,9 @@ from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, find_source_files
 from slopgate.rules.langgraph import (
-    _find_mutations,
-    _find_reducer_findings,
-    _is_langgraph_context,
+    find_mutations,
+    find_reducer_findings,
+    is_langgraph_context,
     LangGraphStateReducerRule,
 )
 
@@ -44,7 +44,7 @@ def _langgraph_files(
     pairs: list[tuple[ParsedFile, str]] = []
     for parsed_file in ensure_parsed(files, fallback=find_source_files()):
         source = _source(parsed_file)
-        if _is_langgraph_context(source, root):
+        if is_langgraph_context(source, root):
             pairs.append((parsed_file, source))
     return pairs
 
@@ -56,7 +56,7 @@ def detect_langgraph_state_reducers(
     rule = LangGraphStateReducerRule()
     violations: list[Violation] = []
     for parsed_file, source in _langgraph_files(files):
-        for finding in _find_reducer_findings(parsed_file.rel, source, rule):
+        for finding in find_reducer_findings(parsed_file.rel, source, rule):
             class_name = str(finding.metadata.get("class", "state"))
             fields = finding.metadata.get("fields", [])
             violations.append(
@@ -76,7 +76,7 @@ def detect_langgraph_state_mutations(
     """Find likely direct state mutation in LangGraph source files."""
     violations: list[Violation] = []
     for parsed_file, source in _langgraph_files(files):
-        mutations = _find_mutations(source)
+        mutations = find_mutations(source)
         if not mutations:
             continue
         line_no, preview = mutations[0]

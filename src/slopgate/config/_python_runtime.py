@@ -10,7 +10,7 @@ from ._coerce import bool_value, float_value, int_value, object_dict
 
 
 @dataclass(frozen=True, slots=True)
-class _PythonRuntimeSettings:
+class PythonRuntimeSettings:
     ast_enabled: bool
     max_parse_chars: int
     long_method_lines: int
@@ -53,11 +53,11 @@ def _python_ast_threshold_int(
     return int_value(value, int(RUNTIME_POLICY_DEFAULTS[keys.default]))
 
 
-def _python_runtime_settings(
+def python_runtime_settings(
     raw: dict[str, object], thresholds: dict[str, object]
-) -> _PythonRuntimeSettings:
+) -> PythonRuntimeSettings:
     python_ast = object_dict(raw.get("python_ast", {}))
-    return _PythonRuntimeSettings(
+    return PythonRuntimeSettings(
         ast_enabled=bool_value(python_ast.get("enabled"), True),
         max_parse_chars=int_value(
             python_ast.get("max_parse_chars"),

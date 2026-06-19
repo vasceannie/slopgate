@@ -6,7 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate._types import ObjectDict, object_list
-from slopgate.constants import DENY, METADATA_PATH, PERMISSION_REQUEST, PRE_TOOL_USE
+from slopgate.constants import (
+    BLOCK,
+    DENY,
+    METADATA_PATH,
+    METADATA_TOOL_NAME,
+    PERMISSION_REQUEST,
+    PRE_TOOL_USE,
+    SESSION_START,
+)
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding, Severity
 from slopgate.state import RetryLockPayload
@@ -23,7 +31,7 @@ from ._hints import (
 from ._hints.import_aliases import compress_repeated_import_alias_examples
 
 
-def _normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
+def normalize_attempt_path(ctx: HookContext, path_value: str) -> str:
     raw_path = Path(path_value)
     if raw_path.is_absolute():
         return str(raw_path.resolve(strict=False))
@@ -45,10 +53,10 @@ def _attempt_fingerprint(ctx: HookContext) -> str | None:
     if not is_edit_like_tool(ctx.tool_name):
         return None
     payload = {
-        "tool_name": ctx.tool_name.lower(),
+        METADATA_TOOL_NAME: ctx.tool_name.lower(),
         "candidate_paths": sorted(
             {
-                _normalize_attempt_path(ctx, path_value)
+                normalize_attempt_path(ctx, path_value)
                 for path_value in ctx.candidate_paths
                 if path_value
             }
@@ -56,7 +64,7 @@ def _attempt_fingerprint(ctx: HookContext) -> str | None:
         "targets": sorted(
             {
                 (
-                    _normalize_attempt_path(ctx, target.path),
+                    normalize_attempt_path(ctx, target.path),
                     target.source,
                     hashlib.sha256(target.content.encode("utf-8")).hexdigest(),
                 )
@@ -104,7 +112,7 @@ def _record_denial_attempt(
     attempt_fingerprint: str | None,
 ) -> int:
     path_value = finding_path(item)
-    state_path = _normalize_attempt_path(ctx, path_value) if path_value else None
+    state_path = normalize_attempt_path(ctx, path_value) if path_value else None
     repeat_count = ctx.state.record_deny_hit(
         ctx.session_id,
         item.rule_id,
@@ -125,8 +133,8 @@ def _apply_repeat_escalation(item: RuleFinding, repeat_count: int) -> bool:
     item.message = (
         (item.message or "").rstrip() + " Change design before retrying."
     ).strip()
-    if repeat_count >= 3 and item.decision != "block":
-        item.decision = "block"
+    if repeat_count >= 3 and item.decision != BLOCK:
+        item.decision = BLOCK
         item.severity = max(item.severity, Severity.HIGH)
         item.metadata["escalated"] = True
     return True
@@ -165,14 +173,14 @@ def _clear_resolved_thin_wrapper_hits(
     found_pairs = {
         (
             item.rule_id,
-            _normalize_attempt_path(ctx, path_value)
+            normalize_attempt_path(ctx, path_value)
             if (path_value := finding_path(item)) is not None
             else "__pathless__",
         )
         for item in denied
     }
     for path in touched_paths:
-        normalized = _normalize_attempt_path(ctx, path)
+        normalized = normalize_attempt_path(ctx, path)
         for rule_id in ("PY-CODE-013",):
             key = (rule_id, normalized)
             if key not in found_pairs:
@@ -203,7 +211,7 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
                 current_rule_ids=current_rule_ids,
                 paths=sorted(
                     {
-                        _normalize_attempt_path(ctx, path_value)
+                        normalize_attempt_path(ctx, path_value)
                         for path_value in ctx.candidate_paths
                         if path_value
                     }
@@ -219,7 +227,7 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
 def inject_recent_failure_context(
     ctx: HookContext, findings: list[RuleFinding]
 ) -> None:
-    if ctx.event_name != "SessionStart":
+    if ctx.event_name != SESSION_START:
         return
     repeated = ctx.state.recent_repeated_failures(ctx.session_id, limit=4)
     if not repeated:
@@ -332,7 +340,7 @@ def enforce_retry_budget(ctx: HookContext, findings: list[RuleFinding]) -> None:
 
 
 def capture_repair_plan_signal(ctx: HookContext) -> None:
-    if ctx.event_name not in {"UserPromptSubmit", "SessionStart"}:
+    if ctx.event_name not in {"UserPromptSubmit", SESSION_START}:
         return
     prompt = ctx.user_prompt.lower()
     if "repair plan" not in prompt:

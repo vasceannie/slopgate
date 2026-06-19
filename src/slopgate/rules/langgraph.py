@@ -59,7 +59,7 @@ def _is_langgraph_project(cwd: str) -> bool:
     return False
 
 
-def _is_langgraph_context(source: str | None, cwd: str) -> bool:
+def is_langgraph_context(source: str | None, cwd: str) -> bool:
     """Return True if the source or project is LangGraph-related."""
     if source is not None:
         if any(marker in source for marker in _LANGGRAPH_SOURCE_MARKERS):
@@ -96,7 +96,7 @@ def _iter_langgraph_sources(
         source = _read_source(path_value, ctx)
         if source is None:
             continue
-        if not _is_langgraph_context(source, cwd):
+        if not is_langgraph_context(source, cwd):
             continue
         pairs.append((path_value, source))
     return pairs
@@ -152,7 +152,7 @@ def _bare_list_fields(class_node: ast.ClassDef) -> list[str]:
     return fields
 
 
-def _find_reducer_findings(
+def find_reducer_findings(
     path_value: str,
     source: str,
     rule: LangGraphStateReducerRule,
@@ -207,7 +207,7 @@ class LangGraphStateReducerRule(Rule):
             return []
         findings: list[RuleFinding] = []
         for path_value, source in _iter_langgraph_sources(ctx):
-            findings.extend(_find_reducer_findings(path_value, source, self))
+            findings.extend(find_reducer_findings(path_value, source, self))
         return findings
 
 
@@ -229,7 +229,7 @@ _STATE_MUTATION_PATTERNS = [
 ]
 
 
-def _find_mutations(source: str) -> list[tuple[int, str]]:
+def find_mutations(source: str) -> list[tuple[int, str]]:
     """Scan source lines for state mutation patterns."""
     mutations: list[tuple[int, str]] = []
     for i, line in enumerate(source.splitlines(), 1):
@@ -283,7 +283,7 @@ class LangGraphStateMutationRule(Rule):
             return []
         findings: list[RuleFinding] = []
         for path_value, source in _iter_langgraph_sources(ctx):
-            mutations = _find_mutations(source)
+            mutations = find_mutations(source)
             if mutations:
                 findings.append(_mutation_finding(path_value, mutations, self))
         return findings

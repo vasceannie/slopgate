@@ -149,18 +149,16 @@ def compute_synced_baseline_rules(
 ) -> tuple[dict[str, set[str]], int]:
     """Return baseline rules after sync and the number of stale ids removed."""
     current_by_rule = _current_ids_by_rule(collectors)
-    accepted = accepted_baseline or {}
-    all_rules = set(old_baseline) | set(current_by_rule) | set(accepted)
+    all_rules = set(old_baseline) | set(current_by_rule)
     synced: dict[str, set[str]] = {}
     stale_removed = 0
 
     for rule in all_rules:
         old_ids = old_baseline.get(rule, set())
-        accepted_ids = accepted.get(rule, set())
         current_ids = current_by_rule.get(rule, set())
         stale_removed += len(old_ids - current_ids)
         if prune_only:
-            kept = (old_ids | accepted_ids) & current_ids
+            kept = old_ids & current_ids
             if kept:
                 synced[rule] = kept
         elif current_ids:

@@ -24,14 +24,14 @@ if TYPE_CHECKING:
     from slopgate.context import HookContext
 
 
-class _PytestAsyncioConfig(NamedTuple):
+class PytestAsyncioConfig(NamedTuple):
     mode: str | None
     default_fixture_loop_scope: str | None
 
 
 _CONFIG_PRIORITY = ("pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg")
 _INI_SECTIONS = ("pytest", "tool:pytest", "tool:pytest.ini_options")
-_EMPTY_CONFIG = _PytestAsyncioConfig(None, None)
+_EMPTY_CONFIG = PytestAsyncioConfig(None, None)
 
 
 def _mapping_value(data: object, key: str) -> object | None:
@@ -71,7 +71,7 @@ def _addopts_asyncio_mode(data: object) -> str | None:
     return None
 
 
-def _pyproject_config(path: Path) -> _PytestAsyncioConfig | None:
+def _pyproject_config(path: Path) -> PytestAsyncioConfig | None:
     if _toml_loads is None or _toml_decode_error is None:
         return None
     try:
@@ -84,14 +84,14 @@ def _pyproject_config(path: Path) -> _PytestAsyncioConfig | None:
     if not isinstance(ini_options, Mapping):
         return None
     options = cast("Mapping[str, object]", ini_options)
-    return _PytestAsyncioConfig(
+    return PytestAsyncioConfig(
         _addopts_asyncio_mode(_mapping_value(options, "addopts"))
         or string_value(_mapping_value(options, "asyncio_mode")),
         string_value(_mapping_value(options, "asyncio_default_fixture_loop_scope")),
     )
 
 
-def _ini_config(path: Path, *, recognize_empty: bool) -> _PytestAsyncioConfig | None:
+def _ini_config(path: Path, *, recognize_empty: bool) -> PytestAsyncioConfig | None:
     parser = configparser.ConfigParser()
     try:
         parser.read(path, encoding="utf-8")
@@ -101,7 +101,7 @@ def _ini_config(path: Path, *, recognize_empty: bool) -> _PytestAsyncioConfig | 
         not any((parser.has_section(section) for section in _INI_SECTIONS))
     ):
         return None
-    return _PytestAsyncioConfig(
+    return PytestAsyncioConfig(
         _ini_asyncio_mode(parser),
         _ini_option(parser, "asyncio_default_fixture_loop_scope"),
     )
@@ -125,7 +125,7 @@ def _ini_asyncio_mode(parser: configparser.ConfigParser) -> str | None:
     return None
 
 
-def _pytest_config_for_root(root_text: str) -> _PytestAsyncioConfig:
+def pytest_config_for_root(root_text: str) -> PytestAsyncioConfig:
     root = Path(root_text)
     for config_name in _CONFIG_PRIORITY:
         path = root / config_name
@@ -143,8 +143,8 @@ def _pytest_config_for_root(root_text: str) -> _PytestAsyncioConfig:
 
 
 def pytest_asyncio_mode(ctx: HookContext) -> str | None:
-    return _pytest_config_for_root(str(ctx.config.repo_root)).mode
+    return pytest_config_for_root(str(ctx.config.repo_root)).mode
 
 
 def pytest_asyncio_default_fixture_loop_scope(ctx: HookContext) -> str | None:
-    return _pytest_config_for_root(str(ctx.config.repo_root)).default_fixture_loop_scope
+    return pytest_config_for_root(str(ctx.config.repo_root)).default_fixture_loop_scope

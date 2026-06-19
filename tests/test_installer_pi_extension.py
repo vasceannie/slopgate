@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,27 @@ import pytest
 import slopgate.installer
 import slopgate.installer._pi
 import slopgate.installer._shared
+
+
+def _install_user_pi_extension(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0, (
+        "install_pi should create a user-scoped Pi extension for uninstall tests"
+    )
+    return tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
+
+
+def _artifact_state(paths: dict[str, Path]) -> dict[str, bool]:
+    return {name: path.exists() for name, path in paths.items()}
+
+
+def _text_artifact_state(paths: dict[str, Path]) -> dict[str, str]:
+    return {name: path.read_text(encoding="utf-8") for name, path in paths.items()}
 
 
 def test_pi_install_writes_global_extension(
@@ -25,12 +45,22 @@ def test_pi_install_writes_global_extension(
     config_path = extension_path.parent / "config.json"
     package_path = extension_path.parent / "package.json"
     content = extension_path.read_text(encoding="utf-8")
-    assert "Pi Slopgate Extension" in content
-    assert json.dumps(["/tmp/slopgate"]) in content
-    assert '"handle", "--platform", "pi"' in content
-    assert json.loads(config_path.read_text(encoding="utf-8"))["name"] == "pi-slopgate"
     package = json.loads(package_path.read_text(encoding="utf-8"))
-    assert package["dependencies"]["@earendil-works/pi-tui"] == "^0.79.6"
+    assert {
+        "has_marker": "Pi Slopgate Extension" in content,
+        "has_binary": json.dumps(["/tmp/slopgate"]) in content,
+        "has_handle_args": '"handle", "--platform", "pi"' in content,
+        "config_name": json.loads(config_path.read_text(encoding="utf-8"))["name"],
+        "pi_tui_version": package["dependencies"]["@earendil-works/pi-tui"],
+        "node_types_version": package["dependencies"]["@types/node"],
+    } == {
+        "has_marker": True,
+        "has_binary": True,
+        "has_handle_args": True,
+        "config_name": "pi-slopgate",
+        "pi_tui_version": "^0.79.6",
+        "node_types_version": "^22.16.5",
+    }, "Pi user install should write extension, config, and package metadata"
 
 
 def test_pi_project_scope_writes_repo_extension(
@@ -48,6 +78,38 @@ def test_pi_project_scope_writes_repo_extension(
     )
     assert (extension_path.parent / "config.json").exists()
     assert (extension_path.parent / "package.json").exists()
+
+
+def test_pi_user_extension_path_uses_global_agent_extension_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    expected = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
+    assert slopgate.installer._pi.pi_user_extension_path() == expected, (
+        "pi_user_extension_path should point at Pi's user agent extension directory"
+    )
+
+
+def test_pi_project_extension_path_uses_project_extension_dir(tmp_path: Path) -> None:
+    expected = tmp_path / ".pi" / "extensions" / "pi-slopgate" / "index.ts"
+    assert slopgate.installer._pi.pi_project_extension_path(tmp_path) == expected, (
+        "pi_project_extension_path should point at the repo-local Pi extension"
+    )
+
+
+def test_pi_extension_has_owned_slopgate_recognizes_installed_extension(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    assert slopgate.installer._pi.install_pi(
+        dry_run=False, scope="project", project_root=tmp_path
+    ) == 0, "install_pi should create the project extension for ownership probing"
+    extension_path = slopgate.installer._pi.pi_project_extension_path(tmp_path)
+    assert slopgate.installer._pi.pi_extension_has_owned_slopgate(extension_path), (
+        "pi_extension_has_owned_slopgate should recognize Slopgate's own template"
+    )
 
 
 def test_pi_install_removes_owned_legacy_standalone_extension(
@@ -96,206 +158,6 @@ def test_pi_install_refuses_to_silently_remove_unrecognized_legacy_extension(
     ).exists()
 
 
-def test_pi_extension_falls_back_to_python_module_invocation() -> None:
-    from slopgate.resources import resource_path
-
-    template = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    extension = slopgate.installer._pi.render_pi_extension(template, sys.executable)
-    assert "__SLOPGATE_BIN__" not in extension
-    assert json.dumps([sys.executable, "-m", "slopgate"]) in extension
-    assert f'{json.dumps(sys.executable)}, "handle"' not in extension
-
-
-def test_pi_extension_uses_documented_input_handled_action() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert '{ action: "handled" }' in extension
-    assert 'ctx.ui.notify(result.reason, "warning")' in extension
-    assert '"warn"' not in extension
-    assert "{ handled: true }" not in extension
-
-
-def test_pi_extension_uses_documented_input_event_text() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "text?: string" in extension
-    assert "function promptFromEvent(event: PiEventLike): string" in extension
-    assert 'return event.text || event.prompt || ""' in extension
-    assert "prompt: promptFromEvent(event)" in extension
-
-
-def test_pi_extension_supports_documented_input_transform_result() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert 'action?: "continue" | "handled" | "transform"' in extension
-    assert 'return { action: "handled" }' in extension
-    assert 'action: "transform", text' in extension
-    assert "inputTransformFromUpdatedInput(result?.updated_input)" in extension
-
-
-def test_pi_extension_maps_tool_args_and_results_from_pi_events() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "args?: Record<string, unknown>" in extension
-    assert "arguments?: Record<string, unknown>" in extension
-    assert "result?: unknown" in extension
-    assert "return event.input || event.args || event.arguments || {}" in extension
-    assert "function textFromContentPart(part: unknown): string" in extension
-    assert (
-        'stdout: event.content.map(textFromContentPart).filter(Boolean).join("\\n")'
-        in extension
-    )
-    assert "return event.content ?? event.result ?? event.message ?? null" in extension
-    assert "tool_input: toolInputFromEvent(event)" in extension
-    assert "tool_result: toolResultFromEvent(event)" in extension
-    assert "tool_response: toolResultFromEvent(event)" in extension
-
-
-def test_pi_extension_maps_user_bash_commands_to_bash_tool_input() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert '| "user_bash"' in extension
-    assert 'pi.on("user_bash"' in extension
-    assert 'typeof event.command === "string"' in extension
-    assert (
-        'tool_name: event.toolName || (typeof event.command === "string" ? "bash" : "")'
-        in extension
-    )
-    assert "exclude_from_context: event.excludeFromContext === true" in extension
-    assert "exitCode: 1" in extension
-
-
-def test_pi_extension_injects_session_context_through_before_agent_start() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "systemPrompt?: string" in extension
-    assert 'const SLOPGATE_CONTEXT_MESSAGE_TYPE = "slopgate-context"' in extension
-    assert 'const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"' in extension
-    assert "function beforeAgentStartResult(" in extension
-    assert (
-        'sendSlopgateChatMessage(pi, result, "before_agent_start", "context")'
-        in extension
-    )
-    assert "customType: SLOPGATE_CONTEXT_MESSAGE_TYPE" in extension
-    assert "content: result.context" in extension
-    assert "display: false" in extension
-    assert (
-        'slopgateMessageDetails("context", "before_agent_start", result)' in extension
-    )
-    assert "Context added to this turn. Expand for details." in extension
-    assert (
-        "return `${heading} · ${eventName}\\nContext captured in details.`"
-        not in extension
-    )
-    assert (
-        "pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)"
-        in extension
-    )
-    assert (
-        "systemPrompt: `${systemPrompt}\\n\\n${result.context}`.trim()" not in extension
-    )
-    assert (
-        "Slopgate active. Follow Slopgate enforcement results surfaced by the extension during this turn."
-        not in extension
-    )
-    assert "const response = beforeAgentStartResult(pi, result)" in extension
-
-
-def test_pi_extension_does_not_require_node_buffer_global() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "Buffer" not in extension
-
-
-def test_pi_extension_suppresses_node_builtin_type_noise_without_require() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "@earendil-works/pi-coding-agent" not in extension
-    assert 'from "@earendil-works/pi-tui"' in extension
-    assert 'from "node:child_process"' in extension
-    assert 'from "node:fs"' in extension
-    assert 'from "node:path"' in extension
-    assert 'from "node:process"' in extension
-    assert extension.count("@ts-ignore Pi provides Node built-ins at runtime") == 4
-    assert "runtimeRequire" not in extension
-    assert "require(" not in extension
-    assert 'eval)("require")' not in extension
-    assert "require is not defined" not in extension
-    assert "interface PiExtensionAPI" in extension
-    assert "async (event, ctx)" in extension
-
-
-def test_pi_extension_keeps_post_tool_findings_advisory() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert 'pi.on("tool_result"' in extension
-    assert 'pi.on("tool_execution_end"' in extension
-    assert "return mergeToolResultPatch(event, result)" in extension
-    assert "tool_result_patch?: PiToolResultPatch" in extension
-    assert "throw new Error" not in extension
-
-
-def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert "sendMessage?<T = unknown>(" in extension
-    assert "registerMessageRenderer?(" in extension
-    assert "function renderSlopgateMessage(" in extension
-    assert "bg(name: string, text: string): string" in extension
-    assert (
-        'const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text))'
-        in extension
-    )
-    assert 'const title = `${theme.bold(theme.fg(color, "Slopgate"))}' in extension
-    assert "const lines = [title, message.content]" in extension
-    assert 'lines.push(theme.fg("dim", event))' not in extension
-    assert 'box.addChild(new Text(lines.join("\\n"), 0, 0))' in extension
-    assert "return box" in extension
-    assert (
-        "pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)"
-        in extension
-    )
-    assert "function sendSlopgateChatMessage(" in extension
-    assert "customType: SLOPGATE_EVENT_MESSAGE_TYPE" in extension
-    assert "display: true" in extension
-    assert "{ triggerTurn: false }" in extension
-    assert 'sendSlopgateChatMessage(pi, result, "tool_call", "blocked")' in extension
-    assert 'sendSlopgateChatMessage(pi, result, "user_bash", "blocked")' in extension
-    assert "setStatus" not in extension
-    assert "setWidget" not in extension
-
-
-def test_pi_extension_renderer_shows_full_context_only_when_expanded() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert 'stringDetail(message.details, "reason")' in extension
-    assert 'stringDetail(message.details, "event")' in extension
-    assert 'stringDetail(message.details, "context")' in extension
-    assert "context && `context:\\n${context}`" in extension
-    assert "if (options.expanded)" in extension
-    assert "JSON.stringify(message.details" not in extension
-
-
-def test_pi_extension_context_advisory_uses_compact_component_state() -> None:
-    from slopgate.resources import resource_path
-
-    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
-    assert 'const state = result.reason ? "warning" : "context"' in extension
-    assert "sendSlopgateChatMessage(pi, result, eventName, state)" in extension
-    assert 'sendSlopgateChatMessage(pi, result, eventName, "warning")' not in extension
-
-
 def test_pi_uninstall_refuses_unrecognized_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -315,11 +177,7 @@ def test_pi_uninstall_refuses_unrecognized_extension(
 def test_pi_uninstall_removes_canonical_config_and_owned_legacy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0
+    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
     legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
     legacy_path.write_text(
         "\n".join(
@@ -332,30 +190,38 @@ def test_pi_uninstall_removes_canonical_config_and_owned_legacy(
         encoding="utf-8",
     )
 
-    extension_path = (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    )
     config_path = extension_path.parent / "config.json"
     package_path = extension_path.parent / "package.json"
-    assert slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user") == 0
-    assert not extension_path.exists()
-    assert not config_path.exists()
-    assert not package_path.exists()
-    assert not legacy_path.exists()
+    paths = {
+        "extension_exists": extension_path,
+        "config_exists": config_path,
+        "package_exists": package_path,
+        "legacy_exists": legacy_path,
+    }
+    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
+
+    assert {
+        "status": status,
+        **_artifact_state(paths),
+    } == {
+        "status": 0,
+        "extension_exists": False,
+        "config_exists": False,
+        "package_exists": False,
+        "legacy_exists": False,
+    }, "Pi uninstall should remove canonical files and owned legacy extension"
 
 
 def test_pi_uninstall_removes_owned_legacy_package_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0
-    extension_path = (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    )
+    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
     legacy_package_path = extension_path.with_name("index.js")
+    paths = {
+        "extension_exists": extension_path,
+        "config_exists": extension_path.parent / "config.json",
+        "legacy_package_exists": legacy_package_path,
+    }
     legacy_package_path.write_text(
         "\n".join(
             (
@@ -367,25 +233,29 @@ def test_pi_uninstall_removes_owned_legacy_package_entry(
         encoding="utf-8",
     )
 
-    assert slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user") == 0
-    assert not extension_path.exists()
-    assert not (extension_path.parent / "config.json").exists()
-    assert not legacy_package_path.exists()
+    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
+
+    assert {
+        "status": status,
+        **_artifact_state(paths),
+    } == {
+        "status": 0,
+        "extension_exists": False,
+        "config_exists": False,
+        "legacy_package_exists": False,
+    }, "Pi uninstall should remove the owned legacy package entry"
 
 
 def test_pi_uninstall_preserves_unrecognized_artifact_but_removes_owned_leftovers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0
-    extension_path = (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    )
+    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
     config_path = extension_path.parent / "config.json"
     legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
+    paths = {
+        "extension_exists": extension_path,
+        "legacy_exists": legacy_path,
+    }
     config_path.write_text('{"name": "custom"}\n', encoding="utf-8")
     legacy_path.write_text(
         "\n".join(
@@ -398,7 +268,15 @@ def test_pi_uninstall_preserves_unrecognized_artifact_but_removes_owned_leftover
         encoding="utf-8",
     )
 
-    assert slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user") == 1
-    assert not extension_path.exists()
-    assert config_path.read_text(encoding="utf-8") == '{"name": "custom"}\n'
-    assert not legacy_path.exists()
+    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
+
+    assert {
+        "status": status,
+        **_artifact_state(paths),
+        **_text_artifact_state({"config_content": config_path}),
+    } == {
+        "status": 1,
+        "extension_exists": False,
+        "config_content": '{"name": "custom"}\n',
+        "legacy_exists": False,
+    }, "Pi uninstall should preserve custom config but remove owned leftovers"

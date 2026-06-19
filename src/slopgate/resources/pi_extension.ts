@@ -28,13 +28,9 @@ interface NodeProcessLike {
   env: Record<string, string | undefined>
 }
 
-// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
 import { spawn } from "node:child_process"
-// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
 import { existsSync } from "node:fs"
-// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
 import { dirname, join } from "node:path"
-// @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
 import runtimeProcessValue from "node:process"
 import { Box, Text } from "@earendil-works/pi-tui"
 
@@ -42,8 +38,17 @@ const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
 const SLOPGATE_ARGV = runtimeProcess.env.SLOPGATE_BIN ? [runtimeProcess.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SESSION_ID = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-const SLOPGATE_CONTEXT_MESSAGE_TYPE = "slopgate-context"
 const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"
+const SLOPGATE_SYSTEM_PROMPT_HEADER = "Slopgate hook context for this turn:"
+let lastSlopgateContext = ""
+
+interface PiContentPart {
+  text?: string
+  type?: string
+  [key: string]: unknown
+}
+
+type PiMessageContent = string | PiContentPart[]
 
 type PiEventName =
   | "agent_end"
@@ -87,12 +92,19 @@ interface PiEventLike {
   excludeFromContext?: boolean
 }
 
+interface PiUiLike {
+  editor?(title: string, prefill?: string): Promise<string | undefined>
+  notify?(message: string, level?: "info" | "warning" | "error"): void
+}
+
 interface PiContextLike {
   hasUI?: boolean
   cwd?: string
-  ui?: {
-    notify?(message: string, level?: "info" | "warning" | "error"): void
-  }
+  ui?: PiUiLike
+}
+
+interface PiCommandContextLike extends PiContextLike {
+  ui?: PiUiLike
 }
 
 interface PiToolResultPatch {
@@ -120,7 +132,7 @@ interface PiInputTransformResult {
 interface PiBeforeAgentStartResult {
   message?: {
     customType: string
-    content: string
+    content: PiMessageContent
     display: boolean
     details?: Record<string, unknown>
   }
@@ -132,17 +144,33 @@ type PiEventHandler = (
   ctx: PiContextLike,
 ) => Promise<PiHookResult | void> | PiHookResult | void
 
+type PiCommandHandler = (
+  args: string,
+  ctx: PiCommandContextLike,
+) => Promise<void>
+
+interface PiMessageRenderOptions {
+  expanded: boolean
+}
+
 interface PiExtensionAPI {
   on(eventName: PiEventName, handler: PiEventHandler): void
-  registerMessageRenderer?(
+  registerCommand(
+    name: string,
+    options: {
+      description: string
+      handler: PiCommandHandler
+    },
+  ): void
+  registerMessageRenderer(
     customType: string,
     renderer: (
       message: {
         customType: string
-        content: string
+        content: PiMessageContent
         details?: Record<string, unknown>
       },
-      options: { expanded?: boolean },
+      options: PiMessageRenderOptions,
       theme: {
         bg(name: string, text: string): string
         fg(name: string, text: string): string
@@ -150,10 +178,10 @@ interface PiExtensionAPI {
       },
     ) => unknown,
   ): void
-  sendMessage?<T = unknown>(
+  sendMessage<T = unknown>(
     message: {
       customType: string
-      content: string
+      content: PiMessageContent
       display: boolean
       details?: T
     },
@@ -243,21 +271,31 @@ function inputTransformFromUpdatedInput(
   return result
 }
 
+function appendSlopgateSystemPrompt(
+  systemPrompt: string | undefined,
+  context: string,
+): string {
+  const slopgateContext = `${SLOPGATE_SYSTEM_PROMPT_HEADER}\n${context}`.trim()
+  const basePrompt = systemPrompt?.trim()
+  return basePrompt ? `${basePrompt}\n\n${slopgateContext}` : slopgateContext
+}
+
 function beforeAgentStartResult(
-  pi: PiExtensionAPI,
+  event: PiEventLike,
   result: PiEnforcerResult | null,
 ): PiBeforeAgentStartResult | void {
   if (!result?.context) {
     return
   }
-  sendSlopgateChatMessage(pi, result, "before_agent_start", "context")
+  lastSlopgateContext = result.context
   return {
     message: {
-      customType: SLOPGATE_CONTEXT_MESSAGE_TYPE,
-      content: result.context,
-      display: false,
+      customType: SLOPGATE_EVENT_MESSAGE_TYPE,
+      content: chatMessageContent("context", "before_agent_start", result),
+      display: true,
       details: slopgateMessageDetails("context", "before_agent_start", result),
     },
+    systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, result.context),
   }
 }
 
@@ -281,6 +319,7 @@ function slopgateMessageDetails(
     event: eventName,
     reason: result.reason,
     context: result.context,
+    summary: chatMessageContent(state, eventName, result),
   }
 }
 
@@ -290,7 +329,7 @@ function chatMessageContent(
   result: PiEnforcerResult,
 ): string {
   if (state === "context") {
-    return "Context added to this turn. Expand for details."
+    return "Context added to this turn. Run /slopgate-context for details."
   }
   const compact = compactSlopgateLines(result).slice(1)
   return compact.length > 0 ? compact.join("\n") : `Slopgate ${state} at ${eventName}`
@@ -304,10 +343,10 @@ function stringDetail(details: Record<string, unknown> | undefined, key: string)
 function renderSlopgateMessage(
   message: {
     customType: string
-    content: string
+    content: PiMessageContent
     details?: Record<string, unknown>
   },
-  options: { expanded?: boolean },
+  _options: PiMessageRenderOptions,
   theme: {
     bg(name: string, text: string): string
     fg(name: string, text: string): string
@@ -315,30 +354,39 @@ function renderSlopgateMessage(
   },
 ): unknown {
   const state = stringDetail(message.details, "state")
-  const event = stringDetail(message.details, "event")
-  const reason = stringDetail(message.details, "reason")
-  const context = stringDetail(message.details, "context")
+  const summary = stringDetail(message.details, "summary") || "Slopgate context captured."
   const label = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
   const color = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
   const title = `${theme.bold(theme.fg(color, "Slopgate"))} ${theme.fg("muted", label)}`
-  const lines = [title, message.content]
-  if (options.expanded) {
-    const detail = [
-      event && `event: ${event}`,
-      reason && `reason:\n${reason}`,
-      context && `context:\n${context}`,
-    ].filter(Boolean)
-    if (detail.length > 0) {
-      lines.push("", theme.fg("dim", detail.join("\n\n")))
-    }
-  }
+  const lines = [title, summary]
   const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text))
   box.addChild(new Text(lines.join("\n"), 0, 0))
   return box
 }
 
 function registerSlopgateMessageRenderer(pi: PiExtensionAPI): void {
-  pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)
+  pi.registerMessageRenderer(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)
+}
+
+function registerSlopgateContextCommand(pi: PiExtensionAPI): void {
+  pi.registerCommand("slopgate-context", {
+    description: "Show the latest Slopgate context injected into the current session.",
+    async handler(_args: string, ctx: PiCommandContextLike): Promise<void> {
+      if (!lastSlopgateContext) {
+        ctx.ui?.notify?.("No Slopgate context has been captured yet.", "info")
+        return
+      }
+      if (ctx.ui?.editor) {
+        await ctx.ui.editor("Slopgate context", lastSlopgateContext)
+        return
+      }
+      ctx.ui?.notify?.("Slopgate context is available after the next TUI turn.", "info")
+    },
+  })
+}
+
+function clearSlopgateContext(): void {
+  lastSlopgateContext = ""
 }
 
 function sendSlopgateChatMessage(
@@ -347,7 +395,7 @@ function sendSlopgateChatMessage(
   eventName: string,
   state: "blocked" | "context" | "warning",
 ): void {
-  if (!result || !pi.sendMessage) {
+  if (!result) {
     return
   }
   pi.sendMessage(
@@ -367,10 +415,6 @@ function advisory(pi: PiExtensionAPI, eventName: string, result: PiEnforcerResul
   }
   const state = result.reason ? "warning" : "context"
   sendSlopgateChatMessage(pi, result, eventName, state)
-  const message = result.context || result.reason
-  if (message && !pi.sendMessage) {
-    console.warn(`[slopgate] ${message}`)
-  }
 }
 
 function mergeToolResultPatch(
@@ -504,6 +548,11 @@ async function enforce(
 
 export default function slopgatePiExtension(pi: PiExtensionAPI) {
   registerSlopgateMessageRenderer(pi)
+  registerSlopgateContextCommand(pi)
+
+  pi.on("session_start", () => {
+    clearSlopgateContext()
+  })
 
   pi.on("tool_call", async (event, ctx) => {
     const result = await enforce("tool_call", event, ctx)
@@ -544,7 +593,7 @@ export default function slopgatePiExtension(pi: PiExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     const result = await enforce("before_agent_start", event, ctx)
-    const response = beforeAgentStartResult(pi, result)
+    const response = beforeAgentStartResult(event, result)
     if (!response) {
       advisory(pi, "before_agent_start", result)
     }

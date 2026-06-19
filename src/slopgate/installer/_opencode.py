@@ -1,23 +1,27 @@
 """OpenCode installer support."""
 
 from __future__ import annotations
-import json
+
 from pathlib import Path
+
+import slopgate.installer._shared
+from slopgate.constants import REPLACE
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
-    opencode_plugin_has_owned_slopgate,
     normalize_install_scope,
+    opencode_plugin_has_owned_slopgate,
     resolve_project_root,
+    resolve_scoped_install_paths,
     scope_paths,
     warn_residual_install_scope,
 )
-import slopgate.installer._shared
+from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
     backup_existing_file_and_report,
-    base_invocation,
     print_binary_install_summary,
     remove_file_with_backup,
 )
+from slopgate.installer.template_rendering import InvocationTemplateRenderer
 from slopgate.util.platform import user_config_dir
 
 __all__ = ["install_opencode", "uninstall_opencode"]
@@ -44,20 +48,10 @@ def _opencode_project_plugin_path(project_root: Path) -> Path:
     return project_root / ".opencode" / "plugins" / _PLUGIN_NAME
 
 
-def render_opencode_plugin(template_text: str, binary: str) -> str:
-    """Render the OpenCode plugin with a safely quoted argv fallback.
-
-    OpenCode's Bun plugin spawns an argv array directly. When Slopgate is
-    launched from a Python interpreter fallback, that argv must be
-    ``python -m slopgate handle ...`` rather than ``python handle ...``.
-    """
-    if _PLUGIN_ARGV_PLACEHOLDER_LITERAL not in template_text:
-        raise ValueError(
-            "OpenCode plugin template is missing the slopgate binary placeholder"
-        )
-    return template_text.replace(
-        _PLUGIN_ARGV_PLACEHOLDER_LITERAL, json.dumps(base_invocation(binary))
-    )
+render_opencode_plugin = InvocationTemplateRenderer(
+    _PLUGIN_ARGV_PLACEHOLDER_LITERAL,
+    "OpenCode plugin template is missing the slopgate binary placeholder",
+)
 
 
 def _is_owned_opencode_plugin(content: str) -> bool:
@@ -95,13 +89,12 @@ def install_opencode(
     if not template.exists():
         print(f"OpenCode plugin template not found at {template}")
         return 1
-    install_scope = normalize_install_scope(scope)
     binary = slopgate.installer._shared.find_binary()
-    root = resolve_project_root(project_root)
-    paths = scope_paths(
-        install_scope,
+    paths = resolve_scoped_install_paths(
+        scope,
+        project_root,
         user_path=opencode_user_plugin_path(),
-        project_path=_opencode_project_plugin_path(root),
+        project_path_for_root=_opencode_project_plugin_path,
     )
     content = template.read_text(encoding="utf-8")
     try:
@@ -115,8 +108,12 @@ def install_opencode(
         status = _install_opencode_at(target, content, binary, dry_run=dry_run)
         if status != 0:
             if not dry_run:
-                for rollback_path in completed:
-                    _ = _uninstall_opencode_at(rollback_path, dry_run=False)
+                rollback_completed_installs(
+                    completed,
+                    lambda rollback_path: _uninstall_opencode_at(
+                        rollback_path, dry_run=False
+                    ),
+                )
             return status
         completed.append(target)
         last_status = status
@@ -126,7 +123,7 @@ def install_opencode(
 def _uninstall_opencode_at(target: Path, *, dry_run: bool) -> int:
     if not target.exists():
         return 0
-    content = target.read_text(encoding="utf-8", errors="replace")
+    content = target.read_text(encoding="utf-8", errors=REPLACE)
     if not _is_owned_opencode_plugin(content):
         print(f"Refusing to remove unrecognized OpenCode plugin: {target}")
         return 1

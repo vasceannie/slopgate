@@ -9,11 +9,12 @@ from typing_extensions import override
 from slopgate._types import (
     ObjectDict,
     ObjectMapping,
-    is_object_dict,
-    object_dict,
     string_value,
 )
-from slopgate.adapters._payload_fields import merge_standard_session_fields
+from slopgate.adapters._payload_fields import (
+    canonical_payload_with_event,
+    merge_standard_session_fields,
+)
 from slopgate.adapters.base import (
     PlatformAdapter,
     hook_specific_context_output,
@@ -67,10 +68,7 @@ class ClaudeAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
-        canonical = object_dict(raw) if is_object_dict(raw) else object_dict(raw)
-        event_name = _canonical_event_name(raw)
-        if event_name:
-            canonical["hook_event_name"] = event_name
+        canonical = canonical_payload_with_event(raw, _canonical_event_name(raw))
         merge_standard_session_fields(raw, canonical)
         return canonical
 

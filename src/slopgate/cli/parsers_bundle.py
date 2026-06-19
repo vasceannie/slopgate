@@ -6,36 +6,13 @@ import argparse
 from typing import cast
 
 from slopgate._argparse_types import SubparserRegistry
-from slopgate.installer._install_scope import (
-    INSTALL_SCOPE_BOTH,
-    INSTALL_SCOPE_PROJECT,
-    INSTALL_SCOPE_USER,
-)
+from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.commands import VALID_PLATFORMS
 from slopgate.cli.commands_bundle import cmd_bundle_sync_prompts
 
 
 def _add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--dry-run", action="store_true")
-
-
-def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(
-        "--install-scope",
-        "--cursor-scope",
-        dest="install_scope",
-        choices=(INSTALL_SCOPE_USER, INSTALL_SCOPE_PROJECT, INSTALL_SCOPE_BOTH),
-        default=INSTALL_SCOPE_USER,
-        help=(
-            "Prompt target: user config dir, project prompt file, or both; "
-            "project scope uses CLAUDE.md for Claude and AGENTS.md for other harnesses"
-        ),
-    )
-    _ = parser.add_argument(
-        "--project-root",
-        default="",
-        help="Project root for --install-scope project/both (default: current directory)",
-    )
 
 
 def _add_prompt_target_arguments(parser: argparse.ArgumentParser) -> None:
@@ -45,7 +22,13 @@ def _add_prompt_target_arguments(parser: argparse.ArgumentParser) -> None:
         default="all",
         help="Prompt target to sync (default: all)",
     )
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(
+        parser,
+        help_text=(
+            "Prompt target: user config dir, project prompt file, or both; "
+            "project scope uses CLAUDE.md for Claude and AGENTS.md for other harnesses"
+        ),
+    )
 
 
 def add_bundle_parsers(sub: SubparserRegistry) -> None:

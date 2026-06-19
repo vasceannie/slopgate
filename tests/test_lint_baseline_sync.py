@@ -51,23 +51,6 @@ def _seed_git_base_debt_repo(tmp_path: Path) -> Path:
     return src
 
 
-def _recorded_rule_ids(tmp_path: Path) -> list[str]:
-    rules_obj = freeze_rules_payload(tmp_path)["rules"]
-    assert isinstance(rules_obj, dict)
-    rules = cast(dict[object, object], rules_obj)
-    recorded: list[str] = []
-    for ids_obj in rules.values():
-        if isinstance(ids_obj, list):
-            recorded.extend(
-                (
-                    item
-                    for item in object_list(cast(object, ids_obj))
-                    if isinstance(item, str)
-                )
-            )
-    return recorded
-
-
 def _seed_empty_baseline_repo(tmp_path: Path) -> Path:
     write_slopgate_toml(tmp_path, '[paths]\nsrc = "src"\n')
     src = tmp_path / "src"
@@ -167,7 +150,7 @@ def test_compute_synced_prune_only_keeps_only_current_accepted_debt(
     synced, removed = slopgate.lint._baseline.compute_synced_baseline_rules(
         collectors, old, prune_only=True, accepted_baseline=accepted
     )
-    expected = {stable_id(item) for item in (old_ids | accepted_ids) & current_ids}
+    expected = {stable_id(item) for item in old_ids & current_ids}
     assert removed == len(old["demo-rule"] - {stable_id(item) for item in current_ids})
     assert synced == ({"demo-rule": expected} if expected else {})
 
@@ -194,8 +177,9 @@ def test_lint_check_does_not_add_new_violations_while_pruning(tmp_path: Path) ->
 def test_lint_check_treats_git_base_findings_as_inherited_debt(tmp_path: Path) -> None:
     _seed_git_base_debt_repo(tmp_path)
     assert lint_check(tmp_path) == 0
-    recorded_ids = _recorded_rule_ids(tmp_path)
-    assert any(("src/base_debt.py" in item for item in recorded_ids))
+    assert not (tmp_path / "baselines.json").exists(), (
+        "lint_check should not persist inherited git-base debt to baselines.json"
+    )
 
 
 def test_lint_check_persists_only_git_base_debt_when_branch_adds_new_finding(
@@ -204,9 +188,9 @@ def test_lint_check_persists_only_git_base_debt_when_branch_adds_new_finding(
     src = _seed_git_base_debt_repo(tmp_path)
     (src / "branch_debt.py").write_text("x = 1\n" * 130, encoding="utf-8")
     assert lint_check(tmp_path) == 1
-    recorded_ids = _recorded_rule_ids(tmp_path)
-    assert any(("src/base_debt.py" in item for item in recorded_ids))
-    assert not any(("src/branch_debt.py" in item for item in recorded_ids))
+    assert not (tmp_path / "baselines.json").exists(), (
+        "lint_check should not persist inherited or new branch debt to baselines.json"
+    )
 
 
 def test_lint_check_writes_git_base_debt_cache_for_repeated_checks(

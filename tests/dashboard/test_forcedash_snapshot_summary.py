@@ -7,6 +7,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
+
+from slopgate._types import object_dict, object_list
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "dashboard" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -42,8 +45,8 @@ def run_trace_snapshot_script(tmp_path: Path) -> dict[str, object]:
         env={"HOME": str(tmp_path)},
         text=True,
     )
-    payload = json.loads(result.stdout)
-    assert isinstance(payload, dict), "Snapshot script should emit a JSON object"
+    payload = object_dict(json.loads(result.stdout))
+    assert payload, "Snapshot script should emit a JSON object"
     return payload
 
 
@@ -66,14 +69,15 @@ def write_event_log(tmp_path: Path, event: dict[str, object]) -> None:
 
 def projected_event(tmp_path: Path, event: dict[str, object]) -> dict[str, object]:
     write_event_log(tmp_path, event)
-    data = run_trace_snapshot_script(tmp_path)["data"]
-    assert isinstance(data, dict), "Snapshot payload should include projected data"
-    typed_data: dict[str, object] = {str(key): value for key, value in data.items()}
+    data = object_dict(run_trace_snapshot_script(tmp_path)["data"])
+    assert data, "Snapshot payload should include projected data"
+    typed_data = data
     events = typed_data["events"]
     assert isinstance(events, list), "Snapshot data should include event records"
-    first_event = events[0]
-    assert isinstance(first_event, dict), "Projected event should be a JSON object"
-    return {str(key): value for key, value in first_event.items()}
+    event_items = object_list(cast(object, events))
+    first_event = object_dict(event_items[0])
+    assert first_event, "Projected event should be a JSON object"
+    return first_event
 
 
 def test_trace_snapshot_script_labels_home_repo_paths_by_repo_name(

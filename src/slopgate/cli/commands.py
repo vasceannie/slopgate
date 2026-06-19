@@ -1,10 +1,16 @@
 from __future__ import annotations
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 from slopgate._types import object_dict
-from slopgate.constants import UNKNOWN_VALUE
+from slopgate.constants import (
+    INSTALL_SCOPE_USER,
+    LINT_SCOPE_ALL,
+    METADATA_PATH,
+    UNKNOWN_VALUE,
+)
 from slopgate.cli.platforms import (
     INSTALL_TARGETS,
     PLATFORM_HELP,
@@ -61,7 +67,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         resolve_repo_root,
     )
 
-    target = Path(string_arg(args, "path", ".")).resolve()
+    target = Path(string_arg(args, METADATA_PATH, ".")).resolve()
     config = load_config(repo_root=target, ensure_enrollment=False, ensure_trace=False)
     resolved_repo_root = resolve_repo_root(target)
     git_root = resolve_git_root(target)
@@ -79,7 +85,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     print(
         json.dumps(
             {
-                "path": str(target),
+                METADATA_PATH: str(target),
                 "status": status,
                 "resolved_repo_root": str(resolved_repo_root)
                 if resolved_repo_root is not None
@@ -101,14 +107,14 @@ def cmd_check(args: argparse.Namespace) -> int:
 def cmd_enroll(args: argparse.Namespace) -> int:
     from slopgate.config import enroll_repo, list_git_worktrees
 
-    target = Path(string_arg(args, "path", ".")).resolve()
+    target = Path(string_arg(args, METADATA_PATH, ".")).resolve()
     include_worktrees = not _bool_arg(args, "no_worktrees")
     repo_root, written_roots = enroll_repo(target, include_worktrees=include_worktrees)
     worktrees = list_git_worktrees(repo_root) if include_worktrees else []
     print(
         json.dumps(
             {
-                "path": str(target),
+                METADATA_PATH: str(target),
                 "status": "ENROLLED",
                 "repo_root": str(repo_root),
                 "include_worktrees": include_worktrees,
@@ -144,7 +150,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     )
 
     platform = string_arg(args, "platform")
-    if platform == "all":
+    if platform == LINT_SCOPE_ALL:
         return install_suite(
             SuiteInstallOptions(
                 dry_run=_bool_arg(args, "dry_run"),
@@ -153,14 +159,14 @@ def cmd_install(args: argparse.Namespace) -> int:
                 source=string_arg(args, "source"),
                 interval_minutes=_int_arg(args, "interval_minutes")
                 or DEFAULT_UPDATE_INTERVAL_MINUTES,
-                install_scope=string_arg(args, "install_scope", "user"),
+                install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
                 project_root=_project_root_arg(args),
             )
         )
     status = install_platform(
         platform,
         dry_run=_bool_arg(args, "dry_run"),
-        install_scope=string_arg(args, "install_scope", "user"),
+        install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
         project_root=_project_root_arg(args),
     )
     if not _bool_arg(args, "with_autoupdate") or status != 0:
@@ -186,19 +192,19 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     )
 
     platform = string_arg(args, "platform")
-    if platform == "all":
+    if platform == LINT_SCOPE_ALL:
         return uninstall_suite(
             SuiteUninstallOptions(
                 dry_run=_bool_arg(args, "dry_run"),
                 with_autoupdate=_bool_arg(args, "with_autoupdate"),
-                install_scope=string_arg(args, "install_scope", "user"),
+                install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
                 project_root=_project_root_arg(args),
             )
         )
     status = uninstall_platform(
         platform,
         dry_run=_bool_arg(args, "dry_run"),
-        install_scope=string_arg(args, "install_scope", "user"),
+        install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
         project_root=_project_root_arg(args),
     )
     if not _bool_arg(args, "with_autoupdate"):
@@ -218,7 +224,7 @@ def cmd_install_suite(args: argparse.Namespace) -> int:
             source=string_arg(args, "source"),
             interval_minutes=_int_arg(args, "interval_minutes")
             or DEFAULT_UPDATE_INTERVAL_MINUTES,
-            install_scope=string_arg(args, "install_scope", "user"),
+            install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
             project_root=_project_root_arg(args),
         )
     )
@@ -233,7 +239,7 @@ def cmd_update_suite(args: argparse.Namespace) -> int:
             source=string_arg(args, "source"),
             include_missing=_bool_arg(args, "include_missing"),
             refresh_hooks=_bool_arg(args, "refresh_hooks"),
-            install_scope=string_arg(args, "install_scope", "user"),
+            install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
             project_root=_project_root_arg(args),
         )
     )
@@ -291,7 +297,8 @@ def _string_tuple_arg(args: argparse.Namespace, name: str) -> tuple[str, ...]:
     value = getattr(args, name, None)
     if not isinstance(value, (list, tuple)):
         return ()
-    return tuple(item for item in value if isinstance(item, str))
+    values = cast(Sequence[object], value)
+    return tuple(item for item in values if isinstance(item, str))
 
 
 def cmd_version(_args: argparse.Namespace) -> int:

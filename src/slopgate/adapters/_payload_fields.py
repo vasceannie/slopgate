@@ -14,6 +14,28 @@ def _first_raw_string(raw: ObjectMapping, *keys: str) -> str:
     return ""
 
 
+def canonical_event_name(
+    raw: ObjectMapping,
+    known_events: set[str],
+    aliases: dict[str, str],
+) -> str:
+    """Return a canonical hook event name from common raw event aliases."""
+    event = _first_raw_string(raw, "hook_event_name", "hookEventName")
+    if not event:
+        return ""
+    if event in known_events:
+        return event
+    return aliases.get(event.lower().replace("-", ""), event)
+
+
+def canonical_payload_with_event(raw: ObjectMapping, event_name: str) -> ObjectDict:
+    """Copy raw payload fields and overlay the canonical hook event when present."""
+    canonical = dict(raw)
+    if event_name:
+        canonical["hook_event_name"] = event_name
+    return canonical
+
+
 def merge_session_id(
     raw: ObjectMapping,
     canonical: ObjectDict,

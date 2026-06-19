@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from slopgate.constants import METADATA_SLOPGATE
 from slopgate.util import warning
 
 from ._coerce import bool_value, object_dict
@@ -215,7 +216,7 @@ def is_repo_disabled(repo_root: Path | None = None) -> bool:
             return True
 
     toml_data = load_toml(repo_root)
-    qg_section = object_dict(toml_data.get("slopgate", {}))
+    qg_section = object_dict(toml_data.get(METADATA_SLOPGATE, {}))
     if bool_value(qg_section.get("enabled"), True) is False:
         return True
 

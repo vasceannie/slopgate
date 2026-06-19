@@ -7,19 +7,23 @@ from pathlib import Path
 from typing import cast
 
 import slopgate.installer._shared
+from slopgate.constants import REPLACE
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     normalize_install_scope,
     resolve_project_root,
+    resolve_scoped_install_paths,
     scope_paths,
     warn_residual_install_scope,
 )
+from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
     backup_existing_file_and_report,
-    base_invocation,
     print_binary_install_summary,
     remove_file_with_backup,
+    write_json_with_backup,
 )
+from slopgate.installer.template_rendering import InvocationTemplateRenderer
 
 __all__ = [
     "PI_OWNERSHIP_MARKERS",
@@ -54,6 +58,7 @@ _PACKAGE_PAYLOAD = {
     "private": True,
     "type": "module",
     "dependencies": {
+        "@types/node": "^22.16.5",
         "@earendil-works/pi-tui": "^0.79.6",
     },
 }
@@ -96,14 +101,10 @@ def _package_path_for(target: Path) -> Path:
     return target.parent / _PACKAGE_NAME
 
 
-def render_pi_extension(template_text: str, binary: str) -> str:
-    if _PI_ARGV_PLACEHOLDER_LITERAL not in template_text:
-        raise ValueError(
-            "Pi extension template is missing the slopgate binary placeholder"
-        )
-    return template_text.replace(
-        _PI_ARGV_PLACEHOLDER_LITERAL, json.dumps(base_invocation(binary))
-    )
+render_pi_extension = InvocationTemplateRenderer(
+    _PI_ARGV_PLACEHOLDER_LITERAL,
+    "Pi extension template is missing the slopgate binary placeholder",
+)
 
 
 def _is_owned_pi_extension(content: str) -> bool:
@@ -114,26 +115,24 @@ def _is_owned_legacy_package_extension(content: str) -> bool:
     return all(marker in content for marker in _LEGACY_PACKAGE_OWNERSHIP_MARKERS)
 
 
-def _is_owned_pi_config(content: str) -> bool:
+def _json_object_from_content(content: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError:
-        return False
+        return None
     if not isinstance(parsed, dict):
-        return False
-    parsed_config = cast("dict[str, object]", parsed)
+        return None
+    return cast("dict[str, object]", parsed)
+
+
+def _is_owned_pi_config(content: str) -> bool:
+    parsed_config = _json_object_from_content(content) or {}
     name = parsed_config.get("name")
     return isinstance(name, str) and name == _CONFIG_PAYLOAD["name"]
 
 
 def _is_owned_pi_package(content: str) -> bool:
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(parsed, dict):
-        return False
-    parsed_package = cast("dict[str, object]", parsed)
+    parsed_package = _json_object_from_content(content) or {}
     dependencies = parsed_package.get("dependencies")
     if not isinstance(dependencies, dict):
         return False
@@ -144,7 +143,7 @@ def _is_owned_pi_package(content: str) -> bool:
 def pi_extension_has_owned_slopgate(path: Path) -> bool:
     if not path.exists():
         return False
-    content = path.read_text(encoding="utf-8", errors="replace")
+    content = path.read_text(encoding="utf-8", errors=REPLACE)
     if path.name == _LEGACY_PACKAGE_ENTRY_NAME:
         return _is_owned_legacy_package_extension(content)
     if path.name == _CONFIG_NAME:
@@ -177,24 +176,29 @@ def _remove_empty_parent(path: Path, *, dry_run: bool) -> None:
         return
 
 
-def _write_config(config_path: Path, *, dry_run: bool) -> None:
+def _write_pi_json(path: Path, payload: object, label: str, *, dry_run: bool) -> None:
     if dry_run:
-        print(f"Would write: {config_path}")
+        print(f"Would write: {path}")
         return
-    backup_existing_file_and_report(config_path, "file")
-    config_path.write_text(
-        json.dumps(_CONFIG_PAYLOAD, indent=2) + "\n", encoding="utf-8"
-    )
+    write_json_with_backup(path, payload, label)
+
+
+def _write_config(config_path: Path, *, dry_run: bool) -> None:
+    _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=dry_run)
 
 
 def _write_package(package_path: Path, *, dry_run: bool) -> None:
-    if dry_run:
-        print(f"Would write: {package_path}")
-        return
-    backup_existing_file_and_report(package_path, "file")
-    package_path.write_text(
-        json.dumps(_PACKAGE_PAYLOAD, indent=2) + "\n", encoding="utf-8"
-    )
+    _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=dry_run)
+
+
+def _pi_template_text() -> str | None:
+    from slopgate.resources import resource_path
+
+    template = resource_path("pi_extension.ts")
+    if not template.exists():
+        print(f"Pi extension template not found at {template}")
+        return None
+    return template.read_text(encoding="utf-8")
 
 
 def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
@@ -246,22 +250,18 @@ def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) ->
 def install_pi(
     dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
-    from slopgate.resources import resource_path
-
-    template = resource_path("pi_extension.ts")
-    if not template.exists():
-        print(f"Pi extension template not found at {template}")
+    template_text = _pi_template_text()
+    if template_text is None:
         return 1
-    install_scope = normalize_install_scope(scope)
     binary = slopgate.installer._shared.find_binary()
-    root = resolve_project_root(project_root)
-    paths = scope_paths(
-        install_scope,
+    paths = resolve_scoped_install_paths(
+        scope,
+        project_root,
         user_path=pi_user_extension_path(),
-        project_path=pi_project_extension_path(root),
+        project_path_for_root=pi_project_extension_path,
     )
     try:
-        content = render_pi_extension(template.read_text(encoding="utf-8"), binary)
+        content = render_pi_extension(template_text, binary)
     except ValueError as exc:
         print(str(exc))
         return 1
@@ -269,8 +269,12 @@ def install_pi(
     for target in paths:
         status = _install_pi_at(target, content, binary, dry_run=dry_run)
         if status != 0:
-            for rollback_path in completed:
-                _uninstall_pi_at(rollback_path, dry_run=False)
+            rollback_completed_installs(
+                completed,
+                lambda rollback_path: _uninstall_pi_at(
+                    rollback_path, dry_run=False
+                ),
+            )
             return status
         completed.append(target)
     return 0
