@@ -36,6 +36,7 @@ import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 // @ts-ignore Pi provides Node built-ins at runtime; this standalone template avoids @types/node.
 import runtimeProcessValue from "node:process"
+import { Box, Text } from "@earendil-works/pi-tui"
 
 const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
@@ -293,15 +294,6 @@ function stringDetail(details: Record<string, unknown> | undefined, key: string)
   return typeof value === "string" ? value : ""
 }
 
-class SlopgateMessageComponent {
-  constructor(private readonly text: string) {}
-
-  render(width: number): string[] {
-    const _ = width
-    return this.text.split("\n")
-  }
-}
-
 function renderSlopgateMessage(
   message: {
     customType: string
@@ -326,7 +318,9 @@ function renderSlopgateMessage(
       lines.push(theme.fg("dim", detail.join("\n")))
     }
   }
-  return new SlopgateMessageComponent(lines.join("\n"))
+  const box = new Box(1, 0)
+  box.addChild(new Text(lines.join("\n"), 0, 0))
+  return box
 }
 
 function registerSlopgateMessageRenderer(pi: PiExtensionAPI): void {
@@ -357,7 +351,8 @@ function advisory(pi: PiExtensionAPI, eventName: string, result: PiEnforcerResul
   if (!result) {
     return
   }
-  sendSlopgateChatMessage(pi, result, eventName, "warning")
+  const state = result.reason ? "warning" : "context"
+  sendSlopgateChatMessage(pi, result, eventName, state)
   const message = result.context || result.reason
   if (message && !pi.sendMessage) {
     console.warn(`[slopgate] ${message}`)

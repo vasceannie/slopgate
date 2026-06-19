@@ -23,11 +23,14 @@ def test_pi_install_writes_global_extension(
         tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
     )
     config_path = extension_path.parent / "config.json"
+    package_path = extension_path.parent / "package.json"
     content = extension_path.read_text(encoding="utf-8")
     assert "Pi Slopgate Extension" in content
     assert json.dumps(["/tmp/slopgate"]) in content
     assert '"handle", "--platform", "pi"' in content
     assert json.loads(config_path.read_text(encoding="utf-8"))["name"] == "pi-slopgate"
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    assert package["dependencies"]["@earendil-works/pi-tui"] == "^0.79.6"
 
 
 def test_pi_project_scope_writes_repo_extension(
@@ -44,6 +47,7 @@ def test_pi_project_scope_writes_repo_extension(
         marker in content for marker in slopgate.installer._pi.PI_OWNERSHIP_MARKERS
     )
     assert (extension_path.parent / "config.json").exists()
+    assert (extension_path.parent / "package.json").exists()
 
 
 def test_pi_install_removes_owned_legacy_standalone_extension(
@@ -209,7 +213,7 @@ def test_pi_extension_suppresses_node_builtin_type_noise_without_require() -> No
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "@earendil-works/pi-coding-agent" not in extension
-    assert "@earendil-works/pi-tui" not in extension
+    assert 'from "@earendil-works/pi-tui"' in extension
     assert 'from "node:child_process"' in extension
     assert 'from "node:fs"' in extension
     assert 'from "node:path"' in extension
@@ -241,8 +245,9 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
     assert "sendMessage?<T = unknown>(" in extension
     assert "registerMessageRenderer?(" in extension
     assert "function renderSlopgateMessage(" in extension
-    assert "class SlopgateMessageComponent" in extension
-    assert 'return new SlopgateMessageComponent(lines.join("\\n"))' in extension
+    assert "const box = new Box(1, 0)" in extension
+    assert 'box.addChild(new Text(lines.join("\\n"), 0, 0))' in extension
+    assert "return box" in extension
     assert (
         'pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)'
         in extension
@@ -265,6 +270,15 @@ def test_pi_extension_renderer_does_not_dump_prompt_context() -> None:
     assert 'stringDetail(message.details, "event")' in extension
     assert 'stringDetail(message.details, "context")' not in extension
     assert "JSON.stringify(message.details" not in extension
+
+
+def test_pi_extension_context_advisory_uses_compact_component_state() -> None:
+    from slopgate.resources import resource_path
+
+    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
+    assert 'const state = result.reason ? "warning" : "context"' in extension
+    assert "sendSlopgateChatMessage(pi, result, eventName, state)" in extension
+    assert 'sendSlopgateChatMessage(pi, result, eventName, "warning")' not in extension
 
 
 def test_pi_uninstall_refuses_unrecognized_extension(
@@ -307,9 +321,11 @@ def test_pi_uninstall_removes_canonical_config_and_owned_legacy(
         tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
     )
     config_path = extension_path.parent / "config.json"
+    package_path = extension_path.parent / "package.json"
     assert slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user") == 0
     assert not extension_path.exists()
     assert not config_path.exists()
+    assert not package_path.exists()
     assert not legacy_path.exists()
 
 

@@ -33,6 +33,7 @@ _EXTENSION_ENTRY_NAME = "index.ts"
 _LEGACY_EXTENSION_NAME = "slopgate.ts"
 _LEGACY_PACKAGE_ENTRY_NAME = "index.js"
 _CONFIG_NAME = "config.json"
+_PACKAGE_NAME = "package.json"
 _PI_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 PI_OWNERSHIP_MARKERS = (
     "Pi Slopgate Extension",
@@ -48,6 +49,13 @@ _CONFIG_PAYLOAD = {
     "description": "Pi Agent extension for slopgate code hygiene enforcement.",
     "version": "1.0.0",
     "enabled": True,
+}
+_PACKAGE_PAYLOAD = {
+    "private": True,
+    "type": "module",
+    "dependencies": {
+        "@earendil-works/pi-tui": "^0.79.6",
+    },
 }
 
 
@@ -84,9 +92,15 @@ def _config_path_for(target: Path) -> Path:
     return target.parent / _CONFIG_NAME
 
 
+def _package_path_for(target: Path) -> Path:
+    return target.parent / _PACKAGE_NAME
+
+
 def render_pi_extension(template_text: str, binary: str) -> str:
     if _PI_ARGV_PLACEHOLDER_LITERAL not in template_text:
-        raise ValueError("Pi extension template is missing the slopgate binary placeholder")
+        raise ValueError(
+            "Pi extension template is missing the slopgate binary placeholder"
+        )
     return template_text.replace(
         _PI_ARGV_PLACEHOLDER_LITERAL, json.dumps(base_invocation(binary))
     )
@@ -112,6 +126,21 @@ def _is_owned_pi_config(content: str) -> bool:
     return isinstance(name, str) and name == _CONFIG_PAYLOAD["name"]
 
 
+def _is_owned_pi_package(content: str) -> bool:
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(parsed, dict):
+        return False
+    parsed_package = cast("dict[str, object]", parsed)
+    dependencies = parsed_package.get("dependencies")
+    if not isinstance(dependencies, dict):
+        return False
+    package_deps = cast("dict[object, object]", dependencies)
+    return "@earendil-works/pi-tui" in package_deps
+
+
 def pi_extension_has_owned_slopgate(path: Path) -> bool:
     if not path.exists():
         return False
@@ -120,6 +149,8 @@ def pi_extension_has_owned_slopgate(path: Path) -> bool:
         return _is_owned_legacy_package_extension(content)
     if path.name == _CONFIG_NAME:
         return _is_owned_pi_config(content)
+    if path.name == _PACKAGE_NAME:
+        return _is_owned_pi_package(content)
     return _is_owned_pi_extension(content)
 
 
@@ -151,14 +182,29 @@ def _write_config(config_path: Path, *, dry_run: bool) -> None:
         print(f"Would write: {config_path}")
         return
     backup_existing_file_and_report(config_path, "file")
-    config_path.write_text(json.dumps(_CONFIG_PAYLOAD, indent=2) + "\n", encoding="utf-8")
+    config_path.write_text(
+        json.dumps(_CONFIG_PAYLOAD, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _write_package(package_path: Path, *, dry_run: bool) -> None:
+    if dry_run:
+        print(f"Would write: {package_path}")
+        return
+    backup_existing_file_and_report(package_path, "file")
+    package_path.write_text(
+        json.dumps(_PACKAGE_PAYLOAD, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
     status = 0
     for stale_path, label in (
         (_legacy_extension_path_for(target), "legacy Pi extension"),
-        (_legacy_package_entry_path_for(target), "legacy pi-slopgate JavaScript extension"),
+        (
+            _legacy_package_entry_path_for(target),
+            "legacy pi-slopgate JavaScript extension",
+        ),
     ):
         if stale_path == target:
             continue
@@ -172,14 +218,18 @@ def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
 
 def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) -> int:
     config_path = _config_path_for(target)
+    package_path = _package_path_for(target)
     if dry_run:
         print(f"Would write: {target}")
         print(f"Would write: {config_path}")
+        print(f"Would write: {package_path}")
         print(f"Binary: {binary}")
         if target.exists():
             print(f"Would back up existing file before writing: {target}")
         if config_path.exists():
             print(f"Would back up existing file before writing: {config_path}")
+        if package_path.exists():
+            print(f"Would back up existing file before writing: {package_path}")
         _cleanup_migrated_pi_extensions(target, dry_run=True)
         print(content[:500] + "...")
         return 0
@@ -187,6 +237,7 @@ def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) ->
     backup_existing_file_and_report(target, "file")
     target.write_text(content, encoding="utf-8")
     _write_config(config_path, dry_run=False)
+    _write_package(package_path, dry_run=False)
     status = _cleanup_migrated_pi_extensions(target, dry_run=False)
     print_binary_install_summary(f"Installed slopgate Pi extension to {target}", binary)
     return status
@@ -230,8 +281,12 @@ def _uninstall_pi_at(target: Path, *, dry_run: bool) -> int:
     for path, label in (
         (target, "Pi extension"),
         (_config_path_for(target), "Pi extension config"),
+        (_package_path_for(target), "Pi extension package manifest"),
         (_legacy_extension_path_for(target), "legacy Pi extension"),
-        (_legacy_package_entry_path_for(target), "legacy pi-slopgate JavaScript extension"),
+        (
+            _legacy_package_entry_path_for(target),
+            "legacy pi-slopgate JavaScript extension",
+        ),
     ):
         status = _remove_owned_file(path, label, dry_run=dry_run) or status
     if status == 0:
