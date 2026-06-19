@@ -289,6 +289,8 @@ def is_mutating_shell_command(command: str) -> bool:
     lowered = command.lower()
     if _has_mutating_shell_command_substitution(lowered):
         return True
+    if any(token in lowered for token in _POWERSHELL_MUTATING_TOKENS):
+        return True
     if "sed -i" in lowered or "tee " in lowered:
         return True
     if _has_unsafe_shell_redirection(lowered):

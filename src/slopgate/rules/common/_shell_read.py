@@ -247,6 +247,8 @@ class ProtectedPathsRule(Rule):
             return []
         if is_read_only_tool_use(ctx):
             return []
+        if not ctx.mutating:
+            return []
         matched_path = find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:
             return []

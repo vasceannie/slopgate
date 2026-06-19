@@ -182,6 +182,28 @@ def test_reading_slopgate_toml_does_not_emit_edit_only_denials(
     assert "BUILTIN-PROTECTED-PATHS" not in ids, "read should not trip path edit guard"
 
 
+def test_executing_quality_test_path_does_not_emit_edit_only_denial(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n")
+
+    payload = _pretool_bash_payload(
+        repo,
+        "rtk pytest "
+        "tests/quality/test_private_import_boundaries.py::"
+        "test_no_cross_package_private_imports -x -q",
+    )
+
+    result = evaluate_payload(payload)
+    ids = finding_ids(result)
+    assert tool_intent(payload) == "execute", "pytest invocation should stay executable"
+    assert "BUILTIN-PROTECTED-PATHS" not in ids, (
+        "test execution should not trip path edit guard"
+    )
+
+
 def test_mutating_slopgate_toml_still_emits_enrollment_denial(
     tmp_path: Path,
 ) -> None:
