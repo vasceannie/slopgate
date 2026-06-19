@@ -5,165 +5,165 @@
 @import "tailwindcss/utilities";
 
 @layer base {
-	:root {
-		--background: 220 30% 4%;
-		--foreground: 210 20% 82%;
+  :root {
+    --background: 220 30% 4%;
+    --foreground: 210 20% 82%;
 
-		--card: 220 25% 7%;
-		--card-foreground: 210 20% 82%;
+    --card: 220 25% 7%;
+    --card-foreground: 210 20% 82%;
 
-		--popover: 220 25% 7%;
-		--popover-foreground: 210 20% 82%;
+    --popover: 220 25% 7%;
+    --popover-foreground: 210 20% 82%;
 
-		--primary: 142 50% 45%;
-		--primary-foreground: 220 30% 4%;
+    --primary: 142 50% 45%;
+    --primary-foreground: 220 30% 4%;
 
-		--secondary: 220 20% 14%;
-		--secondary-foreground: 210 20% 75%;
+    --secondary: 220 20% 14%;
+    --secondary-foreground: 210 20% 75%;
 
-		--muted: 220 15% 12%;
-		--muted-foreground: 215 12% 50%;
+    --muted: 220 15% 12%;
+    --muted-foreground: 215 12% 50%;
 
-		--accent: 220 20% 14%;
-		--accent-foreground: 210 20% 82%;
+    --accent: 220 20% 14%;
+    --accent-foreground: 210 20% 82%;
 
-		--destructive: 0 72% 51%;
-		--destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
 
-		--border: 220 15% 15%;
-		--input: 220 15% 15%;
-		--ring: 142 50% 45%;
+    --border: 220 15% 15%;
+    --input: 220 15% 15%;
+    --ring: 142 50% 45%;
 
-		--radius: 0.5rem;
+    --radius: 0.5rem;
 
-		/* Decision signal colors */
-		--signal-allow: 142 50% 45%;
-		--signal-deny: 0 72% 51%;
-		--signal-block: 0 85% 60%;
-		--signal-ask: 38 92% 50%;
-		--signal-warn: 217 91% 60%;
-		--signal-context: 217 70% 50%;
-		--signal-error: 300 70% 55%;
+    /* Decision signal colors */
+    --signal-allow: 142 50% 45%;
+    --signal-deny: 0 72% 51%;
+    --signal-block: 0 85% 60%;
+    --signal-ask: 38 92% 50%;
+    --signal-warn: 217 91% 60%;
+    --signal-context: 217 70% 50%;
+    --signal-error: 300 70% 55%;
 
-		/* Severity colors */
-		--severity-low: 210 20% 55%;
-		--severity-medium: 38 92% 50%;
-		--severity-high: 20 90% 55%;
-		--severity-critical: 0 85% 60%;
+    /* Severity colors */
+    --severity-low: 210 20% 55%;
+    --severity-medium: 38 92% 50%;
+    --severity-high: 20 90% 55%;
+    --severity-critical: 0 85% 60%;
 
-		/* Platform colors */
-		--platform-claude: 25 95% 55%;
-		--platform-codex: 142 50% 45%;
-		--platform-opencode: 217 91% 60%;
-		--platform-cursor: 271 76% 64%;
-		--platform-pi: 322 75% 60%;
---platform-unknown: 215 12% 50%;
+    /* Platform colors */
+    --platform-claude: 25 95% 55%;
+    --platform-codex: 142 50% 45%;
+    --platform-opencode: 217 91% 60%;
+    --platform-cursor: 271 76% 64%;
+    --platform-pi: 322 75% 60%;
+    --platform-unknown: 215 12% 50%;
 
-		--sidebar-background: 220 25% 5%;
-		--sidebar-foreground: 210 20% 75%;
-		--sidebar-primary: 142 50% 45%;
-		--sidebar-primary-foreground: 220 30% 4%;
-		--sidebar-accent: 220 20% 10%;
-		--sidebar-accent-foreground: 210 20% 75%;
-		--sidebar-border: 220 15% 13%;
-		--sidebar-ring: 142 50% 45%;
-	}
+    --sidebar-background: 220 25% 5%;
+    --sidebar-foreground: 210 20% 75%;
+    --sidebar-primary: 142 50% 45%;
+    --sidebar-primary-foreground: 220 30% 4%;
+    --sidebar-accent: 220 20% 10%;
+    --sidebar-accent-foreground: 210 20% 75%;
+    --sidebar-border: 220 15% 13%;
+    --sidebar-ring: 142 50% 45%;
+  }
 }
 
 @layer base {
-	* {
-		border-color: hsl(var(--border));
-	}
+  * {
+    border-color: hsl(var(--border));
+  }
 
-	body {
-		background-color: hsl(var(--background));
-		color: hsl(var(--foreground));
-		font-family: "Inter", system-ui, -apple-system, sans-serif;
-	}
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
 }
 
 /* Terminal glow effects */
 .glow-green {
-	box-shadow: 0 0 12px -3px hsl(var(--signal-allow) / 0.3);
+  box-shadow: 0 0 12px -3px hsl(var(--signal-allow) / 0.3);
 }
 .glow-red {
-	box-shadow: 0 0 12px -3px hsl(var(--signal-deny) / 0.3);
+  box-shadow: 0 0 12px -3px hsl(var(--signal-deny) / 0.3);
 }
 .glow-amber {
-	box-shadow: 0 0 12px -3px hsl(var(--signal-ask) / 0.3);
+  box-shadow: 0 0 12px -3px hsl(var(--signal-ask) / 0.3);
 }
 .glow-blue {
-	box-shadow: 0 0 12px -3px hsl(var(--signal-warn) / 0.3);
+  box-shadow: 0 0 12px -3px hsl(var(--signal-warn) / 0.3);
 }
 
 /* Motion-safe fade transition for updated rows */
 @keyframes session-row-update {
-	0% {
-		background-color: hsl(var(--primary) / 0.15);
-		border-color: hsl(var(--primary) / 0.3);
-	}
-	100% {
-		background-color: transparent;
-		border-color: hsl(var(--border) / 0.5);
-	}
+  0% {
+    background-color: hsl(var(--primary) / 0.15);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+  100% {
+    background-color: transparent;
+    border-color: hsl(var(--border) / 0.5);
+  }
 }
 
 .session-row-updated {
-	animation: session-row-update 1.2s ease-out;
+  animation: session-row-update 1.2s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-.session-row-updated {
-animation: none;
-background-color: hsl(var(--primary) / 0.05);
-}
+  .session-row-updated {
+    animation: none;
+    background-color: hsl(var(--primary) / 0.05);
+  }
 }
 
 @keyframes fadeIn {
-	from {
-		opacity: 0;
-		transform: translateY(2px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fade-in {
-	animation: fadeIn 200ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: fadeIn 200ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.animate-fade-in {
-		animation: none;
-		opacity: 1;
-		transform: none;
-	}
+  .animate-fade-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes countPulse {
-	0% {
-		transform: scale(1);
-		opacity: 0.8;
-	}
-	50% {
-		transform: scale(1.12);
-		opacity: 1;
-		color: hsl(var(--primary));
-	}
-	100% {
-		transform: scale(1);
-	}
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+    color: hsl(var(--primary));
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .animate-count-pulse {
-	display: inline-block;
-	animation: countPulse 300ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  display: inline-block;
+  animation: countPulse 300ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.animate-count-pulse {
-		animation: none;
-	}
+  .animate-count-pulse {
+    animation: none;
+  }
 }

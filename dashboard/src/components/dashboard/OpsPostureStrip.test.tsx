@@ -5,48 +5,42 @@ import type { RuntimeConfig } from "@/types/slopgate";
 import { OpsPostureStrip } from "./OpsPostureStrip";
 
 const CONFIG: RuntimeConfig = {
-	disabled_rules: [],
-	severity_overrides: [],
-	skip_paths: [],
-	skip_repos: [],
+  disabled_rules: [],
+  severity_overrides: [],
+  skip_paths: [],
+  skip_repos: [],
 };
 
 function renderOpsPostureStrip(harnessStatus: HarnessStatusState) {
-	render(
-		<OpsPostureStrip
-			asyncFailCount={0}
-			config={CONFIG}
-			harnessStatus={harnessStatus}
-		/>,
-	);
+  render(<OpsPostureStrip asyncFailCount={0} config={CONFIG} harnessStatus={harnessStatus} />);
 }
 
 function harnessSummary(): HTMLElement {
-	const summary = screen.getByText("Harnesses:").closest("div");
-	if (!(summary instanceof HTMLElement)) {
-		throw new Error("Harness summary row did not render");
-	}
-	return summary;
+  const summary = screen.getByText("Harnesses:").closest("div");
+  if (!(summary instanceof HTMLElement)) {
+    throw new Error("Harness summary row did not render");
+  }
+  return summary;
 }
 
 describe("OpsPostureStrip", () => {
-	it("renders unavailable harness count for empty harness status", () => {
-		renderOpsPostureStrip({
-			status: { ok: true, platforms: [] },
-			loading: false,
-			error: null,
-		});
+  it("renders unavailable harness count for empty harness status", () => {
+    renderOpsPostureStrip({
+      status: { ok: true, platforms: [] },
+      loading: false,
+      error: null,
+    });
 
-		expect(within(harnessSummary()).getByText("—")).toBeInTheDocument();
-	});
+    expect(within(harnessSummary()).getByText("—")).toBeInTheDocument();
+  });
 
-	it("renders unavailable harness count when harness status fails", () => {
-		renderOpsPostureStrip({
-			status: null,
-			loading: false,
-			error: "backend unavailable",
-		});
+  it("renders unavailable harness count when harness status fails", () => {
+    renderOpsPostureStrip({
+      status: null,
+      loading: false,
+      error: "backend unavailable",
+    });
 
-		expect(within(harnessSummary()).getByText("—")).toBeInTheDocument();
-	});
+    expect(within(harnessSummary()).getByText("—")).toBeInTheDocument();
+  });
 });

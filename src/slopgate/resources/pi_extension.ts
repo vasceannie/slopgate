@@ -356,8 +356,8 @@ function beforeAgentStartResult(
   event: PiEventLike,
   result: PiEnforcerResult | null,
 : PiBeforeAgentStartResult | void {
-  const hasContext = !!result?.context
-  const guidance = lastStopGuidance
+  const hasContext: boolean = !!result?.context
+  const guidance: string = lastStopGuidance
   if (!hasContext && !guidance) {
     return
   }
@@ -441,19 +441,19 @@ function renderSlopgateMessage(
     bold(text: string): string
   },
 : unknown {
-  const state = stringDetail(message.details, "state")
-  const eventName = stringDetail(message.details, "event")
-  const reason = stringDetail(message.details, "reason")
-  const summary = stringDetail(message.details, "summary") || "Slopgate context captured."
+  const state: string = stringDetail(message.details, "state")
+  const eventName: string = stringDetail(message.details, "event")
+  const reason: string = stringDetail(message.details, "reason")
+  const summary: string = stringDetail(message.details, "summary") || "Slopgate context captured."
 
-  const label = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
-  const color = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
+  const label: string = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
+  const color: string = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
 
   // Title: Slopgate · event_name  label
-  const eventPart = eventName ? ` ${theme.fg("dim", `· ${eventName}`)}` : ""
-  const title = `${theme.bold(theme.fg(color, "Slopgate"))}${eventPart} ${theme.fg("muted", label)}`
+  const eventPart: string = eventName ? ` ${theme.fg("dim", `· ${eventName}`)}` : ""
+  const title: string = `${theme.bold(theme.fg(color, "Slopgate"))}${eventPart} ${theme.fg("muted", label)}`
 
-  const lines = [title]
+  const lines: string[] = [title]
 
   // Expanded: show full reason and metadata
   if (_options.expanded && reason) {
@@ -529,7 +529,7 @@ function mergeToolResultPatch(
   if (!result) {
     return
   }
-  const patch = result.tool_result_patch
+  const patch: Record<string, unknown> | undefined = result.tool_result_patch
   const merged: PiToolResultPatch = {}
   if (patch && "isError" in patch) {
     merged.isError = patch.isError
