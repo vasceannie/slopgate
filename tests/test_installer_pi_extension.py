@@ -175,30 +175,36 @@ def test_pi_extension_injects_session_context_through_before_agent_start() -> No
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "systemPrompt?: string" in extension
+    assert 'const SLOPGATE_CONTEXT_MESSAGE_TYPE = "slopgate-context"' in extension
+    assert 'const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"' in extension
     assert "function beforeAgentStartResult(" in extension
-    assert 'customType: "slopgate-event"' in extension
-    assert "display: true" in extension
     assert (
-        'content: chatMessageContent("context", "before_agent_start", result)'
+        'sendSlopgateChatMessage(pi, result, "before_agent_start", "context")'
         in extension
     )
+    assert "customType: SLOPGATE_CONTEXT_MESSAGE_TYPE" in extension
+    assert "content: result.context" in extension
+    assert "display: false" in extension
     assert (
         'slopgateMessageDetails("context", "before_agent_start", result)' in extension
     )
-    assert "Context captured in details." in extension
+    assert "Context added to this turn. Expand for details." in extension
     assert (
-        'pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)'
+        "return `${heading} · ${eventName}\\nContext captured in details.`"
+        not in extension
+    )
+    assert (
+        "pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)"
         in extension
     )
     assert (
         "systemPrompt: `${systemPrompt}\\n\\n${result.context}`.trim()" not in extension
     )
-    assert "content: result.context" not in extension
     assert (
         "Slopgate active. Follow Slopgate enforcement results surfaced by the extension during this turn."
         not in extension
     )
-    assert "const response = beforeAgentStartResult(result)" in extension
+    assert "const response = beforeAgentStartResult(pi, result)" in extension
 
 
 def test_pi_extension_does_not_require_node_buffer_global() -> None:
@@ -245,15 +251,22 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
     assert "sendMessage?<T = unknown>(" in extension
     assert "registerMessageRenderer?(" in extension
     assert "function renderSlopgateMessage(" in extension
-    assert "const box = new Box(1, 0)" in extension
+    assert "bg(name: string, text: string): string" in extension
+    assert (
+        'const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text))'
+        in extension
+    )
+    assert 'const title = `${theme.bold(theme.fg(color, "Slopgate"))}' in extension
+    assert "const lines = [title, message.content]" in extension
+    assert 'lines.push(theme.fg("dim", event))' not in extension
     assert 'box.addChild(new Text(lines.join("\\n"), 0, 0))' in extension
     assert "return box" in extension
     assert (
-        'pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)'
+        "pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)"
         in extension
     )
     assert "function sendSlopgateChatMessage(" in extension
-    assert 'customType: "slopgate-event"' in extension
+    assert "customType: SLOPGATE_EVENT_MESSAGE_TYPE" in extension
     assert "display: true" in extension
     assert "{ triggerTurn: false }" in extension
     assert 'sendSlopgateChatMessage(pi, result, "tool_call", "blocked")' in extension
@@ -262,13 +275,15 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
     assert "setWidget" not in extension
 
 
-def test_pi_extension_renderer_does_not_dump_prompt_context() -> None:
+def test_pi_extension_renderer_shows_full_context_only_when_expanded() -> None:
     from slopgate.resources import resource_path
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert 'stringDetail(message.details, "reason")' in extension
     assert 'stringDetail(message.details, "event")' in extension
-    assert 'stringDetail(message.details, "context")' not in extension
+    assert 'stringDetail(message.details, "context")' in extension
+    assert "context && `context:\\n${context}`" in extension
+    assert "if (options.expanded)" in extension
     assert "JSON.stringify(message.details" not in extension
 
 

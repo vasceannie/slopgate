@@ -42,6 +42,8 @@ const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
 const SLOPGATE_ARGV = runtimeProcess.env.SLOPGATE_BIN ? [runtimeProcess.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SESSION_ID = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const SLOPGATE_CONTEXT_MESSAGE_TYPE = "slopgate-context"
+const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"
 
 type PiEventName =
   | "agent_end"
@@ -142,6 +144,7 @@ interface PiExtensionAPI {
       },
       options: { expanded?: boolean },
       theme: {
+        bg(name: string, text: string): string
         fg(name: string, text: string): string
         bold(text: string): string
       },
@@ -240,15 +243,19 @@ function inputTransformFromUpdatedInput(
   return result
 }
 
-function beforeAgentStartResult(result: PiEnforcerResult | null): PiBeforeAgentStartResult | void {
+function beforeAgentStartResult(
+  pi: PiExtensionAPI,
+  result: PiEnforcerResult | null,
+): PiBeforeAgentStartResult | void {
   if (!result?.context) {
     return
   }
+  sendSlopgateChatMessage(pi, result, "before_agent_start", "context")
   return {
     message: {
-      customType: "slopgate-event",
-      content: chatMessageContent("context", "before_agent_start", result),
-      display: true,
+      customType: SLOPGATE_CONTEXT_MESSAGE_TYPE,
+      content: result.context,
+      display: false,
       details: slopgateMessageDetails("context", "before_agent_start", result),
     },
   }
@@ -282,11 +289,11 @@ function chatMessageContent(
   eventName: string,
   result: PiEnforcerResult,
 ): string {
-  const heading = state === "blocked" ? "Slopgate blocked" : "Slopgate"
   if (state === "context") {
-    return `${heading} · ${eventName}\nContext captured in details.`
+    return "Context added to this turn. Expand for details."
   }
-  return [`${heading} · ${eventName}`, ...compactSlopgateLines(result).slice(1)].join("\n")
+  const compact = compactSlopgateLines(result).slice(1)
+  return compact.length > 0 ? compact.join("\n") : `Slopgate ${state} at ${eventName}`
 }
 
 function stringDetail(details: Record<string, unknown> | undefined, key: string): string {
@@ -302,6 +309,7 @@ function renderSlopgateMessage(
   },
   options: { expanded?: boolean },
   theme: {
+    bg(name: string, text: string): string
     fg(name: string, text: string): string
     bold(text: string): string
   },
@@ -309,22 +317,28 @@ function renderSlopgateMessage(
   const state = stringDetail(message.details, "state")
   const event = stringDetail(message.details, "event")
   const reason = stringDetail(message.details, "reason")
-  const icon = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
-  const heading = theme.bold(theme.fg("accent", `Slopgate ${icon}`))
-  const lines = [heading, message.content]
+  const context = stringDetail(message.details, "context")
+  const label = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
+  const color = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
+  const title = `${theme.bold(theme.fg(color, "Slopgate"))} ${theme.fg("muted", label)}`
+  const lines = [title, message.content]
   if (options.expanded) {
-    const detail = [event && `event: ${event}`, reason && `reason: ${reason}`].filter(Boolean)
+    const detail = [
+      event && `event: ${event}`,
+      reason && `reason:\n${reason}`,
+      context && `context:\n${context}`,
+    ].filter(Boolean)
     if (detail.length > 0) {
-      lines.push(theme.fg("dim", detail.join("\n")))
+      lines.push("", theme.fg("dim", detail.join("\n\n")))
     }
   }
-  const box = new Box(1, 0)
+  const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text))
   box.addChild(new Text(lines.join("\n"), 0, 0))
   return box
 }
 
 function registerSlopgateMessageRenderer(pi: PiExtensionAPI): void {
-  pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)
+  pi.registerMessageRenderer?.(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)
 }
 
 function sendSlopgateChatMessage(
@@ -338,7 +352,7 @@ function sendSlopgateChatMessage(
   }
   pi.sendMessage(
     {
-      customType: "slopgate-event",
+      customType: SLOPGATE_EVENT_MESSAGE_TYPE,
       content: chatMessageContent(state, eventName, result),
       display: true,
       details: slopgateMessageDetails(state, eventName, result),
@@ -530,7 +544,7 @@ export default function slopgatePiExtension(pi: PiExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     const result = await enforce("before_agent_start", event, ctx)
-    const response = beforeAgentStartResult(result)
+    const response = beforeAgentStartResult(pi, result)
     if (!response) {
       advisory(pi, "before_agent_start", result)
     }
