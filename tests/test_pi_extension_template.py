@@ -86,12 +86,11 @@ def test_pi_extension_maps_tool_args_and_results_from_pi_events() -> None:
         pi_extension_template(),
         [
             "args?: Record<string, unknown>",
-            "arguments?: Record<string, unknown>",
             "result?: unknown",
-            "return event.input || event.args || event.arguments || {}",
+            "return event.input || event.args || {}",
             "function textFromContentPart(part: unknown): string",
             'stdout: event.content.map(textFromContentPart).filter(Boolean).join("\\n")',
-            "return event.content ?? event.result ?? event.message ?? null",
+            "return event.content ?? event.result ?? null",
             "tool_input: toolInputFromEvent(event)",
             "tool_result: toolResultFromEvent(event)",
             "tool_response: toolResultFromEvent(event)",
@@ -115,28 +114,29 @@ def test_pi_extension_maps_user_bash_commands_to_bash_tool_input() -> None:
     )
 
 
-def test_pi_extension_injects_session_context_into_system_prompt() -> None:
+def test_pi_extension_delivers_context_through_message_channel() -> None:
     extension = pi_extension_template()
     assert contains_markers(
         extension,
         [
-            "systemPrompt?: string",
+            "function beforeAgentStartResult(",
+            'content: chatMessageContent("context", "before_agent_start", result!),',
+            "display: true,",
+            'details: slopgateMessageDetails("context", "before_agent_start", result!),',
+            "lastSlopgateContext = result",
+            "const response = beforeAgentStartResult(event, result)",
             'const SLOPGATE_SYSTEM_PROMPT_HEADER = "Slopgate hook context for this turn:"',
             "function appendSlopgateSystemPrompt(",
-            "function beforeAgentStartResult(",
-            "systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, result.context)",
-            "const response = beforeAgentStartResult(event, result)",
+            "systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, promptContext),",
         ],
-        "before_agent_start injects Slopgate context into the model-visible system prompt",
+        "before_agent_start delivers context and stop guidance via system prompt and message channel",
     )
     assert excludes_markers(
         extension,
         [
             "SLOPGATE_CONTEXT_MESSAGE_TYPE",
-            "systemPrompt: `${systemPrompt}\\n\\n${result.context}`.trim()",
-            "Slopgate active. Follow Slopgate enforcement results surfaced by the extension during this turn.",
         ],
-        "before_agent_start avoids stale system prompt injection paths",
+        "before_agent_start avoids legacy context message type",
     )
 
 
@@ -148,14 +148,13 @@ def test_pi_extension_surfaces_context_status_without_hiding_context() -> None:
             'const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"',
             "type PiMessageContent = string | PiContentPart[]",
             "customType: SLOPGATE_EVENT_MESSAGE_TYPE",
-            'content: chatMessageContent("context", "before_agent_start", result)',
+            'content: chatMessageContent("context", "before_agent_start", result!)',
             "display: true",
-            'slopgateMessageDetails("context", "before_agent_start", result)',
-            "lastSlopgateContext = result.context",
+            'slopgateMessageDetails("context", "before_agent_start", result!)',
+            "lastSlopgateContext = result",
             'pi.on("session_start", () => {',
             "clearSlopgateContext()",
-            "Context added to this turn. Run /slopgate-context for details.",
-            "pi.registerMessageRenderer(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)",
+            '"Context added to this turn. Run /slopgate-context for details."',
         ],
         "before_agent_start keeps compact visible status while storing full context",
     )
@@ -236,10 +235,10 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
             "registerMessageRenderer(",
             "function renderSlopgateMessage(",
             "bg(name: string, text: string): string",
-            'const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text))',
+            'const box = new Box(1, 1, (text: string) => theme.bg("customMessageBg", text))',
             'const title = `${theme.bold(theme.fg(color, "Slopgate"))}',
             'const summary = stringDetail(message.details, "summary") || "Slopgate context captured."',
-            "const lines = [title, summary]",
+            "const lines = [title]",
             'box.addChild(new Text(lines.join("\\n"), 0, 0))',
             "return box",
             "pi.registerMessageRenderer(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)",
@@ -256,11 +255,10 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
         extension,
         [
             'lines.push(theme.fg("dim", event))',
-            "if (options.expanded)",
             "setStatus",
             "setWidget",
         ],
-        "chat renderer avoids undocumented expansion and footer/widget fallbacks",
+        "chat renderer avoids footer/widget fallbacks",
     )
 
 
@@ -291,13 +289,14 @@ def test_pi_extension_context_advisory_uses_compact_component_state() -> None:
     assert contains_markers(
         extension,
         [
-            'const state = result.reason ? "warning" : "context"',
-            "sendSlopgateChatMessage(pi, result, eventName, state)",
+            'if (!result?.reason) {',
+            'sendSlopgateChatMessage(pi, result, eventName, "warning")',
         ],
-        "advisory messages derive compact context or warning state",
+        "advisory only sends chat for guidance (reason), not context-only",
     )
     assert excludes_markers(
         extension,
-        ['sendSlopgateChatMessage(pi, result, eventName, "warning")'],
-        "context advisory does not force warning state",
+        ['const state = result.reason ? "warning" : "context"',
+         'eventName, "context")'],
+        "advisory no longer sends context-only chat messages",
     )

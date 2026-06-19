@@ -3,7 +3,8 @@
 Pi events and their canonical mapping:
   tool_call (write/edit/bash)  →  PreToolUse
   tool_result                  →  PostToolUse
-  tool_execution_end           →  PostToolUse (async)
+  tool_execution_end (exit 0)  →  PostToolUse
+  tool_execution_end (non-zero)→  PostToolUseFailure
   user_bash                    →  PreToolUse
   input                        →  UserPromptSubmit
   before_agent_start           →  SessionStart
@@ -47,7 +48,8 @@ from slopgate.constants import (
 PI_EVENT_NAMES: set[str] = {
     PRE_TOOL_USE,  # tool_call → PreToolUse
     PERMISSION_REQUEST,  # (not directly used by pi)
-    POST_TOOL_USE,  # tool_result / tool_execution_end → PostToolUse
+    POST_TOOL_USE,  # tool_result → PostToolUse (success)
+    "PostToolUseFailure",  # tool_execution_end → PostToolUseFailure (non-zero exit)
     SESSION_START,  # before_agent_start
     "UserPromptSubmit",  # input
     STOP,  # agent_end
