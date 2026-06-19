@@ -355,7 +355,7 @@ function appendSlopgateSystemPrompt(
 function beforeAgentStartResult(
   event: PiEventLike,
   result: PiEnforcerResult | null,
-: PiBeforeAgentStartResult | void {
+): PiBeforeAgentStartResult | void {
   const hasContext: boolean = !!result?.context
   const guidance: string = lastStopGuidance
   if (!hasContext && !guidance) {
@@ -525,7 +525,7 @@ function advisory(pi: PiExtensionAPI, eventName: string, result: PiEnforcerResul
 function mergeToolResultPatch(
   event: PiEventLike,
   result: PiEnforcerResult | null,
-: PiToolResultPatch | void {
+): PiToolResultPatch | void {
   if (!result) {
     return
   }
