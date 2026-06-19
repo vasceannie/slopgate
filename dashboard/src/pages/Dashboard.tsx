@@ -136,22 +136,22 @@ export default function Dashboard() {
 						</span>
 					</h1>
 				</div>
-				{filters.pathFilter && (
-					<button
-						type="button"
-						onClick={() => handlePathFilter(null)}
-						className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-					>
-						<Filter className="w-3 h-3" />
-						Filtered: <span className="font-mono">{filters.pathFilter}</span>
-						<X className="w-3 h-3" />
-					</button>
+{filters.pathFilter && (
+<button
+type="button"
+onClick={() => handlePathFilter(null)}
+className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+>
+<Filter className="w-3 h-3" />
+Filtered: <span className="font-mono">{filters.pathFilter}</span>
+<X className="w-3 h-3" />
+</button>
 				)}
-			</div>
+					<FileDropZone />
+</div>
 
-			{/* File upload + Filters */}
+			{/* Filters */}
 			<div className="px-6 pt-4 space-y-3">
-				<FileDropZone />
 				<TimeWindowSelector filters={filters} onChange={setFilters} />
 			</div>
 

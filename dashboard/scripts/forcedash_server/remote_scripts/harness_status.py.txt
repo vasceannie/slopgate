@@ -46,6 +46,16 @@ expected = {
         "UserPromptSubmit",
         "Stop",
     ],
+    "pi": [
+        "tool_call",
+        "tool_result",
+        "tool_execution_end",
+        "user_bash",
+        "input",
+        "before_agent_start",
+        "turn_end",
+        "agent_end",
+    ],
 }
 
 
@@ -283,6 +293,39 @@ except OSError as exc:
 opencode_marker = "slopgate" in plugin_text and "handle" in plugin_text
 opencode_disabled_present = opencode_disabled.exists()
 opencode_live_config = fetch_opencode_live_config()
+pi_extension = home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
+pi_config = home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "config.json"
+try:
+    pi_text = pi_extension.read_text(encoding="utf-8")[:12000]
+    pi_present = True
+    pi_error = None
+except FileNotFoundError:
+    pi_text = ""
+    pi_present = False
+    pi_error = "missing"
+except OSError as exc:
+    pi_text = ""
+    pi_present = False
+    pi_error = type(exc).__name__
+
+pi_marker = "Pi Slopgate Extension" in pi_text and "slopgate handle --platform pi" in pi_text
+pi_config_data, pi_config_err = read_json(pi_config)
+
+pi_installed = (
+    pi_present
+    and pi_marker
+    and pi_config_err is None
+    and isinstance(pi_config_data, dict)
+    and pi_config_data.get("enabled") is True
+)
+pi_disabled = (
+    pi_present
+    and pi_marker
+    and pi_config_err is None
+    and isinstance(pi_config_data, dict)
+    and pi_config_data.get("enabled") is False
+)
+pi_partial = pi_present or (pi_config_err is None)
 
 platforms = [
     {
@@ -330,6 +373,23 @@ platforms = [
         "hook_entry_count": 1 if plugin_present else 0,
         "slopgate_command_count": 1 if opencode_marker else 0,
         "all_commands_reference_slopgate": bool(opencode_marker),
+    },
+    {
+        "id": "pi",
+        "label": "Pi",
+        "capability": "partial",
+        "support": "extension-mediated; partial hooks",
+        "status": "installed" if pi_installed else ("disabled" if pi_disabled else status_from(False, pi_partial, pi_error or pi_config_err)),
+        "config_path": "~/.pi/agent/extensions/pi-slopgate/index.ts",
+        "config_exists": pi_present,
+        "error": None if (pi_error in (None, "missing") and pi_config_err in (None, "missing")) else (pi_error or pi_config_err),
+        "dry_run": dry_run("pi"),
+        "configured_events": expected["pi"] if pi_present and pi_marker else [],
+        "missing_events": [] if pi_present and pi_marker else expected["pi"],
+        "expected_events": expected["pi"],
+        "hook_entry_count": len(expected["pi"]) if pi_present and pi_marker else 0,
+        "slopgate_command_count": len(expected["pi"]) if pi_present and pi_marker else 0,
+        "all_commands_reference_slopgate": bool(pi_marker),
     },
 ]
 

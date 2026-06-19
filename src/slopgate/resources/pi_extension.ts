@@ -46,23 +46,28 @@ type PiEventName =
   | "agent_end"
   | "before_agent_start"
   | "input"
+  | "session_start"
   | "tool_call"
   | "tool_execution_end"
   | "tool_result"
   | "turn_end"
+  | "user_bash"
 
 interface PiEnforcerResult {
   block?: boolean
   reason?: string
   context?: string
+  tool_result_patch?: PiToolResultPatch
   updated_input?: Record<string, unknown>
 }
 
 interface PiEventLike {
+  type?: string
   toolName?: string
   toolCallId?: string
   input?: Record<string, unknown>
   args?: Record<string, unknown>
+  arguments?: Record<string, unknown>
   content?: unknown
   details?: unknown
   isError?: boolean
@@ -70,29 +75,53 @@ interface PiEventLike {
   text?: string
   images?: unknown[]
   message?: unknown
+  messages?: unknown[]
   result?: unknown
   reason?: string
   systemPrompt?: string
+  command?: string
+  cwd?: string
+  excludeFromContext?: boolean
 }
 
 interface PiContextLike {
+  hasUI?: boolean
   cwd?: string
   ui?: {
-    notify?(message: string, level?: "info" | "warn" | "error"): void
+    notify?(message: string, level?: "info" | "warning" | "error"): void
   }
+}
+
+interface PiToolResultPatch {
+  details?: Record<string, unknown>
+  isError?: boolean
 }
 
 interface PiHookResult {
   action?: "continue" | "handled" | "transform"
   block?: boolean
-  content?: unknown
   details?: unknown
-  images?: unknown[]
   isError?: boolean
   message?: Record<string, unknown>
   reason?: string
+  result?: unknown
   systemPrompt?: string
   text?: string
+}
+
+interface PiInputTransformResult {
+  action: "transform"
+  text: string
+}
+
+interface PiBeforeAgentStartResult {
+  message?: {
+    customType: string
+    content: string
+    display: boolean
+    details?: Record<string, unknown>
+  }
+  systemPrompt?: string
 }
 
 type PiEventHandler = (
@@ -102,6 +131,33 @@ type PiEventHandler = (
 
 interface PiExtensionAPI {
   on(eventName: PiEventName, handler: PiEventHandler): void
+  registerMessageRenderer?(
+    customType: string,
+    renderer: (
+      message: {
+        customType: string
+        content: string
+        details?: Record<string, unknown>
+      },
+      options: { expanded?: boolean },
+      theme: {
+        fg(name: string, text: string): string
+        bold(text: string): string
+      },
+    ) => unknown,
+  ): void
+  sendMessage?<T = unknown>(
+    message: {
+      customType: string
+      content: string
+      display: boolean
+      details?: T
+    },
+    options?: {
+      triggerTurn?: boolean
+      deliverAs?: "steer" | "followUp" | "nextTurn"
+    },
+  ): void
 }
 
 function findManagedRepoRoot(start: string): string | null {
@@ -133,20 +189,45 @@ function applyUpdatedInput(
 }
 
 function toolInputFromEvent(event: PiEventLike): Record<string, unknown> {
-  return event.input || event.args || {}
+  if (typeof event.command === "string") {
+    return {
+      command: event.command,
+      exclude_from_context: event.excludeFromContext === true,
+    }
+  }
+  return event.input || event.args || event.arguments || {}
 }
 
 function promptFromEvent(event: PiEventLike): string {
   return event.text || event.prompt || ""
 }
 
+function textFromContentPart(part: unknown): string {
+  if (typeof part === "string") {
+    return part
+  }
+  if (!part || typeof part !== "object") {
+    return ""
+  }
+  const text = (part as { text?: unknown }).text
+  return typeof text === "string" ? text : ""
+}
+
 function toolResultFromEvent(event: PiEventLike): unknown {
+  if (Array.isArray(event.content)) {
+    return {
+      stdout: event.content.map(textFromContentPart).filter(Boolean).join("\n"),
+      details: event.details,
+      is_error: event.isError === true,
+      content: event.content,
+    }
+  }
   return event.content ?? event.result ?? event.message ?? null
 }
 
 function inputTransformFromUpdatedInput(
   updatedInput: Record<string, unknown> | undefined,
-): PiHookResult | null {
+): PiInputTransformResult | null {
   if (!updatedInput) {
     return null
   }
@@ -154,35 +235,154 @@ function inputTransformFromUpdatedInput(
   if (typeof text !== "string") {
     return null
   }
-  const result: PiHookResult = { action: "transform", text }
-  if (Array.isArray(updatedInput.images)) {
-    result.images = updatedInput.images
-  }
+  const result: PiInputTransformResult = { action: "transform", text }
   return result
 }
 
-function beforeAgentStartResult(
-  event: PiEventLike,
-  result: PiEnforcerResult | null,
-): PiHookResult | void {
+function beforeAgentStartResult(result: PiEnforcerResult | null): PiBeforeAgentStartResult | void {
   if (!result?.context) {
-    advisory(result)
     return
   }
-  const systemPrompt = event.systemPrompt || ""
   return {
-    systemPrompt: `${systemPrompt}\n\n${result.context}`.trim(),
+    message: {
+      customType: "slopgate-event",
+      content: chatMessageContent("context", "before_agent_start", result),
+      display: true,
+      details: slopgateMessageDetails("context", "before_agent_start", result),
+    },
   }
 }
 
-function advisory(result: PiEnforcerResult | null): void {
+function compactSlopgateLines(result: PiEnforcerResult): string[] {
+  const lines = ["slopgate"]
+  const message = result.reason || result.context
+  if (message) {
+    const compact = message.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 4)
+    lines.push(...compact)
+  }
+  return lines
+}
+
+function slopgateMessageDetails(
+  state: "blocked" | "context" | "warning",
+  eventName: string,
+  result: PiEnforcerResult,
+): Record<string, unknown> {
+  return {
+    state,
+    event: eventName,
+    reason: result.reason,
+    context: result.context,
+  }
+}
+
+function chatMessageContent(
+  state: "blocked" | "context" | "warning",
+  eventName: string,
+  result: PiEnforcerResult,
+): string {
+  const heading = state === "blocked" ? "Slopgate blocked" : "Slopgate"
+  if (state === "context") {
+    return `${heading} · ${eventName}\nContext captured in details.`
+  }
+  return [`${heading} · ${eventName}`, ...compactSlopgateLines(result).slice(1)].join("\n")
+}
+
+function stringDetail(details: Record<string, unknown> | undefined, key: string): string {
+  const value = details?.[key]
+  return typeof value === "string" ? value : ""
+}
+
+class SlopgateMessageComponent {
+  constructor(private readonly text: string) {}
+
+  render(width: number): string[] {
+    const _ = width
+    return this.text.split("\n")
+  }
+}
+
+function renderSlopgateMessage(
+  message: {
+    customType: string
+    content: string
+    details?: Record<string, unknown>
+  },
+  options: { expanded?: boolean },
+  theme: {
+    fg(name: string, text: string): string
+    bold(text: string): string
+  },
+): unknown {
+  const state = stringDetail(message.details, "state")
+  const event = stringDetail(message.details, "event")
+  const reason = stringDetail(message.details, "reason")
+  const icon = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
+  const heading = theme.bold(theme.fg("accent", `Slopgate ${icon}`))
+  const lines = [heading, message.content]
+  if (options.expanded) {
+    const detail = [event && `event: ${event}`, reason && `reason: ${reason}`].filter(Boolean)
+    if (detail.length > 0) {
+      lines.push(theme.fg("dim", detail.join("\n")))
+    }
+  }
+  return new SlopgateMessageComponent(lines.join("\n"))
+}
+
+function registerSlopgateMessageRenderer(pi: PiExtensionAPI): void {
+  pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)
+}
+
+function sendSlopgateChatMessage(
+  pi: PiExtensionAPI,
+  result: PiEnforcerResult | null,
+  eventName: string,
+  state: "blocked" | "context" | "warning",
+): void {
+  if (!result || !pi.sendMessage) {
+    return
+  }
+  pi.sendMessage(
+    {
+      customType: "slopgate-event",
+      content: chatMessageContent(state, eventName, result),
+      display: true,
+      details: slopgateMessageDetails(state, eventName, result),
+    },
+    { triggerTurn: false },
+  )
+}
+
+function advisory(pi: PiExtensionAPI, eventName: string, result: PiEnforcerResult | null): void {
   if (!result) {
     return
   }
+  sendSlopgateChatMessage(pi, result, eventName, "warning")
   const message = result.context || result.reason
-  if (message) {
+  if (message && !pi.sendMessage) {
     console.warn(`[slopgate] ${message}`)
   }
+}
+
+function mergeToolResultPatch(
+  event: PiEventLike,
+  result: PiEnforcerResult | null,
+): PiToolResultPatch | void {
+  const patch = result?.tool_result_patch
+  if (!patch) {
+    return
+  }
+  const merged: PiToolResultPatch = {}
+  if ("isError" in patch) {
+    merged.isError = patch.isError
+  }
+  if (patch.details) {
+    const existingDetails = event.details && typeof event.details === "object" && !Array.isArray(event.details)
+      ? event.details as Record<string, unknown>
+      : {}
+    merged.details = { ...existingDetails, ...patch.details }
+  }
+  return merged
 }
 
 function chunkToUtf8(chunk: string | Uint8Array): string {
@@ -200,7 +400,7 @@ function enforcerPayload(
   const cwd = cwdFromContext(ctx)
   return {
     hook_event_name: eventName,
-    tool_name: event.toolName || "",
+    tool_name: event.toolName || (typeof event.command === "string" ? "bash" : ""),
     tool_call_id: event.toolCallId || "",
     tool_input: toolInputFromEvent(event),
     cwd,
@@ -294,30 +494,35 @@ async function enforce(
 }
 
 export default function slopgatePiExtension(pi: PiExtensionAPI) {
-  pi.on("tool_call", async (event: PiEventLike, ctx: PiContextLike) => {
+  registerSlopgateMessageRenderer(pi)
+
+  pi.on("tool_call", async (event, ctx) => {
     const result = await enforce("tool_call", event, ctx)
     applyUpdatedInput(event, result?.updated_input)
     if (result?.block) {
+      sendSlopgateChatMessage(pi, result, "tool_call", "blocked")
       return { block: true, reason: result.reason || "Blocked by slopgate" }
     }
-    advisory(result)
+    advisory(pi, "tool_call", result)
   })
 
-  pi.on("tool_result", async (event: PiEventLike, ctx: PiContextLike) => {
+  pi.on("tool_result", async (event, ctx) => {
     const result = await enforce("tool_result", event, ctx)
-    advisory(result)
+    advisory(pi, "tool_result", result)
+    return mergeToolResultPatch(event, result)
   })
 
-  pi.on("tool_execution_end", async (event: PiEventLike, ctx: PiContextLike) => {
+  pi.on("tool_execution_end", async (event, ctx) => {
     const result = await enforce("tool_execution_end", event, ctx)
-    advisory(result)
+    advisory(pi, "tool_execution_end", result)
   })
 
-  pi.on("input", async (event: PiEventLike, ctx: PiContextLike) => {
+  pi.on("input", async (event, ctx) => {
     const result = await enforce("input", event, ctx)
     if (result?.block) {
+      sendSlopgateChatMessage(pi, result, "input", "blocked")
       if (result.reason && ctx.ui?.notify) {
-        ctx.ui.notify(result.reason, "warn")
+        ctx.ui.notify(result.reason, "warning")
       }
       return { action: "handled" }
     }
@@ -325,18 +530,39 @@ export default function slopgatePiExtension(pi: PiExtensionAPI) {
     if (transform) {
       return transform
     }
-    advisory(result)
+    advisory(pi, "input", result)
   })
 
-  pi.on("before_agent_start", async (event: PiEventLike, ctx: PiContextLike) => {
-    return beforeAgentStartResult(event, await enforce("before_agent_start", event, ctx))
+  pi.on("before_agent_start", async (event, ctx) => {
+    const result = await enforce("before_agent_start", event, ctx)
+    const response = beforeAgentStartResult(result)
+    if (!response) {
+      advisory(pi, "before_agent_start", result)
+    }
+    return response
   })
 
-  pi.on("turn_end", async (event: PiEventLike, ctx: PiContextLike) => {
-    advisory(await enforce("turn_end", event, ctx))
+  pi.on("turn_end", async (event, ctx) => {
+    advisory(pi, "turn_end", await enforce("turn_end", event, ctx))
   })
 
-  pi.on("agent_end", async (event: PiEventLike, ctx: PiContextLike) => {
-    advisory(await enforce("agent_end", event, ctx))
+  pi.on("agent_end", async (event, ctx) => {
+    advisory(pi, "agent_end", await enforce("agent_end", event, ctx))
+  })
+
+  pi.on("user_bash", async (event, ctx) => {
+    const result = await enforce("user_bash", event, ctx)
+    if (result?.block) {
+      sendSlopgateChatMessage(pi, result, "user_bash", "blocked")
+      return {
+        result: {
+          output: result.reason || "Blocked by slopgate",
+          exitCode: 1,
+          cancelled: false,
+          truncated: false,
+        },
+      }
+    }
+    advisory(pi, "user_bash", result)
   })
 }

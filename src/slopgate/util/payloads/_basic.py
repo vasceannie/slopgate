@@ -70,6 +70,8 @@ def is_edit_like_tool(tool_name: str) -> bool:
     lowered = tool_name.lower()
     if lowered in EDIT_TOOL_NAMES:
         return True
+    if lowered == "replace":
+        return True
     if "edit_file" in lowered or "editfile" in lowered:
         return True
     if "serena" in lowered:

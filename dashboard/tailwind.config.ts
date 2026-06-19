@@ -77,11 +77,13 @@ export default {
           high: "hsl(var(--severity-high))",
           critical: "hsl(var(--severity-critical))",
         },
-        platform: {
-          claude: "hsl(var(--platform-claude))",
-          codex: "hsl(var(--platform-codex))",
+platform: {
+claude: "hsl(var(--platform-claude))",
+codex: "hsl(var(--platform-codex))",
           opencode: "hsl(var(--platform-opencode))",
-        },
+          cursor: "hsl(var(--platform-cursor))",
+          pi: "hsl(var(--platform-pi))",
+},
       },
       borderRadius: {
         lg: "var(--radius)",

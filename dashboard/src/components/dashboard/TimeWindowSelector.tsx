@@ -20,11 +20,12 @@ const TIME_LOOKBACK_HOURS: Record<TimeWindow, number> = {
 };
 
 const PLATFORM_OPTIONS: { value: Platform; label: string; color: string }[] = [
-	{ value: "claude", label: "Claude", color: "bg-platform-claude" },
-	{ value: "codex", label: "Codex", color: "bg-platform-codex" },
-	{ value: "opencode", label: "OpenCode", color: "bg-platform-opencode" },
+{ value: "claude", label: "Claude", color: "bg-platform-claude" },
+{ value: "codex", label: "Codex", color: "bg-platform-codex" },
+{ value: "opencode", label: "OpenCode", color: "bg-platform-opencode" },
 	{ value: "cursor", label: "Cursor", color: "bg-platform-cursor" },
-	{ value: "unknown", label: "Unknown", color: "bg-platform-unknown" },
+	{ value: "pi", label: "Pi", color: "bg-platform-pi" },
+{ value: "unknown", label: "Unknown", color: "bg-platform-unknown" },
 ];
 
 interface Props {

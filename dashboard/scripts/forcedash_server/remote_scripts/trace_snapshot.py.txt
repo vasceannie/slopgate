@@ -67,7 +67,7 @@ TRACE_META_ALIASES = {
     "spawn_description": ("spawn_description", "spawnDescription"),
     "lineage_role": ("lineage_role", "lineageRole"),
 }
-KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "unknown"}
+KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "pi", "unknown"}
 KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
 METADATA_VALUE_OMITTED = object()
 DECISIONS = ("allow", "deny", "block", "ask", "context", "warn", "info")

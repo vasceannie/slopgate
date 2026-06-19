@@ -64,9 +64,13 @@ def run_git(repo: Path, *args: str, test_identity: bool = False) -> None:
     subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+def _plain_str(value: str) -> str:
+    return value
+
+
 def minimal_selection_index() -> IntegrityIndex:
     source: str = 'def used() -> str:\n    return "used"\n'
-    source_lines = source.splitlines()
+    source_lines = [_plain_str(line) for line in source.splitlines()]
     parsed_source = ParsedFile(
         path=Path("src/pkg/core.py"),
         rel="src/pkg/core.py",

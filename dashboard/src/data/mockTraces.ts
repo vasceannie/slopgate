@@ -24,7 +24,7 @@ function pickN<T>(arr: T[], n: number): T[] {
 	return shuffled.slice(0, n);
 }
 
-const PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor"];
+const PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor", "pi"];
 const _EVENT_NAMES: EventName[] = [
 	"SessionStart",
 	"PreToolUse",
@@ -259,16 +259,19 @@ export function generateMockData() {
 				evName === "PostToolUse" ||
 				evName === "PermissionRequest"
 			) {
-				if (platform === "claude") {
-					model = "claude-3-5-sonnet-20241022";
-					provider = "Anthropic";
-				} else if (platform === "codex") {
-					model = "gpt-5.4-preview";
+if (platform === "claude") {
+model = "claude-3-5-sonnet-20241022";
+provider = "Anthropic";
+} else if (platform === "codex") {
+model = "gpt-5.4-preview";
 					provider = "OpenAI";
-				} else {
-					model = "gemini-3-flash-agent";
-					provider = "Google";
-				}
+				} else if (platform === "pi") {
+					model = "pi-2";
+					provider = "Inflection";
+} else {
+model = "gemini-3-flash-agent";
+provider = "Google";
+}
 
 				if (tool === "Bash") {
 					command = pick([

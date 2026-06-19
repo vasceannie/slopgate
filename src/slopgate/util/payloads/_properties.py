@@ -19,7 +19,9 @@ from ._intent import (
     tool_intent_reason,
 )
 from ._shell import shell_command_paths
+from ._shell_content import shell_content_targets
 from .targets import (
+    ctx_execute_content_target,
     direct_candidate_paths,
     multi_edit_candidate_paths,
     multi_edit_content_targets,
@@ -134,8 +136,13 @@ class _TargetHookPayloadProperties(_ShellHookPayloadProperties):
         input_target = tool_input_content_target(self.tool_input, fallback_path)
         if input_target is not None:
             targets.append(input_target)
+        ctx_target = ctx_execute_content_target(self.tool_name, self.tool_input)
+        if ctx_target is not None:
+            targets.append(ctx_target)
         targets.extend(multi_edit_content_targets(self.tool_input, fallback_path))
         targets.extend(patch_content_targets(self.tool_input))
+        if self.shell_command:
+            targets.extend(shell_content_targets(self.shell_command))
         return unique_content_targets(targets)
 
     @cached_property

@@ -34,8 +34,10 @@ from ._shell import (
     shell_command_paths,
     shell_tokens,
 )
+from ._shell_content import shell_content_targets
 from ._shell_paths import shell_write_redirection_paths
 from .targets import (
+    ctx_execute_content_target,
     direct_candidate_paths,
     multi_edit_content_targets,
     patch_content_targets,
@@ -54,6 +56,7 @@ __all__ = [
     "any_path_matches",
     "candidate_path_source",
     "command_has_word",
+    "ctx_execute_content_target",
     "FIND_MUTATING_ACTIONS",
     "detect_language",
     "direct_candidate_paths",
@@ -79,6 +82,7 @@ __all__ = [
     "patch_content_targets",
     "shell_command_executable_paths",
     "shell_command_paths",
+    "shell_content_targets",
     "shell_write_redirection_paths",
     "shell_kind_for_tool",
     "shell_tokens",

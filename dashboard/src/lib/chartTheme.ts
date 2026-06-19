@@ -55,7 +55,8 @@ export const PLATFORM_BADGE_STYLE: Record<Platform, string> = {
 	codex: "bg-platform-codex/20 text-platform-codex",
 	opencode: "bg-platform-opencode/20 text-platform-opencode",
 	cursor: "bg-platform-cursor/20 text-platform-cursor",
-	unknown: "bg-platform-unknown/20 text-platform-unknown",
+	pi: "bg-platform-pi/20 text-platform-pi",
+unknown: "bg-platform-unknown/20 text-platform-unknown",
 };
 
 // Flag target labels & colors (shared between FlagButton and FlaggedItemsPanel)

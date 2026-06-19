@@ -12,13 +12,13 @@ Generate realistic mock data matching the exact trace schema from `TraceWriter`:
 - **results.jsonl** shape: `{timestamp, platform, event_name, session_id, tool_name, findings[], errors[], output, skipped?, reason?}`
 - **subprocess.jsonl** shape: `{timestamp, event_name, session_id, command, cwd, returncode, stdout, stderr}`
 
-Mock data will span ~7 days across all three platforms (Claude, Codex, OpenCode), covering all event types (SessionStart, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop), all decision types (allow, deny, block, ask, context, warn), and a realistic distribution of the ~69 rules (30 Python + 39 regex). Include async job traces with mixed pass/fail.
+Mock data will span ~7 days across all five platforms (Claude, Codex, OpenCode, Cursor, Pi), covering all event types (SessionStart, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop), all decision types (allow, deny, block, ask, context, warn), and a realistic distribution of the ~69 rules (30 Python + 39 regex). Include async job traces with mixed pass/fail.
 
 ## Layout & Design
 
 - **Theme**: Dark background (`#0a0e17`), monospace font (JetBrains Mono/Fira Code via Google Fonts), green/amber/red signal colors. Terminal-inspired card borders with subtle glow on active elements.
 - **Color system**: `allow` → muted green, `deny/block` → red, `ask` → amber, `context/warn` → blue, `error` → magenta.
-- **Top bar**: Time window selector (1h, 6h, 24h, 7d, 30d) + platform filter chips (Claude / Codex / OpenCode / All).
+- **Top bar**: Time window selector (1h, 6h, 24h, 7d, 30d) + platform filter chips (Claude / Codex / OpenCode / Cursor / Pi / All).
 
 ## Six Panels
 

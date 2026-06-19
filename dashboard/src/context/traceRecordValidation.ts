@@ -106,6 +106,8 @@ function normalizePlatform(value: unknown): Platform {
 			return "opencode";
 		case "cursor":
 			return "cursor";
+		case "pi":
+			return "pi";
 		case "unknown":
 			return "unknown";
 		default:

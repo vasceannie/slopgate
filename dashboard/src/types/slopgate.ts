@@ -1,4 +1,4 @@
-export type Platform = "claude" | "codex" | "opencode" | "cursor" | "unknown";
+export type Platform = "claude" | "codex" | "opencode" | "cursor" | "pi" | "unknown";
 export type PlatformSource = "explicit" | "defaulted" | "normalized" | "unknown";
 export type LineageRole = "parent" | "child" | "mirror" | "child_mirror" | "raw";
 export type LineageConfidence = "explicit" | "inferred" | "none";
@@ -195,7 +195,7 @@ export interface HarnessDryRunStatus {
 }
 
 export interface HarnessPlatformStatus {
-	id: "claude" | "codex" | "opencode";
+	id: "claude" | "codex" | "opencode" | "pi";
 	label: string;
 	capability: HarnessCapability;
 	support: string;

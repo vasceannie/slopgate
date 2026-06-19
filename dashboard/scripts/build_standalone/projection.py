@@ -97,7 +97,7 @@ TRACE_META_ALIASES: dict[str, tuple[str, ...]] = {
     "spawn_description": ("spawn_description", "spawnDescription"),
     "lineage_role": ("lineage_role", "lineageRole"),
 }
-KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "unknown"}
+KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "pi", "unknown"}
 KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
 METADATA_VALUE_OMITTED = object()
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent

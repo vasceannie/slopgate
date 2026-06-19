@@ -164,6 +164,20 @@ def test_trace_snapshot_script_preserves_cursor_platform(
         "Remote snapshot projection should mark known platform values as explicit"
     )
 
+def test_trace_snapshot_script_preserves_pi_platform(
+    tmp_path: Path,
+) -> None:
+    event = base_event(platform="pi")
+
+    projected = projected_event(tmp_path, event)
+
+    assert projected["platform"] == "pi", (
+        "Remote snapshot projection should preserve explicit Pi platform values"
+    )
+    assert projected["platform_source"] == "explicit", (
+        "Remote snapshot projection should mark known platform values as explicit"
+    )
+
 
 def test_trace_snapshot_script_normalizes_unsupported_platform_to_unknown(
     tmp_path: Path,

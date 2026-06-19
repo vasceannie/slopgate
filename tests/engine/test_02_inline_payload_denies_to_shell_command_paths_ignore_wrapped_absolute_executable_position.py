@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 from tests.support import SKIP_UNIX_ONLY
@@ -93,6 +94,7 @@ class TestInlinePayloadDenies:
         [
             "str_replace_editor",
             "morph_edit_file",
+            "replace",
             "serena_replace_symbol_body",
         ],
     )
@@ -262,6 +264,159 @@ class TestInlinePayloadDenies:
             "Patch payloads adding Any imports should remain blocked"
         )
 
+    def test_python_shell_write_type_suppression_is_denied(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        command = (
+            'python -c "from pathlib import Path; '
+            "Path('src/example.py').write_text('x = y  # type: ignore[arg-type]')\""
+        )
+        result = evaluate_payload(pretool_bash(command))
+
+        assert_denied_by(result, "PY-TYPE-002")
+        assert "PY-TYPE-002" in finding_ids(result), (
+            "Python shell writes should not bypass suppression bans"
+        )
+
+    def test_pi_user_bash_python_write_type_suppression_is_denied(
+        self, bundle_root: Path
+    ) -> None:
+        command = (
+            "python - <<'PY'\n"
+            "from pathlib import Path\n"
+            "Path('src/example.py').write_text('x = y  # pyright: ignore[reportAny]')\n"
+            "PY"
+        )
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "user_bash",
+            "command": command,
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" in finding_ids(result), (
+            "Pi user_bash Python writes should not bypass suppression bans"
+        )
+        assert result.output is not None, "Expected Pi block output"
+        assert result.output.get("block") is True
+
+    def test_python_shell_read_suppression_search_is_allowed(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        result = evaluate_payload(pretool_bash("rg '# type: ignore' src/example.py"))
+
+        assert "PY-TYPE-002" not in finding_ids(result)
+        assert_not_denied(result)
+
+    def test_python_shell_write_without_suppression_is_allowed(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        command = (
+            'python -c "from pathlib import Path; '
+            "Path('src/example.py').write_text('x: int = 1')\""
+        )
+        result = evaluate_payload(pretool_bash(command))
+
+        assert "PY-TYPE-002" not in finding_ids(result)
+        assert_not_denied(result)
+
+    def test_shell_heredoc_write_type_suppression_is_denied(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        command = "cat > src/example.py <<'PY'\nx = y  # type: ignore[arg-type]\nPY"
+        result = evaluate_payload(pretool_bash(command))
+
+        assert_denied_by(result, "PY-TYPE-002")
+        assert "PY-TYPE-002" in finding_ids(result)
+
+    def test_shell_tee_heredoc_write_type_suppression_is_denied(
+        self, pretool_bash: BashBuilder
+    ) -> None:
+        command = (
+            "cat <<'PY' | tee src/example.py\nx = y  # pyright: ignore[reportAny]\nPY"
+        )
+        result = evaluate_payload(pretool_bash(command))
+
+        assert_denied_by(result, "PY-TYPE-002")
+        assert "PY-TYPE-002" in finding_ids(result)
+
+    def test_shell_echo_write_any_is_denied(self, pretool_bash: BashBuilder) -> None:
+        result = evaluate_payload(
+            pretool_bash("echo 'from typing import Any' > src/example.py")
+        )
+
+        assert_denied_by(result, "PY-TYPE-001")
+        assert "PY-TYPE-001" in finding_ids(result)
+
+    def test_python_open_write_any_is_denied(self, pretool_bash: BashBuilder) -> None:
+        command = (
+            "python -c \"open('src/example.py', 'w').write('from typing import Any')\""
+        )
+        result = evaluate_payload(pretool_bash(command))
+
+        assert_denied_by(result, "PY-TYPE-001")
+        assert "PY-TYPE-001" in finding_ids(result)
+
+    def test_ctx_execute_python_code_filters_code_smells(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "ctx_execute",
+            "tool_input": {
+                "language": "python",
+                "code": "def get_all_users():\n    return UserRepository.find_all()\n",
+            },
+        }
+        result = evaluate_payload(payload)
+
+        assert_denied_by(result, "PY-CODE-013")
+        assert "PY-CODE-013" in finding_ids(result)
+
+    def test_ctx_execute_file_uses_path_for_code_smells(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "ctx_execute_file",
+            "tool_input": {
+                "path": "src/context_mode_example.py",
+                "language": "python",
+                "code": "def get_all_users():\n    return UserRepository.find_all()\n",
+            },
+        }
+        result = evaluate_payload(payload)
+
+        finding = next(
+            (item for item in result.findings if item.rule_id == "PY-CODE-013"),
+            None,
+        )
+        assert finding is not None, "Expected ctx_execute_file code smell finding"
+        assert finding.metadata.get("path") == "src/context_mode_example.py"
+
+    def test_ctx_execute_javascript_does_not_run_python_code_smells(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "ctx_execute",
+            "tool_input": {
+                "language": "javascript",
+                "code": "function getAllUsers() { return UserRepository.findAll(); }\n",
+            },
+        }
+        result = evaluate_payload(payload)
+
+        assert "PY-CODE-013" not in finding_ids(result)
+        assert_not_denied(result)
+
     def test_multiedit_second_edit_caught(self, bundle_root: Path) -> None:
         payload = {
             "session_id": "t",
@@ -280,6 +435,144 @@ class TestInlinePayloadDenies:
         assert "PY-TYPE-001" in finding_ids(result), (
             "MultiEdit payloads should inspect later edits for Any imports"
         )
+
+    def test_pi_replace_lines_payload_blocks_type_suppression(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "tool_call",
+            "tool_name": "replace",
+            "tool_input": {
+                "path": "tests/example.py",
+                "edits": [
+                    {
+                        "start": "before",
+                        "end": "after",
+                        "lines": [
+                            "if callable(callback):",
+                            "    callback(payload)  # type: ignore[call-top-callable]",
+                        ],
+                    }
+                ],
+            },
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" in finding_ids(result), (
+            "Pi replace edits should inspect edits[].lines for suppression comments"
+        )
+        assert result.output is not None, "Expected Pi block output"
+        assert result.output.get("block") is True
+        reason = str(result.output.get("reason", ""))
+        assert "PY-TYPE-002" in reason
+
+    def test_pi_transcript_style_replace_arguments_blocks_type_suppression(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "tool_call",
+            "name": "replace",
+            "arguments": {
+                "path": "/home/trav/repos/job-hunter/src/autopilot/tracing/trace.py",
+                "edits": [
+                    {
+                        "start": "H4X",
+                        "end": "H4X",
+                        "lines": [
+                            "            args = _as_mapping(raw_args)  # pyright: ignore[reportUnknownArgumentType]",
+                        ],
+                    }
+                ],
+            },
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" in finding_ids(result), (
+            "Raw Pi replace events with arguments must inspect edits[].lines"
+        )
+        assert result.output is not None, "Expected Pi block output"
+        assert result.output.get("block") is True
+        reason = str(result.output.get("reason", ""))
+        assert "PY-TYPE-002" in reason
+
+    def test_pi_replace_lines_payload_allows_clean_edit(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "tool_call",
+            "tool_name": "replace",
+            "tool_input": {
+                "path": "tests/example.py",
+                "edits": [
+                    {
+                        "start": "before",
+                        "end": "after",
+                        "lines": [
+                            "if callable(callback):",
+                            "    callback(payload)",
+                        ],
+                    }
+                ],
+            },
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" not in finding_ids(result)
+        assert_not_denied(result)
+
+    def test_pi_replace_json_string_edits_block_type_suppression(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "tool_call",
+            "tool_name": "replace",
+            "tool_input": {
+                "path": "tests/example.py",
+                "edits": json.dumps(
+                    [
+                        {
+                            "oldText": "result = callback(payload)",
+                            "newText": (
+                                "result = callback(payload)  # type: ignore[arg-type]"
+                            ),
+                        }
+                    ]
+                ),
+            },
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" in finding_ids(result), (
+            "Pi replace edits should inspect JSON-string encoded edit arrays"
+        )
+        assert result.output is not None, "Expected Pi block output"
+        assert result.output.get("block") is True
+
+    def test_pi_replace_malformed_json_string_edits_do_not_crash(
+        self, bundle_root: Path
+    ) -> None:
+        payload = {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "tool_call",
+            "tool_name": "replace",
+            "tool_input": {
+                "path": "tests/example.py",
+                "edits": "[",
+            },
+        }
+        result = evaluate_payload(payload, platform="pi")
+
+        assert "PY-TYPE-002" not in finding_ids(result)
+        assert_not_denied(result)
 
 
 def test_shell_command_paths_captures_redirect_targets() -> None:

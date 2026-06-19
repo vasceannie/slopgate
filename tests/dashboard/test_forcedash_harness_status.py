@@ -75,6 +75,12 @@ def _codex_platform(payload: dict[str, object]) -> dict[str, object]:
     assert codex["id"] == "codex", "Expected Codex platform entry"
     return codex
 
+def _pi_platform(payload: dict[str, object]) -> dict[str, object]:
+    platforms = cast(list[dict[str, object]], payload["platforms"])
+    pi = platforms[3]
+    assert pi["id"] == "pi", "Expected Pi platform entry"
+    return pi
+
 
 def _write_codex_install(home: Path, config_text: str) -> None:
     codex_dir = home / ".codex"
@@ -125,3 +131,54 @@ def test_harness_status_accepts_current_codex_hooks_feature_key(
     assert codex["missing_events"] == [], (
         "Expected complete Codex hook event coverage in the synthetic install"
     )
+
+def test_pi_harness_status_missing(tmp_path: Path) -> None:
+    pi_dir = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    payload = _run_harness_status_with_fake_opencode_config(tmp_path)
+    pi = _pi_platform(payload)
+    assert pi["status"] == "missing", "Expected Pi harness status to be missing"
+
+
+def test_pi_harness_status_partial(tmp_path: Path) -> None:
+    pi_dir = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    (pi_dir / "index.ts").write_text(
+        "// Pi Slopgate Extension\nconst SLOPGATE_ARGV = [];\nslopgate handle --platform pi",
+        encoding="utf-8"
+    )
+    payload = _run_harness_status_with_fake_opencode_config(tmp_path)
+    pi = _pi_platform(payload)
+    assert pi["status"] == "partial", "Expected Pi harness status to be partial"
+
+
+def test_pi_harness_status_disabled(tmp_path: Path) -> None:
+    pi_dir = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    (pi_dir / "index.ts").write_text(
+        "// Pi Slopgate Extension\nconst SLOPGATE_ARGV = [];\nslopgate handle --platform pi",
+        encoding="utf-8"
+    )
+    (pi_dir / "config.json").write_text(
+        json.dumps({"name": "pi-slopgate", "enabled": False}),
+        encoding="utf-8"
+    )
+    payload = _run_harness_status_with_fake_opencode_config(tmp_path)
+    pi = _pi_platform(payload)
+    assert pi["status"] == "disabled", "Expected Pi harness status to be disabled"
+
+
+def test_pi_harness_status_installed(tmp_path: Path) -> None:
+    pi_dir = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    (pi_dir / "index.ts").write_text(
+        "// Pi Slopgate Extension\nconst SLOPGATE_ARGV = [];\nslopgate handle --platform pi",
+        encoding="utf-8"
+    )
+    (pi_dir / "config.json").write_text(
+        json.dumps({"name": "pi-slopgate", "enabled": True}),
+        encoding="utf-8"
+    )
+    payload = _run_harness_status_with_fake_opencode_config(tmp_path)
+    pi = _pi_platform(payload)
+    assert pi["status"] == "installed", "Expected Pi harness status to be installed"

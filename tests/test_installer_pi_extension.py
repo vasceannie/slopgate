@@ -40,7 +40,9 @@ def test_pi_project_scope_writes_repo_extension(
     assert slopgate.installer._pi.install_pi(dry_run=False, scope="project") == 0
     extension_path = tmp_path / ".pi" / "extensions" / "pi-slopgate" / "index.ts"
     content = extension_path.read_text(encoding="utf-8")
-    assert all(marker in content for marker in slopgate.installer._pi.PI_OWNERSHIP_MARKERS)
+    assert all(
+        marker in content for marker in slopgate.installer._pi.PI_OWNERSHIP_MARKERS
+    )
     assert (extension_path.parent / "config.json").exists()
 
 
@@ -81,7 +83,10 @@ def test_pi_install_refuses_to_silently_remove_unrecognized_legacy_extension(
     legacy_path.write_text("export default function custom() {}\n", encoding="utf-8")
 
     assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 1
-    assert legacy_path.read_text(encoding="utf-8") == "export default function custom() {}\n"
+    assert (
+        legacy_path.read_text(encoding="utf-8")
+        == "export default function custom() {}\n"
+    )
     assert (
         tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
     ).exists()
@@ -102,6 +107,8 @@ def test_pi_extension_uses_documented_input_handled_action() -> None:
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert '{ action: "handled" }' in extension
+    assert 'ctx.ui.notify(result.reason, "warning")' in extension
+    assert '"warn"' not in extension
     assert "{ handled: true }" not in extension
 
 
@@ -130,12 +137,33 @@ def test_pi_extension_maps_tool_args_and_results_from_pi_events() -> None:
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "args?: Record<string, unknown>" in extension
+    assert "arguments?: Record<string, unknown>" in extension
     assert "result?: unknown" in extension
-    assert "return event.input || event.args || {}" in extension
+    assert "return event.input || event.args || event.arguments || {}" in extension
+    assert "function textFromContentPart(part: unknown): string" in extension
+    assert (
+        'stdout: event.content.map(textFromContentPart).filter(Boolean).join("\\n")'
+        in extension
+    )
     assert "return event.content ?? event.result ?? event.message ?? null" in extension
     assert "tool_input: toolInputFromEvent(event)" in extension
     assert "tool_result: toolResultFromEvent(event)" in extension
     assert "tool_response: toolResultFromEvent(event)" in extension
+
+
+def test_pi_extension_maps_user_bash_commands_to_bash_tool_input() -> None:
+    from slopgate.resources import resource_path
+
+    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
+    assert '| "user_bash"' in extension
+    assert 'pi.on("user_bash"' in extension
+    assert 'typeof event.command === "string"' in extension
+    assert (
+        'tool_name: event.toolName || (typeof event.command === "string" ? "bash" : "")'
+        in extension
+    )
+    assert "exclude_from_context: event.excludeFromContext === true" in extension
+    assert "exitCode: 1" in extension
 
 
 def test_pi_extension_injects_session_context_through_before_agent_start() -> None:
@@ -144,8 +172,29 @@ def test_pi_extension_injects_session_context_through_before_agent_start() -> No
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "systemPrompt?: string" in extension
     assert "function beforeAgentStartResult(" in extension
-    assert "systemPrompt: `${systemPrompt}\\n\\n${result.context}`.trim()" in extension
-    assert 'return beforeAgentStartResult(event, await enforce("before_agent_start", event, ctx))' in extension
+    assert 'customType: "slopgate-event"' in extension
+    assert "display: true" in extension
+    assert (
+        'content: chatMessageContent("context", "before_agent_start", result)'
+        in extension
+    )
+    assert (
+        'slopgateMessageDetails("context", "before_agent_start", result)' in extension
+    )
+    assert "Context captured in details." in extension
+    assert (
+        'pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)'
+        in extension
+    )
+    assert (
+        "systemPrompt: `${systemPrompt}\\n\\n${result.context}`.trim()" not in extension
+    )
+    assert "content: result.context" not in extension
+    assert (
+        "Slopgate active. Follow Slopgate enforcement results surfaced by the extension during this turn."
+        not in extension
+    )
+    assert "const response = beforeAgentStartResult(result)" in extension
 
 
 def test_pi_extension_does_not_require_node_buffer_global() -> None:
@@ -160,6 +209,7 @@ def test_pi_extension_suppresses_node_builtin_type_noise_without_require() -> No
 
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert "@earendil-works/pi-coding-agent" not in extension
+    assert "@earendil-works/pi-tui" not in extension
     assert 'from "node:child_process"' in extension
     assert 'from "node:fs"' in extension
     assert 'from "node:path"' in extension
@@ -170,7 +220,7 @@ def test_pi_extension_suppresses_node_builtin_type_noise_without_require() -> No
     assert 'eval)("require")' not in extension
     assert "require is not defined" not in extension
     assert "interface PiExtensionAPI" in extension
-    assert "event: PiEventLike, ctx: PiContextLike" in extension
+    assert "async (event, ctx)" in extension
 
 
 def test_pi_extension_keeps_post_tool_findings_advisory() -> None:
@@ -179,7 +229,42 @@ def test_pi_extension_keeps_post_tool_findings_advisory() -> None:
     extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
     assert 'pi.on("tool_result"' in extension
     assert 'pi.on("tool_execution_end"' in extension
+    assert "return mergeToolResultPatch(event, result)" in extension
+    assert "tool_result_patch?: PiToolResultPatch" in extension
     assert "throw new Error" not in extension
+
+
+def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
+    from slopgate.resources import resource_path
+
+    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
+    assert "sendMessage?<T = unknown>(" in extension
+    assert "registerMessageRenderer?(" in extension
+    assert "function renderSlopgateMessage(" in extension
+    assert "class SlopgateMessageComponent" in extension
+    assert 'return new SlopgateMessageComponent(lines.join("\\n"))' in extension
+    assert (
+        'pi.registerMessageRenderer?.("slopgate-event", renderSlopgateMessage)'
+        in extension
+    )
+    assert "function sendSlopgateChatMessage(" in extension
+    assert 'customType: "slopgate-event"' in extension
+    assert "display: true" in extension
+    assert "{ triggerTurn: false }" in extension
+    assert 'sendSlopgateChatMessage(pi, result, "tool_call", "blocked")' in extension
+    assert 'sendSlopgateChatMessage(pi, result, "user_bash", "blocked")' in extension
+    assert "setStatus" not in extension
+    assert "setWidget" not in extension
+
+
+def test_pi_extension_renderer_does_not_dump_prompt_context() -> None:
+    from slopgate.resources import resource_path
+
+    extension = resource_path("pi_extension.ts").read_text(encoding="utf-8")
+    assert 'stringDetail(message.details, "reason")' in extension
+    assert 'stringDetail(message.details, "event")' in extension
+    assert 'stringDetail(message.details, "context")' not in extension
+    assert "JSON.stringify(message.details" not in extension
 
 
 def test_pi_uninstall_refuses_unrecognized_extension(
@@ -192,7 +277,10 @@ def test_pi_uninstall_refuses_unrecognized_extension(
     extension_path.parent.mkdir(parents=True)
     extension_path.write_text("export default function custom() {}\n", encoding="utf-8")
     assert slopgate.installer._pi.uninstall_pi(dry_run=False) == 1
-    assert extension_path.read_text(encoding="utf-8") == "export default function custom() {}\n"
+    assert (
+        extension_path.read_text(encoding="utf-8")
+        == "export default function custom() {}\n"
+    )
 
 
 def test_pi_uninstall_removes_canonical_config_and_owned_legacy(

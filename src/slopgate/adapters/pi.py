@@ -4,6 +4,7 @@ Pi events and their canonical mapping:
   tool_call (write/edit/bash)  →  PreToolUse
   tool_result                  →  PostToolUse
   tool_execution_end           →  PostToolUse (async)
+  user_bash                    →  PreToolUse
   input                        →  UserPromptSubmit
   before_agent_start           →  SessionStart
   turn_end                     →  TurnEnd
@@ -47,6 +48,7 @@ PI_EVENT_NAMES: set[str] = {
 
 _PI_EVENT_ALIASES: dict[str, str] = {
     "tool_call": PRE_TOOL_USE,
+    "user_bash": PRE_TOOL_USE,
     "tool_result": POST_TOOL_USE,
     "tool_execution_end": POST_TOOL_USE,
     "input": "UserPromptSubmit",
@@ -68,6 +70,15 @@ _PI_TOOL_MAP: dict[str, str] = {
 }
 
 
+def _raw_event_name(raw: ObjectMapping) -> str:
+    event = string_value(raw.get("hook_event_name")) or string_value(
+        raw.get("hookEventName")
+    )
+    if event is None:
+        return ""
+    return event.lower().replace("-", "")
+
+
 def _canonical_event_name(raw: ObjectMapping) -> str:
     """Map the pi event name to a slopgate canonical event."""
     event = string_value(raw.get("hook_event_name")) or string_value(
@@ -82,11 +93,40 @@ def _canonical_event_name(raw: ObjectMapping) -> str:
 
 def _canonical_tool_name(raw: ObjectMapping) -> str:
     """Map the pi tool name to a slopgate canonical tool name."""
-    tool = string_value(raw.get("tool_name")) or string_value(raw.get("tool"))
+    tool = (
+        string_value(raw.get("tool_name"))
+        or string_value(raw.get("toolName"))
+        or string_value(raw.get("tool"))
+        or string_value(raw.get("name"))
+    )
     if not tool:
         return ""
     normalized = tool.lower().strip()
     return _PI_TOOL_MAP.get(normalized, tool)
+
+
+def _sync_tool_input(raw: ObjectMapping, canonical: ObjectDict) -> None:
+    if is_object_dict(canonical.get("tool_input")):
+        return
+    for key in ("input", "args", "arguments"):
+        value = raw.get(key)
+        if is_object_dict(value):
+            canonical["tool_input"] = object_dict(value)
+            return
+
+
+def _sync_user_bash_command(raw: ObjectMapping, canonical: ObjectDict) -> None:
+    if _raw_event_name(raw) != "user_bash":
+        return
+    command = string_value(raw.get("command"))
+    if not command:
+        return
+    canonical.setdefault("tool_name", "Bash")
+    tool_input = object_dict(canonical.get("tool_input"))
+    tool_input.setdefault("command", command)
+    if raw.get("excludeFromContext") is True:
+        tool_input.setdefault("exclude_from_context", True)
+    canonical["tool_input"] = tool_input
 
 
 class PiAdapter(PlatformAdapter):
@@ -106,6 +146,8 @@ class PiAdapter(PlatformAdapter):
         if tool_name:
             canonical["tool_name"] = tool_name
 
+        _sync_tool_input(raw, canonical)
+        _sync_user_bash_command(raw, canonical)
         merge_standard_session_fields(raw, canonical)
         sync_tool_result_fields(canonical)
         return canonical
@@ -126,12 +168,20 @@ class PiAdapter(PlatformAdapter):
         if can_block and render_request.decision in {DENY, BLOCK, "ask"}:
             output["block"] = True
             output["reason"] = self.join_messages(
-                self.decision_findings(
-                    render_request.findings, render_request.decision
-                )
+                self.decision_findings(render_request.findings, render_request.decision)
             )
         if render_request.decision == "allow" and render_request.updated_input:
             output["updated_input"] = render_request.updated_input
         if render_request.context:
             output["context"] = render_request.context
+        if render_request.event_name == POST_TOOL_USE and output:
+            output["tool_result_patch"] = {
+                "details": {
+                    "slopgate": {
+                        "decision": render_request.decision,
+                        "context": render_request.context,
+                        "reason": output.get("reason"),
+                    }
+                }
+            }
         return output or None

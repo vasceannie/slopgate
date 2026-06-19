@@ -29,11 +29,12 @@ const PIPELINE_STAGES: EventName[] = [
 	"Stop",
 ];
 const PIPELINE_PLATFORMS: Platform[] = [
-	"claude",
-	"codex",
-	"opencode",
+"claude",
+"codex",
+"opencode",
 	"cursor",
-	"unknown",
+	"pi",
+"unknown",
 ];
 
 const PIPELINE_CELL_BASE =
@@ -60,18 +61,24 @@ const PIPELINE_CELL_CLASSES: Record<
 		"bg-platform-opencode/40 text-foreground",
 		"bg-platform-opencode/60 text-foreground",
 	],
-	cursor: [
-		"bg-platform-cursor/5 text-muted-foreground",
-		"bg-platform-cursor/20 text-platform-cursor",
-		"bg-platform-cursor/40 text-foreground",
-		"bg-platform-cursor/60 text-foreground",
+cursor: [
+"bg-platform-cursor/5 text-muted-foreground",
+"bg-platform-cursor/20 text-platform-cursor",
+"bg-platform-cursor/40 text-foreground",
+"bg-platform-cursor/60 text-foreground",
 	],
-	unknown: [
-		"bg-platform-unknown/5 text-muted-foreground",
-		"bg-platform-unknown/20 text-platform-unknown",
-		"bg-platform-unknown/40 text-foreground",
-		"bg-platform-unknown/60 text-foreground",
+	pi: [
+		"bg-platform-pi/5 text-muted-foreground",
+		"bg-platform-pi/20 text-platform-pi",
+		"bg-platform-pi/40 text-foreground",
+		"bg-platform-pi/60 text-foreground",
 	],
+unknown: [
+"bg-platform-unknown/5 text-muted-foreground",
+"bg-platform-unknown/20 text-platform-unknown",
+"bg-platform-unknown/40 text-foreground",
+"bg-platform-unknown/60 text-foreground",
+],
 };
 
 const LANE_CHART_HEIGHT = 22;
@@ -289,7 +296,7 @@ export function DecisionFunnel({
 				<div className="h-[calc(100%-1.25rem)] min-h-[220px] border border-border rounded-md bg-card/30 p-3">
 					{pipelineRows.some((row) => row.total > 0) ? (
 						<div className="grid h-full grid-rows-[auto_1fr_auto] gap-2">
-							<div className="grid grid-cols-[minmax(104px,1fr)_58px_repeat(5,minmax(54px,70px))] gap-1.5 text-[8px] uppercase tracking-wide text-muted-foreground">
+							<div className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(6,minmax(40px,1fr))] gap-1.5 text-[8px] uppercase tracking-wide text-muted-foreground">
 								<span>event</span>
 								<span className="text-right">total</span>
 								{PIPELINE_PLATFORMS.map((platform) => (
@@ -302,7 +309,7 @@ export function DecisionFunnel({
 								{pipelineRows.map((row) => (
 									<div
 										key={row.stage}
-									className="grid grid-cols-[minmax(104px,1fr)_58px_repeat(5,minmax(54px,70px))] items-center gap-1.5 text-[9px]"
+									className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(6,minmax(40px,1fr))] items-center gap-1.5 text-[9px]"
 									>
 										<span className="truncate text-muted-foreground">
 											{row.label}
