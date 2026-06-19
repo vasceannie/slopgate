@@ -434,13 +434,7 @@ function renderSlopgateMessage(
     content: PiMessageContent
     details?: Record<string, unknown>
   },
-  _options: PiMessageRenderOptions,
-  theme: {
-    bg(name: string, text: string): string
-    fg(name: string, text: string): string
-    bold(text: string): string
-  },
-: unknown {
+): unknown {
   const state: string = stringDetail(message.details, "state")
   const eventName: string = stringDetail(message.details, "event")
   const reason: string = stringDetail(message.details, "reason")
