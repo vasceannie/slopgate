@@ -14,3 +14,7 @@ build/
 repomix-output.xml
 error.log
 .env
+.omo/
+.sisyphus/
+.hypothesis/
+headroom_memory.db

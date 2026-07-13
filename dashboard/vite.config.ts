@@ -8,7 +8,7 @@ const VENDOR_CHUNKS: Array<[string, string[]]> = [
   ["recharts", ["/node_modules/recharts/"]],
   ["d3", ["/node_modules/d3-"]],
   ["radix-ui", ["/node_modules/@radix-ui/"]],
-  ["react-core", ["/node_modules/react/", "/node_modules/react-dom/", "/node_modules/react-router-dom/"]],
+  ["react-core", ["/node_modules/react/", "/node_modules/react-dom/", "/node_modules/scheduler/", "/node_modules/react-router-dom/", "/node_modules/react-router/", "/node_modules/@remix-run/router/"]],
   ["query", ["/node_modules/@tanstack/"]],
 ];
 
