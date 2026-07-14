@@ -216,7 +216,7 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
         monkeypatch,
         fail_rebuild,
         importlib.import_module(
-            "slopgate.lint._detectors.test_smells._production_detectors"
+            "slopgate.lint._detectors.test_smells.production_detectors"
         ),
         importlib.import_module(
             "slopgate.lint._detectors.test_smells._hypothesis_obsolete"

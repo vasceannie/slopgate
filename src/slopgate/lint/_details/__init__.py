@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ._formatter import format_violation_details
-from ._metadata import line_number, location, metadata_lines, signature
-from ._prognosis import prognosis
-from ._test_context import test_context_lines
+from .formatter import format_violation_details
+from .metadata import line_number, location, metadata_lines, signature
+from .prognosis import prognosis
+from .test_context import test_context_lines
 
 __all__ = [
     "format_violation_details",

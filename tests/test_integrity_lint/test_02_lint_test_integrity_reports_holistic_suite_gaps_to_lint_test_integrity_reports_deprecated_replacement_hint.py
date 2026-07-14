@@ -183,7 +183,7 @@ def other_behavior() -> str:
     )
 
 
-def test_lint_test_integrity_treats_absent_partial_runtime_coverage_as_unknown(
+def test_lint_test_integrity_falls_back_when_partial_runtime_coverage_omits_module(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
@@ -193,12 +193,17 @@ def test_lint_test_integrity_treats_absent_partial_runtime_coverage_as_unknown(
     result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
-    forbidden = [
+    expected = [
         "src/pkg/other.py:coverage-000",
-        "runtime_line_coverage=0% from coverage.xml",
+        "static_test_reference_coverage=0%",
+        "not present in coverage.xml",
+        "metadata.coverage_kind: static-reference",
     ]
-    assert result == 0
-    assert all(item not in captured.out for item in forbidden)
+    report_errors = [item for item in expected if item not in captured.out]
+    if "runtime_line_coverage=0% from coverage.xml" in captured.out:
+        report_errors.append("omitted module was incorrectly treated as runtime zero")
+    assert result == 1, "partial coverage should expose the omitted untested module"
+    assert report_errors == [], "partial-report fallback should use static coverage"
 
 
 def test_lint_test_integrity_discounts_high_fan_in_style_helpers(

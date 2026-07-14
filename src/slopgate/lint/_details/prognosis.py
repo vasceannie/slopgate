@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from slopgate.lint._baseline import Violation
-from slopgate.lint._details._metadata import (
+from slopgate.lint._details.metadata import (
     BRANCH_RULES,
     DUPLICATE_RULES,
     EXCEPTION_RULES,
@@ -34,9 +34,13 @@ def _module_split_scaffold(violation: Violation) -> list[str]:
     package = path.with_suffix("")
     return [
         "    prognosis: one module owns multiple responsibilities; convert it to a package split.",
-        f"    scaffold: replace {path.as_posix()} with {package.as_posix()}/__init__.py that re-exports the old public API.",
-        f"    scaffold: split focused concerns into {package.as_posix()}/models.py, parsing.py, services.py, adapters.py, constants.py, and errors.py as applicable.",
-        "    verify: preserve imports first, then move one responsibility at a time and run full repo lint from project root.",
+        f"    scaffold: replace {path.as_posix()} with "
+        f"{package.as_posix()}/__init__.py that re-exports the old public API.",
+        "    scaffold: split focused concerns into "
+        f"{package.as_posix()}/models.py, parsing.py, services.py, adapters.py, "
+        "constants.py, and errors.py as applicable.",
+        "    verify: preserve imports first, then move one responsibility at a time "
+        "and run full repo lint from project root.",
     ]
 
 

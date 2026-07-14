@@ -190,10 +190,6 @@ class FullFileReadRule(Rule):
         ]
 
 
-def is_readonly_tool(tool_name: str | None) -> bool:
-    return bool(tool_name and tool_name.lower() in {"glob", "grep", "read"})
-
-
 def is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
     return (
         tool_name is not None
@@ -201,6 +197,14 @@ def is_safe_bash_read(tool_name: str | None, bash_command: str | None) -> bool:
         and bash_command is not None
         and is_safe_read_shell_command(bash_command, reject_find_mutation=True)
     )
+
+
+def _is_sed_transform(tool_name: str | None, bash_command: str | None) -> bool:
+    if tool_name is None or bash_command is None or not is_shell_tool(tool_name):
+        return False
+    tokens = shell_tokens(bash_command)
+    is_sed = bool(tokens) and Path(tokens[0].strip("\"'")).name.lower() == "sed"
+    return is_sed and (not is_safe_bash_read(tool_name, bash_command))
 
 
 def find_matched_protected_path(
@@ -247,7 +251,10 @@ class ProtectedPathsRule(Rule):
             return []
         if is_read_only_tool_use(ctx):
             return []
-        if not ctx.mutating:
+        if not ctx.mutating and not _is_sed_transform(
+            ctx.tool_name,
+            ctx.shell_command,
+        ):
             return []
         matched_path = find_matched_protected_path(ctx.candidate_paths, patterns)
         if matched_path is None:

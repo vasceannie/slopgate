@@ -1,0 +1,8 @@
+# Add patterns to ignore here, one per line
+# Example:
+# *.log
+# tmp/
+.agents/skills/
+.claude/skills/
+.cursor/skills/
+.opencode/skills/

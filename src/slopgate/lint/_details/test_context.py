@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from slopgate.lint._baseline import Violation
-from slopgate.lint._details._metadata import (
+from slopgate.lint._details.metadata import (
     ASSERT_CALL_NAMES,
     TEST_INTEGRITY_RULES,
     line_number,
@@ -223,7 +223,7 @@ def _untested_production_repair_context(violation: Violation) -> list[str]:
     coverage_note = (
         "    coverage-note: runtime coverage artifact was used; sort/fix by lowest line coverage first."
         if coverage_kind == "runtime-line"
-        else "    coverage-note: no runtime coverage artifact was found, so this is static symbol-reference coverage."
+        else "    coverage-note: no runtime coverage entry was usable for this module, so this is static symbol-reference coverage."
     )
     return [
         coverage_note,

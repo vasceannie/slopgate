@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from slopgate.lint._baseline import Violation
-from slopgate.lint._details._metadata import location, metadata_lines, signature
-from slopgate.lint._details._prognosis import prognosis
-from slopgate.lint._details._test_context import test_context_lines
+from slopgate.lint._details.metadata import location, metadata_lines, signature
+from slopgate.lint._details.prognosis import prognosis
+from slopgate.lint._details.test_context import test_context_lines
 
 
 def format_violation_details(

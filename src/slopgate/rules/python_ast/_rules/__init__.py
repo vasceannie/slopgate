@@ -208,7 +208,7 @@ from .imports import (
     patch_added_source,
     private_module_segments,
 )
-from ._private_imports import PythonPrivateImportChainRule
+from .private_imports import PythonPrivateImportChainRule
 from .imports import PythonImportAliasRule, PythonImportFanoutRule
 from .imports import alias_rule, fanout_rule, helpers
 from .module.size import guidance, projection, sources

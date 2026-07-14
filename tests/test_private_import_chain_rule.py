@@ -101,6 +101,46 @@ class TestPrivateImportChainRule(unittest.TestCase):
 
         assert "PY-IMPORT-003" in _rule_ids(result)
 
+    def test_apply_patch_delete_allows_removing_stacked_private_module(self) -> None:
+        result = evaluate_payload(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "apply_patch",
+                "tool_input": {
+                    "patchText": """*** Begin Patch
+*** Delete File: src/cli/auth/_orchestrate/_core.py
+*** End Patch"""
+                },
+                "cwd": str(Path(__file__).resolve().parents[1]),
+            }
+        )
+
+        assert "PY-IMPORT-003" not in _rule_ids(result), (
+            "deleting a stacked private module should remain a valid remediation"
+        )
+
+    def test_apply_patch_move_allows_public_destination(self) -> None:
+        result = evaluate_payload(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "apply_patch",
+                "tool_input": {
+                    "patchText": """*** Begin Patch
+*** Update File: src/cli/auth/_orchestrate/_core.py
+*** Move to: src/cli/auth/orchestrate/core.py
+@@
+-VALUE = 1
++VALUE = 2
+*** End Patch"""
+                },
+                "cwd": str(Path(__file__).resolve().parents[1]),
+            }
+        )
+
+        assert "PY-IMPORT-003" not in _rule_ids(result), (
+            "moving a stacked private module to a public path should remain valid"
+        )
+
 
 if __name__ == "__main__":
     _ = unittest.main()

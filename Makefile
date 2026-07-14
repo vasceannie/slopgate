@@ -1,10 +1,12 @@
-.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump quality test ci
+.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump quality test gitnexus-analyze-dankbox ci
 
 SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 
 DASHBOARD_SSH_HOST ?= little
 DASHBOARD_LOGS_DIR ?= $(HOME)/.config/slopgate/logs
+DANKBOX_SSH ?= PC@dankbox
+DANKBOX_WSL_GITNEXUS_DIR ?= ~/dkr/gitnexus
 -include .env
 
 export UV_PUBLISH_TOKEN ?= $(PYPI_TOKEN)
@@ -96,6 +98,9 @@ quality:
 
 test:
 	uv run slopgate test
+
+gitnexus-analyze-dankbox:
+	@ssh '$(DANKBOX_SSH)' "wsl.exe sh -lc 'cd $(DANKBOX_WSL_GITNEXUS_DIR) && docker compose exec -T gitnexus-server sh -lc \"gitnexus analyze /sources/slopgate --embeddings 0 --pdg --embedding-base-url http://llm.toy/v1 --embedding-model qwen3-embedding:0.6b --embedding-dims 1024 --index-only\"'"
 
 ci:
 	@echo "=== CI: quality checks ===" && \

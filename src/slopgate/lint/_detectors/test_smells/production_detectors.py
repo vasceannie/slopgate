@@ -45,9 +45,9 @@ def detect_untested_production_code(
 ) -> list[Violation]:
     """Find production modules with low runtime or static test coverage.
 
-    If a coverage.json/coverage.xml report exists, findings are sorted by real
-    runtime line coverage. Otherwise the detector falls back to static reference
-    coverage by public symbol name and says so in the output.
+    Runtime line coverage is used for modules represented in the selected report.
+    Modules absent from that report fall back to static reference coverage by
+    public symbol name and say so in the output.
     """
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
@@ -128,6 +128,39 @@ def integration_seam_score(
     return (score, reasons)
 
 
+def _missing_integration_violation(
+    symbol: ProductionSymbol,
+    index: IntegrityIndex,
+) -> Violation | None:
+    call_sites = index.production_call_sites
+    callers = len(call_sites.get(symbol.name, []))
+    qualifies = (
+        symbol.kind == METADATA_FUNCTION
+        and callers >= 2
+        and has_token(f"{symbol.module}.{symbol.name}", INTEGRATION_SEAM_TOKENS)
+        and (not is_utility_or_trivial_helper(symbol))
+        and (not symbol_is_referenced(symbol, index.integration_test_reference_tokens))
+    )
+    violation = None
+    if qualifies:
+        seam_score, reasons = integration_seam_score(symbol, callers)
+        if seam_score >= INTEGRATION_SEAM_THRESHOLD:
+            violation = Violation(
+                rule="missing-integration-test",
+                relative_path=symbol.relative_path,
+                identifier=symbol.qualname,
+                detail=f"line {symbol.lineno}: production_callers={callers}; seam_score={seam_score}; reasons={'; '.join(reasons)}; no integration/e2e/pipeline test references `{symbol.name}`",
+                metadata={
+                    "caller_count": callers,
+                    "seam_score": seam_score,
+                    "symbol": symbol.qualname,
+                    "caller_sites": call_sites.get(symbol.name, [])[:10],
+                    "reasons": reasons,
+                },
+            )
+    return violation
+
+
 def detect_missing_integration_tests(
     src_files: list[Path] | list[ParsedFile] | None = None,
     test_files: list[Path] | list[ParsedFile] | None = None,
@@ -142,39 +175,11 @@ def detect_missing_integration_tests(
     """
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
-    integration_refs = index.integration_test_reference_tokens
-    call_sites = index.production_call_sites
-    violations: list[Violation] = []
-    for symbol in index.production_symbols:
-        callers = len(call_sites.get(symbol.name, []))
-        if (
-            symbol.kind != METADATA_FUNCTION
-            or callers < 2
-            or (
-                not has_token(f"{symbol.module}.{symbol.name}", INTEGRATION_SEAM_TOKENS)
-            )
-            or is_utility_or_trivial_helper(symbol)
-            or symbol_is_referenced(symbol, integration_refs)
-        ):
-            continue
-        seam_score, reasons = integration_seam_score(symbol, callers)
-        if seam_score < INTEGRATION_SEAM_THRESHOLD:
-            continue
-        violations.append(
-            Violation(
-                rule="missing-integration-test",
-                relative_path=symbol.relative_path,
-                identifier=symbol.qualname,
-                detail=f"line {symbol.lineno}: production_callers={callers}; seam_score={seam_score}; reasons={'; '.join(reasons)}; no integration/e2e/pipeline test references `{symbol.name}`",
-                metadata={
-                    "caller_count": callers,
-                    "seam_score": seam_score,
-                    "symbol": symbol.qualname,
-                    "caller_sites": call_sites.get(symbol.name, [])[:10],
-                    "reasons": reasons,
-                },
-            )
-        )
+    violations = [
+        violation
+        for symbol in index.production_symbols
+        if (violation := _missing_integration_violation(symbol, index)) is not None
+    ]
     return sorted(
         violations,
         key=lambda v: (

@@ -204,8 +204,7 @@ def static_coverage_violation(inputs: CoverageInputs) -> Violation | None:
 
 
 def coverage_violation(inputs: CoverageInputs) -> Violation | None:
-    if inputs.runtime_coverage:
-        if inputs.relative_path in inputs.runtime_coverage:
-            return runtime_coverage_violation(inputs)
-        return None
+    """Use runtime coverage for represented modules and static coverage otherwise."""
+    if inputs.relative_path in inputs.runtime_coverage:
+        return runtime_coverage_violation(inputs)
     return static_coverage_violation(inputs)

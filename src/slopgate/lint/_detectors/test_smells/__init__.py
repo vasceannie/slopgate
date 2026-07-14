@@ -257,7 +257,7 @@ from .coverage import (
     runtime_coverage_violation,
     static_coverage_violation,
 )
-from ._production_detectors import (
+from .production_detectors import (
     has_token,
     integration_seam_score,
     is_utility_or_trivial_helper,
