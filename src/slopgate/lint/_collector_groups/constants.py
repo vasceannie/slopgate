@@ -4,10 +4,12 @@ from __future__ import annotations
 
 DEFERRED_TEST_INTEGRITY_COLLECTORS = frozenset(
     {
+        "coverage-artifact-incomplete",
         "hypothesis-candidate",
         "missing-integration-test",
         "obsolete-or-deprecated-test",
-        "untested-production-code",
+        "possibly-dead-internal",
+        "untested-public-api",
     }
 )
 TOUCHED_TEST_INTEGRITY_COLLECTORS = frozenset(
@@ -30,6 +32,7 @@ OPT_IN_CLI_COLLECTORS = frozenset(
         "langgraph-deprecated-api",
         "langgraph-state-mutation",
         "langgraph-state-reducer",
+        "possibly-dead-internal",
         "private-import-chain",
         "pytest-asyncio-pattern",
     }

@@ -8,17 +8,17 @@ from slopgate._types import ObjectDict
 from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import ParsedFile, project_root
 from .coverage import metadata_int
-from ._integrity_index import IntegrityIndex, build_test_integrity_index
-from ._production_symbols import (
+from .integrity_index import IntegrityIndex, build_test_integrity_index
+from .production_symbols import (
     HYPOTHESIS_NAME_TOKENS,
     ProductionSymbol,
     module_names,
     package_roots,
-    production_symbols,
     production_test_inputs,
     reference_tokens_for_tree,
     symbol_is_referenced,
 )
+from .public_symbols import production_symbols
 
 __all__ = [
     "detect_hypothesis_candidates",

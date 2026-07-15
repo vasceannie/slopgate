@@ -14,7 +14,7 @@ from typing import Protocol
 
 from slopgate._types import object_dict, object_list
 from slopgate.cli.lint.report import LintFiles
-from slopgate.lint._baseline import Violation
+from slopgate.lint._baseline import Violation, normalize_lint_rule_ids
 from slopgate.util.atomic_files import write_text_atomic_locked
 
 GIT_BASE_DEBT_CACHE_VERSION = 1
@@ -216,6 +216,7 @@ def _git_base_debt_from_cache_payload(
         }
         if stable_ids:
             rules[rule_name] = stable_ids
+    rules = normalize_lint_rule_ids(rules)
     if not rules:
         return None
     return GitBaseDebt(ref_name=ref_name, base_sha=cache_key.base_sha, rules=rules)
@@ -234,12 +235,14 @@ def _read_git_base_debt_cache(
 def _write_git_base_debt_cache(
     cache_path: Path, cache_key: _GitBaseDebtCacheKey, debt: GitBaseDebt
 ) -> None:
+    canonical_rules = normalize_lint_rule_ids(debt.rules)
     payload = {
         "version": GIT_BASE_DEBT_CACHE_VERSION,
         "base_sha": cache_key.base_sha,
         "detector_signature": cache_key.detector_signature,
         "rules": {
-            rule: sorted(stable_ids) for rule, stable_ids in sorted(debt.rules.items())
+            rule: sorted(stable_ids)
+            for rule, stable_ids in sorted(canonical_rules.items())
         },
     }
     try:

@@ -219,7 +219,7 @@ def test_indexed_detectors_do_not_rebuild_production_symbols(
             "slopgate.lint._detectors.test_smells.production_detectors"
         ),
         importlib.import_module(
-            "slopgate.lint._detectors.test_smells._hypothesis_obsolete"
+            "slopgate.lint._detectors.test_smells.hypothesis_obsolete"
         ),
     )
 
@@ -263,11 +263,14 @@ def test_run_touched_collectors_skips_suite_wide_integrity_index(
     }
     collector_contract = (
         "untested-production-code" not in touched_runner_names,
+        "untested-public-api" not in touched_runner_names,
+        "coverage-artifact-incomplete" not in touched_runner_names,
+        "possibly-dead-internal" not in touched_runner_names,
         "weak-test-assertion" in touched_runner_names,
         "weak-test-assertion" in immediate_names,
     )
 
-    assert collector_contract == (True, True, True), (
+    assert collector_contract == (True, True, True, True, True, True), (
         "Touched collectors should defer suite-wide checks and keep local checks immediate"
     )
 

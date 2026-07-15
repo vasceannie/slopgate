@@ -15,6 +15,9 @@ from slopgate.lint._parity import (
 from slopgate.policy_defaults import LINT_PATH_DEFAULTS
 
 
+LEGACY_CLI_RULE_ALIASES = {"untested-production-code": "untested-public-api"}
+
+
 def _paths_section(project_root: Path) -> dict[str, object]:
     raw_toml = load_toml(project_root)
     paths = raw_toml.get("paths")
@@ -29,12 +32,11 @@ def _bool_map(value: object) -> dict[str, bool]:
     }
 
 
-def _global_enabled_cli_rules() -> dict[str, bool]:
-    return _bool_map(load_json(resolve_config_path()).get("enabled_cli_rules", {}))
-
-
-def _repo_enabled_cli_rules(project_root: Path) -> dict[str, bool]:
-    return _bool_map(load_toml(project_root).get("enabled_cli_rules", {}))
+def _canonical_cli_rule_enablement(rules: dict[str, bool]) -> dict[str, bool]:
+    canonical: dict[str, bool] = {}
+    for rule_id, enabled in rules.items():
+        canonical[LEGACY_CLI_RULE_ALIASES.get(rule_id, rule_id)] = enabled
+    return canonical
 
 
 def _surface_cli_rules(value: object) -> dict[str, bool]:
@@ -44,19 +46,12 @@ def _surface_cli_rules(value: object) -> dict[str, bool]:
         cli_enabled = object_dict(object_dict(item).get("cli")).get("enabled")
         if not isinstance(cli_enabled, bool):
             continue
-        collector_ids = HOOK_RULE_BASELINE_COUNTERPARTS.get(rule_id, ())
-        for collector_id in collector_ids or (rule_id,):
+        canonical_rule_id = LEGACY_CLI_RULE_ALIASES.get(rule_id, rule_id)
+        collector_ids = HOOK_RULE_BASELINE_COUNTERPARTS.get(canonical_rule_id, ())
+        for collector_id in collector_ids or (canonical_rule_id,):
             if collector_id in collector_keys:
                 enabled_rules[collector_id] = cli_enabled
     return enabled_rules
-
-
-def _global_surface_cli_rules() -> dict[str, bool]:
-    return _surface_cli_rules(load_json(resolve_config_path()).get("rule_surfaces", {}))
-
-
-def _repo_surface_cli_rules(project_root: Path) -> dict[str, bool]:
-    return _surface_cli_rules(load_toml(project_root).get("rule_surfaces", {}))
 
 
 def _coerce_path_entries(value: object, *, default: str) -> list[str]:
@@ -139,8 +134,16 @@ def apply_paths_overrides(values: dict[str, object], project_root: Path) -> None
 def apply_rule_enablement_overrides(
     values: dict[str, object], project_root: Path
 ) -> None:
-    enabled_cli_rules = _global_enabled_cli_rules()
-    enabled_cli_rules.update(_global_surface_cli_rules())
-    enabled_cli_rules.update(_repo_enabled_cli_rules(project_root))
-    enabled_cli_rules.update(_repo_surface_cli_rules(project_root))
+    global_config = load_json(resolve_config_path())
+    repo_config = load_toml(project_root)
+    enabled_cli_rules = _canonical_cli_rule_enablement(
+        _bool_map(global_config.get("enabled_cli_rules", {}))
+    )
+    enabled_cli_rules.update(_surface_cli_rules(global_config.get("rule_surfaces", {})))
+    enabled_cli_rules.update(
+        _canonical_cli_rule_enablement(
+            _bool_map(repo_config.get("enabled_cli_rules", {}))
+        )
+    )
+    enabled_cli_rules.update(_surface_cli_rules(repo_config.get("rule_surfaces", {})))
     values["enabled_cli_rules"] = enabled_cli_rules

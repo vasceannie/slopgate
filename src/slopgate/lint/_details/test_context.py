@@ -227,14 +227,14 @@ def _untested_production_repair_context(violation: Violation) -> list[str]:
     )
     return [
         coverage_note,
-        "    correction-options: add behavior tests for the unreferenced public symbols, or delete/private-scope dead API if it is no longer production surface.",
-        "    correction-options: prefer tests that assert observable behavior through the public entrypoint instead of importing every helper directly.",
+        "    correction-options: add an observable contract test through the exported facade, or remove the export if it is unintended.",
+        "    correction-options: prefer public entrypoint behavior over importing implementation helpers directly.",
         "    validation: .venv/bin/python -m pytest tests -q",
     ]
 
 
 def _test_repair_context(rule_name: str, violation: Violation) -> list[str]:
-    if rule_name == "untested-production-code":
+    if rule_name == "untested-public-api":
         return _untested_production_repair_context(violation)
     if rule_name in _REPO_TEST_REPAIRS:
         return list(_REPO_TEST_REPAIRS[rule_name])

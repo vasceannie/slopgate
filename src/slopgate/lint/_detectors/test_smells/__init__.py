@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+
 __all__ = [
     "IntegrityIndex",
     "build_test_integrity_index",
@@ -107,6 +109,8 @@ __all__ = [
     "test_reference_tokens",
     "transform_score",
     "CoverageInputs",
+    "CoverageAssessment",
+    "coverage_artifact_violation",
     "coverage_percent_from_json_file",
     "coverage_percent_from_summary",
     "coverage_percent_from_xml_file",
@@ -120,6 +124,9 @@ __all__ = [
     "integration_seam_score",
     "is_utility_or_trivial_helper",
     "detect_missing_integration_tests",
+    "detect_coverage_artifact_incomplete",
+    "detect_possibly_dead_internal",
+    "detect_untested_public_api",
     "detect_untested_production_code",
     "HYPOTHESIS_PROPERTY_RULES",
     "hypothesis_properties",
@@ -131,7 +138,7 @@ __all__ = [
     "detect_hypothesis_candidates",
     "detect_stale_test_references",
 ]
-from ._integrity_index import IntegrityIndex, build_test_integrity_index
+from .integrity_index import IntegrityIndex, build_test_integrity_index
 from ._basic_detection import (
     ASSERT_PATTERNS,
     call_assertion_name,
@@ -213,7 +220,7 @@ from ._payload_detectors import (
     detect_weak_assertions,
 )
 from .pytest_asyncio import detect_pytest_asyncio_patterns
-from ._production_symbols import (
+from .production_symbols import (
     COVERAGE_JSON_NAMES,
     COVERAGE_XML_NAMES,
     DEPRECATED_TOKENS,
@@ -235,7 +242,6 @@ from ._production_symbols import (
     node_mentions_deprecated,
     package_roots,
     parameter_count,
-    production_symbols,
     production_test_inputs,
     public_top_level_defs,
     reference_tokens_for_node,
@@ -245,8 +251,11 @@ from ._production_symbols import (
     test_reference_tokens,
     transform_score,
 )
+from .public_symbols import production_symbols
 from .coverage import (
+    CoverageAssessment,
     CoverageInputs,
+    coverage_artifact_violation,
     coverage_percent_from_json_file,
     coverage_percent_from_summary,
     coverage_percent_from_xml_file,
@@ -258,13 +267,16 @@ from .coverage import (
     static_coverage_violation,
 )
 from .production_detectors import (
+    detect_coverage_artifact_incomplete,
+    detect_possibly_dead_internal,
+    detect_untested_public_api,
     has_token,
     integration_seam_score,
     is_utility_or_trivial_helper,
     detect_missing_integration_tests,
     detect_untested_production_code,
 )
-from ._hypothesis_obsolete import (
+from .hypothesis_obsolete import (
     HYPOTHESIS_PROPERTY_RULES,
     hypothesis_properties,
     hypothesis_score,
@@ -275,3 +287,5 @@ from ._hypothesis_obsolete import (
     detect_hypothesis_candidates,
     detect_stale_test_references,
 )
+
+_production_symbols = importlib.import_module(f"{__name__}.production_symbols")

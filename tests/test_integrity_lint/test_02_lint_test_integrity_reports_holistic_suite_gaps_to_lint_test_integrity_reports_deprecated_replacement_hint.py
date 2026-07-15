@@ -62,8 +62,13 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_json_paths(
     result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
-    assert result == 1
-    assert "runtime_line_coverage=37% from coverage.json" in captured.out
+    assert result == 1, "low JSON runtime coverage should fail integrity lint"
+    assert "metadata.coverage_percent: 37" in captured.out, (
+        "normalized JSON paths should retain runtime percentage metadata"
+    )
+    assert "metadata.coverage_source: coverage.json" in captured.out, (
+        "normalized JSON paths should retain artifact source metadata"
+    )
 
 
 def test_lint_test_integrity_normalizes_backslash_runtime_coverage_xml_paths(
@@ -91,8 +96,13 @@ def test_lint_test_integrity_normalizes_backslash_runtime_coverage_xml_paths(
     result = run_test_integrity(tmp_path, monkeypatch, details=True)
 
     captured = capsys.readouterr()
-    assert result == 1
-    assert "runtime_line_coverage=37% from coverage.xml" in captured.out
+    assert result == 1, "low XML runtime coverage should fail integrity lint"
+    assert "metadata.coverage_percent: 37" in captured.out, (
+        "normalized XML paths should retain runtime percentage metadata"
+    )
+    assert "metadata.coverage_source: coverage.xml" in captured.out, (
+        "normalized XML paths should retain artifact source metadata"
+    )
 
 
 def _write_cobertura_xml_source_project(tmp_path: Path) -> None:
@@ -183,7 +193,7 @@ def other_behavior() -> str:
     )
 
 
-def test_lint_test_integrity_falls_back_when_partial_runtime_coverage_omits_module(
+def test_lint_test_integrity_reports_partial_runtime_coverage_once(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
@@ -194,16 +204,17 @@ def test_lint_test_integrity_falls_back_when_partial_runtime_coverage_omits_modu
 
     captured = capsys.readouterr()
     expected = [
-        "src/pkg/other.py:coverage-000",
-        "static_test_reference_coverage=0%",
-        "not present in coverage.xml",
-        "metadata.coverage_kind: static-reference",
+        "[NEW] coverage-artifact-incomplete",
+        "coverage.xml:coverage-artifact",
+        "metadata.reason: missing-modules",
+        "metadata.omitted_count: 1",
+        "metadata.omitted_paths: src/pkg/other.py",
     ]
     report_errors = [item for item in expected if item not in captured.out]
-    if "runtime_line_coverage=0% from coverage.xml" in captured.out:
-        report_errors.append("omitted module was incorrectly treated as runtime zero")
-    assert result == 1, "partial coverage should expose the omitted untested module"
-    assert report_errors == [], "partial-report fallback should use static coverage"
+    if "untested-public-api" in captured.out:
+        report_errors.append("partial coverage emitted per-module public API findings")
+    assert result == 1, "partial coverage should emit one artifact-level finding"
+    assert report_errors == [], "partial coverage should suppress module-level noise"
 
 
 def test_lint_test_integrity_discounts_high_fan_in_style_helpers(

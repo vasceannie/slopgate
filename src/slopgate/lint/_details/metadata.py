@@ -31,7 +31,9 @@ TEST_RULES = {
     "assertion-free-test",
     "assertion-roulette",
     "conditional-assertion",
-    "untested-production-code",
+    "coverage-artifact-incomplete",
+    "possibly-dead-internal",
+    "untested-public-api",
     "missing-integration-test",
     "hypothesis-candidate",
     "obsolete-or-deprecated-test",
@@ -42,7 +44,9 @@ TEST_RULES = {
     "mocked-integration-test",
 }
 TEST_INTEGRITY_RULES = {
-    "untested-production-code",
+    "coverage-artifact-incomplete",
+    "possibly-dead-internal",
+    "untested-public-api",
     "missing-integration-test",
     "hypothesis-candidate",
     "obsolete-or-deprecated-test",

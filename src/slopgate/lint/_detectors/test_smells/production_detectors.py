@@ -11,24 +11,27 @@ from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import ParsedFile
 from .coverage import (
     CoverageInputs,
+    coverage_artifact_violation,
     coverage_violation,
     metadata_int,
-    runtime_coverage_by_rel,
 )
-from ._integrity_index import IntegrityIndex, build_test_integrity_index
-from ._production_symbols import (
+from .integrity_index import IntegrityIndex, build_test_integrity_index
+from .production_symbols import (
     INTEGRATION_HELPER_NAME_PREFIXES,
     INTEGRATION_SEAM_TOKENS,
     INTEGRATION_UTILITY_MODULE_TOKENS,
     INTEGRATION_UTILITY_NAME_TOKENS,
     ProductionSymbol,
     integration_test_reference_tokens,
-    production_symbols,
     production_test_inputs,
     symbol_is_referenced,
 )
+from .public_symbols import production_symbols
 
 __all__ = [
+    "detect_coverage_artifact_incomplete",
+    "detect_possibly_dead_internal",
+    "detect_untested_public_api",
     "detect_untested_production_code",
     "detect_missing_integration_tests",
     "production_symbols",
@@ -43,16 +46,15 @@ def detect_untested_production_code(
     *,
     index: IntegrityIndex | None = None,
 ) -> list[Violation]:
-    """Find production modules with low runtime or static test coverage.
-
-    Runtime line coverage is used for modules represented in the selected report.
-    Modules absent from that report fall back to static reference coverage by
-    public symbol name and say so in the output.
-    """
+    """Find public Python modules with low runtime or static test coverage."""
     if index is None:
         index = build_test_integrity_index(src_files, test_files)
+    assessment = index.coverage_assessment
+    if assessment.status in {"incomplete", "invalid"}:
+        return []
     refs = index.test_reference_tokens
-    coverage_source, runtime_coverage = runtime_coverage_by_rel()
+    coverage_source = assessment.source
+    runtime_coverage = assessment.coverage
     by_path: dict[str, list[ProductionSymbol]] = {}
     for symbol in index.production_symbols:
         by_path.setdefault(symbol.relative_path, []).append(symbol)
@@ -77,6 +79,61 @@ def detect_untested_production_code(
     return sorted(
         violations, key=lambda v: (metadata_int(v, "coverage_percent"), v.relative_path)
     )
+
+
+def detect_coverage_artifact_incomplete(
+    src_files: list[Path] | list[ParsedFile] | None = None,
+    test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: IntegrityIndex | None = None,
+) -> list[Violation]:
+    """Return one artifact-level finding for invalid or structurally partial coverage."""
+
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    violation = coverage_artifact_violation(index.coverage_assessment)
+    return [violation] if violation is not None else []
+
+
+def detect_possibly_dead_internal(
+    src_files: list[Path] | list[ParsedFile] | None = None,
+    test_files: list[Path] | list[ParsedFile] | None = None,
+    *,
+    index: IntegrityIndex | None = None,
+) -> list[Violation]:
+    """Return cautious dead-code candidates from unexported private modules."""
+
+    if index is None:
+        index = build_test_integrity_index(src_files, test_files)
+    runtime_coverage = index.coverage_assessment.coverage
+    violations: list[Violation] = []
+    for symbol in index.internal_candidate_symbols:
+        if symbol_is_referenced(symbol, index.production_reference_tokens):
+            continue
+        call_sites = index.internal_call_sites.get(symbol.name, [])
+        if call_sites or runtime_coverage.get(symbol.relative_path, 0) > 0:
+            continue
+        violations.append(
+            Violation(
+                rule="possibly-dead-internal",
+                relative_path=symbol.relative_path,
+                identifier=symbol.qualname,
+                detail="possibly dead internal candidate",
+                metadata={
+                    "reason": "no-static-or-runtime-evidence",
+                    "symbol": symbol.qualname,
+                    "production_reference_count": 0,
+                    "production_call_sites": call_sites,
+                    "runtime_coverage_percent": runtime_coverage.get(
+                        symbol.relative_path, 0
+                    ),
+                },
+            )
+        )
+    return sorted(violations, key=lambda violation: violation.stable_id)
+
+
+detect_untested_public_api = detect_untested_production_code
 
 
 def has_token(text: str, tokens: set[str]) -> bool:

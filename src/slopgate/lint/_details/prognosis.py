@@ -95,10 +95,17 @@ _TYPE_OR_TEST_PROGNOSES: dict[str, tuple[str, ...]] = {
         "    prognosis: fixture discovery and fixture implementation are mixed in the wrong place.",
         "    scaffold: expose fixtures through the narrowest conftest.py; move implementation helpers to tests/<area>/_fixtures/ or tests/<area>/support/.",
     ),
-    "untested-production-code": (
-        "    prognosis: public production surface has low static test-reference coverage; this may be dead API or unprotected behavior.",
-        "    scaffold: start with the lowest-coverage module, identify the public behavior users depend on, then add behavior/integration tests around that entrypoint.",
-        "    verify: coverage here is static reference coverage; confirm with pytest-cov or an equivalent runtime coverage run before treating it as complete proof.",
+    "coverage-artifact-incomplete": (
+        "    prognosis: the selected runtime coverage artifact is malformed, empty, or omits configured source modules.",
+        "    scaffold: regenerate project-root coverage for every configured [paths].src root, then rerun the holistic integrity scan.",
+    ),
+    "untested-public-api": (
+        "    prognosis: an intentionally exported Python surface lacks sufficient runtime or static coverage evidence.",
+        "    scaffold: add an observable contract test through the exported facade, or remove the export if the surface is unintended.",
+    ),
+    "possibly-dead-internal": (
+        "    prognosis: an unexported private-module symbol has no static caller or runtime coverage evidence, but reflection or registration may still use it.",
+        "    scaffold: review callers, reflection, and registration before deleting or privatizing; do not add a test solely to mention the helper name.",
     ),
     "missing-integration-test": (
         "    prognosis: a production seam has multiple callers but no integration/e2e/pipeline test reference, so caller contract drift can hide between unit tests.",

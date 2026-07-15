@@ -106,6 +106,8 @@ default = "all"
 [enabled_cli_rules]
 # Batch lint collector toggles. Missing entries default to enabled.
 # "long-method" = true
+# "possibly-dead-internal" = true  # Opt-in private-module candidate review.
+# Legacy "untested-production-code" maps only to "untested-public-api".
 
 # Optional first-class surface overrides. Missing values inherit defaults.
 # Hook events constrain where the rule may evaluate; actions are allow, ask,

@@ -65,8 +65,8 @@ full test suites before releases or broad refactors.
 | Top-level CLI parser | `src/slopgate/cli/parsers.py` | Currently registers bare `test`; extend this parser with changed-test flags and `--smoke`. |
 | CLI command facade | `src/slopgate/cli/commands.py` | Keep `cmd_test` as the public dispatch point for test workflows. |
 | Existing smoke command | `src/slopgate/cli/_self_test.py` | Run this only when `slopgate test --smoke` is requested. |
-| Test-integrity index | `src/slopgate/lint/_detectors/test_smells/_integrity_index.py` | Reuse `IntegrityIndex` and `build_test_integrity_index(...)`. |
-| Production symbol helpers | `src/slopgate/lint/_detectors/test_smells/_production_symbols.py` | Reuse `module_name_from_rel(...)` and `symbol_is_referenced(...)`. |
+| Test-integrity index | `src/slopgate/lint/_detectors/test_smells/integrity_index.py` | Reuse `IntegrityIndex` and `build_test_integrity_index(...)`; coverage assessment and export facts are built once per holistic scan. |
+| Production symbol helpers | `src/slopgate/lint/_detectors/test_smells/production_symbols.py` | Reuse `module_name_from_rel(...)` and `symbol_is_referenced(...)`; export-aware selection lives in `public_symbols.py`. |
 | File discovery helpers | `src/slopgate/lint/_helpers/discovery.py` | Reuse `find_source_files()` and `find_test_files()`. |
 | Parser smoke tests | `tests/test_cli.py`, `tests/integration/test_cli_parsers_lint.py` | Add focused parser coverage beside existing CLI parser tests. |
 | Test-integrity coverage | `tests/test_test_integrity_lint.py` | Reuse fixture style and semantic assertions for selector behavior. |

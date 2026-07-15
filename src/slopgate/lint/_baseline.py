@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import NamedTuple
 from datetime import datetime, timezone
@@ -23,6 +24,10 @@ from typing_extensions import override
 from slopgate.lint._config import get_config
 
 SCHEMA_VERSION = 1
+LEGACY_UNTESTED_RULE = "untested-production-code"
+UNTESTED_PUBLIC_RULE = "untested-public-api"
+UNTESTED_PUBLIC_IDENTIFIER = "public-api"
+UNTESTED_PUBLIC_DETAIL = "public API lacks coverage evidence"
 
 
 def baseline_path() -> Path:
@@ -70,6 +75,38 @@ class BaselineResult:
         return len(self.new_violations) == 0
 
 
+def _canonical_untested_public_id(stable_id: str) -> str | None:
+    parts = stable_id.split("|", maxsplit=3)
+    if len(parts) < 3 or parts[0] != LEGACY_UNTESTED_RULE:
+        return None
+    relative_path = parts[1]
+    return "|".join(
+        (
+            UNTESTED_PUBLIC_RULE,
+            relative_path,
+            UNTESTED_PUBLIC_IDENTIFIER,
+            UNTESTED_PUBLIC_DETAIL,
+        )
+    )
+
+
+def normalize_lint_rule_ids(
+    rules: Mapping[str, set[str]],
+) -> dict[str, set[str]]:
+    """Canonicalize only legacy untested-production-code persisted identities."""
+
+    normalized: dict[str, set[str]] = {}
+    for rule, stable_ids in rules.items():
+        if rule != LEGACY_UNTESTED_RULE:
+            normalized.setdefault(rule, set()).update(stable_ids)
+            continue
+        for stable_id in stable_ids:
+            canonical = _canonical_untested_public_id(stable_id)
+            target_rule = UNTESTED_PUBLIC_RULE if canonical is not None else rule
+            normalized.setdefault(target_rule, set()).add(canonical or stable_id)
+    return normalized
+
+
 def load_baseline() -> dict[str, set[str]]:
     """Load the baseline file and return ``{rule: {stable_id, …}}``."""
     bp = baseline_path()
@@ -91,16 +128,19 @@ def load_baseline() -> dict[str, set[str]]:
             continue
         typed_ids = cast(list[object], ids)
         result[rule] = {str(item) for item in typed_ids}
-    return result
+    return normalize_lint_rule_ids(result)
 
 
 def save_baseline_ids(rules: dict[str, set[str]]) -> None:
     """Persist baseline rule → stable_id sets (empty rules are omitted)."""
     bp = baseline_path()
+    canonical_rules = normalize_lint_rule_ids(rules)
     data = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "rules": {rule: sorted(ids) for rule, ids in sorted(rules.items()) if ids},
+        "rules": {
+            rule: sorted(ids) for rule, ids in sorted(canonical_rules.items()) if ids
+        },
     }
     write_text_atomic_locked(
         bp,
@@ -108,6 +148,20 @@ def save_baseline_ids(rules: dict[str, set[str]]) -> None:
         prefix="baselines-",
         suffix=".json",
     )
+
+
+def _persisted_baseline_has_legacy_untested_rule() -> bool:
+    bp = baseline_path()
+    if not bp.exists():
+        return False
+    try:
+        data = json.loads(bp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    rules = cast(dict[object, object], data).get("rules")
+    return isinstance(rules, dict) and LEGACY_UNTESTED_RULE in rules
 
 
 def save_baseline(violations_by_rule: dict[str, list[Violation]]) -> None:
@@ -192,7 +246,9 @@ def apply_lint_baseline_sync(
     inherited_added = sum(
         len(ids - old_baseline.get(rule, set())) for rule, ids in synced.items()
     )
-    if _baseline_rules_equal(old_baseline, synced):
+    if _baseline_rules_equal(old_baseline, synced) and not (
+        _persisted_baseline_has_legacy_untested_rule()
+    ):
         return BaselineSyncResult(stale_removed, False, inherited_added)
     save_baseline_ids(synced)
     return BaselineSyncResult(stale_removed, True, inherited_added)
