@@ -1,5 +1,5 @@
 import { getRuleDescription } from "@/lib/ruleDescriptions";
-import type { RuleMetadata, RuleSurfaceAction, Severity, SlopgateConfig } from "@/types/slopgate";
+import type { RuleMetadata, Severity, SlopgateConfig } from "@/types/slopgate";
 export const QUALITY_LINT_RULE_ID = "QUALITY-LINT-001";
 
 export const HOOK_ACTIONS = ["deny", "ask", "block", "allow", "context", "warn"] as const;

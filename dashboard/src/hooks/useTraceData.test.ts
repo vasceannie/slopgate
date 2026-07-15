@@ -47,7 +47,6 @@ function sourceContext(data: TraceDataContextValue["data"]): TraceDataContextVal
 }
 
 afterEach(() => {
-  vi.useRealTimers();
   mockedUseTraceDataSource.mockReset();
 });
 
@@ -148,8 +147,6 @@ describe("stream schema validation warning", () => {
 
 describe("useTraceData", () => {
   it("filters self-test records out of dashboard aggregates", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-28T12:00:00.000Z"));
     const realEvent = traceEvent("session-real", "2026-05-27T12:00:00.000Z", "opencode", ["/repos/slopgate/src/real.py"], "Bash");
     const selfTestSessionId = "self-test-opencode-GIT-001";
     const selfTestEvent = traceEvent(

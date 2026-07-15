@@ -399,19 +399,16 @@ export function DriftTuning({ config, harnessStatus, hottestRepos, operationalCo
             )}
           </OpsCard>
 
-          <OpsCard title="Observed Recovery" icon={RotateCcw}>
+          <OpsCard title="Deny Recovery" icon={RotateCcw}>
             <div className="px-2 py-1.5 rounded-sm bg-muted/20 text-xs flex items-center justify-between font-mono">
-              <span className="text-muted-foreground font-sans">Eventual recovery</span>
+              <span className="text-muted-foreground font-sans">Resolution Rate</span>
               <span className="font-bold text-foreground">
-                {operationalContext.eventualRecoveryRate === null
-                  ? "—"
-                  : `${operationalContext.eventualRecoveryRate.toFixed(1)}%`}
+                {operationalContext.resolutionRate === null ? "—" : `${operationalContext.resolutionRate.toFixed(1)}%`}
               </span>
             </div>
             <div className="text-xs text-muted-foreground mt-2 px-1">
-              {operationalContext.recoveredChains}/
-              {operationalContext.recoveredChains + operationalContext.abandonedChains} chains recovered with observed terminal evidence;
-              {` ${operationalContext.openChains}`} remain open/censored.
+              {operationalContext.resolvedBlockedSessions}/{operationalContext.blockedSessions} blocked sessions later produced
+              allow/context/warn/info.
             </div>
             {operationalContext.repeatedDenials.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border/50">

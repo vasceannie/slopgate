@@ -7,52 +7,7 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings, strategies
 
-from slopgate._types import ObjectDict
 from slopgate.stats import analyze, load_entries, print_report, run_stats
-
-
-_RECOVERY_REPORT: ObjectDict = {
-    "summary": {"chains": 2, "recovered": 1, "abandoned": 0, "open_censored": 1},
-    "rates": {
-        "first_retry_rule_clearance": {
-            "numerator": 1,
-            "denominator": 2,
-            "percentage": 50.0,
-        },
-        "first_retry_operation_success": {
-            "numerator": 0,
-            "denominator": 0,
-            "percentage": None,
-        },
-    },
-    "rules": [
-        {
-            "label": "RULE-001",
-            "chains": 2,
-            "primary_classification": "insufficient_telemetry",
-            "first_retry_operation_success": {
-                "numerator": 0,
-                "denominator": 0,
-                "percentage": None,
-            },
-            "unchanged_first_retry": {
-                "numerator": 1,
-                "denominator": 2,
-                "percentage": 50.0,
-            },
-            "eventual_recovery": {
-                "numerator": 1,
-                "denominator": 1,
-                "percentage": 100.0,
-            },
-            "abandoned": 0,
-            "open_censored": 1,
-            "sessions": 1,
-        }
-    ],
-    "interventions": [],
-    "report_classifications": [],
-}
 
 
 def test_load_entries_skips_invalid_json_lines(tmp_path: Path) -> None:
@@ -121,61 +76,6 @@ def test_print_report_renders_analyzed_stats(
     assert "SLOPGATE HOOK ACTIVITY REPORT" in output
     assert "Total hook events: 1" in output
     assert "deny" in output
-
-
-def test_print_report_uses_honest_event_and_finding_units(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    stats = analyze(
-        [
-            {
-                "timestamp": "2026-06-03T00:00:00+00:00",
-                "event_name": "PreToolUse",
-                "session_id": "session-1",
-                "findings": [
-                    {
-                        "rule_id": "RULE-001",
-                        "decision": "deny",
-                        "severity": "HIGH",
-                        "message": "Denied",
-                    }
-                ],
-            }
-        ]
-    )
-
-    print_report(stats)
-    output = capsys.readouterr().out
-
-    assert (
-        "Event Outcomes" in output,
-        "Finding Decisions" in output,
-        "100.0% (1/1)" in output,
-        "First-time resolution" not in output,
-        "retries before resolution" not in output,
-    ) == (True, True, True, True, True), (
-        "Human report must show unit-safe fractions without false recovery wording"
-    )
-
-
-def test_print_report_renders_recovery_evidence_with_explicit_units(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    stats = analyze([])
-    stats["recovery"] = _RECOVERY_REPORT
-
-    print_report(stats)
-    output = capsys.readouterr().out
-
-    assert (
-        "Recovery Chains" in output,
-        "50.0% (1/2)" in output,
-        "1st retry operation success: —" in output,
-        "RULE-001" in output,
-        "insufficient_telemetry" in output,
-    ) == (True, True, True, True, True), (
-        "Recovery reporting must preserve explicit fractions and unavailable values"
-    )
 
 
 def test_run_stats_outputs_json_report_for_existing_log(

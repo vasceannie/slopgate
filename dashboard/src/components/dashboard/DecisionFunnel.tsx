@@ -139,9 +139,9 @@ export function DecisionFunnel({ timeSeries, eventsByType, eventsByTypeAndPlatfo
   const axisLabels =
     timeSeries.length > 0
       ? [
-          { key: "start", label: formatAxisLabel(timeSeries[0]?.time, timeWindow) },
-          { key: "middle", label: formatAxisLabel(timeSeries[Math.floor((timeSeries.length - 1) / 2)]?.time, timeWindow) },
-          { key: "end", label: formatAxisLabel(timeSeries[timeSeries.length - 1]?.time, timeWindow) },
+          formatAxisLabel(timeSeries[0]?.time, timeWindow),
+          formatAxisLabel(timeSeries[Math.floor((timeSeries.length - 1) / 2)]?.time, timeWindow),
+          formatAxisLabel(timeSeries[timeSeries.length - 1]?.time, timeWindow),
         ]
       : [];
 
@@ -207,8 +207,8 @@ export function DecisionFunnel({ timeSeries, eventsByType, eventsByTypeAndPlatfo
               <div className="grid grid-cols-[68px_minmax(0,1fr)_112px] gap-2 text-[9px] text-muted-foreground">
                 <span />
                 <div className="flex justify-between px-0.5">
-                  {axisLabels.map(({ key, label }) => (
-                    <span key={key}>{label}</span>
+                  {axisLabels.map((label) => (
+                    <span key={label}>{label}</span>
                   ))}
                 </div>
                 <span className="text-right">independent scale</span>

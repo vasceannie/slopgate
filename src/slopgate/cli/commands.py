@@ -247,13 +247,11 @@ def cmd_update_suite(args: argparse.Namespace) -> int:
 
 def cmd_stats(args: argparse.Namespace) -> int:
     from slopgate.stats import run_stats
-    from slopgate.stats.recovery.scopes import RecoveryScope
 
     return run_stats(
         log_path=string_arg(args, "log") or None,
         days=_int_arg(args, "days"),
         as_json=_bool_arg(args, "json"),
-        scope=RecoveryScope(string_arg(args, "scope", RecoveryScope.MANAGED.value)),
     )
 
 

@@ -40,8 +40,8 @@ slopgate install all --disable-autoupdate
 # Run self-test
 slopgate test
 
-# Check stats (managed repositories are the default recovery scope)
-slopgate stats --days 7 --scope managed
+# Check stats
+slopgate stats --days 7
 
 # Lint the current project for code quality
 slopgate lint check             # scan project; fail only on NEW violations (agent stop hooks)
@@ -213,17 +213,13 @@ slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
 ### Activity, config, and self-test
 
 ```bash
-slopgate stats [--log results.jsonl] [--days N] [--json] [--scope managed|relaxed|global|all]
+slopgate stats [--log results.jsonl] [--days N] [--json]
 slopgate config show
 slopgate config init [--force]
 slopgate config path
 slopgate test
 slopgate version
 ```
-
-Recovery reporting defaults to `--scope managed` (`repo_strict`). Use `relaxed`
-for `repo_relaxed`, `global` for `outside_repo`, or `all` to print separate
-scope reports without blending their recovery denominators.
 
 ### Batch code quality linting (project-local)
 

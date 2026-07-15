@@ -34,7 +34,7 @@ function hasTraceIdentity(obj: Record<string, unknown>): obj is Record<string, u
 export function classifyLine(obj: Record<string, unknown>): TraceRecordType | null {
   // subprocess: has command + returncode
   if ("command" in obj && "returncode" in obj) return "subprocess";
-  // result rows are identified by findings; schema-v2 rows may also carry candidate paths.
+  // result rows intentionally do not carry event-only candidate path/language metadata.
   if ("findings" in obj && Array.isArray(obj.findings)) return "result";
   // rules.jsonl also contains timing/metric rows keyed by rule_id; those are not UI findings.
   if ("rule_id" in obj) {
@@ -301,37 +301,6 @@ function normalizeFindingSummary(value: unknown): HookResult["findings"][number]
   };
 }
 
-function normalizeCorrelationConfidence(value: unknown): HookResult["correlation_confidence"] {
-  if (value === "exact" || value === "inferred" || value === "unavailable") return value;
-  return null;
-}
-
-function normalizeEventOutcome(value: unknown): HookResult["event_outcome"] {
-  if (
-    value === "blocked_pre_tool" ||
-    value === "blocked_post_tool" ||
-    value === "asked" ||
-    value === "passed_with_advisory" ||
-    value === "passed_clean" ||
-    value === "tool_failed" ||
-    value === "evaluation_error" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return null;
-}
-
-function normalizeToolOutcome(value: unknown): HookResult["tool_outcome"] {
-  if (value === "success" || value === "failure" || value === "unknown") return value;
-  return null;
-}
-
-function normalizeRepairPlanState(value: unknown): HookResult["repair_plan_state"] {
-  if (value === "none" || value === "requested" || value === "observed") return value;
-  return null;
-}
-
 function normalizeResultRecord(obj: Record<string, unknown>): HookResult | null {
   if (!hasTraceIdentity(obj) || !Array.isArray(obj.findings)) return null;
   const eventName = normalizeEventName(obj.event_name);
@@ -354,16 +323,6 @@ function normalizeResultRecord(obj: Record<string, unknown>): HookResult | null 
     provider: optionalString(obj.provider),
     command: optionalString(obj.command),
     tool_output: optionalString(obj.tool_output),
-    trace_schema_version: typeof obj.trace_schema_version === "number" ? obj.trace_schema_version : null,
-    evaluation_id: optionalString(obj.evaluation_id),
-    operation_id: optionalString(obj.operation_id),
-    correlation_confidence: normalizeCorrelationConfidence(obj.correlation_confidence),
-    candidate_paths: normalizeStringArray(obj.candidate_paths),
-    attempt_fingerprint: optionalString(obj.attempt_fingerprint),
-    event_outcome: normalizeEventOutcome(obj.event_outcome),
-    tool_outcome: normalizeToolOutcome(obj.tool_outcome),
-    intervention_tags: normalizeStringArray(obj.intervention_tags),
-    repair_plan_state: normalizeRepairPlanState(obj.repair_plan_state),
     tool_input:
       objectRecord(obj.tool_input) ??
       objectRecord(obj.toolInput) ??

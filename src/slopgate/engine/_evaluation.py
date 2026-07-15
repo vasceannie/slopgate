@@ -34,12 +34,6 @@ from ._retry import (
     filter_search_reminder_dedupe,
     inject_recent_failure_context,
 )
-from ._trace_schema import (
-    TraceIdentity,
-    completed_trace_fields,
-    start_trace_fields,
-    trace_identity,
-)
 from ._runner import (
     EnforcementMode,
     platform_capability,
@@ -56,7 +50,6 @@ class _EvaluationMetadata:
     resolved_repo_root: Path | None
     platform_capability: str
     degraded_reason: str | None
-    trace_identity: TraceIdentity
 
     @property
     def repo_root_text(self) -> str | None:
@@ -65,18 +58,13 @@ class _EvaluationMetadata:
 
 def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata:
     capability, degraded_reason = platform_capability(platform)
-    resolved_repo_root = resolve_repo_root(Path(ctx.cwd))
     return _EvaluationMetadata(
         platform=platform,
         platform_source=platform,
         enforcement_mode=resolve_enforcement_mode(ctx),
-        resolved_repo_root=resolved_repo_root,
+        resolved_repo_root=resolve_repo_root(Path(ctx.cwd)),
         platform_capability=capability,
         degraded_reason=degraded_reason,
-        trace_identity=trace_identity(
-            ctx,
-            str(resolved_repo_root) if resolved_repo_root is not None else None,
-        ),
     )
 
 
@@ -176,10 +164,10 @@ def _payload_for_start(
         "event_name": ctx.event_name,
         SESSION_ID: ctx.session_id,
         "tool_name": ctx.tool_name,
+        "candidate_paths": ctx.candidate_paths,
         "languages": sorted(ctx.languages),
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
-        **start_trace_fields(ctx, metadata.trace_identity),
         **_trace_drilldown_fields(ctx),
     }
 
@@ -204,7 +192,6 @@ def _payload_for_done(
         "timing": timing,
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
-        **completed_trace_fields(ctx, result, metadata.trace_identity),
         **_trace_drilldown_fields(ctx),
     }
 

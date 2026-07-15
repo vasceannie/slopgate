@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useTraceDataSource } from "@/context/useTraceDataSource";
 import { mockConfig } from "@/data/mockTraces";
-import { computeRecoveryMetrics } from "@/lib/recoveryMetrics";
 import type { NativeSessionIds, SessionData, SessionGroup } from "@/lib/sessionHelpers";
 import type {
   Decision,
@@ -1096,7 +1095,16 @@ export function useTraceData(filters: FilterState) {
       return decision === "block" || decision === "deny";
     });
 
-    const recovery = computeRecoveryMetrics(results);
+    let blockedSessions = 0;
+    let resolvedBlockedSessions = 0;
+    for (const decisions of sessionIndexes.sessionDecisions.values()) {
+      const firstBlockIdx = decisions.findIndex((d) => d === "block" || d === "deny");
+      if (firstBlockIdx === -1) continue;
+      blockedSessions++;
+      if (decisions.slice(firstBlockIdx + 1).some((d) => d === "allow" || d === "context" || d === "warn" || d === "info")) {
+        resolvedBlockedSessions++;
+      }
+    }
 
     const denialCounts = new Map<string, number>();
     for (const result of blockingResults) {
@@ -1123,11 +1131,9 @@ export function useTraceData(filters: FilterState) {
         .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
         .map(([label, count]) => ({ label, count })),
-      eventualRecoveryRate: recovery.eventualRecoveryRate,
-      recoveryChains: recovery.chains,
-      recoveredChains: recovery.recovered,
-      abandonedChains: recovery.abandoned,
-      openChains: recovery.open,
+      resolutionRate: blockedSessions > 0 ? (resolvedBlockedSessions / blockedSessions) * 100 : null,
+      blockedSessions,
+      resolvedBlockedSessions,
     };
   }, [events, results, rules, sessionIndexes]);
 
