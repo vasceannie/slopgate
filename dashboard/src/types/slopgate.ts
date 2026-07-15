@@ -51,6 +51,16 @@ export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type PlatformCapability = "full" | "partial" | "degraded";
 export type EnforcementMode = "outside_repo" | "repo_strict" | "repo_relaxed";
+export type EventOutcome =
+  | "blocked_pre_tool"
+  | "blocked_post_tool"
+  | "asked"
+  | "passed_with_advisory"
+  | "passed_clean"
+  | "tool_failed"
+  | "evaluation_error"
+  | "unknown";
+export type ToolOutcome = "success" | "failure" | "unknown";
 
 export interface TraceMetadata {
   platform_capability?: PlatformCapability | string | null;
@@ -130,6 +140,16 @@ export interface HookResult extends TraceMetadata {
   command?: string | null;
   tool_output?: string | null;
   tool_input?: Record<string, unknown> | null;
+  trace_schema_version?: number | null;
+  evaluation_id?: string | null;
+  operation_id?: string | null;
+  correlation_confidence?: "exact" | "inferred" | "unavailable" | null;
+  candidate_paths?: string[];
+  attempt_fingerprint?: string | null;
+  event_outcome?: EventOutcome | null;
+  tool_outcome?: ToolOutcome | null;
+  intervention_tags?: string[];
+  repair_plan_state?: "none" | "requested" | "observed" | null;
 }
 
 export interface SubprocessRun {
@@ -167,9 +187,11 @@ export interface OperationalContext {
   repoRoots: OperationalCountRow[];
   pathlessResults: number;
   repeatedDenials: OperationalCountRow[];
-  resolutionRate: number | null;
-  blockedSessions: number;
-  resolvedBlockedSessions: number;
+  eventualRecoveryRate: number | null;
+  recoveryChains: number;
+  recoveredChains: number;
+  abandonedChains: number;
+  openChains: number;
 }
 
 export type HarnessStatusValue = "installed" | "partial" | "missing" | "disabled" | "error";

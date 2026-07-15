@@ -24,9 +24,11 @@ const OPERATIONAL_CONTEXT: OperationalContext = {
   repoRoots: [],
   pathlessResults: 0,
   repeatedDenials: [],
-  resolutionRate: null,
-  blockedSessions: 0,
-  resolvedBlockedSessions: 0,
+  eventualRecoveryRate: null,
+  recoveryChains: 0,
+  recoveredChains: 0,
+  abandonedChains: 0,
+  openChains: 0,
 };
 
 describe("DriftTuning", () => {

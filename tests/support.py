@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 import pytest
 
-from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate._types import ObjectDict, object_dict, object_list, string_value
+from slopgate.constants import METADATA_DECISION, METADATA_PATH
 from slopgate.models import EngineResult
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +41,45 @@ SKIP_WINDOWS_ONLY = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 LoadFixture = Callable[[str], ObjectDict]
+
+
+@dataclass(frozen=True, slots=True)
+class StatsResultSpec:
+    """Minimal completed-result finding input for stats tests."""
+
+    event_name: str = "PreToolUse"
+    rule_id: str = "GIT-001"
+    decision: str = "deny"
+    session_id: str = "s1"
+
+
+def stats_result_entry(spec: StatsResultSpec = StatsResultSpec()) -> ObjectDict:
+    """Build a legacy completed-result record for stats compatibility tests."""
+    return {
+        "timestamp": "2026-04-01T12:00:00+00:00",
+        "event_name": spec.event_name,
+        "session_id": spec.session_id,
+        "tool_name": "Bash",
+        "findings": [
+            {
+                "rule_id": spec.rule_id,
+                METADATA_DECISION: spec.decision,
+                "severity": "HIGH",
+                "message": f"{spec.rule_id} triggered",
+                "metadata": {METADATA_PATH: "src/main.py"},
+            }
+        ],
+    }
+
+
+def pair_counts(mapping: ObjectDict, key: str) -> dict[str, int]:
+    """Extract a JSON-compatible list of string/count pairs."""
+    counts: dict[str, int] = {}
+    for item in object_list(mapping.get(key)):
+        pair = object_list(item)
+        if len(pair) == 2 and isinstance(pair[0], str) and isinstance(pair[1], int):
+            counts[pair[0]] = pair[1]
+    return counts
 
 
 class WriteBuilder(Protocol):

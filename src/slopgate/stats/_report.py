@@ -8,9 +8,11 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from slopgate._types import object_dict, object_list
+from slopgate.constants import UNKNOWN_VALUE
 
 from ._analysis import analyze
 from ._load import default_log_path, load_entries
+from .recovery.scopes import RecoveryScope
 
 _PairList = list[tuple[str, int]]
 
@@ -41,12 +43,8 @@ def print_report(stats: Mapping[str, object]) -> None:
         print(f"Fixture/test sessions filtered: {stats['fixture_filtered']:,}")
     print(f"Unique sessions: {stats['sessions']}")
 
-    raw_total = stats.get("total_events", 0)
-    total = int(raw_total) if isinstance(raw_total, (int, float, str)) else 1
-    print("\n--- Decisions ---")
-    for decision, count in _pairs(stats, "by_decision"):
-        pct = count / total * 100
-        print(f"  {decision:12s} {count:6,}  ({pct:.1f}%)")
+    _print_distribution(stats, "Event Outcomes", "event_outcomes")
+    _print_distribution(stats, "Finding Decisions", "finding_decisions")
 
     print("\n--- Event Types ---")
     for event, count in _pairs(stats, "by_event"):
@@ -56,7 +54,7 @@ def print_report(stats: Mapping[str, object]) -> None:
     _print_denied_rules(stats)
     _print_advisory_and_enrichment(stats)
     _print_denied_files(stats)
-    _print_retry_patterns(stats)
+    _print_recovery(stats)
     _print_churn_metrics(stats)
     _print_daily_volume(stats)
     _print_pairs_section(
@@ -121,14 +119,90 @@ def _print_pairs_section(
     print()
 
 
-def _print_retry_patterns(stats: Mapping[str, object]) -> None:
-    patterns = _pairs(stats, "retry_patterns")
-    _print_pairs_section(
-        title="Retry Patterns (same rule denied 2+ in one session)",
-        pairs=patterns,
-        formatter=lambda desc, count: f"  {count:3,}x  {desc}",
-        empty_message="(none detected)",
+def _print_distribution(
+    stats: Mapping[str, object],
+    title: str,
+    key: str,
+) -> None:
+    section = object_dict(stats.get(key))
+    raw_total = section.get("total")
+    total = raw_total if isinstance(raw_total, int) else 0
+    print(f"\n--- {title} ---")
+    counts = _as_pair_list(section.get("counts"))
+    if not counts:
+        print("  (none detected)")
+        return
+    for label, count in counts:
+        print(f"  {label:24s} {count:6,}  {_format_fraction(count, total)}")
+
+
+def _format_fraction(numerator: int, denominator: int) -> str:
+    if denominator <= 0:
+        return "—"
+    percentage = numerator / denominator * 100
+    return f"{percentage:.1f}% ({numerator}/{denominator})"
+
+
+def _rate_text(value: object) -> str:
+    rate = object_dict(value)
+    numerator = rate.get("numerator")
+    denominator = rate.get("denominator")
+    if not isinstance(numerator, int) or not isinstance(denominator, int):
+        return "—"
+    return _format_fraction(numerator, denominator)
+
+
+def _print_recovery_section(recovery: Mapping[str, object], title: str) -> None:
+    summary, rates = map(
+        object_dict,
+        (recovery.get("summary"), recovery.get("rates")),
     )
+    print(f"\n--- {title} ---")
+    print(
+        "  Chains: "
+        f"{summary.get('chains', 0)}  "
+        f"recovered={summary.get('recovered', 0)}  "
+        f"abandoned={summary.get('abandoned', 0)}  "
+        f"open/censored={summary.get('open_censored', 0)}"
+    )
+    print(
+        "  1st retry rule clearance: "
+        f"{_rate_text(rates.get('first_retry_rule_clearance'))}"
+    )
+    print(
+        "  1st retry operation success: "
+        f"{_rate_text(rates.get('first_retry_operation_success'))}"
+    )
+    rules = [object_dict(item) for item in object_list(recovery.get("rules"))]
+    if not rules:
+        print("  Rule evidence: —")
+        return
+    print("  Rule evidence:")
+    for rule in rules[:10]:
+        raw_chains = rule.get("chains")
+        chain_count = raw_chains if isinstance(raw_chains, int) else 0
+        print(
+            f"    {str(rule.get('label', UNKNOWN_VALUE)):32s} "
+            f"chains={chain_count:>4}  "
+            f"success={_rate_text(rule.get('first_retry_operation_success')):>13s}  "
+            f"unchanged={_rate_text(rule.get('unchanged_first_retry')):>13s}  "
+            f"eventual={_rate_text(rule.get('eventual_recovery')):>13s}  "
+            f"class={rule.get('primary_classification', 'unclassified')}"
+        )
+
+
+def _print_recovery(stats: Mapping[str, object]) -> None:
+    recovery = object_dict(stats.get("recovery"))
+    scope_reports = object_dict(recovery.get("scope_reports"))
+    if scope_reports:
+        for scope_name, report in scope_reports.items():
+            _print_recovery_section(
+                object_dict(report),
+                f"Recovery Chains: {scope_name}",
+            )
+        return
+    scope = str(recovery.get("scope", RecoveryScope.MANAGED.value))
+    _print_recovery_section(recovery, f"Recovery Chains: {scope}")
 
 
 def _print_daily_volume(stats: Mapping[str, object]) -> None:
@@ -139,28 +213,52 @@ def _print_daily_volume(stats: Mapping[str, object]) -> None:
 
 
 def _print_churn_metrics(stats: Mapping[str, object]) -> None:
-    print("\n--- Deny Churn ---")
-    resolution_rate = stats.get("first_time_resolution_rate", 0.0)
-    median_retries = stats.get("median_retries_before_resolution", 0.0)
-    if isinstance(resolution_rate, (float, int)):
-        print(f"  First-time resolution rate: {float(resolution_rate) * 100:.1f}%")
-    if isinstance(median_retries, (float, int)):
-        print(f"  Median retries before resolution: {float(median_retries):.2f}")
-    print("  Repeated deny rate by rule:")
-    for rule, count in _pairs(stats, "repeated_deny_rate_by_rule")[:5]:
-        print(f"    {rule:24s} {count:5,}")
-    print("  Top looping files:")
-    for path, count in _pairs(stats, "top_looping_files")[:5]:
-        print(f"    {count:4,}  {path}")
-    print("  Top pathless loop rules:")
-    for rule, count in _pairs(stats, "top_pathless_loop_rules")[:5]:
-        print(f"    {rule:24s} {count:5,}")
+    legacy_metrics = object_dict(stats.get("legacy_metrics"))
+    churn = object_dict(legacy_metrics.get("legacy_churn"))
+    print("\n--- Legacy Denial Churn (deprecated) ---")
+    single_ratio = churn.get("single_occurrence_deny_key_ratio")
+    median_extra = churn.get("median_extra_denials_per_repeated_key")
+    formatted_values: list[str] = []
+    for value, multiplier, precision in ((single_ratio, 100, 1), (median_extra, 1, 2)):
+        formatted = "—"
+        if isinstance(value, (float, int)):
+            formatted = f"{float(value) * multiplier:.{precision}f}"
+        formatted_values.append(formatted)
+    ratio_text, median_text = formatted_values
+    ratio_suffix = "%" if ratio_text != "—" else ""
+    print(f"  Single-occurrence deny-key ratio: {ratio_text}{ratio_suffix}")
+    print(f"  Median extra denials per repeated key: {median_text}")
+    _print_pairs_section(
+        title="Repeated Deny-Key Count by Rule",
+        pairs=_pairs(churn, "repeated_deny_key_count_by_rule")[:5],
+        formatter=lambda rule, count: f"  {rule:24s} {count:5,}",
+        empty_message="(none detected)",
+    )
+    _print_pairs_section(
+        title="Session / Rule Denial Frequency",
+        pairs=_pairs(churn, "session_rule_denial_frequency")[:5],
+        formatter=lambda description, count: f"  {count:4,}  {description}",
+        empty_message="(none detected)",
+    )
+    _print_pairs_section(
+        title="Top Looping Files",
+        pairs=_pairs(churn, "top_looping_files")[:5],
+        formatter=lambda path, count: f"  {count:4,}  {path}",
+        empty_message="(none detected)",
+    )
+    _print_pairs_section(
+        title="Top Pathless Loop Rules",
+        pairs=_pairs(churn, "top_pathless_loop_rules")[:5],
+        formatter=lambda rule, count: f"  {rule:24s} {count:5,}",
+        empty_message="(none detected)",
+    )
 
 
 def run_stats(
     log_path: str | None = None,
     days: int | None = None,
     as_json: bool = False,
+    scope: RecoveryScope = RecoveryScope.MANAGED,
 ) -> int:
     path = Path(log_path) if log_path else default_log_path()
     if not path.exists():
@@ -172,7 +270,7 @@ def run_stats(
         print(f"Loading {path}{label}...")
 
     entries = load_entries(path, days)
-    stats = analyze(entries)
+    stats = analyze(entries, scope=scope)
 
     if as_json:
         print(json.dumps(stats, indent=2, default=str))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import cast
+from typing import Final, cast
 
 from slopgate._argparse_types import SubparserRegistry
 
@@ -27,6 +27,11 @@ from slopgate.cli.commands import (
     cmd_version,
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
+
+_INSTALL_SCOPE_HELP: Final = (
+    "Hook install target: user config dir, project dir (./.claude, ./.codex, "
+    "./.cursor, ./.opencode), or both"
+)
 
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
@@ -94,16 +99,6 @@ def _add_path_command_parser(
     return parser
 
 
-def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    add_install_scope_arguments(
-        parser,
-        help_text=(
-            "Hook install target: user config dir, project dir (./.claude, ./.codex, "
-            "./.cursor, ./.opencode), or both"
-        ),
-    )
-
-
 def _add_platform_install_parser(
     sub: SubparserRegistry,
     name: str,
@@ -125,7 +120,7 @@ def _add_platform_install_parser(
         dest="with_autoupdate",
         help="Skip installing/removing the periodic GitHub updater",
     )
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=_INSTALL_SCOPE_HELP)
     if name == "uninstall":
         return
     _ = parser.add_argument(
@@ -171,7 +166,7 @@ def _add_suite_command_parser(
 ) -> argparse.ArgumentParser:
     parser = _add_command_parser(sub, name, help_text=help_text, func=func)
     _add_suite_update_arguments(parser)
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=_INSTALL_SCOPE_HELP)
     return parser
 
 
@@ -265,6 +260,7 @@ def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
 
 def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     from slopgate.cli.changed_tests_parser import add_changed_test_parser
+    from slopgate.stats.recovery.scopes import RECOVERY_SCOPE_CHOICES
 
     stats = _add_command_parser(
         sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
@@ -272,6 +268,12 @@ def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     _ = stats.add_argument("--log")
     _ = stats.add_argument("--days", type=int)
     _ = stats.add_argument("--json", action="store_true")
+    _ = stats.add_argument(
+        "--scope",
+        choices=RECOVERY_SCOPE_CHOICES,
+        default="managed",
+        help="Recovery scope (default: managed repositories)",
+    )
 
     add_changed_test_parser(sub)
 

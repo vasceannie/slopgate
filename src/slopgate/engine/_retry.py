@@ -49,7 +49,7 @@ def _stable_hash(value: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _attempt_fingerprint(ctx: HookContext) -> str | None:
+def attempt_fingerprint(ctx: HookContext) -> str | None:
     if not is_edit_like_tool(ctx.tool_name):
         return None
     payload = {
@@ -189,7 +189,7 @@ def _clear_resolved_thin_wrapper_hits(
 
 def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> None:
     denied = retry_budget_relevant_denials(findings)
-    attempt_fingerprint = _attempt_fingerprint(ctx)
+    fingerprint = attempt_fingerprint(ctx)
     current_rule_ids = sorted(
         {item.rule_id for item in retry_budget_relevant_denials(findings)}
     )
@@ -197,7 +197,7 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
     max_repeat_count = 0
     for item in denied:
         compress_repeated_import_alias_examples(ctx, item)
-        repeat_count = _record_denial_attempt(ctx, item, attempt_fingerprint)
+        repeat_count = _record_denial_attempt(ctx, item, fingerprint)
         max_repeat_count = max(max_repeat_count, repeat_count)
         if _apply_repeat_escalation(item, repeat_count):
             repeated_rule_ids.add(item.rule_id)
@@ -216,7 +216,7 @@ def apply_loop_aware_steering(ctx: HookContext, findings: list[RuleFinding]) -> 
                         if path_value
                     }
                 ),
-                attempt_fingerprint=attempt_fingerprint,
+                attempt_fingerprint=fingerprint,
                 count=max_repeat_count,
             ),
         )
@@ -272,7 +272,7 @@ def _retry_budget_block(
     if ctx.state.has_repair_plan(ctx.session_id):
         ctx.state.clear_retry_lock(ctx.session_id)
         return None
-    current_attempt_fingerprint = _attempt_fingerprint(ctx)
+    current_attempt_fingerprint = attempt_fingerprint(ctx)
     locked_attempt_fingerprint = lock.get("attempt_fingerprint")
     if (
         isinstance(locked_attempt_fingerprint, str)
