@@ -20,9 +20,7 @@ CATALOG_SURFACES: tuple[CatalogSurface, ...] = (
 
 def test_shared_collector_catalog_routes_deferred_integrity_to_stop_and_cli() -> None:
     catalog = collector_catalog()
-    deferred = catalog["untested-public-api"]
-    artifact = catalog["coverage-artifact-incomplete"]
-    dead_internal = catalog["possibly-dead-internal"]
+    deferred = catalog["untested-production-code"]
     touched = catalog["weak-test-assertion"]
 
     assert {
@@ -30,9 +28,6 @@ def test_shared_collector_catalog_routes_deferred_integrity_to_stop_and_cli() ->
         "deferred_surfaces": deferred.surfaces,
         "deferred_events": deferred.events,
         "deferred_action": deferred.default_action,
-        "artifact_surfaces": artifact.surfaces,
-        "dead_internal_surfaces": dead_internal.surfaces,
-        "dead_internal_action": dead_internal.default_action,
         "touched_scope": touched.scope,
         "touched_surfaces": touched.surfaces,
     } == {
@@ -40,9 +35,6 @@ def test_shared_collector_catalog_routes_deferred_integrity_to_stop_and_cli() ->
         "deferred_surfaces": ("stop", "cli", "dashboard"),
         "deferred_events": ("Stop", "CLI"),
         "deferred_action": None,
-        "artifact_surfaces": ("stop", "cli", "dashboard"),
-        "dead_internal_surfaces": ("stop", "cli", "dashboard"),
-        "dead_internal_action": None,
         "touched_scope": "touched",
         "touched_surfaces": ("hook", "cli", "dashboard"),
     }
@@ -71,7 +63,7 @@ def test_shared_collector_catalog_preserves_immediate_project_constant_scan() ->
 def test_catalog_filter_keeps_custom_ids_and_removes_deferred_hook_collectors() -> None:
     filtered = filter_cataloged_collectors(
         [
-            ("untested-public-api", []),
+            ("untested-production-code", []),
             ("weak-test-assertion", []),
             ("custom-regex-rule", []),
         ],

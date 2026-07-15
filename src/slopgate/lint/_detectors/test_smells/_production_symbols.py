@@ -111,7 +111,6 @@ class ProductionSymbol:
     transform_score: int
     deprecated: bool
     replacement: str | None
-    reference_names: tuple[str, ...] = ()
 
 
 def module_name_from_rel(rel: str) -> str:
@@ -126,15 +125,12 @@ def module_name_from_rel(rel: str) -> str:
 
 def public_top_level_defs(
     tree: ast.Module,
-    public_names: frozenset[str] | None = None,
 ) -> list[ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef]:
     defs: list[ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef] = []
     for node in tree.body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
-        if public_names is not None and node.name not in public_names:
-            continue
-        if public_names is None and node.name.startswith("_"):
+        if node.name.startswith("_"):
             continue
         defs.append(node)
     return defs
@@ -336,5 +332,4 @@ def integration_test_reference_tokens(parsed_tests: list[ParsedFile]) -> set[str
 
 
 def symbol_is_referenced(symbol: ProductionSymbol, tokens: set[str]) -> bool:
-    candidates = symbol.reference_names or (symbol.name, symbol.qualname)
-    return any(candidate.lower() in tokens for candidate in candidates)
+    return symbol.name.lower() in tokens or symbol.qualname.lower() in tokens

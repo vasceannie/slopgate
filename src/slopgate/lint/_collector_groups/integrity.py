@@ -34,23 +34,16 @@ def full_integrity_collectors(
     """Collect bad-test-efficacy and holistic suite-quality indicators."""
     from slopgate.lint._detectors.test_smells import (
         build_test_integrity_index,
-        detect_coverage_artifact_incomplete,
         detect_hypothesis_candidates,
         detect_missing_integration_tests,
-        detect_possibly_dead_internal,
         detect_stale_test_references,
-        detect_untested_public_api,
+        detect_untested_production_code,
     )
 
     index = build_test_integrity_index(parsed_src, parsed_tests)
     test_targets = parsed_tests if parsed_test_targets is None else parsed_test_targets
     return [
-        ("untested-public-api", detect_untested_public_api(index=index)),
-        (
-            "coverage-artifact-incomplete",
-            detect_coverage_artifact_incomplete(index=index),
-        ),
-        ("possibly-dead-internal", detect_possibly_dead_internal(index=index)),
+        ("untested-production-code", detect_untested_production_code(index=index)),
         ("missing-integration-test", detect_missing_integration_tests(index=index)),
         ("hypothesis-candidate", detect_hypothesis_candidates(index=index)),
         ("obsolete-or-deprecated-test", detect_stale_test_references(index=index)),

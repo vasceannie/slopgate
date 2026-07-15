@@ -243,7 +243,7 @@ baseline_path = "baselines.json"
 
 `slopgate lint check` prints the resolved baseline path in its header and **syncs `baselines.json` after each run**: on a clean pass it mirrors current findings (dropping stale ids); when NEW violations block the gate it only prunes fixed debt (never auto-adds NEW ids). Run `slopgate lint freeze` once while `rules` is still empty for initial enrollment. Listed stable IDs remain real defects to fix — not permission to ignore them.
 
-#### 40 batch lint detectors
+#### 38 batch lint detectors
 
 Separate from hook rule IDs: `slopgate lint check` runs these AST/static detectors project-wide (baseline-gated). The real-time hook `QUALITY-LINT-001` reuses the same detector engine on touched files after edits.
 
@@ -254,7 +254,7 @@ Separate from hook rule IDs: `slopgate lint check` runs these AST/static detecto
 | **Type safety** | banned-any, type-suppression |
 | **Exception safety** | broad-except-swallow, silent-except, silent-datetime-fallback |
 | **Test smells** | long-test, eager-test, assertion-free-test, assertion-roulette, conditional-assertion, fixture-outside-conftest |
-| **Test integrity** | untested-public-api, coverage-artifact-incomplete, possibly-dead-internal (opt-in), missing-integration-test, hypothesis-candidate, obsolete-or-deprecated-test, weak-test-assertion, mock-theater, schema-bypass-test-data, hand-built-test-payload, mocked-integration-test |
+| **Test integrity** | untested-production-code, missing-integration-test, hypothesis-candidate, obsolete-or-deprecated-test, weak-test-assertion, mock-theater, schema-bypass-test-data, hand-built-test-payload, mocked-integration-test |
 | **Duplication** | semantic-clone, repeated-magic-number, repeated-string-literal, repeated-code-block, duplicate-call-sequence |
 | **Logging** | direct-get-logger, wrong-logger-name |
 | **Stale code** | deprecated-pattern |
@@ -284,7 +284,7 @@ Slopgate has **three surfaces** that are easy to conflate:
 | **Real-time hooks** | **87** rule evaluations | Agent tool events (`slopgate handle`) |
 | ↳ Python classes | 42 (3 always-on + 39 repo-strict) | Path/git/AST quality, post-edit lint bridge, stop/session, LangGraph, etc. |
 | ↳ Regex (`config.json`) | 45 | Pattern rules for Python/TS/Rust/shell/git/config paths |
-| **Batch lint** | **40** detectors | `slopgate lint check` (project-wide, baseline-gated) |
+| **Batch lint** | **38** detectors | `slopgate lint check` (project-wide, baseline-gated) |
 
 Many IDs overlap *by design* (for example `PY-CODE-013` in hooks and `god-class` / wrapper detectors in batch lint). The dashboard “top rules” chart is dominated by high-volume hook IDs such as `QUALITY-LINT-001` (post-edit touched-file lint), `PY-LOG-002`, and `PY-CODE-013` — not by the older “30 + 39” inventory.
 
@@ -306,21 +306,11 @@ Availability depends on platform support:
 - **OpenCode**: mediated through plugin event translation with advisory gaps around prompt and stop control
 - **Pi**: mediated through extension event translation; strongest blocking on `tool_call`, with lifecycle and post-tool gaps where Pi only supports result patches or advisory extension behavior
 
-### Batch lint (40 detectors)
+### Batch lint (38 detectors)
 
-- See the **40 batch lint detectors** table under Code Quality Linting
+- See the **38 batch lint detectors** table under Code Quality Linting
 - Configured per repo via `slopgate.toml`; only *new* violations fail the gate
 - Repo-wide baseline regeneration is disabled to prevent agents from normalizing technical debt
-
-`untested-public-api` follows deterministic Python export contracts: literal module
-`__all__` is authoritative, normal modules otherwise use non-underscore naming, and
-underscore-prefixed implementation modules require an explicit package-facade
-re-export. Static fallback is used only when no recognized coverage artifact exists.
-A present malformed, empty, or source-incomplete artifact produces one
-`coverage-artifact-incomplete` finding and suppresses per-module public API findings.
-Artifact age checks and framework-specific route/command/plugin registration remain
-out of scope. Enable `possibly-dead-internal` explicitly to review cautious private
-implementation candidates.
 
 ### Declarative regex rules (45)
 

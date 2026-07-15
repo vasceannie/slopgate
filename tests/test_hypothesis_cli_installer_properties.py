@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hypothesis import given, settings, strategies
+from hypothesis import given, strategies
 
 from slopgate.cli.commands import cmd_handle
 from slopgate.cli.main import main
@@ -51,21 +51,18 @@ def test_command_is_slopgate_hook_rejects_non_string_inputs_property(_: None) ->
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_update_suite_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = update_suite(SuiteUpdateOptions(dry_run=dry_run))
     assert result == 0, f"update_suite(dry_run=True) must return 0, got {result}"
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_install_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = install_autoupdate(dry_run=dry_run)
     assert result == 0, f"install_autoupdate(dry_run=True) must return 0, got {result}"
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_uninstall_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = uninstall_autoupdate(dry_run=dry_run)
     assert result == 0, (
@@ -102,49 +99,41 @@ def test_filter_owned_hook_commands_keeps_external_hooks_property(_: None) -> No
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_install_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_claude(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_uninstall_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_claude(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_install_codex_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_codex(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_uninstall_codex_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_codex(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_install_cursor_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_cursor(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_uninstall_cursor_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_cursor(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_install_opencode_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_opencode(dry_run=dry_run) == 0
 
 
 @given(strategies.just(True))
-@settings(deadline=None)
 def test_uninstall_opencode_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_opencode(dry_run=dry_run) == 0
 

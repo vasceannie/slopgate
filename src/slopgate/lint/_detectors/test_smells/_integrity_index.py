@@ -3,24 +3,18 @@
 from __future__ import annotations
 import ast
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from slopgate.constants import METADATA_FUNCTION
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, find_test_files
 from ._assertion_core import call_tail
-from .coverage import CoverageAssessment, runtime_coverage_by_rel
-from .exports import ExportFacts, build_export_facts
-from .production_symbols import (
+from ._production_symbols import (
     ProductionSymbol,
     integration_test_reference_tokens,
     module_names,
+    production_symbols,
     reference_tokens_for_tree,
     test_reference_tokens,
-)
-from .public_symbols import (
-    expected_coverage_paths,
-    internal_candidate_symbols,
-    production_symbols,
 )
 
 
@@ -38,12 +32,6 @@ class IntegrityIndex:
     module_names: set[str]
     hypothesis_reference_tokens: set[str]
     deprecated_symbols: list[ProductionSymbol]
-    export_facts: ExportFacts = field(default_factory=lambda: ExportFacts({}, {}))
-    internal_candidate_symbols: list[ProductionSymbol] = field(default_factory=list)
-    internal_call_sites: dict[str, list[str]] = field(default_factory=dict)
-    production_reference_tokens: set[str] = field(default_factory=set)
-    expected_coverage_paths: tuple[str, ...] = ()
-    coverage_assessment: CoverageAssessment = field(default_factory=CoverageAssessment)
 
 
 def _production_call_sites_from_symbols(
@@ -88,10 +76,7 @@ def build_test_integrity_index(
     """Build reusable facts for all holistic test-integrity detectors."""
     parsed_src = ensure_parsed(src_files, fallback=[])
     parsed_tests = ensure_parsed(test_files, fallback=find_test_files())
-    export_facts = build_export_facts(parsed_src)
-    symbols = production_symbols(parsed_src, export_facts)
-    internal_symbols = internal_candidate_symbols(parsed_src, export_facts)
-    expected_paths = expected_coverage_paths(parsed_src)
+    symbols = production_symbols(parsed_src)
     refs_by_rel = {pf.rel: reference_tokens_for_tree(pf.tree) for pf in parsed_tests}
     refs = test_reference_tokens(parsed_tests)
     return IntegrityIndex(
@@ -107,14 +92,4 @@ def build_test_integrity_index(
         module_names=module_names(parsed_src),
         hypothesis_reference_tokens=_hypothesis_reference_tokens(parsed_tests),
         deprecated_symbols=[symbol for symbol in symbols if symbol.deprecated],
-        export_facts=export_facts,
-        internal_candidate_symbols=internal_symbols,
-        internal_call_sites=_production_call_sites_from_symbols(
-            parsed_src, internal_symbols
-        ),
-        production_reference_tokens={
-            token for pf in parsed_src for token in reference_tokens_for_tree(pf.tree)
-        },
-        expected_coverage_paths=expected_paths,
-        coverage_assessment=runtime_coverage_by_rel(set(expected_paths)),
     )
