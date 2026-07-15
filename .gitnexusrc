@@ -1,14 +1,11 @@
 {
-  // Default branch used in the generated regression-compare example (base_ref).
-  // Use this so a project on `develop`/`master` doesn't get "main" rewritten
-  // over its fix on every analyze. (Alias: "branch".)
   "defaultBranch": "master",
-  "skipContextFiles": true, // alias of skipAgentsMd: keep your own AGENTS.md/CLAUDE.md
-  "skipSkills": true, // don't install .claude/skills/gitnexus/
-  "embeddings": true, // generate embeddings by default
-  "workerTimeout": 0,
+  "skipContextFiles": true,
+  "skipSkills": true,
+  "embeddings": true,
+  "pdg": true,
   "embeddingDevice": "cpu",
-  "embeddingThreads": 16,
-  "embeddingBatchSize": 512,
-  "embeddingSubBatchSize": 64
+  "embeddingThreads": 12,
+  "embeddingBatchSize": 128,
+  "embeddingSubBatchSize": 16
 }

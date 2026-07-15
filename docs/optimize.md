@@ -1,154 +1,398 @@
-# Slopgate Hook Performance Optimization Plan
+# Slopgate feedback: untested-public-surface detection is too noisy
 
-## Summary
+## Executive summary
 
-The optimization should reduce hook latency without weakening enforcement by separating immediate deterministic checks from expensive repo/suite analysis, then sharing one rule/collector catalog across hooks and CLI lint. Enforcement must be best-effort across every supported platform; do not assume Claude is primary or that every platform can hard-block the same phase.
+The current `untested-production-code` / `untested-public-api` detector conflates three different quality questions and answers all of them with literal symbol-name matching. In a recent real-world run this produced **214 apparent new violations**, but post-mortem inspection showed that most of them were false positives caused by Slopgate itself rather than by the target codebase.
 
-Current measured hotspots:
+The four root causes are all inside Slopgate's design:
 
-- `PreToolUse` synthetic `Write`: about `550ms` warm in-process, dominated by enrichment citation scanning.
-- `PostToolUse` synthetic `Write`: about `4.49s` warm in-process, dominated by `PostEditLintRule` running broad touched collectors, test-integrity indexing, constant-index discovery, and reference-test parsing.
-- The installed POSIX Node daemon proxy uses a `1s` timeout while the Python daemon client uses `30s`, so slow daemon requests can fall back to direct CLI and duplicate work.
-- A watcher can help, but only as a bounded invalidation layer for a deterministic project index. It must never become the enforcement authority.
+| Cause                                              | Confidence | Effect                                                                 |
+| -------------------------------------------------- | ---------: | ---------------------------------------------------------------------- |
+| Slopgate accepts incomplete/stale `coverage.xml`   |  Very high | Falls back to static name matching for every module not in the report  |
+| Overbroad public-interface detection               |  Very high | Internal helpers in `_private_module.py` are treated as public API     |
+| Baseline identity includes mutable diagnostic text |  Very high | Existing findings appear `NEW` when percentages or symbol lists change |
+| No separation of coverage, publicity, and reachability |  High   | One rule tries to do three jobs and fails at all of them               |
 
-## Scope Locks
+This document is feedback for the Slopgate rule engine. The recommended changes are to Slopgate's detector, baseline model, and rule taxonomy—not to downstream projects.
 
-- **Platform target:** preserve the strongest available enforcement on every supported platform. Where a platform cannot hard-block `PostToolUse` or `Stop`, emit stable advisory findings, trace records, and dashboard-visible evidence instead of pretending parity.
-- **Public compatibility:** do not change public hook rule IDs, lint collector IDs, counterpart mapping semantics, baseline stable IDs, trace payload shapes, dashboard grouping keys, renderer semantics, or CLI output semantics. Add catalog metadata around the existing public contracts.
-- **Immediate blockers:** duplicate/code-clone checks, repeated literal checks, and project constant-scan-backed literal guidance must remain in the immediate post-edit path. They may be optimized through bounded indexes/caches and narrower discovery, but they must not be deferred entirely to Stop/CLI. Any bounded immediate finding must cite explicit preexisting references, such as file paths, line numbers, constant names, matching duplicate fingerprints, or nearby source/test evidence; vague hook responses are forbidden.
-- **First-pass scope:** watcher-backed invalidation is not part of the first performance pass. The first pass should fix proxy semantics, add catalog-driven routing, split safe-to-defer collectors, add request-local AST/source caching, bound enrichment, and add benchmarks.
-- **Daemon acceptance boundary:** a daemon request is accepted only after daemon acknowledgement through an `accepted` field in the existing response envelope. If acknowledgement is missing, the proxy may fall back before sending/acknowledgement; after acknowledgement, timeout/error handling must fail closed and must not run the same hook through direct CLI.
-- **Trace metrics:** no-finding timing must be configurable, dashboard-safe, and recorded in `results.jsonl` metadata by default. Prefer aggregated per-evaluation and collector-group timing by default; per-rule no-finding traces must be opt-in so JSONL volume does not break replay or dashboard usability.
-- **Cache posture:** use cautious conservative defaults with explicit hard caps, LRU eviction, and short idle eviction. Initial targets should be benchmark-adjusted, but start near `64 MiB` per repo for compact project metadata, `16 MiB` per hook evaluation for request-local AST/source analysis, `256 KiB` maximum cached source text per file, and `10 minutes` idle eviction for daemon repo sessions.
+## What the current detector gets wrong
 
-## Performance Targets
+### 1. Too many symbols are classified as public
 
-Use aggressive but adjustable targets measured as `p50` and `p95` across direct CLI, daemon, and installed POSIX proxy paths. Benchmarks must record cold and warm runs, daemon unavailable runs, cache-disabled runs, and representative small/medium repositories.
+In Slopgate 1.4.16 the heuristic is essentially:
 
-Initial targets:
+```py
+# src/slopgate/lint/_detectors/test_smells/_production_symbols.py
+# public_top_level_defs(), approximately lines 125-135
 
-- Warm `PreToolUse` single-file write: `p95 <= 250ms`.
-- Warm `PostToolUse` single-file Python edit with immediate duplicate/literal/constant checks enabled: `p95 <= 900ms`.
-- Cold `PostToolUse` single-file Python edit through installed proxy: `p95 <= 2.5s`.
-- Direct CLI fallback for the same hook, no daemon and no warm cache: `p95 <= 3s`.
-- Stop/deferred quality pass over uncommitted changes: `p95 <= 5s` for a medium repo, with clear trace output when it degrades or defers.
-- Installed POSIX proxy daemon-ack path: no duplicate direct-CLI execution after acknowledgement, regardless of timeout.
+if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+    if not node.name.startswith("_"):
+        results.append(node)
+```
 
-## Key Changes
+A file such as `automation/scripts/eval/execution/_choice_text.py` is therefore treated as a public module surface merely because its functions lack leading underscores:
 
-1. **Create a shared collector/rule catalog.**
-   - Add metadata for each lint collector and hook rule: stable ID, counterpart IDs, `scope` (`file`, `touched`, `project`, `suite`, `git-base`), `cost`, supported events, supported surfaces, default action, and deferred eligibility.
-   - Keep the existing finding/violation payloads, renderers, baseline IDs, and CLI output semantics unchanged.
-   - Absorb the existing parity contract into the catalog rather than creating a second source of truth beside `slopgate.lint._parity`.
-   - Use the catalog from hooks, CLI lint, Stop checks, dashboard/reporting, and async quality paths instead of maintaining separate rule lists.
+```py
+normalized_choice_text(...)
+ellipsized_prefix(...)
+choice_value_matches(...)
+```
 
-2. **Split immediate hook checks from deferred repo/suite checks.**
-   - `PreToolUse`: run only deterministic checks based on tool input, touched content, and cheap metadata.
-   - `PostToolUse`: run touched-file and touched-test checks that can be bounded to changed paths or nearby context, plus immediate duplicate/code-clone checks, repeated literal checks, and project constant-scan-backed literal guidance.
-   - `Stop`: run safe-to-defer project/suite checks over uncommitted changes using the same collector catalog. Stop must supplement immediate enforcement, not replace it where a platform cannot reliably block.
-   - `CLI lint`: remain the authoritative full scan and must still be able to run without daemon, watcher, or warm cache.
-   - Checks eligible to move out of the hot post-tool path include full test-integrity indexing, missing integration detection, obsolete test refs, mock-theater, schema bypass, and hand-built payload detection when they cannot be bounded to the touched edit.
-   - Checks not eligible for full deferral in this pass: duplicate/code-clone checks, repeated literals, and project constant scans needed to make repeated-literal guidance enforceable. The implementation may replace broad scans with cached/bounded scans, but it must still make the immediate blocking decision in `PostToolUse` and must render explicit references to the preexisting duplicate, repeated literal, or constant evidence.
+These are active production internals with multiple callers, not stale code or public API. The detector misses the signal from the underscore-prefixed module name.
 
-3. **Add a repo-scoped deterministic `ProjectIndex`; defer watcher-backed invalidation.**
-   - Define a deterministic `ProjectIndex` interface for file inventory, source/test classification, constant candidates, parsed summaries, test references, imports, logger conventions, duplicate fingerprints, and dirty path sets.
-   - Start with a local implementation backed by current parsing and discovery helpers.
-   - Keep the first implementation deterministic and callable from direct CLI paths; do not require daemon state or watcher support for correctness.
-   - Leave optional daemon-owned file/tree watcher support as a later acceleration layer that records changed paths and invalidates compact indexes.
-   - Store compact metadata by default: paths, mtimes, sizes, hashes where needed, file kind, symbol summaries, and fingerprints. Do not store the full tree contents.
-   - Keep parsed ASTs and source text in bounded LRU caches only.
-   - For later watcher support, watcher overflow, rename storms, config changes, git checkout, missing watcher support, or stale signatures must mark the index stale and fall back to deterministic scan or defer to Stop/CLI.
-   - Expose optional future adapters for CodeGraph, GitNexus, or ISX, but do not require them for enforcement.
+Slopgate should account for:
 
-4. **Fix daemon proxy semantics.**
-   - Align installed POSIX Node proxy timeout and accepted-request behavior with the Python daemon client.
-   - If the daemon cannot be contacted before sending a request, direct CLI fallback is allowed.
-   - Add an explicit `accepted` field to the existing daemon response envelope after the daemon receives and admits the request.
-   - If `accepted` is true, timeout/error handling must not duplicate the same hook by falling back to direct CLI.
-   - If `accepted` is absent or false, fallback is allowed only when the proxy can prove the hook was not admitted for evaluation.
-   - Preserve fail-closed behavior and explicit stderr/exit-code reporting.
+* An underscore-prefixed module filename.
+* A module's `__all__`.
+* Re-exports from the parent package's `__init__.py`.
+* Framework registration such as FastAPI route decorators.
+* Behavioral tests that enter through a facade and reach internal helpers transitively.
 
-5. **Share per-request Python analysis across hook rules.**
-   - Add a request-local analysis cache keyed by path plus source signature.
-   - Cache parsed module, functions, classes, imports, line/token summaries, parent maps, and reusable AST walks.
-   - Update Python AST helpers so local hook rules reuse the same analysis instead of reparsing the touched file per rule.
-   - Clear request-local analysis at the hook evaluation boundary and daemon request boundary.
+### 2. Static coverage fallback is exact-name matching, not behavioral coverage
 
-6. **Make enrichment bounded and phase-aware.**
-   - Fix repo-relative path resolution so enrichment uses the actual repo root before falling back to broader discovery.
-   - Run cheap enrichment inline.
-   - Use the `ProjectIndex` for expensive citations when fresh; otherwise bound lookup to nearby files or defer rich context to Stop/reporting.
-   - Blocking decisions must not wait on expensive explanatory citation discovery once the violation is already known.
+When a module is absent from `coverage.xml`, Slopgate falls back to:
 
-7. **Reduce trace/log overhead while preserving replayability.**
-   - Buffer trace writes per hook evaluation and flush once, including failure paths.
-   - Keep JSONL trace structure stable for replay.
-   - Gate verbose internal trace-write logs behind a configured log level.
-   - Add configurable, dashboard-safe timing for no-finding rules and collector groups in `results.jsonl` metadata so future performance regressions are visible without bloating JSONL by default.
+```py
+# symbol_is_referenced(), approximately lines 333-334
 
-## Hook And CLI Interoperability Requirements
+return (
+    symbol.name in test_tokens
+    or symbol.qualified_name in test_tokens
+)
+```
 
-- `PreToolUse`, `PostToolUse`, `Stop`, and CLI lint must all consume the same rule/collector catalog for any rule family touched by this work.
-- Surface differences must be data-driven through rule metadata and `RuleSurfaceConfig`, not forked implementations.
-- A rule or collector touched by this work must preserve its existing stable public ID and add exactly one catalog counterpart mapping when it has related hook/CLI surfaces.
-- Hook-specific execution may differ by phase and scope, but semantic meaning of each finding must remain identical to CLI lint.
-- Deferred checks must produce the same collector IDs and stable IDs they would produce in CLI lint.
-- The watcher/index must sit below hooks and CLI as an acceleration provider; correctness must still hold when it is disabled.
-- Best-effort platform behavior must be explicit in metadata and traces. If a surface is advisory-only on a platform, the finding must still keep stable IDs, payload fields, and remediation context.
+This means a test such as:
 
-## Completion Criteria
+```py
+def test_combobox_execution():
+    result = execute_widget_plan(...)
+    assert result.selected_value == "United States"
+```
 
-The work is complete only when all of the following are true:
+does not protect `choice_value_matches()`, even though `execute_widget_plan()` calls it. The helper is reported as untested only because its literal name never appears in test source.
 
-- **Catalog wired:** every touched hook rule and lint collector is registered in the shared catalog with scope, cost, surfaces, events, action, deferred eligibility, public ID preservation, and counterpart IDs.
-- **Hooks wired:** `PreToolUse`, `PostToolUse`, and `Stop` route touched rule families through the shared catalog and project-index interface where applicable, without assuming any single platform is primary.
-- **CLI wired:** CLI lint uses the same catalog and can force a fresh full scan that does not depend on daemon state, watcher state, or warm caches.
-- **Deferred path wired:** expensive project/suite collectors removed from the immediate post-tool hot path are reachable from Stop and CLI lint with the same IDs and result schema, while duplicate/code-clone, repeated-literal, and project-constant-scan-backed checks remain immediate blockers.
-- **ProjectIndex wired:** deterministic local `ProjectIndex` use is covered for hooks and CLI without requiring daemon state, watcher state, or external code-intelligence services.
-- **Watcher deferred:** watcher-backed invalidation is explicitly outside the first performance pass unless all earlier completion criteria are already met.
-- **Cache limits wired:** AST/source/index caches have explicit memory budgets, per-repo idle eviction, and overflow behavior covered by tests.
-- **Proxy wired:** installed POSIX daemon proxy behavior matches Python client semantics for timeout, the `accepted` response-envelope field, accepted request failure, direct fallback, stderr, and exit codes.
-- **Trace wired:** every hook evaluation still writes replayable JSONL trace output, including index freshness/fallback decisions, deferred collector routing, and dashboard-safe timing summaries in `results.jsonl` metadata.
-- **Interoperability proved:** tests demonstrate that touched rule families report the same semantic violation IDs and payloads from hook, Stop, and CLI surfaces where each surface supports that rule.
-- **Performance proved:** warm single-file `PostToolUse` no longer invokes full test-integrity indexing by default, preserves immediate duplicate/literal/constant enforcement, and meets or beats the documented p95 targets against the current multi-second baseline.
-- **Quality proved:** the implementation passes focused unit/integration tests plus the project quality command, with any remaining baseline debt explicitly unrelated to the touched files.
+Slopgate should not recommend adding tests whose sole purpose is to name each helper. That creates scanner-gaming tests, not behavior coverage.
 
-## Test Plan
+### 3. Baseline identity is unstable
 
-- Add collector-catalog tests proving each touched collector/rule has complete metadata and counterpart mapping.
-- Add hook-selection tests for `PreToolUse`, `PostToolUse`, and `Stop` showing phase-appropriate collector routing.
-- Add CLI parity tests proving full lint still runs all collectors and reports existing collector IDs and payload shapes consistently with deferred hook checks.
-- Add deterministic `ProjectIndex` tests for path changes, deletes, renames, stale config, disabled cache/index use, idle eviction, memory cap eviction, and fallback scans.
-- Add later-phase watcher tests for overflow, stale config, missing watcher support, rename storms, and deterministic fallback before enabling watcher-backed invalidation.
-- Add daemon concurrency tests proving repo-scoped indexes remain isolated and same-repo serialization still protects mutable state.
-- Add proxy tests for connection failure fallback, the daemon `accepted` response-envelope field, unacknowledged request fallback, acknowledged slow request handling, timeout behavior, stderr preservation, and fail-closed outcomes.
-- Add AST-cache tests proving multiple local Python rules parse a touched source once per hook evaluation.
-- Add enrichment tests for repo-relative path resolution, bounded lookup, cached citation reuse, and stale-index fallback.
-- Add trace tests proving buffered traces flush on success, block, error, and daemon fallback paths without changing replay semantics or dashboard assumptions.
-- Add configuration tests for no-finding timing modes, including default aggregated timing in `results.jsonl` metadata and opt-in per-rule no-finding trace emission.
-- Add performance regression tests or benchmark fixtures for representative single-file `PreToolUse`, `PostToolUse`, direct CLI fallback, installed POSIX proxy, daemon, and Stop runs.
+`QualityViolation.stable_id()` currently includes the full diagnostic detail:
 
-## Recommended Sequence
+```py
+# src/slopgate/domain.py
+# QualityViolation.stable_id(), approximately lines 27-36
 
-1. Add benchmark fixtures and contract tests for current IDs, payloads, trace shape, direct CLI, daemon, and installed proxy behavior.
-2. Fix daemon proxy timeout/fallback semantics with the daemon `accepted` response-envelope field and add regression tests.
-3. Add the shared collector/rule catalog by absorbing the existing parity/counterpart contract without changing execution.
-4. Route `PostToolUse` collector selection through the catalog while preserving immediate duplicate/code-clone, repeated-literal, and project-constant-scan-backed blockers.
-5. Move only safe-to-defer project/suite collectors to Stop/CLI while preserving IDs and payloads.
-6. Add the `ProjectIndex` interface with local deterministic implementation and conservative cache budgets.
-7. Add request-local AST/source analysis caching for Python hook rules.
-8. Bound enrichment and route expensive citation lookups through deterministic index/cache data where fresh.
-9. Buffer trace writes and add configurable no-finding timing metrics in `results.jsonl` metadata that are safe for dashboard/replay consumers.
-10. Run full interoperability, performance, and quality verification.
-11. Add bounded watcher-backed invalidation inside daemon repo sessions only after the deterministic first pass meets the criteria above.
+return "|".join(
+    (
+        self.rule_id,
+        self.location.file,
+        self.signature,
+        self.detail,
+    )
+)
+```
 
-## Assumptions
+For these findings, `detail` contains mutable values such as:
 
-- Immediate hooks must continue blocking deterministic local violations.
-- Best-effort enforcement applies to every supported platform; do not design around Claude as the primary or only hard-blocking reference.
-- Expensive project/suite checks may move phases only when the catalog marks them safe to defer and immediate enforcement is not weakened on platforms with advisory Stop/PostToolUse behavior.
-- Duplicate/code-clone checks, repeated literals, and project constant scans needed for repeated-literal guidance remain immediate blockers in this pass.
-- CLI lint remains the authoritative complete quality gate.
-- Watcher and external indexes are optimizations only; stale or unavailable indexes cannot change correctness.
-- Platform limitations still apply: where Stop cannot reliably block, it must emit explicit advisory findings with stable IDs and trace records.
-- Public IDs, baseline stable IDs, trace payload shapes, renderer semantics, CLI output semantics, and dashboard grouping keys are compatibility contracts and must not change.
+```text
+static_test_reference_coverage=0% (0/3 public symbols referenced);
+unreferenced=normalized_choice_text, ellipsized_prefix, choice_value_matches;
+not present in coverage.xml
+```
+
+Any of the following changes produces a new stable ID and therefore a `NEW` violation:
+
+* Coverage changes from 0% to 33%.
+* A helper is renamed.
+* One helper is added or removed.
+* Slopgate switches between static and runtime coverage.
+* The ordering of unreferenced symbols changes.
+
+Slopgate should separate identity from mutable metadata.
+
+## Recommended changes to Slopgate
+
+### P0 — Add a coverage-artifact preflight check
+
+Before emitting per-file violations, Slopgate should validate the supplied `coverage.xml`:
+
+```py
+def validate_coverage_artifact(
+    coverage_path: Path,
+    expected_roots: tuple[Path, ...],
+) -> CoverageArtifactStatus:
+    """Reject incomplete coverage input before emitting per-file violations."""
+```
+
+Statuses:
+
+* `coverage_missing`
+* `coverage_stale`
+* `coverage_incomplete`
+* `coverage_complete`
+
+When incomplete, emit one actionable gate failure instead of hundreds of module-level false positives:
+
+```text
+coverage-artifact-incomplete:
+coverage.xml omits 214 scanned production modules.
+Regenerate coverage for the configured source roots.
+```
+
+Also ensure `test_support` directories are classified as test roots, not production roots. A configuration such as:
+
+```toml
+source_roots = [
+    "src",
+    "cloud",
+    "automation",
+    "scripts",
+]
+
+test_roots = [
+    "tests",
+    "test_support",
+]
+```
+
+should be validated so that test infrastructure does not participate in `untested-production-code`.
+
+### P1 — Make baseline identities semantic and stable
+
+Change `QualityViolation.stable_id()` so diagnostic details are not part of identity:
+
+```py
+def stable_id(self) -> str:
+    return "|".join(
+        (
+            self.rule_id,
+            self.location.file,
+            self.signature,
+        )
+    )
+```
+
+For this rule, use a stable semantic signature:
+
+```py
+signature = "module-public-surface-coverage"
+```
+
+Avoid encoding mutable percentages or symbol counts:
+
+```py
+# Avoid
+signature = "coverage-000"
+signature = "coverage-033"
+```
+
+Keep changing data in metadata:
+
+```py
+metadata = {
+    "coverage_kind": "static-reference",
+    "coverage_percent": 33,
+    "referenced_symbols": [...],
+    "unreferenced_symbols": [...],
+}
+```
+
+A regression should update the existing violation rather than create a new identity. Regression tests should cover this:
+
+```py
+def test_stable_id_does_not_change_with_coverage_percentage() -> None:
+    zero = violation(detail="coverage=0%", coverage_percent=0)
+    partial = violation(detail="coverage=33%", coverage_percent=33)
+
+    assert zero.stable_id() == partial.stable_id()
+
+
+def test_stable_id_changes_when_module_changes() -> None:
+    first = violation(file="src/a.py")
+    second = violation(file="src/b.py")
+
+    assert first.stable_id() != second.stable_id()
+```
+
+A one-time baseline migration will be needed because existing IDs include details.
+
+### P2 — Model public interfaces explicitly
+
+Replace the name-only implementation with an indexed public-surface model:
+
+```py
+def public_top_level_defs(
+    tree: ast.Module,
+    *,
+    module_path: Path,
+    explicit_exports: frozenset[str] | None,
+    package_reexports: frozenset[str],
+    framework_entrypoints: frozenset[str],
+) -> list[PublicSymbol]:
+    ...
+```
+
+Recommended precedence:
+
+```py
+def is_public_symbol(
+    symbol: TopLevelSymbol,
+    context: ModuleExportContext,
+) -> bool:
+    if context.explicit_exports is not None:
+        return symbol.name in context.explicit_exports
+
+    if symbol.name in context.framework_entrypoints:
+        return True
+
+    if context.module_path.stem.startswith("_"):
+        return symbol.name in context.package_reexports
+
+    return not symbol.name.startswith("_")
+```
+
+Build a `PublicSurfaceIndex` once per scan:
+
+```py
+@dataclass(frozen=True)
+class PublicSurfaceIndex:
+    explicit_exports_by_module: Mapping[str, frozenset[str]]
+    package_reexports_by_module: Mapping[str, frozenset[str]]
+    framework_entrypoints_by_module: Mapping[str, frozenset[str]]
+```
+
+This cleanly handles:
+
+* `__all__`
+* `from ._internal import PublicFacade`
+* `_internal.py` modules
+* FastAPI `@router.get` / `@router.post`
+* Click or Typer commands
+* Textual actions and event handlers
+* Registered plugin or adapter entrypoints
+
+### P3 — Split into three distinct rules
+
+The current rule conflates distinct conditions. Slopgate should emit three different findings:
+
+#### `untested-public-api`
+
+Use only when a symbol is demonstrably exported or registered as an entrypoint.
+
+Examples:
+
+* Pydantic request/response models intentionally exported by package modules.
+* AG-UI event contracts.
+* Service facades exported through package `__init__.py`.
+* FastAPI route handlers.
+
+#### `possibly-dead-internal`
+
+Use when all are true:
+
+```text
+not exported
+not framework-registered
+no production callers
+no runtime coverage
+```
+
+This should initially be advisory, because reflection and dynamic registration can defeat static call graphs.
+
+#### `coverage-artifact-incomplete`
+
+Use when the report exists but lacks files expected from configured runtime roots.
+
+This is the actual condition represented by many noisy batch findings.
+
+### P4 — Guide users toward observable contract tests
+
+Slopgate documentation and autofix hints should discourage tests whose only purpose is to import every helper by name. Instead, recommend contract tests for genuine public surfaces:
+
+For Pydantic wire models:
+
+```py
+def test_profile_response_serialization_contract() -> None:
+    response = ProfileResponse(
+        success=True,
+        message="ok",
+        profile=profile_fixture(),
+    )
+
+    payload = response.model_dump(mode="json")
+
+    assert payload["success"] is True
+    assert payload["profile"]["personal"]["name"]["first"] == "Travis"
+```
+
+For FastAPI routes:
+
+```py
+async def test_get_profile_returns_wire_contract(client: AsyncClient) -> None:
+    response = await client.get(
+        "/api/profile",
+        headers={"X-API-Key": "test-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+```
+
+For AG-UI events:
+
+```py
+def test_field_verified_event_round_trip() -> None:
+    event = FieldVerifiedEvent(
+        control_id="country",
+        verification_state="passed",
+        current_value="United States",
+        expected_value="United States",
+    )
+
+    restored = decode_event(encode_event(event))
+
+    assert restored == event
+```
+
+For internal orchestration helpers, the rule should recommend testing the public entrypoint and relying on runtime coverage to establish that internal branches were exercised.
+
+### P5 — Help users privatize internal helpers consistently
+
+When Slopgate flags internal helpers in private-looking modules, it should suggest privatization rather than testing:
+
+```text
+automation/scripts/eval/execution/_choice_text.py
+cloud/services/run_metadata/derive_support/_timestamps.py
+```
+
+Two acceptable patterns:
+
+**Private implementation module:**
+
+```py
+def _normalized_choice_text(...): ...
+def _ellipsized_prefix(...): ...
+def _choice_value_matches(...): ...
+```
+
+**Package-private implementation with a deliberate facade:**
+
+```py
+# package/__init__.py
+from ._choice_text import choice_value_matches
+
+__all__ = ["choice_value_matches"]
+```
+
+The second form means the exported symbol deserves contract coverage. The remaining helpers should remain private and should not be flagged.
+
+## Suggested implementation order for Slopgate
+
+1. **Add coverage-artifact validation** and emit `coverage-artifact-incomplete` as a single gate failure.
+2. **Stabilize baseline identity** so `stable_id()` does not include mutable diagnostic text.
+3. **Introduce `PublicSurfaceIndex`** and honor `__all__`, re-exports, private module names, and framework entrypoints.
+4. **Split the monolithic rule** into `untested-public-api`, `possibly-dead-internal`, and `coverage-artifact-incomplete`.
+5. **Re-run Slopgate** against the same target repository to confirm the 214 violations collapse into a small, actionable set.
+6. **Use GitNexus only on the remaining `possibly-dead-internal` symbols** to confirm actual reachability.
+7. **Update documentation and autofix hints** to recommend privatization or contract testing, not name-in-test coverage.
+
+The gate should ultimately answer three different questions accurately: **Was this production behavior executed? Is this intentionally public? Is this code unreachable?** Slopgate 1.4.16 currently approximates all three using literal symbol references, which turns manageable coverage-quality issues into large batches of false positives.

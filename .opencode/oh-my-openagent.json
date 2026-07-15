@@ -1,0 +1,8 @@
+{
+  "sisyphus": {
+    "tasks": {
+      "task_list_id": "slopgate",
+      "claude_code_compat": false
+    }
+  }
+}
