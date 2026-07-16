@@ -1,0 +1,258 @@
+{
+  "schema_version": "1.0",
+  "artifact": "feedback-loop-py-log-002-adjudication",
+  "date": "2026-07-16",
+  "source_sample": "docs/evidence/feedback-loop-py-log-002-sample-2026-07-16.json",
+  "primary_review": "docs/evidence/feedback-loop-py-log-002-review-2026-07-16.json",
+  "agreement_artifact": "docs/evidence/feedback-loop-py-log-002-agreement-2026-07-16.json",
+  "reviewer_agreement_status": "adjudicated_not_unanimous",
+  "adjudication_method": "Each classification disagreement was resolved against recovered current or historical behavior. When the exact trace-time body was unavailable, successor behavior was not treated as proof and the final classification is needs_context.",
+  "decision": {
+    "py_log_002_behavior": "unchanged",
+    "rule_change": false,
+    "classification_use": "evidence_only"
+  },
+  "release_gate": {
+    "status": "adjudicated",
+    "satisfied": true,
+    "resolved_classification_disagreements": 27,
+    "unresolved_classification_disagreements": 0
+  },
+  "aggregate_counts": {
+    "classification": {
+      "true_positive": 19,
+      "false_positive": 64,
+      "needs_context": 17,
+      "total": 100
+    },
+    "source_availability": {
+      "current_source": 6,
+      "current_and_historical_source": 5,
+      "historical_source_recovered": 8,
+      "exact_source_unavailable_successor_only": 8,
+      "total": 27
+    }
+  },
+  "records": [
+    {
+      "record_id": "0929404e1ab11c21f9971d16c800bc256761256ac8228e1bfd83d6353888efde",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "Recovered historical behavior only derives target identifiers from an in-memory event; it does not dispatch, persist, or hand data to an external service.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "high"
+    },
+    {
+      "record_id": "0aa617bf1874874d0c7bb44774b5f9bb4ef58223e9c1afe9a297720350e8a0d7",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The recovered pre-removal body only formats a decision reason from existing findings and performs no I/O or observable handoff.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "high"
+    },
+    {
+      "record_id": "116be1260ec0da323b4969673cee2a3e6f44ac9f4b5b65d3805fbdd3f542a438",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact parity-consumer body is absent from current and recovered history; a successor's private snapshot bookkeeping does not prove the trace-time behavior.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "1733155e507490b076392a700ace61a4941b4dd9ccd5a91b73e102d11095880f",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The record anchor is a constant-valued adapter identifier property with no I/O or handoff; mixed sibling functions in the grouped message do not change the anchored behavior.",
+      "source_availability": "current_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "19e3630d00317ea0da21ffd3960330fd71e2e96cbda512c23002fc6e921adb1d",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "Complete current and originating historical implementations log the observation count before the external client call, so the no-logging premise does not reproduce.",
+      "source_availability": "current_and_historical_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "1b26e6f92a4a89bb23a9b7a5b2a23b9b7532dc5c8c8b560dffaae61b0cdaba07",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The complete function has logged the terminal transition and emitted telemetry before the event handoff since its introduction.",
+      "source_availability": "current_and_historical_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "2c0fb9413db95e27a19e66dd7a9c753ee1eb0c64f1077e4889807b3bacbbcbee",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact callback body is unavailable; a successor performs an event-driven state transition, but that lineage alone cannot establish the scanned draft's behavior.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "2f5c077603eb4ef11c8e40857c488d22b90fbf4c49610ec90f91c2d6735221dc",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The reported method is the adapter telemetry sink abstraction itself; requiring that sink to log or emit telemetry would be circular.",
+      "source_availability": "current_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "3fc525edb7b53749b6095305f6116c98667da381f02f01cc5d6b632328e92a52",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "Recovered historical behavior only extracts target identifiers into an immutable in-memory set and performs no event or package handoff.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "high"
+    },
+    {
+      "record_id": "6af8eb3061f47e2ac69421682af888c095483b3576b9c5fce1ef7840481fe75c",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The reported facade defines no such method, and the exact historical implementation was not recovered; a successor in the implementation module is insufficient to classify the trace-time body.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "6cf457861c8e87c02611a99185458e05c0ea28fa6a9e6de24609dc24d5b68286",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact callable body is unavailable; similar lineage contains a subscription handoff, but that does not prove the behavior of this scanned draft.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "807f4337b94c211cc18271fc6f12d149df5a927a472acdb13a202b661f762d88",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The function is an internal projection helper invoked by the actual event handler; it parses details and mutates preview state but does not receive or dispatch the event.",
+      "source_availability": "current_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "936c536f2ffdb64fe0c7aec51d09487da7c33667abfaf442292ecfc091ac1aab",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact function body is unavailable; a related implementation subscribes to a cloud stream, but classification of this draft cannot be inferred from that successor.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "9683a460f7a721daf0463b804f2410bb294f1fc53648cccced12cda26739a2cb",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact mount callback is absent from current and committed source; a later callback that only populates local widgets does not establish this draft's behavior.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "97edf98ba0530773319621f93ca328fee2e6a5f32e0450e99cc08de31ad6c718",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The matching current and originating historical implementations already log the postprocess scoring boundary before delegating to score emission.",
+      "source_availability": "current_and_historical_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "9bbdc0967a06e3080bd6108f1e269682554fe60208404ac80864f791f8aed4a6",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "Recovered historical behavior classifies dictionaries and constructs typed values in memory; it neither consumes a runtime callback nor crosses an external boundary.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "b13d16a465d53dbb407a5adf69ce323db73487174d93ae5dab2a5e83c1c83b14",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The available implementation is an imported internal projection helper called by the actual event handler; the recorded location is an attribution artifact, not an independent boundary.",
+      "source_availability": "current_source",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "b504036069c9476ff00863ffcff268d8400bc8ac3090daa0d54d9ceba7b4a4cc",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "Complete current and originating historical implementations log the observation count immediately before the external telemetry client call.",
+      "source_availability": "current_and_historical_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "beb0fd6594c3af252998693d9eb2c20890b56a83a4079f7fffb55815009af04d",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The recovered historical helper only accumulates normalized values into in-memory counters and does not emit, publish, persist, or dispatch anything.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "c1724cd378c2f8b75d37b74d35f330a9a4560e8ed2a8bd35dcdbde8a3815ba61",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The record anchor scans mapping keys, normalizes a string, and returns it; actual adapter entry points included in the grouped message do not alter that anchored helper's behavior.",
+      "source_availability": "current_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "c522f902d0bf93ad4f235b38745e2bec79ec821168055a022aa3268a36ab4821",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The record anchor is a constant adapter source identifier property with no I/O or state transition; mixed I/O siblings in the grouped message are separate behaviors.",
+      "source_availability": "current_source",
+      "confidence": "high"
+    },
+    {
+      "record_id": "d5a40e2fa68cf0b22f0b44d119e693602c91a4e0819f6551c88d5b0c3d69c11a",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact recovery-consumption method is unavailable; a successor validates and clears internal retry state, but that does not establish the scanned method's implementation.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "dcff23cb758f833b234c3d6f8c0b99023fc92e94023718d36b355cee365b9361",
+      "final_classification": "true_positive",
+      "adjudication_rationale": "Recovered historical source shows a post-refresh lifecycle callback handing review state into mounted UI rendering without logging or telemetry.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "e9aad1e7cec8f15c301071125012a851b7a47a693b9f71d3fb0ba65746733191",
+      "final_classification": "true_positive",
+      "adjudication_rationale": "Recovered historical source shows a post-refresh lifecycle callback handing review state into mounted UI rendering without logging or telemetry.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "ea6a2f9a58d11bdc62d6a2c7fc2430a7fc88c3ef65c59abf37c2db45c23a228d",
+      "final_classification": "true_positive",
+      "adjudication_rationale": "Recovered historical source shows a post-refresh lifecycle callback handing review state into mounted UI rendering without logging or telemetry.",
+      "source_availability": "historical_source_recovered",
+      "confidence": "medium"
+    },
+    {
+      "record_id": "f4552b818979e6e1bafd72e36dd142e615777f46a814d2b508ca04f5a676849f",
+      "final_classification": "needs_context",
+      "adjudication_rationale": "The exact parity-consumer symbol is absent from current and recovered history; a successor's private read, compare, and delete behavior cannot prove the original body.",
+      "source_availability": "exact_source_unavailable_successor_only",
+      "confidence": "high"
+    },
+    {
+      "record_id": "ffe2451459f15017772b60c2fee534640721ff376500cf258e858b7c698a18f6",
+      "final_classification": "false_positive",
+      "adjudication_rationale": "The matching current and originating historical implementations log the score-emission boundary immediately before the external client call.",
+      "source_availability": "current_and_historical_source",
+      "confidence": "high"
+    }
+  ],
+  "id_set_audit": {
+    "agreement_disagreement_count": 27,
+    "adjudication_record_count": 27,
+    "adjudication_unique_id_count": 27,
+    "exact_match": true,
+    "missing_from_adjudication": [],
+    "extra_in_adjudication": []
+  },
+  "privacy_audit": {
+    "absent_record_keys": [
+      "prompt",
+      "patch",
+      "tool_input",
+      "updated_input",
+      "updated_args",
+      "proposed_content",
+      "content",
+      "source",
+      "source_evidence",
+      "snippet",
+      "code",
+      "message",
+      "additional_context",
+      "output",
+      "metadata",
+      "path"
+    ],
+    "absolute_paths_absent": true,
+    "raw_content_absent": true,
+    "status": "pass"
+  }
+}

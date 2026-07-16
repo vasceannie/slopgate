@@ -49,7 +49,14 @@ def record_suite_subprocess_run(monkeypatch: pytest.MonkeyPatch) -> list[list[st
 
 def test_install_suite_parser_exposes_device_aware_autoupdate_flags() -> None:
     args = build_parser().parse_args(
-        ["setup", "--dry-run", "--include-missing", "--interval-minutes", "45"]
+        [
+            "setup",
+            "--dry-run",
+            "--enable-autoupdate",
+            "--include-missing",
+            "--interval-minutes",
+            "45",
+        ]
     )
     assert (
         args.command,
@@ -66,7 +73,7 @@ def test_install_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> 
         "setup",
         cmd_install_suite,
         True,
-        True,
+        False,
     )
 
 
@@ -75,7 +82,7 @@ def test_native_install_all_parser_supports_autoupdate() -> None:
     assert (args.command, args.platform, args.with_autoupdate, args.dry_run) == (
         "install",
         "all",
-        True,
+        False,
         True,
     )
 
@@ -88,7 +95,7 @@ def test_native_uninstall_all_parser_supports_autoupdate() -> None:
         args.platform,
         args.with_autoupdate,
         args.dry_run,
-    ) == ("uninstall", cmd_uninstall, "all", True, True)
+    ) == ("uninstall", cmd_uninstall, "all", False, True)
 
 
 def test_native_install_parser_supports_pi() -> None:
@@ -98,7 +105,7 @@ def test_native_install_parser_supports_pi() -> None:
         args.platform,
         args.with_autoupdate,
         args.dry_run,
-    ) == ("install", "pi", True, True)
+    ) == ("install", "pi", False, True)
 
 
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:

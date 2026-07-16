@@ -169,7 +169,7 @@ from ._method_style import (
     PythonLongMethodRule,
     PythonLongParameterRule,
 )
-from ._feature_envy import PythonFeatureEnvyRule
+from ..feature_envy import PythonFeatureEnvyRule
 from ._wrapper_god import (
     PythonGodClassRule,
     PythonThinWrapperRule,

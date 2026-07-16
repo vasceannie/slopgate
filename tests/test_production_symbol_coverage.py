@@ -14,9 +14,11 @@ from slopgate.config._repo import (
     resolve_main_git_repo_root,
     resolve_repo_root,
 )
-from slopgate.installer._shared import (
+from slopgate.installer._safe_files import (
     backup_existing_file,
     backup_existing_file_and_report,
+)
+from slopgate.installer._shared import (
     base_invocation,
     coerce_hook_entries,
     find_binary,

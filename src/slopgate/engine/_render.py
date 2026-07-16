@@ -3,7 +3,12 @@ from __future__ import annotations
 from slopgate._types import ObjectDict
 from slopgate.adapters import get_adapter
 from slopgate.adapters.base import PlatformAdapter
-from slopgate.constants import DENY, PLATFORM_CLAUDE
+from slopgate.constants import (
+    DENY,
+    METADATA_DECISION,
+    METADATA_RULE_ID,
+    PLATFORM_CLAUDE,
+)
 from slopgate.context import HookContext
 from slopgate.models import RuleFinding
 
@@ -64,9 +69,9 @@ def top_decision(findings: list[RuleFinding]) -> str | None:
 def serialize_findings(findings: list[RuleFinding]) -> list[dict[str, object]]:
     return [
         {
-            "rule_id": item.rule_id,
+            METADATA_RULE_ID: item.rule_id,
             "severity": item.severity.as_name(),
-            "decision": item.decision,
+            METADATA_DECISION: item.decision,
             "message": item.message,
             "additional_context": item.additional_context,
             "metadata": item.metadata,

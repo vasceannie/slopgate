@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T17:37:04Z",
+  "command": "slopgate stats --days 7 --json",
+  "source": "configured results.jsonl trace corpus",
+  "date_range": "2026-07-09 to 2026-07-16",
+  "raw_total_events": 147160,
+  "analyzed_events": 147158,
+  "fixture_filtered": 2,
+  "sessions": 345,
+  "first_time_resolution_rate": 0.7256,
+  "blocking_promotion_target_rate": 0.902,
+  "median_retries_before_resolution": 1.0,
+  "top_rules_denied": [
+    ["QUALITY-LINT-001", 357],
+    ["PY-CODE-013", 298],
+    ["PY-AST-001", 270],
+    ["PY-IMPORT-002", 132],
+    ["PY-CODE-008", 77],
+    ["PY-CODE-010", 74],
+    ["PY-CODE-018", 69],
+    ["PY-CODE-016", 62],
+    ["PY-CODE-009", 53],
+    ["PY-CODE-015", 39],
+    ["PY-IMPORT-003", 39],
+    ["PY-LOG-002", 35]
+  ],
+  "notes": [
+    "This artifact records the current measured seven-day state from the configured live trace corpus.",
+    "The pre-implementation reference rate is retained in feedback-loop-baseline-2026-07-15.json.",
+    "This artifact was refreshed from the live configured trace corpus after the editable canary update.",
+    "Current first-time resolution improved by 2.36 percentage points, below the required 20-point promotion gate."
+  ]
+}

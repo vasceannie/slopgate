@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from slopgate._types import object_dict, object_list, string_value
-from slopgate.constants import METADATA_PATH
+from slopgate.constants import METADATA_CONTENT, METADATA_PATH
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
 
-NON_FINAL_METADATA_PATHS = frozenset({"content", "patch.diff"})
+NON_FINAL_METADATA_PATHS = frozenset({METADATA_CONTENT, "patch.diff"})
 
 
 def quality_metadata_path(path_value: str | None) -> str | None:

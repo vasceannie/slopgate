@@ -35,6 +35,9 @@ def add_hook_runtime_parsers(
     sub: SubparserRegistry,
     registration: HookRuntimeParserRegistration,
 ) -> None:
+    from slopgate.cli.first_write_contract import add_contract_parser
+    from slopgate.cli.recovery import add_recovery_parser
+
     handle = registration.add_command_parser(
         sub,
         "handle",
@@ -70,6 +73,8 @@ def add_hook_runtime_parsers(
     _ = replay.add_argument("--payload", required=True)
     _ = replay.add_argument("--pretty", action="store_true")
     registration.add_platform_argument(replay)
+    add_contract_parser(sub)
+    add_recovery_parser(sub)
 
 
 def positive_int(raw_value: str) -> int:

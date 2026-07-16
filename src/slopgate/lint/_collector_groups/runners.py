@@ -47,12 +47,21 @@ def run_touched_collectors(
     test_files: list[Path],
     *,
     reference_test_files: list[Path] | None = None,
+    deterministic_file_only: bool = False,
 ) -> CollectorResults:
     """Run immediate detectors for touched files."""
     del reference_test_files
-    parsed_src, parsed_tests, oversized, literals, _project_index = source_analysis(
-        src_files, test_files
-    )
+    if deterministic_file_only:
+        from slopgate.lint._detectors.code_smells import detect_oversized_modules
+
+        parsed_src = parse_files(src_files)
+        parsed_tests = parse_files(test_files)
+        oversized = detect_oversized_modules([*parsed_src, *parsed_tests])
+        literals = []
+    else:
+        parsed_src, parsed_tests, oversized, literals, _project_index = source_analysis(
+            src_files, test_files
+        )
     from slopgate.lint._regex_rules import regex_rule_collectors
 
     results = filter_cataloged_collectors(
@@ -70,7 +79,17 @@ def run_touched_collectors(
         "hook",
         event="PostToolUse",
     )
-    return enabled_collectors(results)
+    enabled = enabled_collectors(results)
+    if not deterministic_file_only:
+        return enabled
+    from slopgate.lint.catalog import collector_catalog
+
+    catalog = collector_catalog()
+    return [
+        item
+        for item in enabled
+        if item[0] not in catalog or catalog[item[0]].scope in {"file", "touched"}
+    ]
 
 
 def run_all_collectors(

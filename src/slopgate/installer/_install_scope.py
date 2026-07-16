@@ -83,10 +83,17 @@ def resolve_scoped_install_paths(
     project_path_for_root: Callable[[Path], Path],
 ) -> list[Path]:
     root = resolve_project_root(project_root)
+    project_path = project_path_for_root(root)
+    try:
+        project_path.resolve().relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"project install path escapes project root: {project_path}"
+        ) from exc
     return scope_paths(
         normalize_install_scope(scope),
         user_path=user_path,
-        project_path=project_path_for_root(root),
+        project_path=project_path,
     )
 
 

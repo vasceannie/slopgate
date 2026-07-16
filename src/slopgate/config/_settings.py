@@ -4,8 +4,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from slopgate.constants import METADATA_SLOPGATE
-from slopgate.models import RegexRuleConfig, RuleSurfaceConfig, RuntimeConfig
+from slopgate.constants import (
+    METADATA_CONTENT,
+    METADATA_RULE_ID,
+    METADATA_SLOPGATE,
+    METADATA_TARGET,
+)
+from slopgate.models import (
+    FailureProfileConfig,
+    RegexRuleConfig,
+    RuleSurfaceConfig,
+    RuntimeConfig,
+)
 
 from ._coerce import (
     bool_value,
@@ -15,7 +25,8 @@ from ._coerce import (
     string_value,
 )
 from ._io import load_toml
-from ._python_runtime import python_runtime_settings
+from ._failure_profile import failure_profile_config
+from ._python_runtime import PythonRuntimeSettings, python_runtime_settings
 from ._repo import DISABLE_SENTINELS
 from ._rule_surfaces import merge_rule_surfaces, rule_surface_configs
 
@@ -44,11 +55,11 @@ def _regex_rule_configs(value: object) -> list[RegexRuleConfig]:
             data = object_dict(cast(dict[object, object], item))
             regex_rules.append(
                 RegexRuleConfig(
-                    rule_id=string_value(data.get("rule_id")),
+                    rule_id=string_value(data.get(METADATA_RULE_ID)),
                     title=string_value(data.get("title")),
                     severity=string_value(data.get("severity"), "MEDIUM"),
                     events=string_list(data.get("events")) or ["PreToolUse"],
-                    target=string_value(data.get("target"), "content"),
+                    target=string_value(data.get(METADATA_TARGET), METADATA_CONTENT),
                     action=string_value(data.get("action"), "deny"),
                     message=string_value(data.get("message")),
                     additional_context=(
@@ -77,6 +88,7 @@ class _RepoQualityGateSettings:
     async_jobs: dict[str, object]
     disabled_rules: list[str]
     severity_overrides: dict[str, str]
+    failure_profile: FailureProfileConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +109,15 @@ class _HookGuidanceSettings:
     project_logger_import: str
     project_logger_usage: str
     quality_check_command: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedRuntimeSettings:
+    repo: _RepoQualityGateSettings
+    post_edit: _PostEditQualitySettings
+    hook_guidance: _HookGuidanceSettings
+    async_jobs: _AsyncJobSettings
+    python: PythonRuntimeSettings
 
 
 def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
@@ -120,6 +141,7 @@ def _repo_slopgate_settings(repo_root: Path) -> _RepoQualityGateSettings:
             ).items()
             if isinstance(value, str)
         },
+        failure_profile=failure_profile_config(toml_data),
     )
 
 
@@ -214,16 +236,25 @@ def _async_job_settings(
     )
 
 
+def _resolved_runtime_settings(
+    raw: dict[str, object], repo_root: Path
+) -> _ResolvedRuntimeSettings:
+    repo = _repo_slopgate_settings(repo_root)
+    return _ResolvedRuntimeSettings(
+        repo=repo,
+        post_edit=_post_edit_quality_settings(raw, repo),
+        hook_guidance=_hook_guidance_settings(raw, repo),
+        async_jobs=_async_job_settings(raw, repo),
+        python=python_runtime_settings(raw, repo.thresholds),
+    )
+
+
 def merge_config(
     actual_root: Path,
     raw: dict[str, object],
     repo_root: Path,
 ) -> RuntimeConfig:
-    repo_settings = _repo_slopgate_settings(repo_root)
-    post_edit = _post_edit_quality_settings(raw, repo_settings)
-    hook_guidance = _hook_guidance_settings(raw, repo_settings)
-    async_jobs = _async_job_settings(raw, repo_settings)
-    python_runtime = python_runtime_settings(raw, repo_settings.thresholds)
+    settings = _resolved_runtime_settings(raw, repo_root)
 
     return RuntimeConfig(
         root=actual_root,
@@ -236,32 +267,33 @@ def merge_config(
         protected_paths=string_list(raw.get("protected_paths", [])),
         sensitive_path_patterns=string_list(raw.get("sensitive_path_patterns", [])),
         system_path_prefixes=string_list(raw.get("system_path_prefixes", [])),
-        python_ast_enabled=python_runtime.ast_enabled,
-        python_ast_max_parse_chars=python_runtime.max_parse_chars,
-        python_long_method_lines=python_runtime.long_method_lines,
-        python_long_parameter_limit=python_runtime.long_parameter_limit,
-        post_edit_quality_enabled=post_edit.enabled,
-        post_edit_quality_block_on_failure=post_edit.block_on_failure,
-        post_edit_quality_commands=post_edit.commands,
-        hook_project_logger_import=hook_guidance.project_logger_import,
-        hook_project_logger_usage=hook_guidance.project_logger_usage,
-        hook_quality_check_command=hook_guidance.quality_check_command,
-        async_jobs_enabled=async_jobs.enabled,
-        async_jobs_commands=async_jobs.commands,
-        python_max_complexity=python_runtime.max_complexity,
-        python_max_nesting_depth=python_runtime.max_nesting_depth,
-        python_max_god_class_methods=python_runtime.max_god_class_methods,
-        python_max_line_length=python_runtime.max_line_length,
-        python_feature_envy_threshold=python_runtime.feature_envy_threshold,
-        python_feature_envy_min_accesses=python_runtime.feature_envy_min_accesses,
-        python_import_fanout_limit=python_runtime.import_fanout_limit,
+        python_ast_enabled=settings.python.ast_enabled,
+        python_ast_max_parse_chars=settings.python.max_parse_chars,
+        python_long_method_lines=settings.python.long_method_lines,
+        python_long_parameter_limit=settings.python.long_parameter_limit,
+        post_edit_quality_enabled=settings.post_edit.enabled,
+        post_edit_quality_block_on_failure=settings.post_edit.block_on_failure,
+        post_edit_quality_commands=settings.post_edit.commands,
+        hook_project_logger_import=settings.hook_guidance.project_logger_import,
+        hook_project_logger_usage=settings.hook_guidance.project_logger_usage,
+        hook_quality_check_command=settings.hook_guidance.quality_check_command,
+        async_jobs_enabled=settings.async_jobs.enabled,
+        async_jobs_commands=settings.async_jobs.commands,
+        python_max_complexity=settings.python.max_complexity,
+        python_max_nesting_depth=settings.python.max_nesting_depth,
+        python_max_god_class_methods=settings.python.max_god_class_methods,
+        python_max_line_length=settings.python.max_line_length,
+        python_feature_envy_threshold=settings.python.feature_envy_threshold,
+        python_feature_envy_min_accesses=settings.python.feature_envy_min_accesses,
+        python_import_fanout_limit=settings.python.import_fanout_limit,
         skip_paths=string_list(raw.get("skip_paths", [])),
         skip_if_file_exists=string_list(
             raw.get("skip_if_file_exists", list(DISABLE_SENTINELS))
         ),
-        disabled_rules=repo_settings.disabled_rules,
-        severity_overrides=repo_settings.severity_overrides,
-        enabled_rules=_enabled_rule_settings(raw, repo_settings),
-        rule_surfaces=_rule_surface_settings(raw, repo_settings),
+        disabled_rules=settings.repo.disabled_rules,
+        severity_overrides=settings.repo.severity_overrides,
+        enabled_rules=_enabled_rule_settings(raw, settings.repo),
+        rule_surfaces=_rule_surface_settings(raw, settings.repo),
         regex_rules=_regex_rule_configs(raw.get("regex_rules", [])),
+        failure_profile=settings.repo.failure_profile,
     )

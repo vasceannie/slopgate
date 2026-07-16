@@ -18,7 +18,7 @@ from slopgate.adapters.cursor_output import (
     cursor_render_request_from_call,
     render_cursor_output,
 )
-from slopgate.constants import METADATA_COMMAND
+from slopgate.constants import METADATA_COMMAND, TOOL_BASH
 
 _CURSOR_EVENT_MAP: dict[str, str] = {
     "preToolUse": "PreToolUse",
@@ -45,7 +45,7 @@ _CURSOR_EVENT_MAP: dict[str, str] = {
 }
 
 _CURSOR_TOOL_ALIAS_MAP: dict[str, str] = {
-    "bash": "Bash",
+    TOOL_BASH: "Bash",
     "shell": "Bash",
     "terminal": "Bash",
     "read": "Read",

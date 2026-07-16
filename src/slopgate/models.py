@@ -5,7 +5,11 @@ from enum import IntEnum
 from pathlib import Path
 
 from .constants import DENY, PRE_TOOL_USE
-from .policy_defaults import RUNTIME_POLICY_DEFAULTS
+from .policy_defaults import (
+    FAILURE_PROFILE_MAX_ENTRIES,
+    FAILURE_PROFILE_RETENTION_DAYS,
+    RUNTIME_POLICY_DEFAULTS,
+)
 from ._types import ObjectDict
 
 
@@ -86,6 +90,13 @@ class RuleSurfaceConfig:
     cli: CliSurfaceConfig = field(default_factory=CliSurfaceConfig)
 
 
+@dataclass(frozen=True, slots=True)
+class FailureProfileConfig:
+    enabled: bool = False
+    retention_days: int = FAILURE_PROFILE_RETENTION_DAYS
+    max_entries: int = FAILURE_PROFILE_MAX_ENTRIES
+
+
 @dataclass(slots=True)
 class RuntimeConfig:
     root: Path
@@ -134,6 +145,7 @@ class RuntimeConfig:
     enabled_rules: dict[str, bool] = field(default_factory=dict)
     rule_surfaces: dict[str, RuleSurfaceConfig] = field(default_factory=dict)
     regex_rules: list[RegexRuleConfig] = field(default_factory=list)
+    failure_profile: FailureProfileConfig = field(default_factory=FailureProfileConfig)
 
 
 @dataclass(slots=True)

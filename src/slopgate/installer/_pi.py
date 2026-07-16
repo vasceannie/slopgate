@@ -239,7 +239,7 @@ def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) ->
         return 0
     target.parent.mkdir(parents=True, exist_ok=True)
     backup_existing_file_and_report(target, "file")
-    target.write_text(content, encoding="utf-8")
+    slopgate.installer._shared.safe_write_text(target, content)
     _write_config(config_path, dry_run=False)
     _write_package(package_path, dry_run=False)
     status = _cleanup_migrated_pi_extensions(target, dry_run=False)
@@ -271,9 +271,7 @@ def install_pi(
         if status != 0:
             rollback_completed_installs(
                 completed,
-                lambda rollback_path: _uninstall_pi_at(
-                    rollback_path, dry_run=False
-                ),
+                lambda rollback_path: _uninstall_pi_at(rollback_path, dry_run=False),
             )
             return status
         completed.append(target)

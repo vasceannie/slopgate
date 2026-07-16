@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from typing import cast
+from typing import Final, cast
 
 from slopgate._argparse_types import SubparserRegistry
 
 from slopgate.cli._migrate import cmd_migrate
+from slopgate.cli.activity import add_stats_parser
 from slopgate.cli.platforms import add_platform_argument
 from slopgate.cli.commands import (
     INSTALL_TARGETS,
@@ -21,12 +22,17 @@ from slopgate.cli.commands import (
     cmd_install,
     cmd_install_suite,
     cmd_replay,
-    cmd_stats,
     cmd_uninstall,
     cmd_update_suite,
     cmd_version,
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
+
+
+INSTALL_SCOPE_HELP: Final = (
+    "Hook install target: user config dir, project dir (./.claude, ./.codex, "
+    "./.cursor, ./.opencode), or both"
+)
 
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
@@ -94,16 +100,6 @@ def _add_path_command_parser(
     return parser
 
 
-def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    add_install_scope_arguments(
-        parser,
-        help_text=(
-            "Hook install target: user config dir, project dir (./.claude, ./.codex, "
-            "./.cursor, ./.opencode), or both"
-        ),
-    )
-
-
 def _add_platform_install_parser(
     sub: SubparserRegistry,
     name: str,
@@ -120,12 +116,18 @@ def _add_platform_install_parser(
     if name not in {"install", "uninstall"}:
         return
     _ = parser.add_argument(
+        "--enable-autoupdate",
+        action="store_true",
+        dest="with_autoupdate",
+        help="Install the periodic updater using the selected package source",
+    )
+    _ = parser.add_argument(
         "--disable-autoupdate",
         action="store_false",
         dest="with_autoupdate",
         help="Skip installing/removing the periodic GitHub updater",
     )
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=INSTALL_SCOPE_HELP)
     if name == "uninstall":
         return
     _ = parser.add_argument(
@@ -146,7 +148,7 @@ def _add_suite_update_arguments(
         add_dry_run_argument(parser)
     _ = parser.add_argument(
         "--source",
-        default="git+https://github.com/vasceannie/slopgate.git@master",
+        default="ai-slopgate==1.4.17",
         help="Package source used by auto-update clients",
     )
     _ = parser.add_argument(
@@ -171,7 +173,7 @@ def _add_suite_command_parser(
 ) -> argparse.ArgumentParser:
     parser = _add_command_parser(sub, name, help_text=help_text, func=func)
     _add_suite_update_arguments(parser)
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=INSTALL_SCOPE_HELP)
     return parser
 
 
@@ -181,6 +183,12 @@ def _add_suite_parsers(sub: SubparserRegistry) -> None:
         "setup",
         help_text="Install all detected harness hooks and optionally the auto-updater",
         func=cmd_install_suite,
+    )
+    _ = install_suite.add_argument(
+        "--enable-autoupdate",
+        action="store_true",
+        dest="with_autoupdate",
+        help="Install the periodic updater using the selected package source",
     )
     _ = install_suite.add_argument(
         "--disable-autoupdate",
@@ -265,13 +273,10 @@ def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
 
 def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     from slopgate.cli.changed_tests_parser import add_changed_test_parser
+    from slopgate.cli.failure_profile import add_profile_parser
 
-    stats = _add_command_parser(
-        sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
-    )
-    _ = stats.add_argument("--log")
-    _ = stats.add_argument("--days", type=int)
-    _ = stats.add_argument("--json", action="store_true")
+    add_stats_parser(sub)
+    add_profile_parser(sub)
 
     add_changed_test_parser(sub)
 

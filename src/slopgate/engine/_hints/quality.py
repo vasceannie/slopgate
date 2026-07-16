@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from slopgate._types import object_dict, object_list
 from slopgate.constants import (
+    METADATA_FUNCTION,
     POST_TOOL_USE,
     PRODUCTION_SYMBOL_PREVIEW_LIMIT,
 )
@@ -15,7 +16,7 @@ from .paths import finding_path
 QUALITY_SYMBOL_KEYS = {
     "symbol",
     "symbols",
-    "function",
+    METADATA_FUNCTION,
     "functions",
     "function_names",
     "public_symbols",

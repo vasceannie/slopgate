@@ -79,6 +79,15 @@ slopgate replay --payload /tmp/hook_capture.json --pretty
 - Rule missing from `PermissionRequest` events? → add to `events` tuple
 - Need richer analysis? → write a Python rule (AST, subprocess, etc.)
 
+## Feedback-loop state
+
+- Baseline and redacted `PY-LOG-002` audit artifacts live under `docs/evidence/`.
+- `WORKFLOW-FIRST-WRITE-001` metadata names the normalized target, missing contract fields, rollout posture, and record-command prefix.
+- `QUALITY-PROJECTED-LINT-001` records either a projection digest and collector IDs or a `skip_reason`; `QUALITY-LINT-001.projected_lint_parity` compares the later authoritative result.
+- Semantic findings expose `semantic_repeat_count` separately from `exact_repeat_count`. `RETRY-BUDGET-001.recovery_status` explains missing, expired, mismatched, or consumed recovery evidence.
+- Only a successful full post-tool read after the retry lock counts as reread proof. Prompt keywords and proposed reads do not unlock recovery.
+- `slopgate profile show --cwd PATH` inspects the opt-in aggregate profile. `clear` and `reset` remove that profile without deleting trace history or always-on state.
+
 ## Operational safety
 
 - **Never print non-JSON to stdout** from `slopgate handle` — platforms parse stdout as JSON

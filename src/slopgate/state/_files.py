@@ -91,6 +91,25 @@ class StateSnapshotMixin(StateFileMixin):
         advisory_hits = self._coerce_object_map(state.get("advisory_hits"), cutoff)
         retry_locks = self._coerce_object_map(state.get("retry_locks"), cutoff)
         repair_plans = self._coerce_object_map(state.get("repair_plans"), cutoff)
+        first_write_contracts = {
+            key: object_dict(value)
+            for key, value in object_dict(state.get("first_write_contracts")).items()
+        }
+        semantic_deny_hits = self._coerce_object_map(
+            state.get("semantic_deny_hits"), cutoff
+        )
+        recovery_evidence = {
+            key: typed
+            for key, value in object_dict(state.get("recovery_evidence")).items()
+            if isinstance(
+                (created_at := (typed := object_dict(value)).get("created_at")), int
+            )
+            and created_at >= cutoff
+        }
+        full_read_events = self._coerce_object_map(
+            state.get("full_read_events"), cutoff
+        )
+        event_sequence = state.get("event_sequence")
         return {
             "full_reads": full_reads,
             "search_reminders": search_reminders,
@@ -98,6 +117,11 @@ class StateSnapshotMixin(StateFileMixin):
             "advisory_hits": advisory_hits,
             "retry_locks": retry_locks,
             "repair_plans": repair_plans,
+            "first_write_contracts": first_write_contracts,
+            "semantic_deny_hits": semantic_deny_hits,
+            "recovery_evidence": recovery_evidence,
+            "full_read_events": full_read_events,
+            "event_sequence": event_sequence if isinstance(event_sequence, int) else 0,
         }
 
     @staticmethod

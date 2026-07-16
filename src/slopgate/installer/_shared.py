@@ -8,13 +8,16 @@ import shlex
 import subprocess
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import cast
 
 from slopgate._types import object_dict, object_list
 from slopgate.constants import METADATA_COMMAND, PLATFORM_CLAUDE
 from slopgate.installer.hook_proxy import HOOK_PROXY_MARKER, posix_daemon_proxy_command
+from slopgate.installer._safe_files import (
+    backup_existing_file_and_report,
+    safe_write_text,
+)
 from slopgate.util import logger
 from slopgate.util.platform import is_windows
 
@@ -277,30 +280,15 @@ def merge_owned_hooks_into(
     config["hooks"] = merge_owned_hooks(config.get("hooks"), managed_hooks)
 
 
-def backup_existing_file(path: Path) -> Path | None:
-    """Create a timestamped sibling backup for an existing config/plugin file."""
-    if not path.exists():
-        return None
-    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    backup_path = path.with_name(f"{path.name}.slopgate-bak-{timestamp}")
-    _ = shutil.copy2(path, backup_path)
-    return backup_path
-
-
-def backup_existing_file_and_report(path: Path, label: str) -> None:
-    """Back up an existing file and print a concise installer status line."""
-    backup_path = backup_existing_file(path)
-    if backup_path is not None:
-        print(f"Backed up existing {label} to {backup_path}")
-
-
 def write_json_with_backup(path: Path, payload: object, label: str) -> None:
     """Back up an existing file, then write formatted JSON."""
     backup_existing_file_and_report(path, label)
-    _ = path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    safe_write_text(path, json.dumps(payload, indent=2) + "\n")
 
 
 def remove_file_with_backup(path: Path, label: str) -> None:
+    if path.is_symlink():
+        raise OSError(f"refusing to remove installer symlink: {path}")
     backup_existing_file_and_report(path, label)
     path.unlink()
     print(f"Removed: {path}")

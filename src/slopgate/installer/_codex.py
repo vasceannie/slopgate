@@ -6,7 +6,12 @@ import re
 import tomllib
 from pathlib import Path
 from typing import cast
-from slopgate.constants import METADATA_COMMAND, POST_TOOL_USE, PRE_TOOL_USE
+from slopgate.constants import (
+    DEFAULT_LONG_COMMAND_TIMEOUT_SECONDS,
+    METADATA_COMMAND,
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+)
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     json_has_owned_slopgate_hooks,
@@ -55,7 +60,7 @@ CODEX_EVENTS: dict[str, _CodeHookMeta] = {
         "statusMessage": "slopgate: reviewing tool output",
     },
     "UserPromptSubmit": {"timeout": 10},
-    "Stop": {"timeout": 30},
+    "Stop": {"timeout": DEFAULT_LONG_COMMAND_TIMEOUT_SECONDS},
 }
 
 
@@ -130,7 +135,7 @@ def _find_codex_feature_flags(
 
 
 def _write_codex_toml_lines(config_path: Path, lines: list[str]) -> None:
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    slopgate.installer._shared.safe_write_text(config_path, "\n".join(lines) + "\n")
 
 
 def _existing_codex_toml_is_valid(config_path: Path) -> bool:
@@ -183,8 +188,8 @@ def enable_codex_hooks_toml(config_path: Path) -> None:
     if features_index is None:
         suffix = "" if not lines else "\n\n"
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(
-            text.rstrip("\n") + suffix + "[features]\nhooks = true\n", encoding="utf-8"
+        slopgate.installer._shared.safe_write_text(
+            config_path, text.rstrip("\n") + suffix + "[features]\nhooks = true\n"
         )
         return
     hooks_index, codex_hooks_indexes = _find_codex_feature_flags(

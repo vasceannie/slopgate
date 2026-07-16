@@ -7,7 +7,7 @@ import pytest
 from slopgate import rules
 from slopgate.config import load_config
 from slopgate.context import HookContext
-from slopgate.rules.common.quality.lint import _TouchedLintReport
+from slopgate.rules.common.quality.lint import TouchedLintReport
 from slopgate.rules.python_ast import PythonPytestAsyncioRule
 from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
@@ -62,9 +62,9 @@ def bash_payload(command: str, event: str = "PreToolUse") -> dict[str, object]:
     }
 
 
-def touched_lint_report_stub(ctx: HookContext) -> _TouchedLintReport:
+def touched_lint_report_stub(ctx: HookContext) -> TouchedLintReport:
     _ = ctx
-    return _TouchedLintReport(
+    return TouchedLintReport(
         ["long-test: 1"],
         [["[HOOK] long-test", "file: tests/test_sample.py"]],
         ["tests/test_sample.py"],
@@ -140,7 +140,7 @@ def test_post_edit_lint_rule_reports_touched_lint_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "slopgate.rules.common.quality.lint._collect_touched_lint_report",
+        "slopgate.rules.common.quality.lint.collect_touched_lint_report",
         touched_lint_report_stub,
     )
     ctx = context_for_payload(

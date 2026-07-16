@@ -44,7 +44,7 @@ def opencode_user_plugin_path() -> Path:
     return _opencode_config_dir() / "plugins" / _PLUGIN_NAME
 
 
-def _opencode_project_plugin_path(project_root: Path) -> Path:
+def opencode_project_plugin_path(project_root: Path) -> Path:
     return project_root / ".opencode" / "plugins" / _PLUGIN_NAME
 
 
@@ -75,7 +75,7 @@ def _install_opencode_at(
         return 0
     target_dir.mkdir(parents=True, exist_ok=True)
     _backup_and_report(target)
-    _ = target.write_text(content, encoding="utf-8")
+    slopgate.installer._shared.safe_write_text(target, content)
     print_binary_install_summary(f"Installed slopgate plugin to {target}", binary)
     return 0
 
@@ -94,7 +94,7 @@ def install_opencode(
         scope,
         project_root,
         user_path=opencode_user_plugin_path(),
-        project_path_for_root=_opencode_project_plugin_path,
+        project_path_for_root=opencode_project_plugin_path,
     )
     content = template.read_text(encoding="utf-8")
     try:
@@ -143,7 +143,7 @@ def uninstall_opencode(
     paths = scope_paths(
         install_scope,
         user_path=opencode_user_plugin_path(),
-        project_path=_opencode_project_plugin_path(root),
+        project_path=opencode_project_plugin_path(root),
     )
     any_found = False
     last_status = 0
@@ -162,7 +162,7 @@ def uninstall_opencode(
                 platform_label="OpenCode",
                 scope=scope,
                 user_path=opencode_user_plugin_path(),
-                project_path=_opencode_project_plugin_path(root),
+                project_path=opencode_project_plugin_path(root),
                 project_root=project_root,
                 has_owned=opencode_plugin_has_owned_slopgate,
             )

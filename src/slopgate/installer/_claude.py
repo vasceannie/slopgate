@@ -50,11 +50,11 @@ _ClaudeHookEntry = dict[str, str | list[_ClaudeHookCommand]]
 _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
 
 
-def _claude_user_settings_path() -> Path:
+def claude_user_settings_path() -> Path:
     return Path.home() / ".claude" / "settings.json"
 
 
-def _claude_project_settings_path(project_root: Path) -> Path:
+def claude_project_settings_path(project_root: Path) -> Path:
     return project_root / ".claude" / "settings.json"
 
 
@@ -113,8 +113,8 @@ def install_claude(
     root = resolve_project_root(project_root)
     paths = scope_paths(
         install_scope,
-        user_path=_claude_user_settings_path(),
-        project_path=_claude_project_settings_path(root),
+        user_path=claude_user_settings_path(),
+        project_path=claude_project_settings_path(root),
     )
     if dry_run:
         print(f"Binary: {binary}")
@@ -164,8 +164,8 @@ def uninstall_claude(
     root = resolve_project_root(project_root)
     paths = scope_paths(
         install_scope,
-        user_path=_claude_user_settings_path(),
-        project_path=_claude_project_settings_path(root),
+        user_path=claude_user_settings_path(),
+        project_path=claude_project_settings_path(root),
     )
     any_found = False
     last_status = 0
@@ -183,8 +183,8 @@ def uninstall_claude(
             ResidualInstallScopeWarning(
                 platform_label="Claude",
                 scope=scope,
-                user_path=_claude_user_settings_path(),
-                project_path=_claude_project_settings_path(root),
+                user_path=claude_user_settings_path(),
+                project_path=claude_project_settings_path(root),
                 project_root=project_root,
                 has_owned=json_has_owned_slopgate_hooks,
             )

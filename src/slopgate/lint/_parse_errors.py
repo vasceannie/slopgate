@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from slopgate.constants import METADATA_LINE
 from slopgate.lint._baseline import Violation
 from slopgate.lint._helpers import relative_path
 
@@ -24,7 +25,7 @@ def detect_python_parse_errors(paths: list[Path]) -> list[Violation]:
                     relative_path=relative_path(path),
                     identifier=f"line-{line}",
                     detail=exc.msg,
-                    metadata={"line": line, "offset": exc.offset or 0},
+                    metadata={METADATA_LINE: line, "offset": exc.offset or 0},
                 )
             )
         except OSError as exc:

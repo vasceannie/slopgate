@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-15T17:59:09Z",
+  "command": "slopgate stats --days 7 --json",
+  "source": "configured results.jsonl trace corpus",
+  "date_range": "2026-07-09 to 2026-07-15",
+  "raw_total_events": 108058,
+  "analyzed_events": 108058,
+  "sessions": 356,
+  "first_time_resolution_rate": 0.702,
+  "blocking_promotion_target_rate": 0.902,
+  "median_retries_before_resolution": 1.0,
+  "top_rules_denied": [
+    ["QUALITY-LINT-001", 373],
+    ["PY-AST-001", 223],
+    ["PY-CODE-013", 198],
+    ["PY-IMPORT-002", 91],
+    ["PY-CODE-008", 59],
+    ["PY-CODE-016", 44],
+    ["PY-CODE-015", 33],
+    ["PY-IMPORT-003", 31],
+    ["PY-CODE-009", 31],
+    ["PY-CODE-018", 31],
+    ["PY-CODE-010", 28],
+    ["PY-LOG-002", 27]
+  ],
+  "notes": [
+    "This artifact records the pre-implementation reference window from the configured live trace corpus.",
+    "The current measured state is recorded separately in feedback-loop-current-state-2026-07-16.json."
+  ]
+}

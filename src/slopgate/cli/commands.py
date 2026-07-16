@@ -23,7 +23,7 @@ from slopgate.cli._config_commands import (
     cmd_config_show,
 )
 from slopgate.cli.hook_runtime import cmd_daemon, cmd_handle, cmd_handle_async
-from slopgate.cli.io import CliInputError, string_arg
+from slopgate.cli.io import CliInputError, int_arg, report_cli_input_error, string_arg
 
 __all__ = [
     "VALID_PLATFORMS",
@@ -43,11 +43,6 @@ __all__ = [
 def _bool_arg(args: argparse.Namespace, name: str, default: bool = False) -> bool:
     value = getattr(args, name, default)
     return value if isinstance(value, bool) else default
-
-
-def _int_arg(args: argparse.Namespace, name: str) -> int | None:
-    value = getattr(args, name, None)
-    return value if isinstance(value, int) else None
 
 
 def _project_root_arg(args: argparse.Namespace) -> Path | None:
@@ -131,7 +126,16 @@ def cmd_replay(args: argparse.Namespace) -> int:
     from slopgate.engine import evaluate_payload
 
     payload_path = Path(string_arg(args, "payload")).resolve()
-    parsed = cast(object, json.loads(payload_path.read_text(encoding="utf-8")))
+    try:
+        parsed = cast(object, json.loads(payload_path.read_text(encoding="utf-8")))
+    except OSError as exc:
+        return report_cli_input_error(
+            CliInputError(f"Unable to read payload file {payload_path}: {exc}")
+        )
+    except json.JSONDecodeError as exc:
+        return report_cli_input_error(
+            CliInputError(f"Invalid JSON in payload file: {exc.msg}")
+        )
     payload = object_dict(parsed)
     platform = string_arg(args, "platform", UNKNOWN_VALUE)
     result = evaluate_payload(payload, platform=platform)
@@ -157,7 +161,7 @@ def cmd_install(args: argparse.Namespace) -> int:
                 include_missing=_bool_arg(args, "include_missing"),
                 with_autoupdate=_bool_arg(args, "with_autoupdate"),
                 source=string_arg(args, "source"),
-                interval_minutes=_int_arg(args, "interval_minutes")
+                interval_minutes=int_arg(args, "interval_minutes")
                 or DEFAULT_UPDATE_INTERVAL_MINUTES,
                 install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
                 project_root=_project_root_arg(args),
@@ -176,7 +180,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             dry_run=_bool_arg(args, "dry_run"),
             source=string_arg(args, "source"),
             include_missing=_bool_arg(args, "include_missing"),
-            interval_minutes=_int_arg(args, "interval_minutes")
+            interval_minutes=int_arg(args, "interval_minutes")
             or DEFAULT_UPDATE_INTERVAL_MINUTES,
         )
         or status
@@ -222,7 +226,7 @@ def cmd_install_suite(args: argparse.Namespace) -> int:
             include_missing=_bool_arg(args, "include_missing"),
             with_autoupdate=_bool_arg(args, "with_autoupdate"),
             source=string_arg(args, "source"),
-            interval_minutes=_int_arg(args, "interval_minutes")
+            interval_minutes=int_arg(args, "interval_minutes")
             or DEFAULT_UPDATE_INTERVAL_MINUTES,
             install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
             project_root=_project_root_arg(args),
@@ -242,16 +246,6 @@ def cmd_update_suite(args: argparse.Namespace) -> int:
             install_scope=string_arg(args, "install_scope", INSTALL_SCOPE_USER),
             project_root=_project_root_arg(args),
         )
-    )
-
-
-def cmd_stats(args: argparse.Namespace) -> int:
-    from slopgate.stats import run_stats
-
-    return run_stats(
-        log_path=string_arg(args, "log") or None,
-        days=_int_arg(args, "days"),
-        as_json=_bool_arg(args, "json"),
     )
 
 
