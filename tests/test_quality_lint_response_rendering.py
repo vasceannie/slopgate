@@ -10,7 +10,7 @@ from slopgate.context import HookContext, build_context
 from slopgate.engine import evaluate_payload, render_output
 from slopgate.engine import _retry
 from slopgate.lint._baseline import Violation
-from slopgate.rules.common.quality.lint import lint_message, violation_details
+from slopgate.rules.common.quality.lint import _lint_message, _violation_details
 from slopgate.models import RuleFinding, Severity
 from tests import support
 
@@ -206,8 +206,10 @@ def test_blocking_quality_lint_context_precedes_and_labels_advisory_design_debt(
     _assert_immediate_context_precedes_advisory_context(context)
 
 
+
+
 def test_quality_lint_message_uses_path_only_first_diagnostic_fallback() -> None:
-    message = lint_message(
+    message = _lint_message(
         ["oversized-module-soft: 1"],
         [],
         ["src/session.py"],
@@ -220,7 +222,6 @@ def test_quality_lint_message_uses_path_only_first_diagnostic_fallback() -> None
 
     assert "First lint target: src/session.py (oversized-module-soft)." in message
 
-
 def test_quality_lint_detail_rendering_shows_three_hits_and_overflow() -> None:
     violations = [
         Violation(
@@ -232,7 +233,7 @@ def test_quality_lint_detail_rendering_shows_three_hits_and_overflow() -> None:
         for line_number in range(1, 5)
     ]
 
-    details = violation_details("obsolete-or-deprecated-test", violations)
+    details = _violation_details("obsolete-or-deprecated-test", violations)
     rendered = "\n".join(line for group in details for line in group)
 
     assert len(details) == 3, "quality lint should render at most three details"

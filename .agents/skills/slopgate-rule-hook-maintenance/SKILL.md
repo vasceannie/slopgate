@@ -225,7 +225,7 @@ Prefer this validation ladder:
 2. Related integration/public-contract tests.
 3. `uv run pytest` for broad validation when the change affects public rule, adapter, config, or hook behavior.
 4. Type/lint checks when function signatures, dataclasses, config schemas, or imports change:
-   - `uv run basedpyright src tests`
+   - `uv run pyrefly check src tests`
    - `uv run ruff check src tests`
 
 Use the repository's existing `pytest` configuration (`pythonpath = ["src"]`). If `uv` is unavailable, use the project's virtual environment or explain that validation could not be run.

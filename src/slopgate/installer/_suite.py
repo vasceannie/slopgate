@@ -11,11 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.cli.commands import VALID_PLATFORMS
-from slopgate.installer._install_scope import (
-    normalize_install_scope,
-    resolve_project_root,
-    scope_paths,
-)
 from slopgate.installer._shared import find_binary, shell_command
 from slopgate.installer.suite import (
     AUTOUPDATE_MARKER,
@@ -24,7 +19,6 @@ from slopgate.installer.suite import (
     SchedulerPlan,
     autoupdate,
 )
-from slopgate.installer.suite.sites import INSTALL_SITE_SPECS
 
 __all__ = ["AUTOUPDATE_MARKER"]
 from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
@@ -45,7 +39,7 @@ class SuiteInstallOptions:
 
     dry_run: bool = False
     include_missing: bool = False
-    with_autoupdate: bool = False
+    with_autoupdate: bool = True
     source: str = DEFAULT_UPDATE_SOURCE
     interval_minutes: int = DEFAULT_UPDATE_INTERVAL_MINUTES
     install_scope: str = "user"
@@ -91,29 +85,34 @@ def current_device_label() -> str:
     return f"{system}/{machine}"
 
 
-def discover_install_sites(
-    *,
-    include_missing: bool = False,
-    install_scope: str = "user",
-    project_root: Path | None = None,
-) -> list[InstallSite]:
+def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite]:
     """Discover current-device hook install sites for supported harnesses."""
-    scope = normalize_install_scope(install_scope)
-    root = resolve_project_root(project_root)
-    sites: list[InstallSite] = []
-    for spec in INSTALL_SITE_SPECS:
-        paths = scope_paths(
-            scope,
-            user_path=spec.user_path(),
-            project_path=spec.project_path(root),
-        )
-        sites.append(
-            InstallSite(
-                spec.platform,
-                paths[-1],
-                any(path.parents[spec.present_parent].exists() for path in paths),
-            )
-        )
+    home = Path.home()
+    sites = [
+        InstallSite(
+            CLAUDE_PLATFORM,
+            home / ".claude" / "settings.json",
+            (home / ".claude").exists(),
+        ),
+        InstallSite(
+            CODEX_PLATFORM, home / ".codex" / "hooks.json", (home / ".codex").exists()
+        ),
+        InstallSite(
+            OPENCODE_PLATFORM,
+            user_config_dir(OPENCODE_PLATFORM) / "plugins" / "slopgate-plugin.ts",
+            user_config_dir(OPENCODE_PLATFORM).exists(),
+        ),
+        InstallSite(
+            CURSOR_PLATFORM,
+            home / ".cursor" / "hooks.json",
+            (home / ".cursor").exists(),
+        ),
+        InstallSite(
+            PI_PLATFORM,
+            home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
+            (home / ".pi" / "agent").exists(),
+        ),
+    ]
     if include_missing:
         return sites
     return [site for site in sites if site.present]
@@ -175,11 +174,7 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
     from slopgate.installer import install_platform
 
     resolved_options = options or SuiteInstallOptions()
-    sites = discover_install_sites(
-        include_missing=resolved_options.include_missing,
-        install_scope=resolved_options.install_scope,
-        project_root=resolved_options.project_root,
-    )
+    sites = discover_install_sites(include_missing=resolved_options.include_missing)
     print(f"Device: {current_device_label()}")
     if not sites:
         print(
@@ -218,11 +213,7 @@ def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
     from slopgate.installer import uninstall_platform
 
     resolved_options = options or SuiteUninstallOptions()
-    sites = discover_install_sites(
-        include_missing=resolved_options.include_missing,
-        install_scope=resolved_options.install_scope,
-        project_root=resolved_options.project_root,
-    )
+    sites = discover_install_sites(include_missing=resolved_options.include_missing)
     print(f"Device: {current_device_label()}")
     status = 0
     for site in sites:
@@ -263,11 +254,7 @@ def update_suite(options: SuiteUpdateOptions) -> int:
         print("Hook refresh: skipped (use --refresh-hooks to rewrite harness hooks)")
         return 0
     status = 0
-    for site in discover_install_sites(
-        include_missing=options.include_missing,
-        install_scope=options.install_scope,
-        project_root=options.project_root,
-    ):
+    for site in discover_install_sites(include_missing=options.include_missing):
         print(f"Refreshing {site.platform} hooks at {site.path}")
         if options.dry_run:
             print(f"Would install: {site.platform}")

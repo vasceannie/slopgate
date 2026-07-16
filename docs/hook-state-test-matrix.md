@@ -179,49 +179,6 @@ Goal: break same-rule/same-file retry loops by forcing a changed approach after 
 
 - If one file accumulates 3+ structural/quality denies in-session, emit a compound hint to stop incremental patching and extract helpers/config objects first.
 
-## 8. First-Write Contract
-
-- Contracts are keyed by normalized session identity and target path.
-- Complete records contain operation, reused convention, stable behavior/API, three to five risks, design response, focused verification, timestamp, and schema version.
-- Shadow mode traces missing contracts without hook output; advisory adds target-specific context; blocking denies only edit-like pre-tool/permission surfaces.
-- Multi-target edits require every target to be covered. A blocked multi-target attempt does not reserve the covered targets.
-- A matching post-tool mutation consumes the authorized contract. Expired, malformed, and unknown-schema records are rejected and pruned deterministically.
-- Contracts never contain proposed source content and never leak across sessions or targets.
-
-## 9. Projected Pre-Edit Lint
-
-- Complete structured Write/Edit/MultiEdit content is materialized under repository-relative paths in a temporary overlay.
-- Deterministic file/touched collectors run against overlay paths; finding paths are restored to repository-relative paths.
-- The real repository remains byte-for-byte unchanged. Cleanup occurs after success, denial, exception, and generator/cancellation-equivalent exit.
-- Missing, ambiguous, shell, or unsupported projections produce a traceable skip and cannot hard-block solely because projection is unavailable.
-- `QUALITY-LINT-001` remains authoritative and consumes projected parity snapshots on the matching post-edit event.
-
-## 10. Semantic Retry and Structured Recovery
-
-- Exact fingerprints remain independent diagnostic counters; semantic enforcement keys use session, rule, normalized path, or pathless operation category.
-- Cosmetic changes do not reset semantic counts. Rules and paths remain independent.
-- A clean matching mutation clears the semantic counter and lock; reintroduction starts at one.
-- Prompt substrings cannot unlock retry state.
-- Recovery evidence must match every active locked rule/target, include a materially changed design, belong to the same session/repository, and remain unexpired/unconsumed.
-- Only successful full post-tool reads after the lock count as reread proof.
-- Valid evidence is consumed once across subprocess boundaries; old repair-plan booleans are not reinterpreted as structured evidence.
-
-## 11. Aggregate Repository Failure Profile
-
-- Profile capture is repo-strict and per-repository opt-in; opt-out performs no write or steering.
-- Stored dimensions are rule ID, path role, language, platform, optional model ID, resolution outcome, and daily counts only.
-- Raw paths, sessions, prompts, patches, tool inputs, proposed content, messages, and source snippets never enter storage.
-- Worktrees have distinct hashed scopes. Daily buckets decay over a 30-day window, prune automatically, and obey a deterministic cap.
-- Inspection and reset are explicit CLI operations. Only the top three to five recurring blocked risks may enter first-write guidance.
-
-## 12. Platform Feedback Invariants
-
-- Claude supports the fullest pre/post enforcement surface.
-- Cursor and Codex are partial; post-edit behavior remains capability-limited.
-- OpenCode blocks most strongly before tool execution and treats stop/post guidance as advisory or best-effort.
-- Pi blocks at tool-call/input surfaces and uses result patches or advisory messages after tools.
-- No adapter may promote an unavailable or incomplete projection into a stronger decision than its native surface supports.
-
 ## Execution Order
 
 1. Add executable spec tests for the settled behavior.

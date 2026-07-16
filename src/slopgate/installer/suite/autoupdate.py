@@ -11,7 +11,6 @@ from slopgate.installer._shared import (
     base_invocation,
     backup_existing_file_and_report,
     find_binary,
-    safe_write_text,
     shell_command,
 )
 from slopgate.installer.suite.autoupdate_types import (
@@ -27,7 +26,7 @@ from slopgate.installer.suite.autoupdate_windows import (
 from slopgate.util import platform
 from slopgate.util.platform import is_windows, user_config_dir
 
-DEFAULT_UPDATE_SOURCE = "ai-slopgate==1.4.17"
+DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@master"
 DEFAULT_UPDATE_INTERVAL_MINUTES = 3 * 10
 user_data_dir = platform.user_data_dir
 
@@ -223,7 +222,7 @@ def install_autoupdate(
     for target_path, content in _scheduler_plan_files(plan):
         target_path.parent.mkdir(parents=True, exist_ok=True)
         backup_existing_file_and_report(target_path, "auto-update file")
-        safe_write_text(target_path, content)
+        target_path.write_text(content, encoding="utf-8")
     if plan.enable_command is None:
         return 0
     completed = subprocess.run(plan.enable_command, check=False)

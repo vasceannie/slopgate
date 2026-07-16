@@ -2,17 +2,42 @@
 
 ## Overview
 
-slopgate is a global CLI guardrails engine for AI coding agents. One canonical rule pipeline serves Claude Code, Cursor, Codex CLI, OpenCode, and Pi without shell wrappers.
+slopgate is a global CLI guardrails engine for AI coding agents. One rule set, three platforms (Claude Code, Codex CLI, OpenCode), zero shell wrappers.
 
-| Platform | Capability posture | Strongest feedback surface |
-|---|---|---|
-| Claude Code | Full | Pre-tool/permission blocking and post-tool backstops |
-| Cursor | Partial | Pre-tool blocking; post-edit context only |
-| Codex CLI | Partial | Available permission hooks; critical post-tool stop where supported |
-| OpenCode | Degraded | `tool.execute.before`; post-edit and stop guidance are advisory |
-| Pi | Partial | `tool_call`/input blocking; post-tool result patches and advisory messages |
-
-All platforms follow `normalize_payload → state/preflight → rules → enrichment → adapter render → trace`. Capability labels gate documentation and rendering claims; they do not pretend that every harness can hard-block every event.
+```
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Claude Code  │  │  Codex CLI  │  │  OpenCode   │
+│ settings.json│  │ hooks.json  │  │  TS plugin  │
+│  ↓           │  │  ↓          │  │  ↓          │
+│ slopgate   │  │ slopgate  │  │ slopgate  │
+│   handle     │  │   handle    │  │   handle    │
+│              │  │  --platform │  │  --platform │
+│              │  │    codex    │  │   opencode  │
+└──────┬───────┘  └──────┬──────┘  └──────┬──────┘
+       │                 │                 │
+       └─────────────────┼─────────────────┘
+                         ▼
+              ┌────────────────────┐
+              │  Platform Adapter  │
+              │  normalize_payload │
+              └─────────┬──────────┘
+                        ▼
+              ┌────────────────────┐
+              │   Rule Engine      │
+              │  87 hook rules     │
+              │  (42 Py + 45 rx)  │
+              └─────────┬──────────┘
+                        ▼
+              ┌────────────────────┐
+              │    Enrichment      │
+              │  (project context) │
+              └─────────┬──────────┘
+                        ▼
+              ┌────────────────────┐
+              │  Platform Adapter  │
+              │  render_output     │
+              └────────────────────┘
+```
 
 ## Pipeline
 
@@ -22,12 +47,10 @@ Every hook invocation follows this flow:
 2. **Normalize** — adapter translates platform-specific JSON → canonical form
 3. **Context** — build HookContext (config, payload, trace writer)
 4. **Skip check** — repo opt-out (sentinel files, slopgate.toml, skip_paths)
-5. **Preflight** — check first-write contracts and project reconstructable edits in a disposable overlay
-6. **Evaluate** — iterate all rules that support this event
-7. **Retry/profile** — apply semantic retry state, structured recovery, and opt-in aggregate capture
-8. **Enrich** — augment findings with project-specific context (fixtures, patterns, etc.)
-9. **Render** — adapter translates findings → platform-native JSON for stdout
-10. **Trace** — log results, parity metadata, and shadow observations
+5. **Evaluate** — iterate all rules that support this event
+6. **Enrich** — augment findings with project-specific context (fixtures, patterns, etc.)
+7. **Render** — adapter translates findings → platform-native JSON for stdout
+8. **Trace** — log everything to JSONL
 
 ## Decision ordering
 
@@ -41,33 +64,28 @@ deny/block > ask > allow > none (context-only)
 
 ```
 src/slopgate/
-├── cli/                CLI entry points and hook runtime
-├── engine/             Core evaluation and semantic retry pipeline
-├── config/             XDG and per-repo config loading
+├── cli.py              CLI entry point (argparse subcommands)
+├── engine.py           Core evaluation pipeline
+├── config.py           XDG config discovery + loading
 ├── context.py          Payload → HookContext
 ├── models.py           Data models (Severity, RuleFinding, RuntimeConfig, etc.)
 ├── trace.py            JSONL tracing
 ├── enrichment.py       Project-aware context enrichment for findings
 ├── constants.py        Tool name sets, language mappings
 ├── installer/         Platform-specific hook/plugin installation
-├── stats/              Activity analysis and evidence export
-├── state/              Locked cross-subprocess contracts, reads, retries, recovery
-├── failure_profile/    Opt-in aggregate-only repository failure profile
+├── stats.py            Hook activity log analysis
+├── async_jobs.py       Async post-edit quality jobs
 ├── adapters/
 │   ├── base.py         Abstract PlatformAdapter
 │   ├── claude.py       Claude Code (default, identity normalization)
-│   ├── cursor.py       Cursor native hook mapping
 │   ├── codex.py        Codex CLI
-│   ├── opencode.py     OpenCode plugin mapping
-│   └── pi.py           Pi extension mapping
+│   └── opencode.py     OpenCode (event name mapping, output translation)
 ├── rules/
 │   ├── base.py         Abstract Rule class
-│   ├── common/         Shared safety and authoritative post-edit rules
-│   ├── first_write_contract.py
-│   ├── projected_lint/ Disposable pre-edit projection and parity
+│   ├── common.py       8 built-in rules (paths, git, sensitive data, etc.)
 │   ├── regex_rule.py   Config-driven regex rule engine
-│   ├── python_ast.py   19 AST-backed Python quality rules
-│   ├── stop_rules.py   8 rules (stop checks, session start, config guard, etc.)
+│   ├── python_ast.py   10 AST-backed Python quality rules
+│   ├── stop_rules.py   7 rules (stop checks, session start, config guard, etc.)
 │   ├── baseline_guard.py   Baseline inflation protection
 │   ├── error_rules.py  Bash error/failure reinforcement
 │   └── langgraph.py    LangGraph-specific best practices

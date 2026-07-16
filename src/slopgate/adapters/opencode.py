@@ -25,7 +25,6 @@ from slopgate.constants import (
     PRE_TOOL_USE,
     SESSION_START,
     STOP,
-    TOOL_BASH,
 )
 
 OPENCODE_EVENT_MAP: dict[str, str] = {
@@ -44,7 +43,7 @@ OPENCODE_EVENT_MAP: dict[str, str] = {
 }
 
 OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
-    TOOL_BASH: "Bash",
+    "bash": "Bash",
     "edit": "Edit",
     "glob": "Glob",
     "grep": "Grep",
@@ -58,8 +57,6 @@ OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
 }
 
 OPENCODE_MUTATION_EVENTS = frozenset({"file.edited"})
-
-
 class _AdapterTelemetry:
     def record_metric(self, *values: object) -> None:
         return None
@@ -95,9 +92,7 @@ class OpenCodeAdapter(PlatformAdapter):
             tool_name = "Write"
         if tool_name:
             lowered = tool_name.strip().lower().replace("-", "_")
-            canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(
-                lowered, tool_name
-            )
+            canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
 
         merge_standard_session_fields(raw, canonical, cwd_extra_keys=("directory",))
         opencode_session_identity(raw).apply_to(canonical)

@@ -79,15 +79,6 @@ def test_trace_records_omitted_platform_as_unknown(
     )
 
 
-def test_pi_platform_capability_is_partial() -> None:
-    from slopgate.engine._runner import platform_capability
-
-    capability, limitation = platform_capability("pi")
-
-    assert capability == "partial", "Pi must not inherit Claude's full capability label"
-    assert limitation, "Partial capability labels should explain the platform limit"
-
-
 def test_results_trace_records_aggregate_timing_metadata(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:

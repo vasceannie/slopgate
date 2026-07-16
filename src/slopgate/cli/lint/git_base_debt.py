@@ -14,7 +14,6 @@ from typing import Protocol
 
 from slopgate._types import object_dict, object_list
 from slopgate.cli.lint.report import LintFiles
-from slopgate.constants import DEFAULT_LONG_COMMAND_TIMEOUT_SECONDS
 from slopgate.lint._baseline import Violation
 from slopgate.util.atomic_files import write_text_atomic_locked
 
@@ -25,7 +24,7 @@ GIT_BASE_DEBT_DETECTOR_PATTERNS = (
     "src/slopgate/rules/python_ast/**/*.py",
 )
 GIT_COMMAND_TIMEOUT_SECONDS = 10
-GIT_ARCHIVE_TIMEOUT_SECONDS = DEFAULT_LONG_COMMAND_TIMEOUT_SECONDS
+GIT_ARCHIVE_TIMEOUT_SECONDS = 30
 
 
 class ConfiguredLintFiles(Protocol):

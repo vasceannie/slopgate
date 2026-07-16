@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.cli.io import CliInputError
-from slopgate.constants import PYTHON_SOURCE_SUFFIX
 from slopgate.cli.js_ts_tests import (
     changed_files_in_submodules,
     execute_default_js_ts_tests,
@@ -137,7 +136,7 @@ def select_tests_for_changed_files(
     changed_python_sources = tuple(
         path
         for path in normalized_changed_files
-        if path.endswith(PYTHON_SOURCE_SUFFIX) and path in source_paths
+        if path.endswith(".py") and path in source_paths
     )
     changed_source_set = set(changed_python_sources)
     changed_symbols = tuple(

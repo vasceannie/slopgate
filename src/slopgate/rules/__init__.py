@@ -35,8 +35,6 @@ __all__ = [
     "RulebookSecurityRule",
     "SessionStartContextRule",
     "WarnLargeFileRule",
-    "FirstWriteContractRule",
-    "ProjectedPreEditLintRule",
     "_PYTHON_AST_IMPORT_REPORTED",
     "_python_ast_import_reported",
 ]
@@ -44,9 +42,6 @@ __all__ = [
 from slopgate.context import HookContext
 from slopgate.constants import (
     DENY,
-    METADATA_DECISION,
-    METADATA_PLATFORM,
-    METADATA_RULE_ID,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
@@ -54,8 +49,6 @@ from slopgate.constants import (
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule
-from slopgate.rules.first_write_contract import FirstWriteContractRule
-from slopgate.rules.projected_lint.rule import ProjectedPreEditLintRule
 from slopgate.util.payloads import is_edit_like_tool
 from slopgate.rules.common import (
     FullFileReadRule,
@@ -145,13 +138,13 @@ def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
         _python_ast_import_reported = True
         ctx.trace.rule(
             {
-                METADATA_PLATFORM: "any",
+                "platform": "any",
                 "event_name": ctx.event_name,
                 SESSION_ID: ctx.session_id,
                 "tool_name": ctx.tool_name,
-                METADATA_RULE_ID: "PY-AST-IMPORT-001",
+                "rule_id": "PY-AST-IMPORT-001",
                 "severity": "high",
-                METADATA_DECISION: None,
+                "decision": None,
                 "message": "Python AST rules disabled due to import error",
                 "additional_context": repr(current_error),
                 "metadata": {"kind": "import_error"},
@@ -235,8 +228,6 @@ def build_always_on_rules(ctx: HookContext) -> list[Rule]:
 def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
     rules: list[Rule] = [
         PromptContextRule(),
-        FirstWriteContractRule(),
-        ProjectedPreEditLintRule(),
         FullFileReadRule(),
         GitNoVerifyRule(),
         SearchReminderRule(),

@@ -129,7 +129,6 @@ HOOK_RULE_CATEGORIES: dict[ParityCategory, frozenset[str]] = {
             "PY-TEST-005",
             "PY-TYPE-001",
             "PY-TYPE-002",
-            "QUALITY-PROJECTED-LINT-001",
             "RS-QUALITY-001",
             "RS-QUALITY-002",
             "RS-QUALITY-003",
@@ -163,7 +162,6 @@ HOOK_RULE_CATEGORIES: dict[ParityCategory, frozenset[str]] = {
             "STOP-001",
             "STOP-002",
             "WARN-LARGE-001",
-            "WORKFLOW-FIRST-WRITE-001",
         }
     ),
     "config_safety_only": frozenset(

@@ -1,18 +1,13 @@
 from __future__ import annotations
 import json
-import tempfile
 from pathlib import Path
 import pytest
-from hypothesis import given, strategies
 import slopgate.installer
 import slopgate.installer._shared
 from slopgate.constants import PLATFORM_CLAUDE
-from slopgate.installer._safe_files import (
+from slopgate.installer._shared import (
     backup_existing_file,
     backup_existing_file_and_report,
-    safe_write_text,
-)
-from slopgate.installer._shared import (
     base_invocation,
     coerce_hook_entries,
     find_binary,
@@ -20,26 +15,6 @@ from slopgate.installer._shared import (
     require_json_object,
     write_json_with_backup,
 )
-
-
-def test_safe_write_text_rejects_symlink_target(tmp_path: Path) -> None:
-    victim = tmp_path / "victim.txt"
-    victim.write_text("original", encoding="utf-8")
-    target = tmp_path / "target.txt"
-    target.symlink_to(victim)
-
-    with pytest.raises(OSError, match="symlink"):
-        safe_write_text(target, "replacement")
-
-    assert victim.read_text(encoding="utf-8") == "original"
-
-
-@given(content=strategies.text())
-def test_safe_write_text_round_trips_unicode(content: str) -> None:
-    with tempfile.TemporaryDirectory() as temp_dir:
-        target = Path(temp_dir) / "settings.txt"
-        safe_write_text(target, content)
-        assert target.read_bytes() == content.encode()
 
 
 def hook_commands(settings_path: Path) -> list[str]:

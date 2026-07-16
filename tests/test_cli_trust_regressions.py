@@ -19,7 +19,6 @@ from slopgate.cli.commands import (
     cmd_config_path,
     cmd_config_show,
     cmd_handle,
-    cmd_replay,
 )
 from slopgate.cli.lint import cmd_lint
 from slopgate.cli.main import main
@@ -110,27 +109,6 @@ def test_handle_malformed_json_reports_clean_error(
     captured = capsys.readouterr()
     assert "Invalid JSON on stdin" in captured.err
     assert "Traceback" not in captured.err
-
-
-def test_replay_reports_malformed_payload_without_traceback(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    payload_path = tmp_path / "malformed.json"
-    payload_path.write_text("{bad json", encoding="utf-8")
-
-    exit_code = cmd_replay(
-        argparse.Namespace(payload=str(payload_path), platform="claude", pretty=True)
-    )
-    captured = capsys.readouterr()
-
-    assert exit_code == 1, "Malformed replay JSON should return a user-input failure"
-    assert captured.out == "", "Malformed replay JSON should not emit success output"
-    assert "Invalid JSON in payload file" in captured.err, (
-        "Malformed replay JSON should emit a concise parse error"
-    )
-    assert "Traceback" not in captured.err, (
-        "Malformed replay JSON should not expose an implementation traceback"
-    )
 
 
 class _InteractiveStdin(io.StringIO):

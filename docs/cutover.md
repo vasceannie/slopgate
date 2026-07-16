@@ -15,10 +15,10 @@
 
 ## What stays the same
 
-- The previous 42 Python hook rules remain unchanged; first-write contracts and projected lint add two repo-strict rules, for 44 built-in Python rules total
+- All bundled Python hook rules (42: 3 always-on + 39 repo-strict) — identical behavior
 - All 45 bundled regex rules — loaded from same config format
 - Adapter core behavior is shared, but platform hook capabilities differ
-  (Claude has fullest parity; Cursor/Codex/Pi are partial; OpenCode is degraded)
+  (Claude has fullest parity; Codex/OpenCode have platform-specific limits)
 - `slopgate.toml` per-repo overrides — identical
 - JSONL trace format — identical
 - Fixture format — identical
@@ -95,12 +95,6 @@ For OpenCode:
 slopgate install opencode
 ```
 
-For Cursor and Pi:
-```bash
-slopgate install cursor
-slopgate install pi
-```
-
 Native Windows hook commands are emitted through a PowerShell-compatible
 launcher so installed console scripts under `AppData` can be called even when
 their path contains spaces. `slopgate install opencode` writes the plugin to
@@ -122,14 +116,6 @@ slopgate stats --days 1
 # Test a real hook invocation
 echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git commit --no-verify"},"cwd":"/tmp","session_id":"cutover-test"}' | slopgate handle
 ```
-
-### Feedback-loop rollout
-
-First-write contracts and projected lint default to shadow. Promote them independently through `[rule_surfaces.<RULE>.hook]` with `action = "context"` before `action = "deny"`. `RETRY-BUDGET-001` preserves the existing blocking posture but can be changed to context or disabled without deleting trace history. Keep `QUALITY-LINT-001` enabled as the authoritative post-edit backstop.
-
-The aggregate repository profile is off until `[failure_profile].enabled = true`. Inspect with `slopgate profile show`; clear with `slopgate profile clear`. Blocking promotion still requires the post-deployment precision and first-time-resolution gates recorded in the feedback-loop evidence artifacts.
-
-The first user-global advisory canary is recorded in `docs/evidence/feedback-loop-advisory-rollout-2026-07-16.json`. It confirms live Claude/Codex hook output, no initial runtime errors, and median evaluation latency, but intentionally leaves Phase 4 precision and Phase 6 promotion open pending sustained labeled traffic.
 
 ### 5. Clean up (optional)
 

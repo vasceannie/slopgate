@@ -64,10 +64,6 @@ def _apply_hook_surface_action(ctx: HookContext, findings: list[RuleFinding]) ->
         action = surface.hook.action if surface is not None else None
         if action is None:
             continue
-        if finding.metadata.get("surface_action_cap") == "advisory":
-            finding.decision = None
-            finding.metadata["surface_action"] = action
-            continue
         if action in {CONTEXT, WARN}:
             finding.decision = None
         else:
@@ -100,11 +96,6 @@ def platform_capability(platform: str) -> tuple[str, str | None]:
         return (
             "partial",
             "cursor postToolUse and afterFileEdit cannot hard-block tool results; they inject additional_context only. workspaceOpen and several observational hooks are not installed by default",
-        )
-    if normalized == "pi":
-        return (
-            "partial",
-            "pi can block model tool_call and prompt input, while post-tool findings are limited to result patches and advisory extension messages",
         )
     if normalized == UNKNOWN_VALUE:
         return (

@@ -6,7 +6,6 @@ from pathlib import Path
 from time import monotonic
 
 from slopgate.constants import (
-    METADATA_PATH,
     SESSION_ID,
     PLATFORM_CLAUDE,
     TOOL_WRITE,
@@ -22,12 +21,7 @@ from slopgate.adapters import get_adapter
 from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
 from slopgate.lint._helpers import reset_request_analysis_cache
-from slopgate.failure_profile import (
-    FailureProfileCapture,
-    active_retry_locks,
-    capture_failure_profile,
-)
-from slopgate.models import EngineResult, RuleFinding
+from slopgate.models import EngineResult
 
 from .._types import is_object_dict, object_dict
 from .advisories import compact_context_advisories
@@ -39,7 +33,6 @@ from ._retry import (
     enforce_retry_budget,
     filter_search_reminder_dedupe,
     inject_recent_failure_context,
-    record_full_read_evidence,
 )
 from ._runner import (
     EnforcementMode,
@@ -97,7 +90,7 @@ def _fallback_command(tool_name: str, tool_input: dict[str, object]) -> str | No
         path = (
             tool_input.get("filePath")
             or tool_input.get("file_path")
-            or tool_input.get(METADATA_PATH)
+            or tool_input.get("path")
         )
         return f"{tool_name.lower()} {path}" if path else None
     if tool_name in _SEARCH_TOOLS:
@@ -203,25 +196,6 @@ def _payload_for_done(
     }
 
 
-def _capture_profile(
-    ctx: HookContext,
-    metadata: _EvaluationMetadata,
-    findings: list[RuleFinding],
-    prior_retry_locks: dict[str, dict[str, object]],
-) -> None:
-    model_identifier, _provider = _extract_model_provider(ctx.payload.payload)
-    capture_failure_profile(
-        ctx,
-        FailureProfileCapture(
-            platform=metadata.platform,
-            model_identifier=model_identifier,
-            enforcement_mode=metadata.enforcement_mode,
-            findings=tuple(findings),
-            prior_retry_locks=prior_retry_locks,
-        ),
-    )
-
-
 def evaluate_payload(
     payload_dict: Mapping[str, object],
     platform: str = UNKNOWN_VALUE,
@@ -239,14 +213,11 @@ def evaluate_payload(
         ctx.trace.event(_payload_for_start(ctx, metadata))
 
         capture_repair_plan_signal(ctx)
-        record_full_read_evidence(ctx)
-        prior_retry_locks = active_retry_locks(ctx)
         rule_engine_start = monotonic()
         acc = run_rules(ctx, trace_platform, metadata.enforcement_mode)
         rule_engine_ms = int((monotonic() - rule_engine_start) * 1000)
         enforce_retry_budget(ctx, acc.findings)
         apply_loop_aware_steering(ctx, acc.findings)
-        _capture_profile(ctx, metadata, acc.findings, prior_retry_locks)
         inject_recent_failure_context(ctx, acc.findings)
         acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
         acc.findings = dedupe_findings(acc.findings)

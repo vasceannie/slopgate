@@ -17,7 +17,7 @@ from .._helpers import evaluate_common
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
-from .._rules import parsed_functions
+from ._source_parse import parsed_functions
 
 
 class PythonFeatureEnvyRule(Rule):
@@ -174,9 +174,6 @@ class PythonFeatureEnvyRule(Rule):
     def _check_source(
         self, source: str, path_value: str, ctx: HookContext
     ) -> list[RuleFinding]:
-        normalized_path = path_value.replace("\\", "/")
-        if normalized_path.startswith("tests/") or "/tests/" in normalized_path:
-            return []
         findings: list[RuleFinding] = []
         for node in parsed_functions(source, ctx):
             finding = self._check_function(node, path_value, ctx)

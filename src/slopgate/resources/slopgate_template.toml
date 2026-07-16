@@ -118,19 +118,6 @@ default = "all"
 #
 # [rule_surfaces."PY-LOG-001".cli]
 # enabled = true
-#
-# Feedback-loop rollout controls are independent and reversible:
-# [rule_surfaces."WORKFLOW-FIRST-WRITE-001".hook]
-# enabled = true
-# action = "context" # omit for shadow, use "deny" for blocking
-#
-# [rule_surfaces."QUALITY-PROJECTED-LINT-001".hook]
-# enabled = true
-# action = "context" # omit for shadow, use "deny" for blocking
-#
-# [rule_surfaces."RETRY-BUDGET-001".hook]
-# enabled = true
-# action = "deny" # omit for blocking default; use "context" for advisory, enabled = false to disable
 
 [post_edit_quality]
 # enabled = true
@@ -144,12 +131,6 @@ default = "all"
 project_logger_import = ""
 project_logger_usage = ""
 quality_check_command = "slopgate lint check"
-
-[failure_profile]
-# Explicit per-repo opt-in. Stores aggregate dimensions only; worktrees are separate.
-enabled = false
-retention_days = 30
-max_entries = 128
 
 [async_jobs]
 # enabled = false

@@ -9,8 +9,6 @@ from typing_extensions import override
 
 from slopgate.constants import (
     METADATA_PATH,
-    METADATA_LINE,
-    METADATA_TARGET,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
@@ -22,7 +20,6 @@ from .._helpers import decision_for_context, evaluate_common, parse_module
 from ._flat_siblings import (
     flat_sibling_patch_added_and_removed_paths,
     flat_sibling_patch_blob,
-    flat_sibling_resolve_candidate_path,
 )
 from .imports import (
     PrivateImportFinding,
@@ -66,9 +63,9 @@ class PythonPrivateImportChainRule(Rule):
             additional_context=additional_context,
             metadata={
                 METADATA_PATH: finding.path_value,
-                METADATA_TARGET: finding.target,
+                "target": finding.target,
                 "kind": finding.kind,
-                METADATA_LINE: finding.line,
+                "line": finding.line,
             },
         )
 
@@ -78,16 +75,8 @@ class PythonPrivateImportChainRule(Rule):
         path_value: str,
     ) -> RuleFinding | None:
         patch_blob = flat_sibling_patch_blob(ctx)
-        added_paths, removed_paths = flat_sibling_patch_added_and_removed_paths(
-            patch_blob
-        )
+        _, removed_paths = flat_sibling_patch_added_and_removed_paths(patch_blob)
         if path_value in removed_paths:
-            return None
-        existing_pre_edit = ctx.event_name in (PRE_TOOL_USE, PERMISSION_REQUEST) and (
-            flat_sibling_resolve_candidate_path(ctx, path_value).exists()
-        )
-        patch_updates_path = f"*** Update File: {path_value}" in patch_blob
-        if path_value not in added_paths and (existing_pre_edit or patch_updates_path):
             return None
         module_path = module_path_from_python_file(path_value)
         if len(private_module_segments(module_path)) < 2:

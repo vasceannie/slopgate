@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from slopgate.constants import METADATA_DECISION, METADATA_RULE_ID
-
 __all__ = [
     "FixtureInfo",
     "ParametrizeExample",
@@ -129,12 +127,12 @@ def _metrics_payload(
     enrichers_fired: Counter[str],
 ) -> dict[str, object]:
     return {
-        METADATA_RULE_ID: "_ENRICHMENT_METRICS",
+        "rule_id": "_ENRICHMENT_METRICS",
         "title": "Enrichment metrics",
         "elapsed_ms": elapsed_ms,
         "enrichers_fired": dict(enrichers_fired),
         "ast_parses": get_parse_count(),
-        METADATA_DECISION: "info",
+        "decision": "info",
         "severity": "info",
     }
 

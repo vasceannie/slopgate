@@ -1,6 +1,6 @@
 # Rules Reference
 
-## Built-in Python Rules (44: 3 always-on + 41 repo-strict)
+## Built-in Python Rules (42: 3 always-on + 39 repo-strict)
 
 ### Path & System Protection
 
@@ -23,12 +23,8 @@
 |---|---|---|---|
 | BUILTIN-ENFORCE-FULL-READ | MEDIUM | PreToolUse, PermissionRequest | Requires full file read before partial reads |
 | BUILTIN-INJECT-PROMPT | LOW | UserPromptSubmit | Injects prompt context files on each prompt |
-| WORKFLOW-FIRST-WRITE-001 | MEDIUM/HIGH | PreToolUse, PermissionRequest, PostToolUse | Observes or enforces a session+target structured contract before the first edit; default shadow |
-| QUALITY-PROJECTED-LINT-001 | LOW/HIGH | PreToolUse, PermissionRequest | Runs deterministic touched-file collectors in a disposable overlay; default shadow, incomplete projections stay advisory |
-| RETRY-BUDGET-001 | HIGH | PreToolUse, PermissionRequest | Blocks a third semantic retry until structured recovery evidence is verified; independently advisory/disableable |
 | REMIND-SEARCH-001 | LOW | PreToolUse | Adds reminder message on search operations |
 | QUALITY-POST-001 | HIGH | PostToolUse | Runs configured quality commands after edits |
-| QUALITY-LINT-001 | LOW/HIGH | PostToolUse | Authoritative touched-file collector backstop and projected-parity reporter |
 | WARN-LARGE-001 | MEDIUM | PreToolUse, PermissionRequest | Warns on edits to files > 50K characters |
 
 ### Python AST Quality

@@ -43,11 +43,6 @@ def string_arg(args: object, name: str, default: str = "") -> str:
     return value if isinstance(value, str) else default
 
 
-def int_arg(args: object, name: str) -> int | None:
-    value = getattr(args, name, None)
-    return value if isinstance(value, int) else None
-
-
 def dump_output(output: ObjectMapping | None) -> int:
     if output:
         _ = sys.stdout.write(json.dumps(output, separators=(",", ":")) + "\n")
@@ -57,7 +52,6 @@ def dump_output(output: ObjectMapping | None) -> int:
 __all__ = [
     "CliInputError",
     "dump_output",
-    "int_arg",
     "load_stdin_json",
     "report_cli_input_error",
     "string_arg",

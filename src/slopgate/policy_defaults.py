@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Final, TypedDict
 
-from . import constants
 from .constants import (
     MAX_COMPLEXITY,
     MAX_GOD_CLASS_LINES,
@@ -41,11 +40,6 @@ from .constants import (
     RUNTIME_MAX_LINE_LENGTH,
     RUNTIME_MAX_PARSE_CHARS,
 )
-
-
-FAILURE_PROFILE_RETENTION_DAYS: Final = constants.FAILURE_PROFILE_RETENTION_DAYS
-FAILURE_PROFILE_MAX_ENTRIES: Final = 128
-FAILURE_PROFILE_DECAY_PRECISION: Final = constants.FAILURE_PROFILE_DECAY_PRECISION
 
 
 class _LintMagicDefaults(TypedDict):
