@@ -189,6 +189,10 @@ slopgate replay --payload fixture.json [--platform codex] [--pretty]
 
 `slopgate handle` is the entrypoint that platform hooks invoke. `slopgate daemon` runs the optional resident Unix-socket server, and `handle-async` runs post-edit jobs when a platform supports them.
 
+The daemon proxy is a same-host Unix-socket fast path with direct CLI fallback;
+it is not a network proxy. See [`docs/remote-proxy-server.md`](docs/remote-proxy-server.md)
+for the retained alterations, deployment boundary, and remote-server transport notes.
+
 ### Repo enrollment and status
 
 ```bash
