@@ -1,11 +1,11 @@
 {
-  "defaultBranch": "master",
+  "defaultBranch": "main",
   "skipContextFiles": true,
-  "skipSkills": true,
+  "skipSkills": false,
   "embeddings": true,
   "pdg": true,
   "embeddingDevice": "cpu",
-  "embeddingThreads": 12,
-  "embeddingBatchSize": 128,
+  "embeddingThreads": 8,
+  "embeddingBatchSize": 32,
   "embeddingSubBatchSize": 16
 }
