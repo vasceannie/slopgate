@@ -12,6 +12,7 @@ import pytest
 
 from slopgate.cli.commands import cmd_handle
 from slopgate.constants import LINT_SCOPE_ALL
+from slopgate.daemon.admission import DAEMON_BUSY_ERROR
 from slopgate.daemon.scheduler import DaemonServerOptions
 from slopgate.lint._config import (
     get_config,
@@ -20,6 +21,7 @@ from slopgate.lint._config import (
     set_config,
     set_quality_scope,
 )
+from slopgate.models import EngineResult
 from slopgate.quality.constant_index import (
     build_project_constant_index,
     get_session_constant_index,
@@ -29,6 +31,7 @@ from tests.daemon_protocol.support import (
     CoordinatedHookRequestHandler,
     HAS_UNIX_SOCKETS,
     HookDaemonServer,
+    REQUEST_BLOCKED_OBSERVATION_SECONDS,
     REQUEST_START_TIMEOUT_SECONDS,
     SERVER_JOIN_TIMEOUT_SECONDS,
     DaemonRequest,
@@ -45,15 +48,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 SHORT_DAEMON_TIMEOUT_SECONDS = 0.05
-EXPECTED_FAILURE_EXIT_CODE = 1
+HANDLE_PLATFORM = "opencode"
 
 
 @dataclass(frozen=True, slots=True)
-class TimeoutFallbackObservation:
+class BusyLaneFallbackObservation:
     first_started: bool
     second_started: bool
     exit_code: int
-    stderr: str
+    fallback_platform: str | None
     server_alive: bool
 
 
@@ -117,6 +120,8 @@ def _state_response(
     quality_scope: str | None,
     has_constant_index: bool,
 ) -> DaemonResponse:
+    if not request_id:
+        raise ValueError("request_id is required for a state probe response")
     return DaemonResponse(
         ok=True,
         output={
@@ -154,7 +159,7 @@ def test_daemon_allows_different_repos_to_evaluate_concurrently(
     assert not observation.server_alive, "Daemon should stop after two requests"
 
 
-def test_daemon_serializes_requests_for_same_repo(tmp_path: Path) -> None:
+def test_daemon_refuses_overlapping_same_repo_requests(tmp_path: Path) -> None:
     repo = _managed_repo(tmp_path, "repo-a")
     observation = observe_serialized_request_start(
         tmp_path / "slopgate.sock",
@@ -164,18 +169,30 @@ def test_daemon_serializes_requests_for_same_repo(tmp_path: Path) -> None:
 
     assert observation.first_started, "First same-repo request should reach the handler"
     assert not observation.second_started_while_first_blocked, (
-        "Same-repo request should not start while the first request is blocked"
+        "Same-repo overlap should not start while the lane is held"
     )
-    assert observation.second_started_after_release, (
-        "Second same-repo request should start after the first request is released"
+    assert not observation.second_started_after_release, (
+        "Refused same-repo overlap should not queue behind the held lane"
     )
-    assert observation.started_order == ("first", "second"), (
-        "Same-repo requests should preserve arrival order"
+    assert observation.started_order == ("first",), (
+        "Only the admitted same-repo request should start on the daemon"
+    )
+    assert observation.second_response is not None, (
+        "Overlapping client should receive an immediate busy response"
+    )
+    assert observation.second_response.ok is False, (
+        "Overlapping same-repo request should not evaluate on the daemon"
+    )
+    assert observation.second_response.accepted is False, (
+        "Busy same-repo overlap must stay unaccepted so callers can fall back"
+    )
+    assert observation.second_response.error == DAEMON_BUSY_ERROR, (
+        "Busy response should use the shared admission error"
     )
     assert not observation.server_alive, "Daemon should stop after two requests"
 
 
-def test_daemon_serializes_unknown_repo_requests(tmp_path: Path) -> None:
+def test_daemon_refuses_overlapping_unknown_repo_requests(tmp_path: Path) -> None:
     observation = observe_serialized_request_start(
         tmp_path / "slopgate.sock",
         _daemon_request("first", None),
@@ -184,37 +201,45 @@ def test_daemon_serializes_unknown_repo_requests(tmp_path: Path) -> None:
 
     assert observation.first_started, "First unknown-repo request should reach handler"
     assert not observation.second_started_while_first_blocked, (
-        "Unknown-repo requests should share one serialized lane"
+        "Unknown-repo overlap should not start while the shared lane is held"
     )
-    assert observation.second_started_after_release, (
-        "Second unknown-repo request should start after the first request is released"
+    assert not observation.second_started_after_release, (
+        "Refused unknown-repo overlap should not queue behind the held lane"
+    )
+    assert observation.second_response is not None, (
+        "Overlapping unknown-repo client should receive a busy response"
+    )
+    assert observation.second_response.accepted is False, (
+        "Busy unknown-repo overlap must stay unaccepted so callers can fall back"
+    )
+    assert observation.second_response.error == DAEMON_BUSY_ERROR, (
+        "Busy unknown-repo response should use the shared admission error"
     )
     assert not observation.server_alive, "Daemon should stop after two requests"
 
 
-def test_handle_does_not_direct_fallback_after_same_repo_daemon_timeout(
+def test_handle_falls_back_when_same_repo_lane_is_busy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     repo = _managed_repo(tmp_path, "repo-a")
-    observation = _observe_timeout_fallback(
-        monkeypatch, capsys, tmp_path / "slopgate.sock", repo
+    observation = _observe_busy_lane_fallback(
+        monkeypatch, tmp_path / "slopgate.sock", repo
     )
 
     assert observation.first_started, (
         "First same-repo request should hold the daemon repo lock"
     )
-    assert observation.exit_code == EXPECTED_FAILURE_EXIT_CODE, (
-        "Accepted daemon timeouts should fail closed instead of falling back"
+    assert observation.exit_code == 0, (
+        "Unaccepted busy overlap should fall back to direct handle"
     )
-    assert observation.second_started, (
-        "Timed-out accepted request should still finish in daemon"
+    assert observation.fallback_platform == HANDLE_PLATFORM, (
+        "Busy overlap should evaluate through the direct handle path"
     )
-    assert not observation.server_alive, "Daemon should stop after both requests finish"
-    assert "daemon request accepted" in observation.stderr, (
-        "Accepted timeout should explain why direct fallback was skipped"
+    assert not observation.second_started, (
+        "Busy overlap should not start a second daemon evaluation"
     )
+    assert not observation.server_alive, "Daemon should stop after the overlap is refused"
 
 
 def test_daemon_resets_request_context_between_single_worker_requests(
@@ -241,52 +266,43 @@ def test_daemon_resets_request_context_between_single_worker_requests(
     assert not observation.server_alive, "Single-worker daemon should stop cleanly"
 
 
-def _short_timeout_request(socket_path: Path, request: DaemonRequest) -> DaemonResponse:
-    return send_daemon_request(
-        socket_path,
-        request,
-        timeout=SHORT_DAEMON_TIMEOUT_SECONDS,
-    )
-
-
-def _forbidden_evaluate(_payload: object, *, platform: str) -> object:
-    raise AssertionError(f"direct fallback should not run for {platform}")
-
-
-def _observe_timeout_fallback(
+def _observe_busy_lane_fallback(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     socket_path: Path,
     repo: Path,
-) -> TimeoutFallbackObservation:
+) -> BusyLaneFallbackObservation:
     handler = CoordinatedHookRequestHandler()
     server_thread = serve_requests(socket_path, handler, max_requests=2)
     first_responses: dict[str, object] = {}
+    fallback: dict[str, str] = {}
     first_thread = threading.Thread(
         target=_send_first_request,
         args=(socket_path, _daemon_request("first", repo), first_responses),
     )
     first_thread.start()
     first_started = handler.wait_started("first", REQUEST_START_TIMEOUT_SECONDS)
+
+    def _record_evaluate(_payload: object, *, platform: str) -> EngineResult:
+        fallback["platform"] = platform
+        return EngineResult(event_name=platform, output={"fallback": True})
+
     monkeypatch.setenv("SLOPGATE_DAEMON_SOCKET", str(socket_path))
     monkeypatch.setattr(
         sys,
         "stdin",
         io.StringIO(json.dumps({"cwd": str(repo), "request_id": "second"})),
     )
-    monkeypatch.setattr("slopgate.daemon.send_daemon_request", _short_timeout_request)
-    monkeypatch.setattr("slopgate.engine.evaluate_payload", _forbidden_evaluate)
-    exit_code = cmd_handle(argparse.Namespace(platform="opencode"))
+    monkeypatch.setattr("slopgate.engine.evaluate_payload", _record_evaluate)
+    exit_code = cmd_handle(argparse.Namespace(platform=HANDLE_PLATFORM))
     handler.release("first")
-    second_started = handler.wait_started("second", REQUEST_START_TIMEOUT_SECONDS)
-    handler.release("second")
+    second_started = handler.wait_started("second", REQUEST_BLOCKED_OBSERVATION_SECONDS)
     first_thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
     server_thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
-    return TimeoutFallbackObservation(
+    return BusyLaneFallbackObservation(
         first_started=first_started,
         second_started=second_started,
         exit_code=exit_code,
-        stderr=capsys.readouterr().err,
+        fallback_platform=fallback.get("platform"),
         server_alive=server_thread.is_alive(),
     )
 

@@ -7,8 +7,14 @@ import socket
 import threading
 
 import pytest
+from hypothesis import given, strategies
 
-from slopgate.daemon.protocol import decode_response
+from slopgate.daemon.admission import (
+    DAEMON_BUSY_ERROR,
+    refuse_busy_connection,
+    try_acquire_admission,
+)
+from slopgate.daemon.protocol import DaemonResponse, decode_response, encode_response
 from slopgate.daemon.scheduler import DaemonServerOptions
 from slopgate.daemon.server import AdmittedConnection
 from tests.daemon_protocol.support import (
@@ -38,8 +44,10 @@ class AcceptBackpressureObservation:
     first_started: bool
     second_accepted_while_blocked: bool
     second_started_while_blocked: bool
-    second_accepted_after_release: bool
     second_started_after_release: bool
+    second_response_ok: bool
+    second_response_accepted: bool
+    second_response_error: str | None
     server_alive: bool
 
 
@@ -63,6 +71,7 @@ class AcceptProbeServer:
     def accept(self) -> tuple[socket.socket, object]:
         request_id = self._next_request_id()
         server_socket, client_socket = socket.socketpair()
+        client_socket.settimeout(REQUEST_START_TIMEOUT_SECONDS)
         client_socket.sendall(
             encode_request(DaemonRequest(payload={"request_id": request_id}))
         )
@@ -74,6 +83,11 @@ class AcceptProbeServer:
         for client_socket in self._client_sockets:
             client_socket.close()
 
+    def read_second_response(self) -> DaemonResponse:
+        if len(self._client_sockets) < MAX_PROBED_REQUESTS:
+            raise AssertionError("second client socket was not accepted")
+        return decode_response(self._client_sockets[1].recv(SOCKET_READ_BYTES))
+
     def _next_request_id(self) -> str:
         with self._lock:
             self._accepted += 1
@@ -83,7 +97,7 @@ class AcceptProbeServer:
         return self.first_accepted if request_id == "first" else self.second_accepted
 
 
-def test_concurrent_daemon_does_not_accept_past_available_worker_slots(
+def test_concurrent_daemon_refuses_same_lane_overlap_without_queuing(
     tmp_path: Path,
 ) -> None:
     observation = _observe_accept_backpressure(tmp_path / "slopgate.sock")
@@ -100,11 +114,17 @@ def test_concurrent_daemon_does_not_accept_past_available_worker_slots(
     assert not observation.second_started_while_blocked, (
         "Same-repo request should not start while the repo lane is occupied"
     )
-    assert observation.second_accepted_after_release, (
-        "Concurrent daemon should accept the next request after a worker slot is released"
+    assert not observation.second_started_after_release, (
+        "Refused overlap should not queue behind the occupied worker slot"
     )
-    assert observation.second_started_after_release, (
-        "Second request should run after the first worker slot is released"
+    assert observation.second_response_ok is False, (
+        "Saturated same-lane client should receive a busy response"
+    )
+    assert observation.second_response_accepted is False, (
+        "Busy overlap must stay unaccepted so callers can fall back"
+    )
+    assert observation.second_response_error == DAEMON_BUSY_ERROR, (
+        "Busy overlap should use the shared admission error"
     )
     assert not observation.server_alive, (
         "Backpressured concurrent daemon should stop after max_requests are handled"
@@ -131,6 +151,55 @@ def test_submit_failure_returns_error_and_releases_admission_locks(
     assert observation.worker_slot_released, (
         "Submit failure should release the worker admission slot"
     )
+
+
+def test_try_acquire_admission_fails_when_repo_lane_is_held() -> None:
+    repo_lane = threading.Lock()
+    worker_slots = threading.BoundedSemaphore(SINGLE_WORKER_COUNT)
+    repo_lane.acquire()
+    acquired = try_acquire_admission(repo_lane, worker_slots)
+    worker_free = worker_slots.acquire(blocking=False)
+    assert (acquired, worker_free) == (False, True), (
+        "Held repo lane should refuse admission without consuming a worker slot"
+    )
+
+
+def test_try_acquire_admission_releases_repo_when_workers_are_full() -> None:
+    repo_lane = threading.Lock()
+    worker_slots = threading.BoundedSemaphore(SINGLE_WORKER_COUNT)
+    worker_slots.acquire()
+    acquired = try_acquire_admission(repo_lane, worker_slots)
+    repo_free = repo_lane.acquire(blocking=False)
+    assert (acquired, repo_free) == (False, True), (
+        "Saturated workers should refuse admission and release the repo lane"
+    )
+
+
+def test_refuse_busy_connection_sends_unaccepted_error(tmp_path: Path) -> None:
+    server_socket, client_socket = socket.socketpair()
+    sent: list[DaemonResponse] = []
+
+    def _capture_send(connection: socket.socket, response: DaemonResponse) -> None:
+        sent.append(response)
+        connection.sendall(encode_response(response))
+
+    with server_socket, client_socket:
+        refuse_busy_connection(server_socket, _capture_send, tmp_path / "slopgate.sock")
+        response = decode_response(client_socket.recv(SOCKET_READ_BYTES))
+    assert response.ok is False, "Busy refusal should not report success"
+    assert response.accepted is False, "Busy refusal must stay unaccepted"
+    assert response.error == DAEMON_BUSY_ERROR, "Busy refusal should use admission error"
+    assert sent[0].error == DAEMON_BUSY_ERROR, "Send callback should receive busy error"
+
+
+@given(strategies.integers(min_value=0, max_value=2))
+def test_admission_helper_names(value: int) -> None:
+    assert (
+        try_acquire_admission.__name__,
+        refuse_busy_connection.__name__,
+        DAEMON_BUSY_ERROR,
+        value,
+    )[-1] == value
 
 
 def _observe_submit_failure(socket_path: Path) -> SubmitFailureObservation:
@@ -188,14 +257,11 @@ def _observe_accept_backpressure(socket_path: Path) -> AcceptBackpressureObserva
     second_started_while_blocked = handler.wait_started(
         "second", REQUEST_BLOCKED_OBSERVATION_SECONDS
     )
+    second_response = accept_probe.read_second_response()
     handler.release("first")
-    second_accepted_after_release = accept_probe.second_accepted.wait(
-        REQUEST_START_TIMEOUT_SECONDS
-    )
     second_started_after_release = handler.wait_started(
-        "second", REQUEST_START_TIMEOUT_SECONDS
+        "second", REQUEST_BLOCKED_OBSERVATION_SECONDS
     )
-    handler.release("second")
     server_thread.join(timeout=SERVER_JOIN_TIMEOUT_SECONDS)
     accept_probe.close_clients()
     return AcceptBackpressureObservation(
@@ -203,7 +269,9 @@ def _observe_accept_backpressure(socket_path: Path) -> AcceptBackpressureObserva
         first_started=first_started,
         second_accepted_while_blocked=second_accepted_while_blocked,
         second_started_while_blocked=second_started_while_blocked,
-        second_accepted_after_release=second_accepted_after_release,
         second_started_after_release=second_started_after_release,
+        second_response_ok=second_response.ok,
+        second_response_accepted=second_response.accepted,
+        second_response_error=second_response.error,
         server_alive=server_thread.is_alive(),
     )

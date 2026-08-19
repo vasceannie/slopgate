@@ -14,6 +14,7 @@ import stat
 import threading
 from typing import Protocol
 
+from slopgate.daemon.admission import refuse_busy_connection, try_acquire_admission
 from slopgate.daemon.protocol import (
     DaemonRequest,
     DaemonResponse,
@@ -130,8 +131,12 @@ class HookDaemonServer:
                     handled += 1
                     continue
                 repo_lane = self._repo_lanes.lock_for(repo_key_for_request(request))
-                repo_lane.acquire()
-                worker_slots.acquire()
+                if not try_acquire_admission(repo_lane, worker_slots):
+                    refuse_busy_connection(
+                        connection, self._send_response, self.socket_path
+                    )
+                    handled += 1
+                    continue
                 future = self._submit_connection(
                     executor,
                     AdmittedConnection(
