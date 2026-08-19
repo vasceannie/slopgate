@@ -12,10 +12,12 @@ from slopgate.lint._collector_groups.incremental import (
     restrict_violations,
 )
 from slopgate.lint._collector_groups.incremental_cache import (
+    attach_dependency_signatures,
     cached_run_results,
     persist_run_results,
 )
 from slopgate.lint._helpers.profile import bind_lint_profile
+from slopgate.lint._helpers.parsing import reset_request_analysis_cache
 from slopgate.lint._collector_groups.planner import (
     LintExecutionPlan,
     LintPlanRequest,
@@ -89,7 +91,9 @@ def _run_collectors(
     test_files: list[Path],
     options: CollectorRunOptions,
 ) -> CollectorResults:
+    reset_request_analysis_cache()
     plan = apply_index_peek(_plan_for_options(src_files, test_files, options))
+    plan = attach_dependency_signatures(plan)
     cached = cached_run_results(plan)
     if cached is not None:
         bind_lint_profile(options.profile)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 import json
-import subprocess
 from pathlib import Path
 from typing import cast
 from hypothesis import given
@@ -8,35 +7,13 @@ from hypothesis import strategies
 import slopgate.lint._baseline
 from slopgate._types import object_dict, object_list
 from slopgate.cli.lint import lint_check, lint_freeze
+from slopgate.lint._collectors import CollectorRunOptions, run_all_collectors
 from tests.lint_paths_support import (
     freeze_rules_payload,
+    run_test_git,
     seed_freeze_repo,
     write_slopgate_toml,
 )
-
-GIT_TEST_USER_NAME = "Slopgate Tests"
-GIT_TEST_USER_EMAIL = "slopgate-tests@example.invalid"
-
-
-def _run_git(repo: Path, *args: str, test_identity: bool = False) -> None:
-    command = ["git", "-C", str(repo)]
-    if test_identity:
-        command.extend(
-            [
-                "-c",
-                f"user.name={GIT_TEST_USER_NAME}",
-                "-c",
-                f"user.email={GIT_TEST_USER_EMAIL}",
-            ]
-        )
-    command.extend(args)
-    subprocess.run(
-        command,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
 
 
 def _seed_git_base_debt_repo(tmp_path: Path) -> Path:
@@ -44,10 +21,10 @@ def _seed_git_base_debt_repo(tmp_path: Path) -> Path:
     src = tmp_path / "src"
     src.mkdir()
     (src / "base_debt.py").write_text("x = 1\n" * 130, encoding="utf-8")
-    _run_git(tmp_path, "init", "-b", "main")
-    _run_git(tmp_path, "add", "slopgate.toml", "src/base_debt.py")
-    _run_git(tmp_path, "commit", "-m", "seed base debt", test_identity=True)
-    _run_git(tmp_path, "checkout", "-b", "feature")
+    run_test_git(tmp_path, "init", "-b", "main")
+    run_test_git(tmp_path, "add", "slopgate.toml", "src/base_debt.py")
+    run_test_git(tmp_path, "commit", "-m", "seed base debt", test_identity=True)
+    run_test_git(tmp_path, "checkout", "-b", "feature")
     return src
 
 
@@ -205,3 +182,33 @@ def test_lint_check_writes_git_base_debt_cache_for_repeated_checks(
     before_payload = cache_file.read_text(encoding="utf-8")
     assert lint_check(tmp_path) == 0
     assert cache_file.read_text(encoding="utf-8") == before_payload
+
+
+def _tracked_git_base_cache_contract(root: Path) -> int:
+    src = _seed_git_base_debt_repo(root)
+    branch_source = src / "branch_debt.py"
+    branch_source.write_text("x = 1\n" * 130, encoding="utf-8")
+    lint_check(root)
+    branch_hits = dict(
+        run_all_collectors(
+            [branch_source],
+            [],
+            CollectorRunOptions(persist_index=False, use_index=False),
+        )
+    )
+    branch_rule, branch_violations = next(
+        (rule, violations) for rule, violations in branch_hits.items() if violations
+    )
+    branch_id = branch_violations[0].stable_id
+    cache_file = _single_git_base_cache_file(root)
+    payload = object_dict(json.loads(cache_file.read_text(encoding="utf-8")))
+    rules = object_dict(payload.get("rules"))
+    rules[branch_rule] = [*object_list(rules.get(branch_rule)), branch_id]
+    payload["rules"] = rules
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+    run_test_git(root, "add", "-f", str(cache_file.relative_to(root)))
+    return lint_check(root)
+
+
+def test_tracked_git_base_cache_cannot_accept_branch_only_debt(tmp_path: Path) -> None:
+    assert _tracked_git_base_cache_contract(tmp_path) == 1

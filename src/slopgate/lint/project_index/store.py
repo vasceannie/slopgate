@@ -220,11 +220,16 @@ def is_file_local_ready(connection: sqlite3.Connection) -> bool:
     """Return True when a complete file-local violation cache has been stored."""
     from slopgate.constants import LINT_INDEX_FILE_LOCAL_READY_KEY
 
+    return meta_value(connection, LINT_INDEX_FILE_LOCAL_READY_KEY) == _FILE_LOCAL_READY
+
+
+def meta_value(connection: sqlite3.Connection, key: str) -> str | None:
+    """Return one persisted index metadata value."""
     row = connection.execute(
         "SELECT value FROM meta WHERE key = ?",
-        (LINT_INDEX_FILE_LOCAL_READY_KEY,),
+        (key,),
     ).fetchone()
-    return row is not None and str(row["value"]) == _FILE_LOCAL_READY
+    return str(row["value"]) if row is not None else None
 
 
 def mark_file_local_ready(connection: sqlite3.Connection) -> None:

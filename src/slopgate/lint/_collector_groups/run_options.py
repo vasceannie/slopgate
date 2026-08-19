@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, TypeAlias
 
 from slopgate.lint._helpers.profile import LintProfile
 from slopgate.lint.catalog import CatalogSurface
+
+IntegrityMode: TypeAlias = Literal["full", "touched"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +18,7 @@ class CollectorRunOptions:
     surface: CatalogSurface = "cli"
     event: str | None = None
     build_constants: bool = True
-    integrity_mode: str = "full"
+    integrity_mode: IntegrityMode = "full"
     profile: LintProfile | None = None
     persist_index: bool = False
     use_index: bool = True

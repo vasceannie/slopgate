@@ -61,8 +61,7 @@ def git_output(
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
-    stripped = output.strip()
-    return stripped or None
+    return output.strip()
 
 
 def resolve_git_root(start: Path | None = None) -> Path | None:

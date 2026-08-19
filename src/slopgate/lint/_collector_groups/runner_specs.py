@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from slopgate.lint._collector_groups.ast_collectors import ast_src_collector_specs
@@ -10,6 +11,7 @@ from slopgate.lint._collector_groups.integrity_specs import (
     touched_integrity_collector_specs,
 )
 from slopgate.lint._collector_groups.pytest_file_collectors import test_collector_specs
+from slopgate.lint._collector_groups.run_options import IntegrityMode
 from slopgate.lint._collector_groups.scheduling import CollectorSpec, parse_error_spec
 from slopgate.lint._collector_groups.structure_collectors import (
     structure_src_collector_specs,
@@ -31,7 +33,7 @@ class CollectorSpecInputs:
     file_local_tests: list[ParsedFile]
     oversized: list[Violation]
     literals: list[Violation]
-    integrity_mode: str
+    integrity_mode: IntegrityMode
     project_index: ProjectIndex | None = None
 
 
@@ -49,31 +51,27 @@ def cli_collector_specs(inputs: CollectorSpecInputs) -> list[CollectorSpec]:
         *test_collector_specs(inputs.file_local_tests),
         *_regex_specs(inputs.file_local_src, inputs.file_local_tests),
     ]
-    if inputs.integrity_mode == "full":
-        specs.extend(
-            full_integrity_collector_specs(
-                inputs.parsed_src, inputs.parsed_tests, None, inputs.project_index
-            )
-        )
-    elif inputs.integrity_mode == "touched":
-        specs.extend(touched_integrity_collector_specs(inputs.file_local_tests))
+    integrity_specs: dict[IntegrityMode, Callable[[], list[CollectorSpec]]] = {
+        "full": lambda: full_integrity_collector_specs(
+            inputs.parsed_src,
+            inputs.parsed_tests,
+            None,
+            inputs.project_index,
+        ),
+        "touched": lambda: touched_integrity_collector_specs(inputs.file_local_tests),
+    }
+    specs.extend(integrity_specs[inputs.integrity_mode]())
     return specs
 
 
 def _regex_specs(
     parsed_src: list[ParsedFile], parsed_tests: list[ParsedFile]
 ) -> list[CollectorSpec]:
-    from slopgate.config import load_config
-    from slopgate.lint._config import get_config
-    from slopgate.lint._regex_rules import CLI_REGEX_TARGETS, regex_rule_collectors
-
-    quality = get_config()
-    runtime = load_config(
-        quality.project_root,
-        quality.project_root,
-        ensure_enrollment=False,
-        ensure_trace=False,
+    from slopgate.lint._regex_rules import (
+        cli_regex_rule_configs,
+        regex_rule_collectors,
     )
+
     holder: list[dict[str, list[Violation]] | None] = [None]
 
     def hits_for(rule_id: str) -> list[Violation]:
@@ -83,8 +81,5 @@ def _regex_specs(
 
     return [
         CollectorSpec(config.rule_id, lambda rid=config.rule_id: hits_for(rid))
-        for config in runtime.regex_rules
-        if config.target in CLI_REGEX_TARGETS
-        and runtime.rule_surfaces.get(config.rule_id) is not None
-        and runtime.rule_surfaces[config.rule_id].cli.enabled is True
+        for config in cli_regex_rule_configs()
     ]

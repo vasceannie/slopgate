@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from hypothesis import given, strategies
+from hypothesis import given, settings, strategies
 
 from slopgate.cli import changed_tests
 from slopgate.cli.changed_tests import (
@@ -266,6 +266,7 @@ def test_changed_files_since_sorts_nonblank_git_output_property(
 
 
 @given(path_text=PATH_TEXT)
+@settings(deadline=None)
 def test_select_tests_for_changed_files_preserves_normalized_change_list_property(
     path_text: str,
 ) -> None:

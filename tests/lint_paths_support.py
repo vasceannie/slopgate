@@ -3,13 +3,38 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from slopgate.lint._toml_overrides import apply_paths_overrides
 
+GIT_TEST_USER_NAME = "Slopgate Tests"
+GIT_TEST_USER_EMAIL = "slopgate-tests@example.invalid"
+
 
 def write_slopgate_toml(tmp_path: Path, body: str) -> None:
     (tmp_path / "slopgate.toml").write_text(body, encoding="utf-8")
+
+
+def run_test_git(repo: Path, *args: str, test_identity: bool = False) -> None:
+    command = ["git", "-C", str(repo)]
+    if test_identity:
+        command.extend(
+            [
+                "-c",
+                f"user.name={GIT_TEST_USER_NAME}",
+                "-c",
+                f"user.email={GIT_TEST_USER_EMAIL}",
+            ]
+        )
+    command.extend(args)
+    subprocess.run(
+        command,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
 
 
 def seed_paths_src_list_repo(tmp_path: Path) -> tuple[Path, Path]:

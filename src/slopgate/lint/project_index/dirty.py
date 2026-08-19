@@ -19,13 +19,20 @@ def collect_dirty_and_deleted(
     }
     if not _is_git_work_tree(root):
         return tuple(sorted(inventory_by_relative.values())), ()
-    dirty_relatives = _git_path_set(root, "diff", "--name-only", "HEAD")
-    dirty_relatives |= _git_path_set(
+    modified_relatives = _git_path_set(root, "diff", "--name-only", "HEAD")
+    untracked_relatives = _git_path_set(
         root, "ls-files", "--others", "--exclude-standard"
     )
     deleted_relatives = _git_path_set(
         root, "diff", "--name-only", "--diff-filter=D", "HEAD"
     )
+    if (
+        modified_relatives is None
+        or untracked_relatives is None
+        or deleted_relatives is None
+    ):
+        return tuple(sorted(inventory_by_relative.values())), ()
+    dirty_relatives = modified_relatives | untracked_relatives
     dirty = tuple(
         sorted(
             inventory_by_relative[relative]
@@ -47,6 +54,8 @@ def untracked_python_paths(root: Path) -> tuple[Path, ...]:
     """Return untracked Python files under *root* according to git."""
     suffix = next(iter(LANGUAGE_BY_SUFFIX))
     relatives = _git_path_set(root, "ls-files", "--others", "--exclude-standard")
+    if relatives is None:
+        return ()
     return tuple(
         sorted(
             (root / relative).resolve()
@@ -64,8 +73,8 @@ def _is_git_work_tree(root: Path) -> bool:
     return output == "true"
 
 
-def _git_path_set(root: Path, *args: str) -> set[str]:
+def _git_path_set(root: Path, *args: str) -> set[str] | None:
     output = git_output([GIT_BIN, "-C", str(root), *args], cwd=root)
     if output is None:
-        return set()
+        return None
     return {line.strip() for line in output.splitlines() if line.strip()}

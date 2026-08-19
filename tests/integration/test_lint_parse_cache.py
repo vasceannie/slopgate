@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -10,6 +11,7 @@ from slopgate.lint._helpers import (
     request_analysis_cache_stats,
     reset_request_analysis_cache,
 )
+from slopgate.lint.project_index.store import connect_index, meta_value
 
 
 @given(value=strategies.integers(min_value=-100, max_value=100))
@@ -88,3 +90,13 @@ def test_parse_file_cache_reset_starts_new_request(tmp_path: Path) -> None:
         "hits": 0,
         "misses": 1,
     }
+
+
+def test_index_metadata_round_trips_through_store_seam(tmp_path: Path) -> None:
+    with closing(connect_index(tmp_path)) as connection:
+        connection.execute(
+            "INSERT INTO meta(key, value) VALUES (?, ?)",
+            ("integration-key", "integration-value"),
+        )
+
+        assert meta_value(connection, "integration-key") == "integration-value"

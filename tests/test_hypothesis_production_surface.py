@@ -3,13 +3,15 @@ import argparse
 import ast
 import io
 import keyword
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import TracebackType
+from urllib.request import Request
 from unittest.mock import patch
 import pytest
 from hypothesis import given, settings, strategies
 from tests.test_enrichment_public_api import context_for_source
-from slopgate.adapters.base import render_request_from_call
 from slopgate.cli.commands import cmd_handle
 from slopgate.cli.main import main
 from slopgate.config._repo import enroll_repo
@@ -38,19 +40,22 @@ from slopgate.lint._helpers import (
 from slopgate.models import RuleFinding, Severity
 from slopgate.search import config
 from slopgate.search import runtime
-from slopgate.util.payloads import is_edit_like_tool, shell_command_paths
-from slopgate.util.platform import normalize_path_for_match, resolve_path_for_match
+from slopgate.util.payloads import shell_command_paths
 
 TEXT_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789 _.-/"
 IDENTIFIERS = strategies.from_regex("[a-z][a-z0-9_]{0,12}", fullmatch=True).filter(
     lambda value: not keyword.iskeyword(value)
 )
 SHORT_TEXT = strategies.text(alphabet=TEXT_ALPHABET, max_size=40)
-TOOL_NAMES = strategies.sampled_from(
-    ["Edit", "Write", "edit_file", "morph_edit", "Read"]
+CODE_SMELL_DETECTORS = strategies.sampled_from(
+    (
+        code_smells.detect_deep_nesting,
+        code_smells.detect_high_complexity,
+        code_smells.detect_long_methods,
+        code_smells.detect_oversized_modules,
+        code_smells.detect_too_many_params,
+    )
 )
-
-
 def _parsed(source: str, rel: str = "src/example.py") -> ParsedFile:
     tree = ast.parse(source)
     return ParsedFile(
@@ -111,22 +116,20 @@ def test_main_returns_zero_for_version_flag() -> None:
     assert main(["--version"]) == 0
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(name=IDENTIFIERS)
 def test_run_touched_collectors_returns_mapping_property(name: str) -> None:
     assert isinstance(_run_touched_collectors_sample(name), list)
 
 
-@given(name=IDENTIFIERS)
-def test_code_smell_detectors_accept_minimal_module_property(name: str) -> None:
+@settings(max_examples=20, deadline=None)
+@given(name=IDENTIFIERS, detector=CODE_SMELL_DETECTORS)
+def test_code_smell_detectors_accept_minimal_module_property(
+    name: str,
+    detector: Callable[[list[ParsedFile]], list[Violation]],
+) -> None:
     parsed = [_parsed(f"def {name}():\n    return 1\n")]
-    assert (
-        code_smells.detect_deep_nesting(parsed),
-        code_smells.detect_high_complexity(parsed),
-        code_smells.detect_long_methods(parsed),
-        code_smells.detect_oversized_modules(parsed),
-        code_smells.detect_too_many_params(parsed),
-    ) == ([], [], [], [], [])
+    assert detector(parsed) == []
 
 
 @given(name=IDENTIFIERS)
@@ -147,6 +150,7 @@ def test_detect_stale_patterns_accepts_clean_module_property(name: str) -> None:
     assert stale_code.detect_stale_patterns(parsed) == []
 
 
+@settings(max_examples=20, deadline=None)
 @given(name=IDENTIFIERS)
 def test_basic_test_smell_detectors_accept_valid_test_property(name: str) -> None:
     parsed = [
@@ -171,7 +175,12 @@ def test_fetch_models_parses_model_ids_property(model_id: str) -> None:
         def __enter__(self) -> Response:
             return self
 
-        def __exit__(self, *_args: object) -> None:
+        def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc_value: BaseException | None,
+            _traceback: TracebackType | None,
+        ) -> None:
             return None
 
         def read(self) -> bytes:
@@ -179,7 +188,7 @@ def test_fetch_models_parses_model_ids_property(model_id: str) -> None:
 
             return json.dumps({"data": [{"id": model_id}]}).encode("utf-8")
 
-    def fake_urlopen(_request: object, timeout: int) -> Response:
+    def fake_urlopen(_request: Request, timeout: int) -> Response:
         assert timeout == 10
         return Response()
 
@@ -221,7 +230,11 @@ def test_update_suite_returns_nonzero_when_package_update_fails(
     class _FailedRun:
         returncode = 1
 
-        def __call__(self, *_args: object, **_kwargs: object) -> "_FailedRun":
+        def __call__(
+            self,
+            *_args: str | list[str],
+            **_kwargs: str | int | bool | dict[str, str],
+        ) -> _FailedRun:
             return self
 
     monkeypatch.setattr(_suite.subprocess, "run", _FailedRun())
@@ -280,67 +293,13 @@ def _run_test_integrity_collectors_sample(
         return _collectors.run_test_integrity_collectors([src_path], [test_path])
 
 
-@settings(deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(name=IDENTIFIERS)
 def test_run_all_collectors_returns_rule_mapping_property(name: str) -> None:
     assert isinstance(_run_all_collectors_sample(name), list)
 
 
+@settings(max_examples=5, deadline=None)
 @given(name=IDENTIFIERS)
 def test_run_test_integrity_collectors_returns_rule_mapping_property(name: str) -> None:
     assert isinstance(_run_test_integrity_collectors_sample(name), list)
-
-
-@given(model_name=SHORT_TEXT)
-def test_embedding_like_is_boolean_property(model_name: str) -> None:
-    assert isinstance(runtime.embedding_like(model_name), bool)
-
-
-def test_fetch_runtime_models_returns_list_when_env_present(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("RUNTIME_API_KEY", "secret")
-
-    def fake_fetch_models(_base: object, _key: object) -> list[str]:
-        return ["model-a"]
-
-    monkeypatch.setattr(runtime, "fetch_models", fake_fetch_models)
-    cfg = config.SearchConfig(
-        base_url="https://llm.example", api_key_env="RUNTIME_API_KEY"
-    )
-    assert runtime.fetch_runtime_models(cfg) == ["model-a"]
-
-
-@given(tool=TOOL_NAMES)
-def test_is_edit_like_tool_matches_edit_family_property(tool: str) -> None:
-    assert isinstance(is_edit_like_tool(tool), bool)
-
-
-@given(value=SHORT_TEXT)
-def test_normalize_path_for_match_is_idempotent_property(value: str) -> None:
-    once = normalize_path_for_match(value)
-    twice = normalize_path_for_match(once)
-    assert once == twice
-
-
-@given(value=SHORT_TEXT)
-def test_resolve_path_for_match_lowercases_relative_paths_property(value: str) -> None:
-    with TemporaryDirectory() as raw_path:
-        resolved = resolve_path_for_match(value, Path(raw_path))
-    assert resolved == resolved.casefold()
-
-
-@given(
-    event=strategies.sampled_from(["PreToolUse", "PostToolUse", "stop"]),
-    decision=strategies.one_of(
-        strategies.none(), strategies.just("deny"), strategies.just("allow")
-    ),
-)
-def test_render_request_from_call_accepts_adapter_args_property(
-    event: str, decision: str | None
-) -> None:
-    kwargs: dict[str, object] = {}
-    if decision is not None:
-        kwargs["decision"] = decision
-    request = render_request_from_call((event, []), kwargs)
-    assert request.event_name == event

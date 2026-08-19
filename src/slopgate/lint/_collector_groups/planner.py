@@ -6,11 +6,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from slopgate.config._repo import is_repo_enrolled
+from slopgate.constants import LINT_CACHE_DIRNAME, LINT_INDEX_FILENAME
 from slopgate.lint.catalog import (
     CatalogSurface,
     IMMEDIATE_DUPLICATION_COLLECTORS,
     collector_catalog,
 )
+from slopgate.lint.project_index.cache_trust import cache_path_is_trusted
 from slopgate.lint.project_index.dirty import collect_dirty_and_deleted
 
 
@@ -51,6 +53,7 @@ class LintExecutionPlan:
     file_tasks: tuple[str, ...] = ()
     aggregate_tasks: tuple[str, ...] = ()
     git_base_task: bool = False
+    dependency_signatures: tuple[tuple[str, str], ...] = ()
 
 
 def build_lint_plan(
@@ -61,7 +64,11 @@ def build_lint_plan(
     """Build a plan that keeps full lint semantics with incremental execution."""
     inventory = tuple(path.resolve() for path in [*src_files, *test_files])
     enrolled = is_repo_enrolled(request.project_root)
-    persist = request.persist_index and request.use_index and enrolled
+    cache_enabled = request.use_index and enrolled and cache_path_is_trusted(
+        request.project_root,
+        request.project_root / LINT_CACHE_DIRNAME / LINT_INDEX_FILENAME,
+    )
+    persist = request.persist_index and cache_enabled
     dirty_paths, deleted_paths = collect_dirty_and_deleted(
         request.project_root, inventory
     )
@@ -69,8 +76,7 @@ def build_lint_plan(
     file_local = frozenset(
         collector_id
         for collector_id in request.active_ids
-        if collector_id in catalog
-        and catalog[collector_id].scope == "file"
+        if (collector_id not in catalog or catalog[collector_id].scope == "file")
         and collector_id not in IMMEDIATE_DUPLICATION_COLLECTORS
     )
     aggregate = request.active_ids - file_local
@@ -83,7 +89,7 @@ def build_lint_plan(
         file_local_ids=file_local,
         aggregate_ids=aggregate,
         persist_index=persist,
-        use_index=request.use_index and enrolled,
+        use_index=cache_enabled,
         rebuild_index=request.rebuild_index,
         build_constants=request.build_constants,
         surface=request.surface,
@@ -125,12 +131,16 @@ def fact_types_for_collectors(active_ids: frozenset[str]) -> frozenset[str]:
 
 
 def apply_index_peek(plan: LintExecutionPlan) -> LintExecutionPlan:
-    """Replace git dirty with index-stat dirty when the enrolled cache is warm."""
+    """Use index stat/content checks to identify dirty paths on warm caches."""
     if not plan.use_index or plan.rebuild_index:
         return plan
     from slopgate.lint.project_index.peek import peek_index
 
-    peek = peek_index(plan.project_root, (*plan.src_files, *plan.test_files))
+    peek = peek_index(
+        plan.project_root,
+        (*plan.src_files, *plan.test_files),
+        plan.dirty_paths,
+    )
     if not peek.ready:
         return plan
     return replace(

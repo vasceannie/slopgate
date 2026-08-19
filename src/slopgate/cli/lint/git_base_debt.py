@@ -16,14 +16,11 @@ from slopgate._types import object_dict, object_list
 from slopgate.cli.lint.report import LintFiles
 from slopgate.config._repo import GIT_BIN
 from slopgate.lint._baseline import Violation
+from slopgate.lint.project_index.cache_trust import cache_path_is_trusted
 from slopgate.util.atomic_files import write_text_atomic_locked
 
 GIT_BASE_DEBT_CACHE_VERSION = 1
 GIT_BASE_DEBT_CACHE_ROOT = ".slopgate/cache/git-base-debt"
-GIT_BASE_DEBT_DETECTOR_PATTERNS = (
-    "src/slopgate/lint/**/*.py",
-    "src/slopgate/rules/python_ast/**/*.py",
-)
 GIT_COMMAND_TIMEOUT_SECONDS = 10
 GIT_ARCHIVE_TIMEOUT_SECONDS = 30
 
@@ -185,19 +182,12 @@ def _collector_ids_by_rule(
 
 
 def _git_base_debt_detector_signature(project_root: Path) -> str:
+    from slopgate.lint.project_index.fingerprint import engine_fingerprint
+
     digest = hashlib.sha256()
-    for pattern in GIT_BASE_DEBT_DETECTOR_PATTERNS:
-        for path in sorted(project_root.glob(pattern)):
-            if not path.is_file():
-                continue
-            stat = path.stat()
-            relative = path.relative_to(project_root)
-            digest.update(str(relative).encode("utf-8"))
-            digest.update(b"\0")
-            digest.update(str(stat.st_mtime_ns).encode("ascii"))
-            digest.update(b"\0")
-            digest.update(str(stat.st_size).encode("ascii"))
-            digest.update(b"\0")
+    digest.update(str(GIT_BASE_DEBT_CACHE_VERSION).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(engine_fingerprint(project_root).encode("ascii"))
     return digest.hexdigest()
 
 
@@ -280,6 +270,12 @@ def _git_worktree_clean(root: Path) -> bool:
     return completed.returncode == 0 and not completed.stdout.strip()
 
 
+def _attach_profile(debt: GitBaseDebt) -> None:
+    from slopgate.lint._helpers.profile import attach_git_base_profile_line
+
+    attach_git_base_profile_line(debt.profile_line)
+
+
 def scan_git_base_debt(
     project_root: Path, *, configured_lint_files: ConfiguredLintFiles
 ) -> GitBaseDebt | None:
@@ -292,12 +288,15 @@ def scan_git_base_debt(
         detector_signature=_git_base_debt_detector_signature(project_root),
     )
     cache_path = _git_base_debt_cache_path(project_root, cache_key)
-    cached = _read_git_base_debt_cache(cache_path, ref_name, cache_key)
+    cache_trusted = cache_path_is_trusted(project_root, cache_path)
+    cached = (
+        _read_git_base_debt_cache(cache_path, ref_name, cache_key)
+        if cache_trusted
+        else None
+    )
     if cached is not None:
         hit = replace(cached, cache_hit=True)
-        from slopgate.lint._helpers.profile import attach_git_base_profile_line
-
-        attach_git_base_profile_line(hit.profile_line)
+        _attach_profile(hit)
         return hit
     from time import perf_counter
 
@@ -322,10 +321,9 @@ def scan_git_base_debt(
     if not rules:
         return None
     debt = GitBaseDebt(ref_name=ref_name, base_sha=base_sha, rules=rules, scan_seconds=scan_seconds)
-    _write_git_base_debt_cache(cache_path, cache_key, debt)
-    from slopgate.lint._helpers.profile import attach_git_base_profile_line
-
-    attach_git_base_profile_line(debt.profile_line)
+    if cache_trusted:
+        _write_git_base_debt_cache(cache_path, cache_key, debt)
+    _attach_profile(debt)
     return debt
 
 

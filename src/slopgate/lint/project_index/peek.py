@@ -23,7 +23,11 @@ class IndexPeek:
     stat_dirty: tuple[Path, ...]
 
 
-def peek_index(root: Path, inventory: tuple[Path, ...]) -> IndexPeek:
+def peek_index(
+    root: Path,
+    inventory: tuple[Path, ...],
+    content_check_paths: tuple[Path, ...] = (),
+) -> IndexPeek:
     """Return whether file-local facts are ready and which paths fail a stat check."""
     connection = connect_index(root)
     try:
@@ -35,13 +39,15 @@ def peek_index(root: Path, inventory: tuple[Path, ...]) -> IndexPeek:
         connection.close()
     if not ready:
         return IndexPeek(False, ())
-    return IndexPeek(True, _stat_mismatched(root, inventory, stored))
+    content_checks = frozenset(path.resolve() for path in content_check_paths)
+    return IndexPeek(True, _stat_mismatched(root, inventory, stored, content_checks))
 
 
 def _stat_mismatched(
     root: Path,
     inventory: tuple[Path, ...],
     stored: dict[str, sqlite3.Row],
+    content_checks: frozenset[Path],
 ) -> tuple[Path, ...]:
     dirty: list[Path] = []
     for path in inventory:
@@ -50,12 +56,20 @@ def _stat_mismatched(
             continue
         relative = resolved.relative_to(root).as_posix()
         row = stored.get(relative)
-        if row is None or not _row_current(resolved, row):
+        if row is None or not _row_current(
+            resolved,
+            row,
+            require_content=resolved in content_checks,
+        ):
             dirty.append(resolved)
     return tuple(sorted(dirty))
 
 
-def _row_current(path: Path, row: sqlite3.Row) -> bool:
+def _row_current(
+    path: Path, row: sqlite3.Row, *, require_content: bool = False
+) -> bool:
+    if require_content:
+        return _row_content_matches(path, row)
     return _row_stat_matches(path, row) or _row_content_matches(path, row)
 
 

@@ -38,13 +38,21 @@ def active_collector_ids(
 ) -> frozenset[str]:
     """Return catalog collector IDs that should execute on *surface*."""
     from slopgate.lint._config import get_config
+    from slopgate.lint._regex_rules import cli_regex_rule_configs
 
-    enabled_cli_rules = get_config().enabled_cli_rules
-    return frozenset(
+    config = get_config()
+    enabled_cli_rules = config.enabled_cli_rules
+    catalog_ids = {
         collector_id
         for collector_id in collector_ids_for_surface(surface, event=event)
         if collector_enabled(collector_id, enabled_cli_rules)
-    )
+    }
+    regex_ids = {
+        rule.rule_id
+        for rule in cli_regex_rule_configs(config.project_root)
+        if collector_enabled(rule.rule_id, enabled_cli_rules)
+    }
+    return frozenset(catalog_ids | regex_ids)
 
 
 def spec_is_scheduled(
