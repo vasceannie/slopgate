@@ -332,4 +332,7 @@ def print_collector_results(
             color=color,
         )
     )
+    from slopgate.lint._helpers.profile import flush_lint_profile
+
+    flush_lint_profile()
     return exit_code

@@ -96,14 +96,68 @@ def _walk_roots(roots: tuple[Path, ...]) -> list[Path]:
 
 def find_source_files() -> list[Path]:
     """Return all non-test Python source files."""
+    indexed = _indexed_kind_files("source", src_roots())
+    if indexed is not None:
+        return indexed
     return _walk_roots(src_roots())
 
 
 def find_test_files() -> list[Path]:
     """Return all Python test files."""
+    indexed = _indexed_kind_files("test", test_roots())
+    if indexed is not None:
+        return indexed
     return _walk_roots(test_roots())
 
 
 def find_all_python_files() -> list[Path]:
     """Return all Python files (source + test)."""
     return find_source_files() + find_test_files()
+
+
+def _indexed_kind_files(kind: str, roots: tuple[Path, ...]) -> list[Path] | None:
+    from slopgate.config._repo import is_repo_enrolled
+
+    if _scope_filter() is not None:
+        return None
+    root = get_config().project_root
+    if not is_repo_enrolled(root):
+        return None
+    from slopgate.lint.project_index.store import (
+        connect_index,
+        is_file_local_ready,
+        load_file_rows,
+        store_matches_engine,
+    )
+
+    connection = connect_index(root)
+    try:
+        ready = store_matches_engine(connection, root) and is_file_local_ready(
+            connection
+        )
+        stored = load_file_rows(connection) if ready else {}
+    finally:
+        connection.close()
+    if not ready:
+        return None
+    by_resolved: dict[Path, Path] = {}
+    for relative, row in stored.items():
+        if str(row["kind"]) != kind:
+            continue
+        path = root / relative
+        if path.is_file():
+            by_resolved[path.resolve()] = path
+    for extra in _untracked_python_under(root, roots):
+        by_resolved.setdefault(extra.resolve(), extra)
+    return sorted(by_resolved.values())
+
+
+def _untracked_python_under(root: Path, roots: tuple[Path, ...]) -> list[Path]:
+    from slopgate.lint.project_index.dirty import untracked_python_paths
+
+    resolved_roots = tuple(item.resolve() for item in roots)
+    return [
+        path
+        for path in untracked_python_paths(root)
+        if any(path.is_relative_to(item) for item in resolved_roots)
+    ]

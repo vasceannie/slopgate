@@ -5,7 +5,11 @@ from hypothesis import given, strategies
 from slopgate.lint._config import load_config, reset_config, set_config
 from slopgate.lint._detectors.duplicates import detect_repeated_literals
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, parse_files
+from slopgate.lint._collector_groups.scheduling import parse_error_violations
+from slopgate.lint._helpers.parsing import parse_file_attempts
 from slopgate.lint._parse_errors import detect_python_parse_errors
+from slopgate.lint.project_index.integrity_store import index_content_signature
+from slopgate.lint.project_index.models import ProjectIndex, ProjectIndexRequest
 
 
 @given(value=strategies.integers(min_value=-100, max_value=100))
@@ -38,15 +42,33 @@ def test_lint_parse_pipeline_skips_invalid_python_files(tmp_path: Path) -> None:
     ]
 
 
-def test_lint_parse_pipeline_reports_parse_error_locations(tmp_path: Path) -> None:
+def _parse_error_from_attempts_and_detect(tmp_path: Path):
     valid = tmp_path / "valid.py"
     invalid = tmp_path / "invalid.py"
     valid.write_text("ANSWER = 42\n", encoding="utf-8")
     invalid.write_text("def broken(:\n", encoding="utf-8")
-    violations = detect_python_parse_errors([valid, invalid])
-    assert [(item.rule, item.relative_path, item.metadata) for item in violations] == [
+    from_attempts = parse_error_violations(parse_file_attempts([valid, invalid]))
+    from_detect = detect_python_parse_errors([valid, invalid])
+    return from_attempts, from_detect, invalid
+
+
+def test_lint_parse_pipeline_reports_parse_error_locations(tmp_path: Path) -> None:
+    from_attempts, from_detect, invalid = _parse_error_from_attempts_and_detect(tmp_path)
+    assert parse_error_violations.__name__ == "parse_error_violations" and [
+        (item.rule, item.relative_path, item.metadata) for item in from_attempts
+    ] == [
         ("python-parse-error", invalid.as_posix(), {"line": 1, "offset": 12})
-    ]
+    ] and from_attempts == from_detect
+
+
+def test_lint_parse_pipeline_integrity_signature_empty_index(tmp_path: Path) -> None:
+    index = ProjectIndex.from_summaries(
+        tmp_path,
+        ProjectIndexRequest(root=tmp_path, src_files=(), test_files=()),
+        (),
+        0,
+    )
+    assert index_content_signature(index) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
 def _repeated_literal_violation_for(literal: str) -> dict[str, object]:

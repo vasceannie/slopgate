@@ -21,7 +21,7 @@ from .sources import (
     pre_python_camouflage_sources,
     python_structural_sources,
 )
-from ..._source_parse import line_count, python_ast_rule_is_disabled
+from ...source_parse import line_count, python_ast_rule_is_disabled
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext

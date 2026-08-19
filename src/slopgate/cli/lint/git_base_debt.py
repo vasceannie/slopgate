@@ -8,12 +8,13 @@ import os
 import subprocess
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
 from slopgate._types import object_dict, object_list
 from slopgate.cli.lint.report import LintFiles
+from slopgate.config._repo import GIT_BIN
 from slopgate.lint._baseline import Violation
 from slopgate.util.atomic_files import write_text_atomic_locked
 
@@ -42,6 +43,8 @@ class GitBaseDebt:
     ref_name: str
     base_sha: str
     rules: dict[str, set[str]]
+    cache_hit: bool = False
+    scan_seconds: float = 0.0
 
     @property
     def inherited_count(self) -> int:
@@ -54,6 +57,14 @@ class GitBaseDebt:
             f"({self.inherited_count} inherited id(s))"
         )
 
+    @property
+    def profile_line(self) -> str:
+        from slopgate.lint._helpers.profile import format_profile_seconds
+
+        if self.cache_hit:
+            return f"HIT sha={self.base_sha}"
+        return f"MISS scan={format_profile_seconds(self.scan_seconds)}"
+
 
 @dataclass(frozen=True, slots=True)
 class _GitBaseDebtCacheKey:
@@ -64,7 +75,7 @@ class _GitBaseDebtCacheKey:
 def _run_git(root: Path, *args: str) -> str | None:
     try:
         completed = subprocess.run(
-            ["git", "-C", str(root), *args],
+            [GIT_BIN, "-C", str(root), *args],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -127,7 +138,7 @@ def _discover_git_base(root: Path) -> tuple[str, str] | None:
 
 def _extract_git_archive(root: Path, base_sha: str, destination: Path) -> bool:
     git_process = subprocess.Popen(
-        ["git", "-C", str(root), "archive", "--format=tar", base_sha],
+        [GIT_BIN, "-C", str(root), "archive", "--format=tar", base_sha],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
@@ -254,11 +265,24 @@ def _write_git_base_debt_cache(
         return
 
 
+def _git_worktree_clean(root: Path) -> bool:
+    try:
+        completed = subprocess.run(
+            [GIT_BIN, "-C", str(root), "status", "--porcelain"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=GIT_COMMAND_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0 and not completed.stdout.strip()
+
+
 def scan_git_base_debt(
     project_root: Path, *, configured_lint_files: ConfiguredLintFiles
 ) -> GitBaseDebt | None:
-    from slopgate.lint._collectors import run_all_collectors
-
     discovered = _discover_git_base(project_root)
     if discovered is None:
         return None
@@ -270,18 +294,38 @@ def scan_git_base_debt(
     cache_path = _git_base_debt_cache_path(project_root, cache_key)
     cached = _read_git_base_debt_cache(cache_path, ref_name, cache_key)
     if cached is not None:
-        return cached
+        hit = replace(cached, cache_hit=True)
+        from slopgate.lint._helpers.profile import attach_git_base_profile_line
+
+        attach_git_base_profile_line(hit.profile_line)
+        return hit
+    from time import perf_counter
+
+    started = perf_counter()
+    reuse = _run_git(project_root, "rev-parse", "HEAD") == base_sha and _git_worktree_clean(
+        project_root
+    )
     with tempfile.TemporaryDirectory(prefix="slopgate-git-base-") as tmpdir:
-        archive_root = Path(tmpdir)
-        if not _extract_git_archive(project_root, base_sha, archive_root):
+        scan_root = project_root if reuse else Path(tmpdir)
+        if not reuse and not _extract_git_archive(project_root, base_sha, scan_root):
             return None
-        files = configured_lint_files(archive_root, force_all_scope=True)
-        collectors = run_all_collectors(files.src_files, files.test_files)
+        files = configured_lint_files(scan_root, force_all_scope=True)
+        from slopgate.lint._collectors import CollectorRunOptions, run_all_collectors
+
+        collectors = run_all_collectors(
+            files.src_files,
+            files.test_files,
+            CollectorRunOptions(persist_index=False, use_index=reuse),
+        )
+    scan_seconds = perf_counter() - started
     rules = _collector_ids_by_rule(collectors)
     if not rules:
         return None
-    debt = GitBaseDebt(ref_name=ref_name, base_sha=base_sha, rules=rules)
+    debt = GitBaseDebt(ref_name=ref_name, base_sha=base_sha, rules=rules, scan_seconds=scan_seconds)
     _write_git_base_debt_cache(cache_path, cache_key, debt)
+    from slopgate.lint._helpers.profile import attach_git_base_profile_line
+
+    attach_git_base_profile_line(debt.profile_line)
     return debt
 
 

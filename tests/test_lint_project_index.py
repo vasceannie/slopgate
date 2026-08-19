@@ -184,3 +184,38 @@ def test_source_analysis_returns_project_index_for_collector_surfaces(
         "project_index_type": True,
         "indexed_paths": ("src/pkg/worker.py", "tests/test_worker.py"),
     }
+
+
+def test_file_analysis_facts_json_roundtrip() -> None:
+    from slopgate.lint.project_index.facts import (
+        FileAnalysisFacts,
+        facts_from_json,
+        facts_to_json,
+    )
+
+    restored = facts_from_json(
+        facts_to_json(FileAnalysisFacts(line_count=4, module_name="pkg.mod"))
+    )
+    assert (restored.line_count, restored.module_name) == (4, "pkg.mod")
+
+
+def test_project_index_extracts_facts_from_parse_attempts(tmp_path: Path) -> None:
+    from slopgate.lint._helpers.parsing import parse_file_attempts
+
+    source, test = _write_project_files(tmp_path)
+    load_config(tmp_path)
+    try:
+        attempts = tuple(parse_file_attempts([source, test]))
+        index = build_project_index(
+            ProjectIndexRequest(
+                root=tmp_path,
+                src_files=(source,),
+                test_files=(test,),
+                attempts=attempts,
+            )
+        )
+        worker = index.by_relative_path["src/pkg/worker.py"]
+        extracted = (worker.facts.line_count, worker.facts.module_name)
+    finally:
+        reset_config()
+    assert extracted == (7, "pkg.worker")

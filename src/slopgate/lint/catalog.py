@@ -30,6 +30,9 @@ IMMEDIATE_DUPLICATION_COLLECTORS = frozenset(
 PROJECT_CONSTANT_SCAN_COLLECTORS = frozenset(
     {"repeated-magic-number", "repeated-string-literal"}
 )
+OVERSIZED_MODULE_COLLECTORS = frozenset(
+    {"oversized-module", "oversized-module-soft"}
+)
 DEFAULT_COLLECTOR_EVENTS = (POST_TOOL_USE, "Stop", "CLI")
 
 
@@ -188,6 +191,7 @@ __all__ = [
     "CatalogSurface",
     "DEFAULT_COLLECTOR_EVENTS",
     "IMMEDIATE_DUPLICATION_COLLECTORS",
+    "OVERSIZED_MODULE_COLLECTORS",
     "PROJECT_CONSTANT_SCAN_COLLECTORS",
     "collector_catalog",
     "collector_ids_for_surface",

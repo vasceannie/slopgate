@@ -41,6 +41,7 @@ def _collector_names(function_names: set[str]) -> set[str]:
     names: set[str] = set()
     for path in source_paths:
         names |= _collector_names_from_path(path, candidate_names)
+    names |= _collector_spec_names(collector_groups)
     return names
 
 
@@ -58,6 +59,42 @@ def _collector_names_from_path(source_path: Path, function_names: set[str]) -> s
                 ):
                     names.add(child.elts[0].value)
     return names
+
+
+def _collector_spec_names(collector_groups: Path) -> set[str]:
+    module_names = (
+        "ast_collectors.py",
+        "structure_collectors.py",
+        "pytest_file_collectors.py",
+        "integrity.py",
+        "integrity_specs.py",
+        "runner_specs.py",
+        "scheduling.py",
+    )
+    names: set[str] = set()
+    for module_name in module_names:
+        names |= _collector_spec_ids_from_path(collector_groups / module_name)
+    return names
+
+
+def _collector_spec_ids_from_path(source_path: Path) -> set[str]:
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        if not _is_collector_spec_call(node.func):
+            continue
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            names.add(first.value)
+    return names
+
+
+def _is_collector_spec_call(func: ast.expr) -> bool:
+    if isinstance(func, ast.Name):
+        return func.id == "CollectorSpec"
+    return isinstance(func, ast.Attribute) and func.attr == "CollectorSpec"
 
 
 def _runtime_rule_ids() -> set[str]:

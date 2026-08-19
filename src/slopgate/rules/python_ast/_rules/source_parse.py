@@ -1,4 +1,4 @@
-"""Python AST runtime rules."""
+"""Parse Python sources for AST runtime rules."""
 
 from __future__ import annotations
 
@@ -123,3 +123,8 @@ def parsed_classes(source: str, ctx: HookContext) -> list[ast.ClassDef]:
 
 def python_ast_rule_is_disabled(ctx: HookContext, rule_id: str) -> bool:
     return not is_rule_enabled(ctx, rule_id) or not ctx.config.python_ast_enabled
+
+
+from .compat import install_private_module_aliases
+
+install_private_module_aliases()

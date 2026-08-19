@@ -1,4 +1,4 @@
-"""Python AST runtime rules."""
+"""Detect modules that import too many other modules."""
 
 from __future__ import annotations
 

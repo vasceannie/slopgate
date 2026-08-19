@@ -24,8 +24,11 @@ def is_third_party_or_virtualenv_path(path_value: str) -> bool:
     return any(part in THIRD_PARTY_DIR_NAMES for part in normalized.split("/"))
 
 
+PYTHON_SOURCE_SUFFIXES = (".py", ".pyi")
+
+
 def is_authored_python_path(path_value: str) -> bool:
     """Return True when *path_value* is project-authored Python source."""
     return path_value.lower().endswith(
-        (".py", ".pyi")
+        PYTHON_SOURCE_SUFFIXES
     ) and not is_third_party_or_virtualenv_path(path_value)

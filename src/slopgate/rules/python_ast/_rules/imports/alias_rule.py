@@ -1,4 +1,4 @@
-"""Python AST runtime rules."""
+"""Detect import aliases that hide the imported name."""
 
 from __future__ import annotations
 import ast

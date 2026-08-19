@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import ast
+import fnmatch
+import os
 import re
 import threading
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+
+from slopgate.policy_defaults import LINT_PATH_DEFAULTS
 
 KNOWN_CONSTANT_GLOBS: tuple[str, ...] = (
     "constants.py",
@@ -17,6 +21,7 @@ KNOWN_CONSTANT_GLOBS: tuple[str, ...] = (
     "*_constants.py",
     "config/*.py",
 )
+_SKIP_DIR_NAMES = frozenset(LINT_PATH_DEFAULTS["exclude_dirs"]) | {".slopgate"}
 
 _DEFAULT_MAX_FILE_SIZE = 128_000
 
@@ -78,23 +83,51 @@ def get_session_constant_index() -> ConstantIndex | None:
 
 
 def reset_session_constant_index() -> None:
+    """Drop the session index and per-file extract cache for the next rebuild."""
     _session_index_context().set(None)
+    with _FILE_CACHE_LOCK:
+        _FILE_CACHE.clear()
 
 
 def iter_constant_candidate_paths(
     root: Path, patterns: tuple[str, ...] = KNOWN_CONSTANT_GLOBS
 ) -> list[Path]:
     """Return sorted, de-duplicated constant/config module candidates."""
-
     found: list[Path] = []
     seen: set[Path] = set()
-    for pattern in patterns:
-        for candidate in root.rglob(pattern):
-            if not candidate.is_file() or candidate in seen:
+    resolved = root.resolve()
+    for dirpath, dirnames, filenames in os.walk(resolved):
+        dirnames[:] = [name for name in dirnames if name not in _SKIP_DIR_NAMES]
+        for filename in filenames:
+            candidate = Path(dirpath) / filename
+            if candidate in seen or not is_constant_candidate_path(
+                candidate, resolved, patterns
+            ):
                 continue
             seen.add(candidate)
             found.append(candidate)
     return sorted(found)
+
+
+def is_constant_candidate_path(
+    path: Path,
+    root: Path,
+    patterns: tuple[str, ...] = KNOWN_CONSTANT_GLOBS,
+) -> bool:
+    """Return True when *path* matches a known constant/config filename glob."""
+    return any(_matches_constant_glob(path, root, pattern) for pattern in patterns)
+
+
+def _matches_constant_glob(path: Path, root: Path, pattern: str) -> bool:
+    if "/" not in pattern:
+        return fnmatch.fnmatch(path.name, pattern)
+    try:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        relative = path.as_posix()
+    return fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(
+        relative, f"*/{pattern}"
+    )
 
 
 def _extract_string_constants(path: Path) -> dict[str, list[StringConstantMatch]]:

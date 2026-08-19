@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import os
 from collections import OrderedDict
 from collections.abc import Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from slopgate.constants import LINT_CACHE_COUNTER_STEP
 from slopgate.lint._helpers.ast_utils import (
     build_parent_map,
     compute_string_line_ranges,
@@ -18,7 +20,11 @@ from slopgate.lint._helpers.cache_config import (
     REQUEST_ANALYSIS_CACHE_MAX_BYTES,
     REQUEST_ANALYSIS_CACHE_MAX_SOURCE_BYTES,
 )
-from slopgate.lint._helpers.models import ParsedFile
+from slopgate.lint._helpers.models import (
+    FileParseAttempt,
+    FileSourceSnapshot,
+    ParsedFile,
+)
 from slopgate.lint._helpers.paths import relative_path
 
 _TEXT_DECODE_ERROR_POLICY = "replace"
@@ -28,7 +34,7 @@ _TEXT_DECODE_ERROR_POLICY = "replace"
 class _ParsedFileCacheEntry:
     signature: tuple[int, int, str]
     size: int
-    parsed: ParsedFile
+    attempt: FileParseAttempt
 
 
 @dataclass(slots=True)
@@ -131,61 +137,113 @@ def _remember_parsed_file(
     while cache.stats.bytes_used > cache.max_bytes and cache.entries:
         _, evicted = cache.entries.popitem(last=False)
         cache.stats.bytes_used = max(0, cache.stats.bytes_used - evicted.size)
-        cache.stats.evictions += 1
+        cache.stats.evictions += LINT_CACHE_COUNTER_STEP
 
 
-def parse_file(path: Path) -> ParsedFile | None:
-    """Parse a Python file into a ``ParsedFile``, or return None on failure."""
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    cache_path = path.resolve()
-    cache = _request_analysis_cache()
-    try:
-        source = path.read_text(encoding="utf-8", errors=_TEXT_DECODE_ERROR_POLICY)
-    except (OSError, UnicodeDecodeError):
-        return None
-    signature = _source_signature(stat.st_size, stat.st_mtime_ns, source)
+def _lookup_cached_by_stat(
+    cache: _RequestAnalysisCache,
+    cache_path: Path,
+    stat: os.stat_result,
+) -> FileParseAttempt | None:
     cached = cache.entries.get(cache_path)
-    if cached is not None and cached.signature == signature:
-        cache.stats.hits += 1
-        cache.entries.move_to_end(cache_path)
-        return cached.parsed
-
-    cache.stats.misses += 1
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
+    if cached is None:
         return None
+    mtime_ns, size, _digest = cached.signature
+    if mtime_ns != stat.st_mtime_ns or size != stat.st_size:
+        return None
+    cache.stats.hits += LINT_CACHE_COUNTER_STEP
+    cache.entries.move_to_end(cache_path)
+    return cached.attempt
+
+
+def _attempt_from_snapshot(snapshot: FileSourceSnapshot) -> FileParseAttempt:
+    try:
+        tree = ast.parse(snapshot.source, filename=str(snapshot.path))
+    except SyntaxError as exc:
+        return FileParseAttempt.syntax_failure(snapshot, exc)
     parsed = ParsedFile(
-        path=path,
-        rel=relative_path(path),
+        path=snapshot.path,
+        rel=relative_path(snapshot.path),
         tree=tree,
-        lines=source.splitlines(),
+        lines=snapshot.source.splitlines(),
         parent_map=build_parent_map(tree),
         string_line_ranges=compute_string_line_ranges(tree),
     )
+    return FileParseAttempt.success(snapshot, parsed)
+
+
+def _read_source_snapshot(
+    path: Path, stat: os.stat_result | None = None
+) -> FileSourceSnapshot | FileParseAttempt:
+    try:
+        file_stat = path.stat() if stat is None else stat
+        source = path.read_text(encoding="utf-8", errors=_TEXT_DECODE_ERROR_POLICY)
+    except (OSError, UnicodeDecodeError) as exc:
+        return FileParseAttempt.read_failure(path, type(exc).__name__)
+    signature = _source_signature(file_stat.st_size, file_stat.st_mtime_ns, source)
+    return FileSourceSnapshot(
+        path=path,
+        size=file_stat.st_size,
+        mtime_ns=file_stat.st_mtime_ns,
+        source=source,
+        content_hash=signature[2],
+    )
+
+
+def parse_file_attempt(path: Path) -> FileParseAttempt:
+    """Read and parse a Python file once, retaining success or error metadata."""
+    cache = _request_analysis_cache()
+    cache_path = path.resolve()
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        return FileParseAttempt.read_failure(path, type(exc).__name__)
+    cached = _lookup_cached_by_stat(cache, cache_path, stat)
+    if cached is not None:
+        return cached
+    snapshot = _read_source_snapshot(path, stat)
+    if isinstance(snapshot, FileParseAttempt):
+        return snapshot
+    signature = (snapshot.mtime_ns, snapshot.size, snapshot.content_hash)
+    cache.stats.misses += LINT_CACHE_COUNTER_STEP
+    attempt = _attempt_from_snapshot(snapshot)
     _remember_parsed_file(
         cache,
         cache_path,
         _ParsedFileCacheEntry(
             signature=signature,
-            size=_cache_entry_size(cache_path, source),
-            parsed=parsed,
+            size=_cache_entry_size(cache_path, snapshot.source),
+            attempt=attempt,
         ),
     )
-    return parsed
+    return attempt
+
+
+def parse_file_attempts(paths: Sequence[Path]) -> list[FileParseAttempt]:
+    """Parse each path once and retain success or error metadata."""
+    from slopgate.lint._helpers.parallel import (
+        parse_attempts_parallel,
+        should_parse_in_parallel,
+    )
+
+    unique_paths = list(paths)
+    if should_parse_in_parallel(unique_paths):
+        return parse_attempts_parallel(unique_paths)
+    return [parse_file_attempt(path) for path in unique_paths]
+
+
+def parse_file(path: Path) -> ParsedFile | None:
+    """Parse a Python file into a ``ParsedFile``, or return None on failure."""
+    return parse_file_attempt(path).parsed
 
 
 def parse_files(paths: list[Path]) -> list[ParsedFile]:
     """Parse a list of Python files, skipping any that fail to parse."""
-    results: list[ParsedFile] = []
-    for path in paths:
-        parsed = parse_file(path)
-        if parsed is not None:
-            results.append(parsed)
-    return results
+    return [
+        attempt.parsed
+        for attempt in parse_file_attempts(paths)
+        if attempt.parsed is not None
+    ]
 
 
 def ensure_parsed(

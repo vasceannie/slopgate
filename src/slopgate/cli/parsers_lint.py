@@ -1,10 +1,26 @@
 """Lint subcommand argparse wiring."""
 
 from __future__ import annotations
+import argparse
 from dataclasses import dataclass
 from typing import cast
 from slopgate._argparse_types import SubparserRegistry
 from slopgate.cli.lint import cmd_lint
+from slopgate.cli.lint.scan_flags import (
+    apply_lint_scan_env,
+    restore_lint_scan_env,
+    scan_flags_from_args,
+)
+
+
+def _cmd_lint_with_scan_env(args: argparse.Namespace) -> int:
+    """Apply CLI lint scan flags to env, then dispatch the lint subcommand."""
+    flags = scan_flags_from_args(args)
+    prior = apply_lint_scan_env(flags)
+    try:
+        return cmd_lint(args)
+    finally:
+        restore_lint_scan_env(prior)
 
 
 @dataclass(frozen=True)
@@ -25,7 +41,25 @@ def _add_lint_analysis_parser(
         spec.name, help=spec.help_text, description=spec.description
     )
     parsers.add_details_argument(parser, help_text=spec.details_help)
-    parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
+    parser.add_argument(
+        "--profile",
+        dest="profile",
+        action="store_true",
+        help="Print per-phase and per-collector timings",
+    )
+    parser.add_argument(
+        "--full",
+        dest="full",
+        action="store_true",
+        help="Rebuild the enrolled lint fact index from scratch",
+    )
+    parser.add_argument(
+        "--no-index",
+        dest="no_index",
+        action="store_true",
+        help="Skip reading and writing the enrolled lint fact index",
+    )
+    parser.set_defaults(func=_cmd_lint_with_scan_env, lint_command=spec.lint_command)
 
 
 def _add_lint_analysis_parsers(lint_sub: SubparserRegistry) -> None:
@@ -78,7 +112,7 @@ def _add_lint_path_subcommand(
         spec.name, help=spec.help_text, description=spec.description
     )
     parsers.add_optional_path_argument(parser)
-    parser.set_defaults(func=cmd_lint, lint_command=spec.lint_command)
+    parser.set_defaults(func=_cmd_lint_with_scan_env, lint_command=spec.lint_command)
 
 
 _LINT_PATH_SUBCOMMANDS = (
@@ -107,7 +141,7 @@ def _add_lint_init_parser(lint_sub: SubparserRegistry) -> None:
 
     init = lint_sub.add_parser("init", help="Scaffold slopgate.toml")
     parsers.add_optional_path_argument(init)
-    init.set_defaults(func=cmd_lint, lint_command="init")
+    init.set_defaults(func=_cmd_lint_with_scan_env, lint_command="init")
 
 
 def _add_lint_update_parser(lint_sub: SubparserRegistry) -> None:
@@ -116,7 +150,7 @@ def _add_lint_update_parser(lint_sub: SubparserRegistry) -> None:
     update = lint_sub.add_parser("update", help="Add missing config keys")
     parsers.add_optional_path_argument(update)
     parsers.add_dry_run_argument(update)
-    update.set_defaults(func=cmd_lint, lint_command="update")
+    update.set_defaults(func=_cmd_lint_with_scan_env, lint_command="update")
 
 
 def add_lint_parsers(sub: SubparserRegistry) -> None:
@@ -126,4 +160,4 @@ def add_lint_parsers(sub: SubparserRegistry) -> None:
     _add_lint_path_subcommands(lint_sub)
     _add_lint_init_parser(lint_sub)
     _add_lint_update_parser(lint_sub)
-    lint.set_defaults(func=cmd_lint, lint_command="check")
+    lint.set_defaults(func=_cmd_lint_with_scan_env, lint_command="check")

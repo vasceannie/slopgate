@@ -1,4 +1,4 @@
-"""Python AST runtime rules."""
+"""Shared helpers for import-alias and private-import AST rules."""
 
 from __future__ import annotations
 

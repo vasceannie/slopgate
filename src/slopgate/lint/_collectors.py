@@ -12,6 +12,7 @@ from slopgate.lint._collector_groups.constants import (
     TOUCHED_TEST_INTEGRITY_COLLECTORS,
 )
 from slopgate.lint._collector_groups.integrity import full_integrity_collectors
+from slopgate.lint._collector_groups.run_options import CollectorRunOptions
 from slopgate.lint._collector_groups.runners import (
     run_all_collectors,
     run_test_integrity_collectors,
@@ -29,6 +30,7 @@ test_integrity_collectors = full_integrity_collectors
 
 __all__ = [
     "CollectorResults",
+    "CollectorRunOptions",
     "DEFERRED_TEST_INTEGRITY_COLLECTORS",
     "OPT_IN_CLI_COLLECTORS",
     "SourceAnalysis",

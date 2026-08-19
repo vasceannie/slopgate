@@ -11,6 +11,8 @@ from slopgate.util import warning
 from ._coerce import bool_value, object_dict
 from ._io import load_toml, slopgate_path, slopgate_template, write_slopgate
 
+GIT_BIN = "git"
+
 # Sentinel filenames that disable the quality gate for a repo.
 DISABLE_SENTINELS = (".noslopgate", ".no-slop-gate")
 MISSING_FILE_MTIME_NS = -1

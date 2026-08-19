@@ -17,7 +17,7 @@ from slopgate.util.payloads import (
     is_mutating_tool_use,
 )
 
-from ..._source_parse import line_count, resolve_python_path
+from ...source_parse import line_count, resolve_python_path
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
