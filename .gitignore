@@ -19,3 +19,9 @@ error.log
 .hypothesis/
 headroom_memory.db
 .slopgate/cache/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

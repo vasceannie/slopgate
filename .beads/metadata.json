@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "slopgate",
+  "project_id": "e1b804a4-85f7-45a0-8189-404473f9bbfc"
+}
