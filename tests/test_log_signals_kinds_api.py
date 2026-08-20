@@ -39,6 +39,7 @@ def test_contains_package_boundary_call_detects_client_get() -> None:
 
 def test_boundary_kind_for_function_marks_adapter_path() -> None:
     node = ast.parse("def send_order():\n    pass\n").body[0]
+    assert isinstance(node, ast.FunctionDef)
     kind = boundary_kind_for_function(ADAPTER_PATH, node, None)
     assert kind == "package boundary", kind
 

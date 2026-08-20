@@ -40,15 +40,14 @@ def dry_run_install_json(
     def which(name: str) -> str | None:
         return case.binary if name == "slopgate" else None
 
-    def run_probe(
-        command: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[list[str]]:
-        return subprocess.CompletedProcess(command, 0)
-
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: case.windows)
     monkeypatch.setattr(slopgate.installer._shared.shutil, "which", which)
-    monkeypatch.setattr(slopgate.installer._shared.subprocess, "run", run_probe)
+    monkeypatch.setattr(
+        slopgate.installer._shared.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 0),
+    )
     assert slopgate.installer.install_platform(case.platform, dry_run=True) == 0
     output = capsys.readouterr().out
     return object_dict(json.loads(output[output.index("{") :]))
@@ -107,22 +106,23 @@ def _codex_hook_coverage_summary(hooks: ObjectDict) -> dict[str, object]:
     permission_matcher = str(permission.get("matcher", ""))
     required_tools = {"Bash", "apply_patch", "Edit", "Write"}
     missing_tools_by_matcher = {
-        "PreToolUse": sorted(
-            (tool for tool in required_tools if tool not in pre_matcher)
-        ),
-        "PostToolUse": sorted(
-            (tool for tool in required_tools if tool not in post_matcher)
-        ),
-        "PermissionRequest": sorted(
-            (tool for tool in required_tools if tool not in permission_matcher)
-        ),
+        event: (
+            []
+            if matcher == "*"
+            else sorted(tool for tool in required_tools if tool not in matcher)
+        )
+        for event, matcher in (
+            ("PreToolUse", pre_matcher),
+            ("PostToolUse", post_matcher),
+            ("PermissionRequest", permission_matcher),
+        )
     }
     return {
         "missing_tools_by_matcher": missing_tools_by_matcher,
         "session_sources_ok": all(
             (
                 source in session_start_matcher
-                for source in ("startup", "resume", "clear")
+                for source in ("startup", "resume", "clear", "compact")
             )
         ),
     }
@@ -154,7 +154,7 @@ def test_codex_hooks_cover_current_tool_events() -> None:
     }
 
 
-def test_codex_hooks_are_bash_only(
+def test_codex_hooks_use_managed_cli_commands(
     capsys: CaptureFixture[str], monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     data = dry_run_install_json(

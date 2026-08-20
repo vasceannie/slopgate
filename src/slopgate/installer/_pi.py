@@ -59,8 +59,8 @@ _PACKAGE_PAYLOAD = {
     "type": "module",
     "dependencies": {
         "@types/node": "^22.16.5",
-        "@earendil-works/pi-tui": "^0.79.6",
     },
+    "peerDependencies": {"@earendil-works/pi-tui": "*"},
 }
 
 
@@ -107,14 +107,6 @@ render_pi_extension = InvocationTemplateRenderer(
 )
 
 
-def _is_owned_pi_extension(content: str) -> bool:
-    return all(marker in content for marker in PI_OWNERSHIP_MARKERS)
-
-
-def _is_owned_legacy_package_extension(content: str) -> bool:
-    return all(marker in content for marker in _LEGACY_PACKAGE_OWNERSHIP_MARKERS)
-
-
 def _json_object_from_content(content: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(content)
@@ -133,11 +125,13 @@ def _is_owned_pi_config(content: str) -> bool:
 
 def _is_owned_pi_package(content: str) -> bool:
     parsed_package = _json_object_from_content(content) or {}
-    dependencies = parsed_package.get("dependencies")
-    if not isinstance(dependencies, dict):
-        return False
-    package_deps = cast("dict[object, object]", dependencies)
-    return "@earendil-works/pi-tui" in package_deps
+    for group_name in ("dependencies", "peerDependencies"):
+        dependencies = parsed_package.get(group_name)
+        if isinstance(dependencies, dict):
+            package_deps = cast("dict[object, object]", dependencies)
+            if "@earendil-works/pi-tui" in package_deps:
+                return True
+    return False
 
 
 def pi_extension_has_owned_slopgate(path: Path) -> bool:
@@ -145,12 +139,12 @@ def pi_extension_has_owned_slopgate(path: Path) -> bool:
         return False
     content = path.read_text(encoding="utf-8", errors=REPLACE)
     if path.name == _LEGACY_PACKAGE_ENTRY_NAME:
-        return _is_owned_legacy_package_extension(content)
+        return all(marker in content for marker in _LEGACY_PACKAGE_OWNERSHIP_MARKERS)
     if path.name == _CONFIG_NAME:
         return _is_owned_pi_config(content)
     if path.name == _PACKAGE_NAME:
         return _is_owned_pi_package(content)
-    return _is_owned_pi_extension(content)
+    return all(marker in content for marker in PI_OWNERSHIP_MARKERS)
 
 
 def _remove_owned_file(path: Path, label: str, *, dry_run: bool) -> int:
@@ -181,14 +175,6 @@ def _write_pi_json(path: Path, payload: object, label: str, *, dry_run: bool) ->
         print(f"Would write: {path}")
         return
     write_json_with_backup(path, payload, label)
-
-
-def _write_config(config_path: Path, *, dry_run: bool) -> None:
-    _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=dry_run)
-
-
-def _write_package(package_path: Path, *, dry_run: bool) -> None:
-    _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=dry_run)
 
 
 def _pi_template_text() -> str | None:
@@ -240,8 +226,8 @@ def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) ->
     target.parent.mkdir(parents=True, exist_ok=True)
     backup_existing_file_and_report(target, "file")
     target.write_text(content, encoding="utf-8")
-    _write_config(config_path, dry_run=False)
-    _write_package(package_path, dry_run=False)
+    _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=False)
+    _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=False)
     status = _cleanup_migrated_pi_extensions(target, dry_run=False)
     print_binary_install_summary(f"Installed slopgate Pi extension to {target}", binary)
     return status

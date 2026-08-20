@@ -7,6 +7,7 @@ from typing import NamedTuple
 
 from . import classify
 from .constants import (
+    EVENT_PATH_PARTS,
     HTTP_BOUNDARY_METHODS,
     PACKAGE_BOUNDARY_CLASS_SUFFIXES,
     PACKAGE_BOUNDARY_NAME_PARTS,
@@ -53,7 +54,7 @@ def boundary_kind_for_function(
 ) -> str | None:
     """Return event/package kind when node is an observability boundary."""
     parts = classify.path_parts(path_value)
-    if parts & classify.EVENT_PATH_PARTS:
+    if parts & EVENT_PATH_PARTS:
         return "event boundary"
     if classify.name_has_pubsub_marker(node.name):
         return "event boundary"

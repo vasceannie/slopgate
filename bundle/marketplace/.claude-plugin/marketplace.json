@@ -7,7 +7,7 @@
     {
       "name": "slopgate",
       "source": "../claude-plugin",
-      "description": "Slopgate recovery skills and agents for Claude Code; install hooks separately with slopgate install claude.",
+      "description": "Slopgate recovery skills and agents for Claude Code; install hooks separately with slopgate install claude --install-scope user|project|both.",
       "version": "1.2.0"
     }
   ]

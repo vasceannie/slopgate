@@ -1,0 +1,19 @@
+{
+  "session_id": "2026-08-20T16:28:00Z",
+  "iteration": 2,
+  "repo": "/home/trav/.openclaw/workspace-hooker/slopgate",
+  "initial_counts": {
+    "ruff": 20,
+    "pyrefly": 21
+  },
+  "current_counts": {
+    "ruff": 0,
+    "pyrefly": 0
+  },
+  "pending_items": [],
+  "completed_items": [
+    {"collector": "ruff", "code": "F401,E402,F822", "resolved_at": "2026-08-20T16:40:00Z"},
+    {"collector": "pyrefly", "code": "missing-import,deprecated,not-callable,bad-argument-type,missing-attribute", "resolved_at": "2026-08-20T16:40:00Z"}
+  ],
+  "last_updated": "2026-08-20T16:40:00Z"
+}

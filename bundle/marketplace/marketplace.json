@@ -7,7 +7,7 @@
     {
       "name": "slopgate",
       "source": "../claude-plugin",
-      "description": "Slopgate recovery skills and agents for Claude Code (isx-cli, codegraph-cli, rtk-cli). Hooks: slopgate install claude; CodeGraph: codegraph install; RTK: rtk init -g.",
+      "description": "Slopgate recovery skills and agents for Claude Code (isx-cli, codegraph-cli, rtk-cli). Hooks: slopgate install claude --install-scope user|project|both; CodeGraph: codegraph install; RTK: rtk init -g.",
       "version": "1.2.0"
     }
   ]

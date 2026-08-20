@@ -1,6 +1,6 @@
 {
   "name": "slopgate",
-  "description": "Slopgate recovery skills and agents for Claude Code, including isx-cli, codegraph-cli (CodeGraph MCP), and rtk-cli. Hooks: slopgate install; CodeGraph MCP via codegraph install; RTK via rtk init -g.",
+  "description": "Slopgate recovery skills and agents for Claude Code, including isx-cli, codegraph-cli (CodeGraph MCP), and rtk-cli. Hooks: slopgate install claude --install-scope user|project|both; CodeGraph MCP via codegraph install; RTK via rtk init -g.",
   "version": "1.2.0",
   "author": {
     "name": "trav"

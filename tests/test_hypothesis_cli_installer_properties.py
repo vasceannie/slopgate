@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from hypothesis import given, strategies
+from pathlib import Path
 
+from hypothesis import HealthCheck, given, settings, strategies
+
+from slopgate._types import ObjectDict
 from slopgate.cli.commands import cmd_handle
 from slopgate.cli.main import main
 from slopgate.installer._shared import (
@@ -15,13 +18,28 @@ from slopgate.installer.suite import (
     uninstall_autoupdate,
 )
 from slopgate.installer._claude import install_claude, uninstall_claude
-from slopgate.installer._codex import codex_hooks_block, install_codex, uninstall_codex
+from slopgate.installer._codex import (
+    codex_hooks_block,
+    enable_codex_hooks_toml,
+    install_codex,
+    uninstall_codex,
+)
 from slopgate.installer._cursor import install_cursor, uninstall_cursor
 from slopgate.installer._opencode import install_opencode, uninstall_opencode
 
 _SHORT_TEXT = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 /-_.",
     max_size=40,
+)
+_CODEX_FEATURE_LINE = strategies.sampled_from(
+    [
+        "",
+        "hooks = false\n",
+        "hooks = true\n",
+        "codex_hooks = false\n",
+        "codex_hooks = true\n",
+        "hooks = false\ncodex_hooks = true\n",
+    ]
 )
 
 
@@ -72,10 +90,10 @@ def test_uninstall_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> No
 
 @given(strategies.sampled_from(["PreToolUse", "PostToolUse"]))
 def test_merge_owned_hooks_preserves_unrelated_events_property(event: str) -> None:
-    existing: dict[str, object] = {
+    existing: ObjectDict = {
         "hooks": {event: [{"hooks": [{"command": "echo keep"}]}]}
     }
-    managed: dict[str, list[dict[str, object]]] = {
+    managed: dict[str, list[ObjectDict]] = {
         event: [{"hooks": [{"command": "slopgate handle --platform claude"}]}]
     }
     merged = merge_owned_hooks(existing, managed)
@@ -142,3 +160,30 @@ def test_uninstall_opencode_dry_run_returns_zero_property(dry_run: bool) -> None
 def test_codex_hooks_block_is_mapping_property(binary: str) -> None:
     hooks = codex_hooks_block(binary)
     assert isinstance(hooks, dict)
+
+
+@given(label=_SHORT_TEXT, feature_line=_CODEX_FEATURE_LINE)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_enable_codex_hooks_toml_is_canonical_and_idempotent_property(
+    tmp_path: Path, label: str, feature_line: str
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f'label = "{label}"\n'
+        "[features]\n"
+        "plugin_hooks = true\n"
+        f"{feature_line}"
+        "[projects.sample]\n"
+        f'name = "{label}"\n',
+        encoding="utf-8",
+    )
+
+    enable_codex_hooks_toml(config_path)
+    first_result = config_path.read_text(encoding="utf-8")
+    enable_codex_hooks_toml(config_path)
+
+    assert "hooks = true\n" in first_result, "canonical Codex hook flag must be set"
+    assert "codex_hooks" not in first_result, "legacy Codex hook flags must be removed"
+    assert config_path.read_text(encoding="utf-8") == first_result, (
+        "enabling Codex hooks twice must be idempotent"
+    )

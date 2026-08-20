@@ -99,7 +99,7 @@ __all__ = [
     "PythonImportAliasRule",
     "PythonImportFanoutRule",
 ]
-from ._source_parse import (
+from .source_parse import (
     first_significant_line,
     is_full_module_candidate,
     line_count,
@@ -131,15 +131,15 @@ from .module import (
     python_structural_sources,
     read_python_source,
 )
-from ._ast_health import PythonAstHealthRule
-from ._broad_silent import (
+from .ast_health import PythonAstHealthRule
+from .broad_silent import (
     PythonBroadExceptLoggerRule,
     PythonSilentExceptRule,
     is_broad_exception,
     is_empty_default_return,
     is_logger_call,
 )
-from ._boundary_helpers import (
+from .log_signals import (
     BOUNDARY_LOG_METHODS,
     BOUNDARY_LOG_NAMES,
     BoundaryFunction,
@@ -150,6 +150,7 @@ from ._boundary_helpers import (
     PACKAGE_BOUNDARY_CLASS_SUFFIXES,
     PACKAGE_BOUNDARY_NAME_PARTS,
     PACKAGE_BOUNDARY_PATH_PARTS,
+    PythonBoundaryLoggingRule,
     attribute_chain_parts,
     boundary_kind_for_function,
     called_name,
@@ -162,15 +163,14 @@ from ._boundary_helpers import (
     iter_public_boundary_functions,
     path_parts,
 )
-from ._boundary_rule import PythonBoundaryLoggingRule
-from ._method_style import (
+from .style_limits import (
     PythonDeepNestingRule,
     PythonLongLineRule,
     PythonLongMethodRule,
     PythonLongParameterRule,
 )
-from ._feature_envy import PythonFeatureEnvyRule
-from ._wrapper_god import (
+from .feature_envy import PythonFeatureEnvyRule
+from .class_shape import (
     PythonGodClassRule,
     PythonThinWrapperRule,
     is_exempt_cast_wrapper,
@@ -183,12 +183,12 @@ from ._wrapper_god import (
     thin_wrapper_extract_single_call,
     thin_wrapper_has_self_or_cls_receiver,
 )
-from ._complexity_dead import (
+from .complexity_dead import (
     PythonCyclomaticComplexityRule,
     PythonDeadCodeRule,
     CC_BRANCH_TYPES,
 )
-from ._flat_siblings import (
+from .sibling_files import (
     PythonFlatFileSiblingsRule,
     FlatSiblingFindingInput,
     flat_sibling_patch_added_and_removed_paths,
@@ -212,7 +212,9 @@ from .private_imports import PythonPrivateImportChainRule
 from .imports import PythonImportAliasRule, PythonImportFanoutRule
 from .imports import alias_rule, fanout_rule, helpers
 from .module.size import guidance, projection, sources
+from .compat import install_private_module_aliases
 
+install_private_module_aliases()
 
 sys.modules.update(
     {

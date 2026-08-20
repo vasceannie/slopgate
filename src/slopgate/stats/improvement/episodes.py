@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from .parsing import parse_result_record
 from .scope_model import (
     STATE_EVALUATION_ERROR,
     STATE_NO_FOLLOWUP,
@@ -21,7 +22,6 @@ from .scope_model import (
     ResultRecord,
     RepairEpisode,
     StructuralKey,
-    parse_result_record,
     timestamp_key,
 )
 

@@ -21,10 +21,10 @@ from slopgate.stats.improvement import (
     resolve_comparison,
     semantic_tool_family,
 )
+from slopgate.stats.improvement.parsing import parse_result_record
 from slopgate.stats.improvement.scope_model import (
     normalized_path_set,
     optional_str,
-    parse_result_record,
     parse_timestamp,
     timestamp_key,
 )

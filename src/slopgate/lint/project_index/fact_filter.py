@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -12,7 +12,7 @@ _ACTIVE_FACT_TYPES: ContextVar[frozenset[str] | None] = ContextVar(
 
 
 @contextmanager
-def fact_type_filter(kinds: frozenset[str] | None) -> Iterator[None]:
+def fact_type_filter(kinds: frozenset[str] | None) -> Generator[None, None, None]:
     """Apply a fact-type allowlist for one index refresh, then restore the prior filter."""
     token = _ACTIVE_FACT_TYPES.set(kinds)
     try:

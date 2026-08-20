@@ -17,7 +17,7 @@ from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 
 from .._helpers import decision_for_context, evaluate_common, parse_module
-from ._flat_siblings import (
+from .sibling_files import (
     flat_sibling_patch_added_and_removed_paths,
     flat_sibling_patch_blob,
 )

@@ -18,7 +18,8 @@ This note records the Slopgate changes retained while moving the working branch 
 These are first-party Slopgate changes in the daemon and hook path, rather than
 upstream configuration assumptions:
 
-1. **Resident daemon transport.** `slopgate daemon` evaluates hook requests over a
+1. **Resident daemon transport.** `slopgate daemon [--socket PATH]
+   [--max-requests N] [--workers N | --serial]` evaluates hook requests over a
    newline-framed JSON protocol on a Unix-domain socket. Socket discovery prefers
    `$XDG_RUNTIME_DIR/slopgate-hookd.sock`, then a user-scoped temporary socket.
    Frames are capped at 1 MiB and non-socket paths are never unlinked.

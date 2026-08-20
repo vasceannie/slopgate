@@ -51,14 +51,16 @@ def test_pi_install_writes_global_extension(
         "has_binary": json.dumps(["/tmp/slopgate"]) in content,
         "has_handle_args": '"handle", "--platform", "pi"' in content,
         "config_name": json.loads(config_path.read_text(encoding="utf-8"))["name"],
-        "pi_tui_version": package["dependencies"]["@earendil-works/pi-tui"],
+            "pi_tui_version": package["peerDependencies"][
+                "@earendil-works/pi-tui"
+            ],
         "node_types_version": package["dependencies"]["@types/node"],
     } == {
         "has_marker": True,
         "has_binary": True,
         "has_handle_args": True,
         "config_name": "pi-slopgate",
-        "pi_tui_version": "^0.79.6",
+            "pi_tui_version": "*",
         "node_types_version": "^22.16.5",
     }, "Pi user install should write extension, config, and package metadata"
 

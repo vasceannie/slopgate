@@ -14,7 +14,7 @@ from pathlib import Path
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, find_source_files
-from slopgate.rules.python_ast._rules._boundary_helpers import (
+from slopgate.rules.python_ast._rules.log_signals import (
     boundary_kind_for_function,
     has_boundary_log_call,
     is_test_module_path,

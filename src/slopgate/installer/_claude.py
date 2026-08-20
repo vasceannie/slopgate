@@ -69,7 +69,7 @@ def claude_hooks_block(binary: str) -> _ClaudeHooks:
         }
         entry: _ClaudeHookEntry = {"hooks": [command_entry]}
         if event == "SessionStart":
-            entry["matcher"] = "startup|resume"
+            entry["matcher"] = "startup|resume|clear|compact|fork"
         hooks[event] = [entry]
     return hooks
 

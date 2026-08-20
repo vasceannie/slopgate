@@ -109,7 +109,7 @@ make dashboard-dev                # Vite → http://localhost:18835
 |---|---|---|
 | **Claude Code** | ✅ Production | `slopgate install claude [--install-scope user\|project\|both]` |
 | **Cursor** | ⚠️ Partial | `slopgate install cursor [--install-scope user\|project\|both]` |
-| **Codex CLI** | ⚠️ Partial | `slopgate install codex [--install-scope user\|project\|both]` |
+| **Codex CLI** | ⚠️ GA hooks, coverage gaps | `slopgate install codex [--install-scope user\|project\|both]` |
 | **OpenCode** | ⚠️ Degraded | `slopgate install opencode [--install-scope user\|project\|both]` |
 | **Pi** | ⚠️ Partial | `slopgate install pi [--install-scope user\|project\|both]` |
 
@@ -141,10 +141,10 @@ claude --plugin-dir ./bundle/claude-plugin
 
 ## Platform Notes
 
-- **Claude Code**: full first-class hook target. Installs into `~/.claude/settings.json` and/or `.claude/settings.json` (`--install-scope`). Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
+- **Claude Code**: full first-class hook target. Installs into `~/.claude/settings.json` and/or `.claude/settings.json` (`--install-scope`). Session startup hooks cover `startup`, `resume`, `clear`, `compact`, and `fork`; Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
 - **Cursor**: native hooks via `~/.cursor/hooks.json` (user) and/or `.cursor/hooks.json` (project). Install with `slopgate install <platform>` (user default), `--install-scope project|both`, and optional `--project-root /path/to/repo`. The same flags apply to `install all`, `setup`, `update`, and `uninstall`. Slopgate maps Cursor events to its canonical model and renders Cursor-native stdout (`permission` gates, `continue` for `beforeSubmitPrompt`, `additional_context` for `postToolUse`/`afterFileEdit`, `followup_message` for `stop`/`subagentStop`). Post-tool hooks cannot hard-block edits the way Claude `PostToolUse` denial does; use `preToolUse`, `beforeShellExecution`, or `beforeReadFile` for enforcement. Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`) are installed for inline-completion policy; `workspaceOpen` is not wired yet.
-- **Codex CLI**: partial hooks via `~/.codex/hooks.json` and/or `.codex/hooks.json`, with `features.hooks = true` enabled in the adjacent `config.toml` when that file exists. Matchers target `Bash|apply_patch|Edit|Write`. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per [Codex hooks docs](https://developers.openai.com/codex/config-reference).
-- **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `file.edited`, `permission.asked`, `permission.replied`, `session.created`, `session.compacted`, `session.idle`, `session.error`, `session.status`, `shell.env`, and `command.executed`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool.execute.before`; `file.edited` is the preferred post-edit quality/lint signal when OpenCode emits it. Lifecycle/telemetry events are replayable and may log advisory context, but do not provide hard enforcement. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
+- **Codex CLI**: GA hooks with platform-specific gaps via `~/.codex/hooks.json` and/or `.codex/hooks.json`; the installer keeps `features.hooks = true` in the adjacent `config.toml` for compatibility. Matchers cover all Codex-supported local function and MCP tools, while hosted tools such as `WebSearch` remain outside the hook path. After installation or refresh, run `/hooks` in Codex to review and trust the changed hook definitions. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per the [Codex hooks reference](https://developers.openai.com/codex/hooks).
+- **OpenCode**: plugin shim at the user config plugins dir and/or `.opencode/plugins/slopgate-plugin.ts`. Native events (`tool.execute.before`, `tool.execute.after`, `file.edited`, `permission.asked`, `permission.replied`, `session.created`, `session.compacted`, `session.idle`, `session.error`, `session.status`, `shell.env`, and `command.executed`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool.execute.before`; `file.edited` is the preferred post-edit quality/lint signal when OpenCode emits it. Compatibility plugins may also replay Claude-configured hooks; payloads marked `hook_source: "opencode-plugin"` retain OpenCode adapter semantics even when that compatibility command supplies `--platform claude`. Lifecycle/telemetry events are replayable and may log advisory context, but do not provide hard enforcement. `session.idle` stop guidance is advisory (`action: continue`) because OpenCode cannot force another turn from the plugin API.
 - **Pi**: extension shim at `~/.pi/agent/extensions/pi-slopgate/index.ts` and/or `.pi/extensions/pi-slopgate/index.ts`. Native events (`tool_call`, `tool_result`, `tool_execution_end`, `user_bash`, `input`, `before_agent_start`, `turn_end`, and `agent_end`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool_call`, where Pi supports `{ block: true, reason }` and mutable `event.input` for argument patches; `user_bash` blocks are returned as synthetic failed shell results because Pi's user-bash hook is an interception surface, not the same block schema as model tool calls. The `input` event can return Pi's documented handled action for blocked prompts. Post-tool findings attach Slopgate metadata through Pi's `tool_result` patch shape, while visible Slopgate activity is sent as compact custom chat messages instead of footer/status widgets or routine stderr output. Installs migrate away the legacy standalone `slopgate.ts` shim when it is Slopgate-owned to avoid duplicate Pi extension loading.
 
 ## Architecture
@@ -181,10 +181,10 @@ No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 ### Hook runtime
 
 ```bash
-slopgate daemon [--socket PATH] [--max-requests N]
-slopgate handle [--platform claude|cursor|codex|opencode|pi]
+slopgate daemon [--socket PATH] [--max-requests N] [--workers N | --serial]
+slopgate handle [--platform claude|cursor|codex|opencode|pi|unknown]
 slopgate handle-async
-slopgate replay --payload fixture.json [--platform codex] [--pretty]
+slopgate replay --payload fixture.json [--platform claude|cursor|codex|opencode|pi|unknown] [--pretty]
 ```
 
 `slopgate handle` is the entrypoint that platform hooks invoke. `slopgate daemon` runs the optional resident Unix-socket server, and `handle-async` runs post-edit jobs when a platform supports them.
@@ -205,9 +205,9 @@ slopgate enroll [path] [--no-worktrees]
 ### Install / update / lifecycle
 
 ```bash
-slopgate install <claude|cursor|codex|opencode|pi|all> [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate install <claude|cursor|codex|opencode|pi|all> [--dry-run] [--source URL] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
 slopgate uninstall <claude|cursor|codex|opencode|pi|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
-slopgate setup [--dry-run] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate setup [--dry-run] [--source URL] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
 slopgate update [--dry-run] [--source URL] [--include-missing] [--refresh-hooks] [--install-scope user|project|both] [--project-root PATH]
 slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
 ```
@@ -217,12 +217,21 @@ slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
 ### Activity, config, and self-test
 
 ```bash
-slopgate stats [--log results.jsonl] [--days N] [--json]
+slopgate stats [--log results.jsonl] [--days N] [--json] [--baseline-policy HASH] [--candidate-policy HASH] [--baseline-guidance HASH] [--candidate-guidance HASH] [--cohort DIM=VALUE]
 slopgate config show
 slopgate config init [--force]
 slopgate config path
-slopgate test
+slopgate test [--list] [--smoke | --since REF | --files PATH ...] [--runner COMMAND] [-- RUNNER_ARGS ...]
 slopgate version
+```
+
+### Bundles and semantic search
+
+```bash
+slopgate bundle sync-prompts [--dry-run] [--remove] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
+slopgate bundle uninstall-prompts [--dry-run] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
+slopgate search <init|doctor|models|use|list|add|query|remove|sync|reindex|completions> ...
+isx <command-or-query>  # compatibility entry point for `slopgate search`
 ```
 
 ### Batch code quality linting (project-local)

@@ -1,0 +1,394 @@
+[
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 15,
+      "row": 6
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/lint/project_index/constant_cache.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Remove unused import: `sqlite3`"
+    },
+    "location": {
+      "column": 8,
+      "row": 6
+    },
+    "message": "`sqlite3` imported but unused",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 27,
+      "row": 4
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 4
+    },
+    "message": "`.calls.is_exempt_cast_wrapper` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 4,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 34,
+      "row": 5
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 5
+    },
+    "message": "`.calls.is_exempt_test_helper_wrapper` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 5,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 24,
+      "row": 6
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 6
+    },
+    "message": "`.calls.is_test_helper_path` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 25,
+      "row": 7
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 7
+    },
+    "message": "`.calls.is_wrapper_candidate` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 32,
+      "row": 8
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 8
+    },
+    "message": "`.calls.thin_wrapper_attribute_name` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 8,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 32,
+      "row": 9
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 9
+    },
+    "message": "`.calls.thin_wrapper_call_root_name` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 9,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 34,
+      "row": 10
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 10
+    },
+    "message": "`.calls.thin_wrapper_call_target_name` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 10,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 37,
+      "row": 11
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 11
+    },
+    "message": "`.calls.thin_wrapper_extract_single_call` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 11,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 42,
+      "row": 12
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 12
+    },
+    "message": "`.calls.thin_wrapper_has_self_or_cls_receiver` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 12,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 36,
+      "row": 14
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 18,
+      "row": 14
+    },
+    "message": "`.god.PythonGodClassRule` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 14,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 40,
+      "row": 15
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/class_shape/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 19,
+      "row": 15
+    },
+    "message": "`.thin.PythonThinWrapperRule` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 15,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 25,
+      "row": 4
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 4
+    },
+    "message": "`.constants.BOUNDARY_LOG_METHODS` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 4,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 23,
+      "row": 5
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 5
+    },
+    "message": "`.constants.BOUNDARY_LOG_NAMES` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 5,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 21,
+      "row": 6
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 6
+    },
+    "message": "`.constants.EVENT_CALL_NAMES` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 6,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 23,
+      "row": 7
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 7
+    },
+    "message": "`.constants.EVENT_NAME_MARKERS` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 7,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 21,
+      "row": 8
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/__init__.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 8
+    },
+    "message": "`.constants.EVENT_PATH_PARTS` imported but unused; consider removing, adding to `__all__`, or using a redundant alias",
+    "noqa_row": 8,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 21,
+      "row": 14
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/log_signals/classify.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from .constants import (\n    BOUNDARY_LOG_METHODS,\n    BOUNDARY_LOG_NAMES,\n    EVENT_CALL_NAMES,\n    EVENT_NAME_MARKERS,\n)",
+          "end_location": {
+            "column": 2,
+            "row": 15
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Remove unused import: `.constants.EVENT_PATH_PARTS`"
+    },
+    "location": {
+      "column": 5,
+      "row": 14
+    },
+    "message": "`.constants.EVENT_PATH_PARTS` imported but unused",
+    "noqa_row": 14,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 51,
+      "row": 128
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/rules/python_ast/_rules/source_parse.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 128
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 128,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "F822",
+    "end_location": {
+      "column": 50,
+      "row": 246
+    },
+    "filename": "/home/trav/.openclaw/workspace-hooker/slopgate/src/slopgate/stats/improvement/scope_model.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 246
+    },
+    "message": "Undefined name `parse_result_record` in `__all__`",
+    "noqa_row": 246,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-export"
+  }
+]

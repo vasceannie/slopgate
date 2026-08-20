@@ -35,22 +35,22 @@ _CodeHookEntry = dict[str, str | list[_CodeHookCommand]]
 _CodeHooks = dict[str, list[_CodeHookEntry]]
 CODEX_EVENTS: dict[str, _CodeHookMeta] = {
     "SessionStart": {
-        "matcher": "startup|resume|clear",
+        "matcher": "startup|resume|clear|compact",
         "timeout": 10,
         "statusMessage": "Loading slopgate context",
     },
     PRE_TOOL_USE: {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "*",
         "timeout": 10,
         "statusMessage": "slopgate: checking tool use",
     },
     "PermissionRequest": {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "*",
         "timeout": 10,
         "statusMessage": "slopgate: checking approval request",
     },
     POST_TOOL_USE: {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "*",
         "timeout": 10,
         "statusMessage": "slopgate: reviewing tool output",
     },
@@ -129,10 +129,6 @@ def _find_codex_feature_flags(
     return (hooks_index, codex_hooks_indexes)
 
 
-def _write_codex_toml_lines(config_path: Path, lines: list[str]) -> None:
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def _existing_codex_toml_is_valid(config_path: Path) -> bool:
     if not config_path.exists():
         return True
@@ -159,7 +155,7 @@ def _set_existing_hooks_flag(
     if match:
         lines[hooks_index] = f"{match.group(1)}true{match.group(2)}"
     _drop_lines(lines, codex_hooks_indexes)
-    _write_codex_toml_lines(config_path, lines)
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _replace_legacy_codex_hooks_flag(
@@ -172,7 +168,7 @@ def _replace_legacy_codex_hooks_flag(
             f"{match.group(1)}hooks{match.group(2)}true{match.group(3)}"
         )
     _drop_lines(lines, codex_hooks_indexes[1:])
-    _write_codex_toml_lines(config_path, lines)
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def enable_codex_hooks_toml(config_path: Path) -> None:
@@ -197,7 +193,7 @@ def enable_codex_hooks_toml(config_path: Path) -> None:
         _replace_legacy_codex_hooks_flag(config_path, lines, codex_hooks_indexes)
         return
     lines.insert(features_index + 1, "hooks = true")
-    _write_codex_toml_lines(config_path, lines)
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _install_codex_at(
@@ -226,6 +222,7 @@ def _install_codex_at(
         f"Installed slopgate hooks into {hooks_path}\nEnabled hooks feature flag in {config_path}",
         binary,
     )
+    print("Next: /hooks in Codex to review and trust the installed hooks.")
     return 0
 
 

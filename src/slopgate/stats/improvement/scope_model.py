@@ -243,7 +243,7 @@ class EpisodeEvaluation:
     first_observed: list[ResultRecord]
 
 
-__all__ = ["UNKNOWN_VALUE", "parse_result_record"]
+__all__ = ["UNKNOWN_VALUE"]
 
 
 def __getattr__(name: str) -> object:

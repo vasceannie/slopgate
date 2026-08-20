@@ -19,7 +19,7 @@ Do **not** symlink over full user prompt entrypoints such as `~/.claude/CLAUDE.m
 uv tool install /path/to/slopgate  # global CLI; or `uv sync` for dev venv
 ./bundle/scripts/link-local.sh --dry-run
 ./bundle/scripts/link-local.sh
-slopgate install all            # hooks only; idempotent owner of harness hook files
+slopgate install all --disable-autoupdate  # hooks only; do not register a dev scheduler
 ./bundle/scripts/verify-local.sh
 ```
 

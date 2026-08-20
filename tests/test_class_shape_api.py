@@ -14,14 +14,19 @@ from slopgate.rules.python_ast._rules.class_shape import (
 
 def test_is_wrapper_candidate_accepts_single_statement() -> None:
     node = ast.parse("def send():\n    return helper()\n").body[0]
+    assert isinstance(node, ast.FunctionDef)
     matched = is_wrapper_candidate(node)
     assert (node.name, matched) == ("send", True)
 
 
 def test_thin_wrapper_extract_single_call_reads_return() -> None:
     node = ast.parse("def send():\n    return helper()\n").body[0]
+    assert isinstance(node, ast.FunctionDef)
     call_node = thin_wrapper_extract_single_call(node.body[0])
-    assert ast.dump(call_node) == ast.dump(ast.parse("helper()").body[0].value)
+    assert call_node is not None
+    helper = ast.parse("helper()").body[0]
+    assert isinstance(helper, ast.Expr)
+    assert ast.dump(call_node) == ast.dump(helper.value)
 
 
 def test_god_and_thin_rule_ids() -> None:

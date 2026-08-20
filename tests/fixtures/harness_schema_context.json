@@ -60,7 +60,7 @@
       ]
     },
     "codex": {
-      "blocking_notes": "Partial hooks. Re-check unsupported/fail-open/fail-closed response fields before claiming enforcement.",
+      "blocking_notes": "Partial hooks coverage on a GA hook surface. Re-check unsupported/fail-open/fail-closed response fields before claiming enforcement.",
       "canonical_events": [
         "PostCompact",
         "PreCompact",
@@ -310,6 +310,16 @@
         "line": 33,
         "source_id": "claude_hooks",
         "text": "| `Setup`               | When you start Claude Code with `--init-only`, or with `--init` or `--maintenance` in `-p` mode. For one-time preparation in CI or scripts             |\n| `UserPromptSubmit`    | When you submit a prompt, before Claude processes it                                                                                                   |\n| `UserPromptExpansion` | When a user-typed command expands into a prompt, before it reaches Claude. Can block the expansion                                                     |\n| `PreToolUse`          | Before a tool call executes. Can block it                                                                                                              |\n| `PermissionRequest`   | When a permission dialog appears                                                                                                                       |\n| `PermissionDenied`    | When a tool call is denied by the auto mode classifier. Return `{retry: true}` to tell the model it may retry the denied tool call                     |\n| `PostToolUse`         | After a tool call succeeds                                                                                                                             |"
+      },
+      {
+        "keywords": [
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse"
+        ],
+        "line": 278,
+        "source_id": "codex_hooks",
+        "text": "The `matcher` field is a regex string that filters when hooks fire. Use `\"*\"`, `\"\"`, or omit `matcher` entirely to match every occurrence of a supported event."
       },
       {
         "keywords": [
@@ -800,7 +810,7 @@
         ],
         "line": 282,
         "source_id": "codex_hooks",
-        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |"
+        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |"
       },
       {
         "keywords": [
@@ -809,7 +819,7 @@
         ],
         "line": 283,
         "source_id": "codex_hooks",
-        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |"
+        "text": "| Event               | What `matcher` filters | Notes                                                        |\n| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |"
       },
       {
         "keywords": [
@@ -818,7 +828,7 @@
         ],
         "line": 284,
         "source_id": "codex_hooks",
-        "text": "| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
+        "text": "| ------------------- | ---------------------- | ------------------------------------------------------------ |\n| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
       },
       {
         "keywords": [
@@ -826,7 +836,7 @@
         ],
         "line": 285,
         "source_id": "codex_hooks",
-        "text": "| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
+        "text": "| `PermissionRequest` | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PostToolUse`       | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |"
       },
       {
         "keywords": [
@@ -835,7 +845,7 @@
         ],
         "line": 286,
         "source_id": "codex_hooks",
-        "text": "| `PostToolUse`       | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
+        "text": "| `PostToolUse`       | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
       },
       {
         "keywords": [
@@ -844,7 +854,7 @@
         ],
         "line": 287,
         "source_id": "codex_hooks",
-        "text": "| `PreToolUse`        | tool name              | Support includes `Bash`, `apply_patch`\\*, and MCP tool names |\n| `SessionStart`      | start source           | Current runtime values are `startup`, `resume`, and `clear`  |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
+        "text": "| `PreToolUse`        | tool name              | See [Tool coverage](#tool-coverage)                            |\n| `SessionStart`      | start source           | Values are `startup`, `resume`, `clear`, and `compact`         |\n| `UserPromptSubmit`  | not supported          | Any configured `matcher` is ignored for this event           |\n| `Stop`              | not supported          | Any configured `matcher` is ignored for this event           |\n\n\\*For `apply_patch`, `matcher` values can also use `Edit` or `Write`."
       },
       {
         "keywords": [
