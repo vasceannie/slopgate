@@ -1,276 +1,494 @@
-## 1. Conclusion
+## 1. Decision-complete conclusion
 
-Slopgate already records enough runtime evaluation data to build a useful **deterministic improvement-measurement layer without transcript mining or an LLM**. `results.jsonl` carries session, repo/enforcement mode, platform capability, model/provider, tool input, mutation intent, findings, errors, and timings. `slopgate stats` already loads that file as its canonical source. `src/slopgate/engine/_evaluation.py:139-153`, `src/slopgate/engine/_evaluation.py:175-196`, `src/slopgate/stats/_load.py:13-34`, `src/slopgate/stats/_report.py:160-182`
+Slopgate can build a deterministic improvement-measurement layer from `results.jsonl` without transcript mining or an LLM. The runtime already records session identity, repo and enforcement mode, platform capability, model/provider, tool input and mutation intent, findings, rule errors, and timings. `slopgate stats` already owns the canonical loader and report path. `src/slopgate/engine/_evaluation.py:139-153`, `src/slopgate/engine/_evaluation.py:175-196`, `src/slopgate/stats/_load.py:50-71`, `src/slopgate/stats/_report.py:160-182`
 
-The problem is that Slopgate currently has several incompatible definitions of “improved.” Python stats call a one-off denial “first-time resolved,” dashboard operational metrics treat any later non-blocking event as resolution, and rule calibration uses a comparable-attempt key that contains the entire `tool_input`, so an actual repaired write can cease to be comparable merely because, scandalously, the code changed. `src/slopgate/stats/_analysis.py:164-177`, `dashboard/src/hooks/useTraceData.ts:1091-1136`, `dashboard/src/lib/ruleCalibration.ts:54-61`
+The implementation target is **Slices 1 through 4**:
 
-I would implement a **canonical repair-episode model inside the existing stats layer first**, then add policy/version fingerprints, baseline-vs-candidate comparisons, and finally make the dashboard consume those semantics. Your uploaded feedback-loop design is directionally right about episode-based deterministic metrics and cohort comparisons; the repo inspection suggests that first layer can be substantially simpler than the eventual cross-harness transcript system. 
+1. complete and fingerprint result traces,
+2. add canonical single-window improvement metrics,
+3. add guarded baseline-vs-candidate comparisons, and
+4. make the dashboard mirror the same tested semantics.
 
-## 2. Findings
+Transcript enrichment remains out of scope.
 
-| Severity | Type                 | Finding                                                                                                                                                     | Evidence                                                                                                                                                                                                    | Why it matters                                                                                                                                       | Recommended fix                                                                                                                     |
-| -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **P1**   | `confirmed behavior` | `first_time_resolution_rate` does not actually observe resolution. A `(session, rule, path)` seen exactly once is immediately counted as resolved.          | `src/slopgate/stats/_analysis.py:164-177`, `src/slopgate/stats/_analysis.py:190-192`, `src/slopgate/stats/_report.py:141-157`                                                                               | A lower repeat count can masquerade as successful remediation even when the agent abandoned the issue.                                               | Preserve it temporarily as a legacy churn metric, but introduce episode-based `repair_success_rate` and `first_attempt_clean_rate`. |
-| **P1**   | `confirmed behavior` | Dashboard session resolution is too broad: after the first deny/block, **any** later allow/context/warn/info marks the session resolved.                    | `dashboard/src/hooks/useTraceData.ts:1091-1136`                                                                                                                                                             | An unrelated Read/Bash/other-file operation can “resolve” a failed write statistically.                                                              | Replace dashboard resolution with the same canonical repair-episode evaluator used by stats.                                        |
-| **P1**   | `confirmed behavior` | `results.jsonl` intentionally omits `candidate_paths` and `languages`, even though the corresponding event trace contains them.                             | `src/slopgate/engine/_evaluation.py:156-172`, `src/slopgate/engine/_evaluation.py:175-196`, `dashboard/src/context/traceRecordValidation.ts:34-47`                                                          | The canonical stats input cannot reliably group repairs by target or stratify by language without joining another stream or reparsing tool payloads. | Add `candidate_paths` and `languages` to `_payload_for_done()`.                                                                     |
-| **P1**   | `confirmed behavior` | Result traces have no effective policy/intervention fingerprint.                                                                                            | `src/slopgate/engine/_evaluation.py:175-196`                                                                                                                                                                | Before/after numbers cannot prove which rule/config/prompt revision was active.                                                                      | Trace Slopgate version plus deterministic effective-policy and guidance fingerprints.                                               |
-| **P2**   | `confirmed behavior` | Calibration's “comparable result” key hashes the full `tool_input`.                                                                                         | `dashboard/src/lib/ruleCalibration.ts:54-61`                                                                                                                                                                | A Write/Edit repair commonly changes the content, causing the repaired attempt to fall into another scope.                                           | Introduce a content-independent `repair_scope_key`: repo + session + rule + event/tool + normalized target paths.                   |
-| **P2**   | `confirmed behavior` | Improvement logic is split between Python stats, dashboard calibration, and dashboard session ops.                                                          | `src/slopgate/stats/_analysis.py:131-192`, `dashboard/src/lib/ruleCalibration.ts:17-40`, `dashboard/src/components/dashboard/FalsePositiveAnalysis.tsx:42`, `dashboard/src/hooks/useTraceData.ts:1091-1136` | The same trace history can produce three different stories about whether behavior improved.                                                          | Put canonical semantics in Python and make CLI/dashboard presentations consume or mirror one tested contract.                       |
-| **P2**   | `confirmed behavior` | Current enforcement already correctly distinguishes strict managed-repo rules from safety-only behavior, but raw aggregate metrics can erase that boundary. | `src/slopgate/engine/_runner.py:229-267`, `src/slopgate/rules/__init__.py:228-259`, `tests/engine/test_12_enforcement_modes.py:33-111`                                                                      | Mixing `repo_strict`, `repo_relaxed`, and `outside_repo` can make an enforcement change look like an agent-quality improvement.                      | Default coding-improvement analysis to `repo_strict`; report relaxed/outside-repo cohorts separately.                               |
+The original delivery order was unsafe. Outcome metrics must not become authoritative before version, policy, guidance, path, and language provenance exists. A policy change can otherwise look exactly like an agent repair. Trace completeness and the canonical episode contract therefore land before authoritative reporting.
 
-One boundary is **Unverified**: if by “evaluation data” you specifically mean the output of `make eval-dataset-ats`, GitNexus exposes a test showing that target invocation is allowed, but it did not expose the target's implementation or output schema. `tests/test_shell_read_rules_public_api.py:127-143`. The plan below therefore targets Slopgate's canonical runtime evaluation data in `results.jsonl`.
+## 2. Confirmed problems
 
----
+| Severity | Finding | Evidence | Required correction |
+| --- | --- | --- | --- |
+| **P1** | `first_time_resolution_rate` calls a scope resolved when it was denied only once; no clean follow-up is observed. | `src/slopgate/stats/_analysis.py:164-177`, `src/slopgate/stats/_analysis.py:190-192`, `src/slopgate/stats/_report.py:141-157` | Preserve the field as legacy churn telemetry. Add outcome-valid metrics with explicit denominators and censoring. |
+| **P1** | Dashboard session resolution treats any later non-blocking result as resolution. | `dashboard/src/hooks/useTraceData.ts:1091-1136` | Replace the operational metric with rule-local repair episodes. |
+| **P1** | Result rows omit `candidate_paths` and `languages`, although start rows contain them. | `src/slopgate/engine/_evaluation.py:156-196`, `dashboard/src/context/traceRecordValidation.ts:34-47` | Add both fields to result rows and dashboard result types. |
+| **P1** | Result rows have no policy, guidance, or implementation provenance. | `src/slopgate/engine/_evaluation.py:175-196` | Add Slopgate version plus deterministic policy and guidance fingerprints. |
+| **P2** | Dashboard calibration hashes the complete mutable `tool_input`. | `dashboard/src/lib/ruleCalibration.ts:42-61` | Use content-independent semantic scope identity. |
+| **P2** | Python stats, dashboard session operations, and dashboard calibration define improvement differently. | `src/slopgate/stats/_analysis.py:131-192`, `dashboard/src/lib/ruleCalibration.ts:90-332`, `dashboard/src/hooks/useTraceData.ts:1091-1136` | Define one pure contract in Python and mirror it in TypeScript against shared fixtures. |
+| **P2** | Aggregate metrics can mix `repo_strict`, `repo_relaxed`, and `outside_repo`. | `src/slopgate/engine/_runner.py:229-267`, `tests/engine/test_12_enforcement_modes.py:33-111` | Use strict-mode metrics as the headline and always show the other modes as separate cohorts. |
 
-## 3. Detailed analysis and implementation plan
+One boundary remains explicitly outside this plan: the implementation and schema behind `make eval-dataset-ats` were not established. This strategy targets runtime `results.jsonl` data.
 
-### A. Define one canonical unit: the repair episode
+## 3. Locked product decisions
 
-Do not start by adding more percentages to `_analysis.py`. That merely gives the metric hydra another head.
+These decisions are implementation requirements, not open questions.
 
-The current stats layer groups denials by `(session, rule_id, path)`, but only counts occurrences; it does not inspect a later clean attempt. `src/slopgate/stats/_analysis.py:164-177` The dashboard has the better idea of comparing attempts, but its scope key contains command plus the full stable `tool_input`. `dashboard/src/lib/ruleCalibration.ts:54-61`
+| Area | Decision |
+| --- | --- |
+| Delivery scope | Implement Slices 1 through 4. Do not implement transcript enrichment. |
+| Canonical model | Use two related models: a scope-level first-observed outcome and block-anchored rule-local repair episodes. |
+| Legacy rows | Show unversioned rows as best-effort `unknown_policy` diagnostics. Never mix them with fingerprinted authoritative comparisons. |
+| Multi-path identity | Prefer paths implicated by finding metadata. Otherwise retain the normalized candidate-path set as one low-confidence compound scope. |
+| Fingerprints | Keep `slopgate_version`, enforcement behavior, and runtime guidance as separate provenance fields. |
+| Rule-source changes | Effective policy identity must change when enforcement source changes even if the package version was not bumped. |
+| Resolution | Rule X resolves when a comparable result omits enforcing X and contains no evaluation error for X. Other rules may still fire. |
+| Tool comparability | Compare semantic tool families, so Write, Edit, MultiEdit, and apply-patch-style file mutations can repair one another on the same target. |
+| Observation end | Scan all available same-session rows until resolution, provenance change, or end of available data. |
+| Stats output | Every stats report includes a nested, versioned `improvement` object. Existing top-level keys and formulas remain unchanged. |
+| Dashboard | Python defines the canonical contract. TypeScript mirrors the pure evaluator so uploaded raw JSONL remains analyzable in-browser. |
+| Enforcement modes | Headline coding metrics use `repo_strict`. Relaxed and outside-repo metrics are always reported separately. |
+| Comparisons | Always show stratified breakdowns. Suppress the headline aggregate when matched filters do not isolate the selected intervention. |
 
-I would add:
+## 4. Canonical measurement model
 
-```text
-src/slopgate/stats/
-├── _episodes.py
-├── _improvement.py
-└── _fingerprints.py
-```
+### 4.1 Result record prerequisites
 
-Keep this under `stats` initially rather than founding another architectural kingdom. The existing loader, report path, JSON mode, and CLI integration are already there. `src/slopgate/stats/_load.py:50-71`, `src/slopgate/stats/_report.py:160-182`, `src/slopgate/cli/parsers.py:266-299`
-
-A rule-specific repair scope should conceptually be:
-
-```text
-session_id
-+ resolved_repo_root
-+ enforcement_mode
-+ rule_id
-+ event/tool family
-+ normalized candidate path(s)
-```
-
-It should **not** contain source content. For pathless rules, record `scope_confidence="low"` rather than pretending the correlation is equally precise.
-
-An episode becomes:
+Every new result row must contain:
 
 ```text
-first relevant attempt
-→ first block/deny
-→ zero or more comparable attempts
-→ first comparable clean attempt
-```
-
-Possible terminal states should be explicit:
-
-```text
-never_blocked
-resolved
-still_failing
-no_observed_followup
-```
-
-I would deliberately call the last state `no_observed_followup`, not “abandoned.” The trace proves absence of a later comparable result, not the psychological state of the agent. Humans have invented enough telemetry fan fiction already.
-
-### B. Metrics worth extracting in v1
-
-The result payload already records `mutating`, timing, model/provider, enforcement mode, repo, platform capability, findings and errors. `src/slopgate/engine/_evaluation.py:139-153`, `src/slopgate/engine/_evaluation.py:175-196`
-
-That supports these metrics without external histories:
-
-1. **Blocking evaluations per 100 mutating evaluations**
-   `100 × mutating evaluations ending deny/block / mutating evaluations`
-
-2. **First-attempt clean rate**
-   Percentage of repair scopes whose first mutating attempt does not produce an enforcing finding.
-
-3. **Observed repair success rate**
-   Blocked episodes with a later comparable clean attempt divided by blocked episodes with adequate observable follow-up. Keep `no_observed_followup` visible rather than silently treating it as success or failure.
-
-4. **Repair attempts**
-   Median and p90 attempts between initial block and clean comparable attempt.
-
-5. **Repair latency**
-   Median and p90 elapsed wall-clock time between initial block and clean comparable attempt.
-
-6. **Persistence rate by rule**
-   How often the same rule remains present on later comparable attempts. This replaces the current crude repeated-denial interpretation and generalizes the useful idea in dashboard calibration. `dashboard/src/lib/ruleCalibration.ts:17-40`, `dashboard/src/lib/ruleCalibration.ts:90`
-
-7. **Runtime reliability**
-   Result error rate plus p50/p95 `evaluation_ms` and `rule_engine_ms`; those timing fields are already emitted on every completed evaluation. `src/slopgate/engine/_evaluation.py:199-240`
-
-8. **Cohort facets**
-   Repo, enforcement mode, platform/capability, model/provider, rule, event/tool, and once the trace is enriched, language and policy fingerprint. The underlying dimensions already exist except the missing result-level language/path and fingerprints. `src/slopgate/engine/_evaluation.py:139-196`
-
-Do **not** produce a single “Slopgate improvement score.” A 12% reduction in blocks can mean the agent got better, the rule got weaker, a repo was disabled, a different model was used, or somebody simply stopped doing the thing being measured. One scalar would hide exactly the information this feature is supposed to extract.
-
-### C. Fix the result trace before running serious experiments
-
-There are two small but high-value schema changes.
-
-First, mirror `candidate_paths` and `languages` from the start record into the result record. They exist at evaluation start but are deliberately absent from result rows today. `src/slopgate/engine/_evaluation.py:156-172`, `src/slopgate/engine/_evaluation.py:175-196`, `dashboard/src/context/traceRecordValidation.ts:34-47`
-
-Change `_payload_for_done()` to include:
-
-```python
-"candidate_paths": ctx.candidate_paths,
-"languages": sorted(ctx.languages),
-```
-
-This keeps `results.jsonl` self-sufficient for the stats pipeline instead of requiring an events/results join merely to answer “what file was this repair about?”
-
-Second, add provenance such as:
-
-```text
+candidate_paths
+languages
 slopgate_version
 effective_policy_fingerprint
 guidance_fingerprint
 ```
 
-`effective_policy_fingerprint` should represent the effective enforcement configuration, not raw config text. At minimum it should change when effective rule enablement, surface action, severity override, or other enforcement-relevant policy changes.
+Existing fields remain unchanged. New dashboard fields are optional during ingestion so historical rows continue to load.
 
-There is already precedent for deterministic hashing in the lint project-index fingerprint, which hashes engine/version/config-derived state rather than relying on timestamps. `src/slopgate/lint/project_index/fingerprint.py:38-54`
+Legacy rows without fingerprints are classified as `unknown_policy`. They may appear in diagnostic counts and best-effort single-window summaries, but they cannot enter an authoritative baseline/candidate comparison.
 
-The trace should store the hash, not secret-bearing raw configuration.
+### 4.2 Semantic tool families
 
-### D. Baseline vs candidate comparisons
-
-Once provenance exists, add an improvement comparison object:
+Attempt identity uses semantic families rather than exact tool names:
 
 ```text
-ImprovementComparison
-  baseline
-  candidate
-  dimensions
-  metric_deltas
-  sample_counts
+file_mutation  = Write, Edit, MultiEdit, apply_patch, equivalent adapter-normalized writes
+shell          = Bash and equivalent shell execution
+search         = Glob, Grep, indexed/semantic search tools
+web            = WebFetch, WebSearch, equivalent web tools
+lifecycle      = Stop, SessionEnd, task/session lifecycle events
+other          = any remaining canonical tool/event pair
 ```
 
-A comparison should produce both absolute and relative deltas:
+Families must remain narrow enough that an unrelated shell or read operation cannot resolve a blocked file mutation.
+
+### 4.3 Path identity and confidence
+
+For a blocking finding, select target paths in this order:
+
+1. normalized paths explicitly implicated by finding metadata,
+2. normalized result-level `candidate_paths`, retained as one compound set,
+3. a pathless sentinel.
+
+Normalize paths by converting separators to POSIX form, resolving `.` and `..`, making in-repo paths relative to `resolved_repo_root`, preserving normalized absolute paths outside the repo, removing duplicates, and sorting compound sets.
+
+Confidence is explicit:
 
 ```text
-first_attempt_clean_rate: 71% → 82%  (+11 pp)
-blocking_per_100_mutations: 24.1 → 15.8  (-34%)
-median_repair_attempts: 2 → 1
-repair_success_rate: 78% → 91%
-evaluation_p95_ms: 146 → 151  (+3%)
+high   = one or more finding-implicated paths
+medium = candidate-path compound scope
+low    = pathless scope
 ```
 
-The important part is the cohort contract. Do not compare two windows unless the report can show their distribution across repo, enforcement mode, platform/capability, rule, and ideally model/provider. Those fields are already present in result traces. `src/slopgate/engine/_evaluation.py:139-196`
+Do not explode a multi-path attempt into one episode per path. That would double-count attempts and attribute findings to files the rule may not have implicated.
 
-Once fingerprints exist, `effective_policy_fingerprint` becomes a first-class cohort dimension. That lets you answer the actually useful question:
+### 4.4 Scope-level first-observed outcome
 
-> Did policy/guidance revision B reduce preventable repair churn relative to A under comparable workloads?
+`first_attempt_clean_rate` is not rule-specific because a clean attempt has no rule identity.
 
-instead of:
-
-> Number went down this week, everybody celebrate.
-
-### E. Preserve old metrics, but stop calling them outcomes
-
-I would not silently change the implementation behind the existing `first_time_resolution_rate` key. Existing scripts or consumers may rely on it.
-
-Instead:
-
-* Mark `first_time_resolution_rate` as legacy/deprecated.
-* Add an accurately named equivalent such as `single_deny_scope_rate`.
-* Introduce `repair_success_rate` as the outcome-valid successor.
-* Print a deprecation explanation in the human-readable stats report.
-
-The reason is concrete: current logic increments `first_time_resolved` solely because count is `<= 1`. `src/slopgate/stats/_analysis.py:164-177` Its current formula then presents that as resolution. `src/slopgate/stats/_analysis.py:190-192`
-
-### F. CLI integration
-
-The narrowest UI is to extend `slopgate stats`, because it already owns the JSONL loader and JSON output. `src/slopgate/cli/commands.py:248-255`, `src/slopgate/cli/parsers.py:266-299`
-
-I would land this progressively:
+Define a structural scope identity first:
 
 ```text
-slopgate stats --improvement --days 30
-slopgate stats --improvement --days 30 --json
+session_id
++ resolved_repo_root
++ semantic tool family
++ normalized target path set
 ```
 
-Then, after fingerprints have accumulated enough history:
+The cohort scope key adds enforcement and provenance:
 
 ```text
-slopgate stats --improvement \
-  --baseline-policy <hash-a> \
-  --candidate-policy <hash-b>
+structural scope identity
++ enforcement_mode
++ slopgate_version
++ effective_policy_fingerprint
++ guidance_fingerprint
 ```
 
-The JSON output should expose raw counts alongside rates so downstream consumers do not have to reverse-engineer denominators from percentages.
-
-### G. Consolidate the dashboard after the Python contract stabilizes
-
-Do not immediately rewrite `ruleCalibration.ts`. Its existing persistence idea is useful, and `FalsePositiveAnalysis` currently consumes it directly. `dashboard/src/lib/ruleCalibration.ts:90`, `dashboard/src/components/dashboard/FalsePositiveAnalysis.tsx:42`
-
-After the Python episode model has tests and fixtures:
-
-1. Generate a shared fixture from representative result sequences.
-2. Require Python improvement calculations and dashboard calculations to agree.
-3. Replace the dashboard's broad session `resolutionRate` with episode-based resolution.
-4. Replace or narrow `resultScopeKey()` so mutable source content is not part of repair identity.
-5. Eventually treat TypeScript calibration as presentation/triage logic, not the authoritative definition of resolution.
-
-This specifically removes the current case where any later non-blocking event counts as a blocked session resolving. `dashboard/src/hooks/useTraceData.ts:1091-1136`
-
-### H. Test gates I would require
-
-The core tests should encode semantics rather than merely chase the implementation:
+For each mutating scope, inspect only its first observed result:
 
 ```text
-blocked write(path A, content v1)
-→ clean write(path A, content v2)
-= resolved in 1 repair attempt
+clean   = no deny/block finding
+blocked = one or more deny/block findings
+```
 
-blocked write(path A)
-→ allowed bash/git status
-= NOT resolved
+Advisory findings do not make the attempt blocked.
 
-blocked write(path A)
-→ clean write(path B)
-= NOT resolved
+### 4.5 Rule-local repair episodes
+
+A repair episode begins only when a rule produces `deny` or `block`.
+
+The episode key adds `rule_id` to the scope-level key. Source content, full `tool_input`, command text, and rendered output are excluded.
+
+After the initial block, later rows are comparable only when they have:
+
+- the same session,
+- the same repo root,
+- the same enforcement mode,
+- the same semantic tool family,
+- the same normalized target-path identity,
+- the same Slopgate version,
+- the same policy fingerprint, and
+- the same guidance fingerprint.
+
+The target rule's initial block proves that it was active for that provenance. A comparable later result resolves rule X when:
+
+1. no enforcing finding for X is present, and
+2. `errors` contains no `X: ...` rule-evaluation error.
+
+Errors from another rule do not censor X. Enrichment errors do not censor X. Partial or degraded platform capability does not automatically censor the result; platform and capability remain cohort dimensions, and comparable attempts require stable provenance.
+
+Episode states are:
+
+```text
+resolved
+still_failing
+no_observed_followup
+provenance_changed
+evaluation_error
+```
+
+`never_blocked` is not a repair-episode state. It belongs to the scope-level first-observed model.
+
+State rules:
+
+- `resolved`: first comparable result where X is absent and X did not error.
+- `still_failing`: at least one comparable follow-up exists and the latest comparable result still enforces X.
+- `no_observed_followup`: no comparable follow-up exists before available session data ends.
+- `provenance_changed`: later activity matches the structural scope identity, but version/policy/guidance/enforcement provenance changed before a comparable resolution was observed.
+- `evaluation_error`: structurally comparable activity exists, but the last available evidence for X is an `X: ...` evaluation error and no later valid comparable result resolves or persists X.
+
+After resolution, a later block for the same key starts a new episode.
+
+## 5. Metrics and denominators
+
+The nested `improvement` object must expose raw counts and derived rates.
+
+### 5.1 Required single-window metrics
+
+1. **Blocking evaluations per 100 mutating evaluations**
+   - numerator: mutating results ending in deny/block
+   - denominator: all mutating results
+
+2. **First-attempt clean rate**
+   - numerator: first-observed mutating scopes classified `clean`
+   - denominator: all first-observed mutating scopes
+
+3. **Observed repair success rate**
+   - numerator: resolved episodes
+   - denominator: resolved plus still-failing episodes
+   - excluded but reported: `no_observed_followup`, `provenance_changed`, `evaluation_error`
+
+4. **Repair attempts**
+   - one repair attempt is one comparable follow-up after the initial block
+   - report median and p90 for resolved episodes
+
+5. **Repair latency**
+   - elapsed wall time from initial block to first resolving result
+   - report median and p90 for resolved episodes
+
+6. **Persistence rate by rule**
+   - numerator: comparable follow-ups where the same rule still enforces
+   - denominator: all comparable follow-ups for that rule
+
+7. **Runtime reliability**
+   - result error rate
+   - p50 and p95 `evaluation_ms`
+   - p50 and p95 `rule_engine_ms`
+
+8. **Cohort distribution**
+   - repo
+   - enforcement mode
+   - platform and capability
+   - model/provider
+   - rule
+   - event/tool family
+   - language
+   - Slopgate version
+   - policy fingerprint
+   - guidance fingerprint
+   - scope confidence
+
+Do not create a scalar Slopgate improvement score.
+
+### 5.2 Enforcement-mode presentation
+
+The report always contains separate mode cohorts:
+
+```text
+repo_strict
+repo_relaxed
+outside_repo
+```
+
+Only `repo_strict` contributes to the headline coding-improvement metrics. Relaxed and outside-repo cohorts remain visible so disabling or bypassing strict policy cannot masquerade as improvement. Runtime health is reported for every mode.
+
+## 6. Provenance fingerprints
+
+### 6.1 Slopgate version
+
+Record `slopgate.__version__` directly as `slopgate_version`. `src/slopgate/_version.py:1`
+
+### 6.2 Effective policy fingerprint
+
+`effective_policy_fingerprint` represents enforcement behavior, not raw config text and not user-facing guidance wording.
+
+Hash a canonical, secret-free projection containing:
+
+- built-in and declarative enforcement rule source digests,
+- resolved rule enablement and disabled rules,
+- resolved hook events and surface actions,
+- severity overrides,
+- regex rule definitions that affect matching or decisions,
+- enforcement thresholds,
+- skip/disable semantics,
+- protected/sensitive/system path policy,
+- post-edit blocking behavior, and
+- other resolved fields that can change whether a finding is emitted or enforced.
+
+Exclude:
+
+- trace paths,
+- timestamps,
+- repo absolute path as data rather than policy,
+- model/provider,
+- platform/capability,
+- raw source content,
+- command text, and
+- user-facing guidance text.
+
+Use SHA-256 over deterministically serialized JSON. Source digests ensure local rule changes alter policy identity even when `slopgate_version` is unchanged. The existing lint `engine_fingerprint()` is precedent, but this fingerprint must use content digests rather than file mtimes. `src/slopgate/lint/project_index/fingerprint.py:38-101`
+
+Some rule modules contain enforcement logic and user-facing text in the same source file. When a guidance-only change cannot be separated safely from enforcement source, conservatively allow both fingerprints to change. False cohort separation is preferable to merging semantically different runs.
+
+### 6.3 Guidance fingerprint
+
+`guidance_fingerprint` represents runtime guidance Slopgate can emit for the evaluation.
+
+Hash a canonical projection of:
+
+- rule messages and additional-context templates,
+- `RULE_HINTS`, `QUALITY_COLLECTOR_HINTS`, and `REPLAN_PROMPT`,
+- quality-lint repair guidance templates,
+- configured hook guidance values, and
+- configured prompt-context file contents when those files are part of runtime hook context.
+
+Do not include unrelated installed bundle assets merely because they exist on disk. In particular, do not hash the entire shared skill library or prompt bundle unless the runtime evaluation actually incorporates that asset. Transcript-level attribution of broader agent instructions remains Slice 5 work.
+
+## 7. Stats and JSON contract
+
+Existing top-level `analyze()` output remains backward compatible. In particular:
+
+- preserve `first_time_resolution_rate` with its current formula,
+- add `single_deny_scope_rate` as an honest alias,
+- label both as legacy in the human report, and
+- do not reinterpret existing keys silently.
+
+Every stats run adds:
+
+```json
+{
+  "improvement": {
+    "schema_version": 1,
+    "authoritative": true,
+    "legacy_rows": {
+      "count": 0,
+      "included_in_comparisons": false
+    },
+    "headline": {},
+    "by_enforcement_mode": {},
+    "by_rule": {},
+    "cohorts": {},
+    "episodes": {},
+    "runtime": {},
+    "comparison": null
+  }
+}
+```
+
+If only legacy rows are available, `authoritative` is false and the object explains why.
+
+The human report always includes a concise improvement section. No `--improvement` opt-in flag is required.
+
+Comparison selectors extend the existing command:
+
+```text
+slopgate stats --baseline-policy <hash-a> --candidate-policy <hash-b>
+slopgate stats --baseline-guidance <hash-a> --candidate-guidance <hash-b>
+slopgate stats --baseline-policy <hash-a> --candidate-policy <hash-b> --json
+slopgate stats --baseline-policy <hash-a> --candidate-policy <hash-b> \
+  --cohort enforcement_mode=repo_strict --cohort platform=claude
+```
+
+Each baseline/candidate selector pair is all-or-nothing. At least one complete policy or guidance pair is required for a comparison. Missing or unknown fingerprints are CLI input errors, not empty successful comparisons. `--cohort dimension=value` is repeatable for repo, enforcement mode, platform, capability, model, provider, rule, language, version, policy, guidance, and scope confidence.
+
+## 8. Baseline-vs-candidate comparison contract
+
+An `ImprovementComparison` contains:
+
+```text
+baseline provenance and counts
+candidate provenance and counts
+matched cohort dimensions
+absolute deltas
+relative deltas
+sample counts
+confounding dimensions
+aggregate availability and suppression reason
+```
+
+Always emit breakdowns for repo, enforcement mode, platform/capability, model/provider, rule, language, and scope confidence.
+
+The headline aggregate is available only when the selected rows have identical repo, enforcement-mode, platform/capability, model/provider, and language facet values after cohort filters, except for the fingerprint dimension intentionally selected as the intervention. Otherwise the report remains stratified.
+
+If the selected cohorts also differ in version, non-selected fingerprints, model, provider, or platform mix:
+
+- emit the stratified breakdowns,
+- set the aggregate to unavailable,
+- report the confounding dimensions, and
+- do not describe the result as causal improvement.
+
+No automatic statistical reweighting is included in this scope.
+
+## 9. Dashboard convergence
+
+Python is the semantic authority. The browser must still support raw uploaded JSONL, so the dashboard implements a pure TypeScript mirror rather than depending exclusively on the ForceDash server.
+
+Requirements:
+
+1. Create shared language-neutral fixtures containing representative result sequences and expected scope/episode/metric outputs.
+2. Require Python and TypeScript evaluators to produce the same contract for every fixture.
+3. Extend `HookResult` and trace normalization with optional paths, languages, version, and fingerprint fields.
+4. Replace the broad session `resolutionRate` calculation with episode-based observed repair success.
+5. Replace content-bearing calibration identity with the canonical semantic scope identity.
+6. Preserve calibration triage fields unless their meaning is explicitly migrated; outcome truth comes from the episode evaluator.
+7. Show legacy/unknown-policy and confounded-comparison status in the UI rather than silently merging those rows.
+
+`dashboard/src/hooks/useTraceData.ts:1091-1136`, `dashboard/src/lib/ruleCalibration.ts:54-61`, `dashboard/src/context/traceRecordValidation.ts:304-380`
+
+## 10. Required behavioral tests
+
+The shared fixture suite must include at least:
+
+```text
+blocked Write(path A, content v1)
+-> clean Edit(path A, content v2)
+= rule resolved in 1 repair attempt
+
+blocked Write(path A)
+-> allowed Bash(git status)
+= no comparable follow-up
+
+blocked Write(path A)
+-> clean Write(path B)
+= no comparable follow-up
 
 blocked rule X(path A)
-→ clean attempt for rule X(path A)
-= resolved
+-> comparable result with rule Y(path A)
+= X resolved if X did not error
 
 blocked rule X(path A)
-→ rule Y(path A)
-= X resolved only if comparable evaluation proves X absent
+-> comparable result with error "X: detector crashed"
+= X not resolved; episode ends as evaluation_error if no later valid comparable result exists
+
+blocked rule X(path A)
+-> comparable result with error for rule Y
+= X may resolve if X is absent
+
+blocked multi-path attempt with finding metadata path A
+-> clean attempt on A
+= high-confidence resolution
+
+blocked multi-path attempt without finding path metadata
+-> clean attempt with same candidate-path set
+= medium-confidence resolution
 
 single block with no comparable follow-up
-= no_observed_followup, NOT first-time resolved
+= no_observed_followup
+
+block followed by policy, guidance, version, or enforcement-mode change
+= provenance_changed, not resolved
+
+clean first mutating scope
+= first-attempt clean without inventing a rule identity
+
+legacy row without fingerprints
+= diagnostic only; excluded from authoritative comparison
 ```
 
-That first test is particularly important because the existing dashboard scope key includes the complete `tool_input`, which would distinguish content v1 from v2. `dashboard/src/lib/ruleCalibration.ts:54-61`
+Additional gates:
 
-### Recommended delivery order
+- fingerprint determinism across dictionary/set ordering,
+- fingerprint changes for rule-source, enablement, action, severity, threshold, regex, and runtime-guidance changes,
+- no fingerprint changes for timestamps, trace paths, or unrelated bundle assets,
+- Python/TypeScript fixture parity,
+- existing stats JSON keys and formulas preserved,
+- dashboard upload mode computes the same results as live mode, and
+- aggregate comparison suppressed when confounders remain.
 
-**Slice 1: Outcome-correct metrics.** Add `_episodes.py` and `_improvement.py`, define content-independent repair scopes, add regression tests, and expose single-window metrics through `slopgate stats`. Keep existing fields intact. Existing loader and CLI seams are already suitable. `src/slopgate/stats/_load.py:50-71`, `src/slopgate/stats/_report.py:160-182`, `src/slopgate/cli/parsers.py:266-299`
+## 11. Delivery order
 
-**Slice 2: Trace completeness.** Add result-level `candidate_paths` and `languages`, then version/effective-policy fingerprints. The corresponding event fields already exist, so the former is a very small schema change. `src/slopgate/engine/_evaluation.py:156-196`
+### Milestone 1: Trace completeness and contract fixtures
 
-**Slice 3: Cohort comparison.** Add baseline/candidate reports keyed by policy fingerprint with deltas and raw sample counts, stratified by repo, harness capability, model/provider, rule, and language. The relevant runtime dimensions are already emitted. `src/slopgate/engine/_evaluation.py:139-196`
+- Add result-level paths, languages, version, policy fingerprint, and guidance fingerprint.
+- Define canonical record, scope, episode, metric, and comparison schemas.
+- Add shared fixtures before exposing authoritative rates.
 
-**Slice 4: Dashboard convergence.** Make dashboard resolution and rule persistence agree with the canonical episode semantics instead of maintaining separate outcome definitions. `dashboard/src/lib/ruleCalibration.ts:54-61`, `dashboard/src/hooks/useTraceData.ts:1091-1136`
+### Milestone 2: Python evaluator and stats integration
 
-**Slice 5: Causal transcript enrichment.** Only then add the broader transcript/agent-history layer from the uploaded design to answer *why* an improvement happened, rather than whether it happened. 
+- Add the pure scope and episode evaluator under `src/slopgate/stats/`.
+- Add single-window metrics and runtime reliability.
+- Preserve legacy top-level fields.
+- Emit the nested versioned `improvement` object on every stats run.
+- Report strict, relaxed, and outside-repo cohorts separately.
 
-That order gets you credible numerical feedback quickly while keeping the much more invasive cross-harness conversation analysis optional.
+### Milestone 3: Guarded cohort comparison
 
-## 4. Policy Boundary Recommendations
+- Add baseline/candidate policy and guidance selectors plus repeatable cohort filters.
+- Emit raw counts, absolute and relative deltas, facet distributions, confounders, and aggregate suppression reasons.
+- Never mix fingerprinted and `unknown_policy` rows in authoritative comparisons.
 
-The metrics layer should preserve Slopgate's existing enforcement boundary rather than flattening every machine action into one giant “agent performance” bucket.
+### Milestone 4: Dashboard convergence
 
-**Project repo work:** default improvement analysis to `enforcement_mode == "repo_strict"`. That is where Slopgate intentionally adds Git, quality, config, stop, LangGraph, Python AST, regex, and related coding guardrails. `src/slopgate/engine/_runner.py:242-267`, `src/slopgate/rules/__init__.py:228-259`
+- Mirror the pure evaluator in TypeScript.
+- Enforce shared-fixture parity.
+- Replace broad session resolution and mutable-content calibration scope.
+- Preserve raw upload support and display provenance confidence.
 
-**General workstation use:** exclude `outside_repo` activity from coding-improvement KPIs by default. Current implementation deliberately runs the always-on safety set while withholding repo-strict coding rules outside enrolled repositories. That is a `confirmed behavior`, and tests explicitly defend it. `src/slopgate/engine/_runner.py:229-267`, `tests/engine/test_12_enforcement_modes.py:33-47`
+### Deferred: transcript enrichment
 
-**Server operations:** treat the same way as general workstation activity. Report narrow global-safety events and runtime health separately, but do not use fewer repo-quality findings during server administration as evidence that coding behavior improved. Current tests establish that even relaxed repositories retain safety protection while strict coding rules are suppressed. `tests/engine/test_12_enforcement_modes.py:91-111`
+Do not add transcript mining, cross-harness conversation reconstruction, or LLM-based causal explanation in this implementation.
 
-**Repo disable/skip semantics:** treat `repo_relaxed` and skipped strict paths as explicit cohort boundaries, not successes. A candidate policy that merely moves more traffic from `repo_strict` into relaxed/skipped modes should show that distribution change prominently instead of reporting a miraculous fall in violations. Enforcement mode is already resolved explicitly and written into result traces. `src/slopgate/engine/_runner.py:229-267`, `src/slopgate/engine/_evaluation.py:175-196`
+## 12. Completion criteria
 
-Concretely, I would make the improvement analyzer default to **repo-strict only**, require an explicit flag to mix other modes, and refuse to calculate a single baseline/candidate delta across differing enforcement-mode distributions without showing the mode-specific breakdown. That keeps the measurement system aligned with Slopgate's current architecture instead of accidentally rewarding the easiest optimization known to software engineering: turning the guardrail off.
+The implementation is complete only when:
+
+- new result rows are self-sufficient for path, language, and provenance analysis,
+- first-attempt clean and repair success use the separate locked models,
+- rule-local resolution is error-aware and provenance-stable,
+- every rate includes raw numerator, denominator, and censored counts,
+- strict and non-strict cohorts cannot be silently mixed,
+- legacy rows cannot enter authoritative comparisons,
+- local rule-source changes alter effective policy identity,
+- Python and TypeScript agree on shared fixtures,
+- dashboard live and upload modes produce the same improvement semantics,
+- existing stats fields remain backward compatible, and
+- confounded baseline/candidate selections suppress the aggregate headline.
