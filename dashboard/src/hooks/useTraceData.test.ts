@@ -48,6 +48,7 @@ function sourceContext(data: TraceDataContextValue["data"]): TraceDataContextVal
 
 afterEach(() => {
   mockedUseTraceDataSource.mockReset();
+  vi.useRealTimers();
 });
 
 function finding(rule_id: string, decision: RuleFinding["decision"]): RuleFinding {
@@ -87,6 +88,35 @@ function traceEvent(session_id: string, timestamp: string, platform: Platform, c
     tool_name,
     candidate_paths,
     languages: ["typescript"],
+  };
+}
+
+function improvementResult(
+  timestamp: string,
+  sessionId: string,
+  enforcementMode: "repo_strict" | "repo_relaxed",
+  path: string,
+  ruleId: string | null,
+): HookResult {
+  return {
+    timestamp,
+    platform: "claude",
+    event_name: "PreToolUse",
+    session_id: sessionId,
+    tool_name: "Write",
+    findings: ruleId
+      ? [{ rule_id: ruleId, severity: "HIGH", decision: "deny", message: "blocked", metadata: { path } }]
+      : [],
+    errors: [],
+    output: null,
+    mutating: true,
+    enforcement_mode: enforcementMode,
+    resolved_repo_root: "/repos/demo",
+    candidate_paths: [`/repos/demo/${path}`],
+    languages: ["python"],
+    slopgate_version: "2.1.0",
+    effective_policy_fingerprint: "policy-a",
+    guidance_fingerprint: "guidance-a",
   };
 }
 
@@ -147,6 +177,8 @@ describe("stream schema validation warning", () => {
 
 describe("useTraceData", () => {
   it("filters self-test records out of dashboard aggregates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T12:00:00.000Z"));
     const realEvent = traceEvent("session-real", "2026-05-27T12:00:00.000Z", "opencode", ["/repos/slopgate/src/real.py"], "Bash");
     const selfTestSessionId = "self-test-opencode-GIT-001";
     const selfTestEvent = traceEvent(
@@ -220,6 +252,77 @@ describe("useTraceData", () => {
     expect(result.current.sessions.map((session) => session.id)).toEqual(["session-real"]);
     expect(result.current.async.passCount).toBe(0);
     expect(result.current.fireCounts.has("GIT-001")).toBe(false);
+  });
+
+  it("does not count an unrelated later allow as observed repair success", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-02T12:00:00.000Z"));
+    const blockedWrite: HookResult = {
+      timestamp: "2026-08-01T10:00:00+00:00",
+      platform: "claude",
+      event_name: "PreToolUse",
+      session_id: "session-repair",
+      tool_name: "Write",
+      findings: [{ rule_id: "PY-CODE-013", severity: "HIGH", decision: "deny", message: "blocked", metadata: { path: "src/a.py" } }],
+      errors: [],
+      output: null,
+      mutating: true,
+      enforcement_mode: "repo_strict",
+      resolved_repo_root: "/repos/demo",
+      candidate_paths: ["/repos/demo/src/a.py"],
+      languages: ["python"],
+      slopgate_version: "2.1.0",
+      effective_policy_fingerprint: "policy-a",
+      guidance_fingerprint: "guidance-a",
+    };
+    const unrelatedBash: HookResult = {
+      timestamp: "2026-08-01T10:01:00+00:00",
+      platform: "claude",
+      event_name: "PreToolUse",
+      session_id: "session-repair",
+      tool_name: "Bash",
+      findings: [],
+      errors: [],
+      output: null,
+      mutating: true,
+      enforcement_mode: "repo_strict",
+      resolved_repo_root: "/repos/demo",
+      candidate_paths: [],
+      languages: ["python"],
+      slopgate_version: "2.1.0",
+      effective_policy_fingerprint: "policy-a",
+      guidance_fingerprint: "guidance-a",
+    };
+    mockedUseTraceDataSource.mockReturnValue(
+      sourceContext({ events: [], rules: [], results: [blockedWrite, unrelatedBash], subprocesses: [] }),
+    );
+
+    const { result } = renderHook(() => useTraceData(DEFAULT_FILTERS));
+
+    expect(result.current.drift.operationalContext).toMatchObject({
+      resolutionRate: null,
+      censoredRepairEpisodes: 1,
+    });
+  });
+
+  it("excludes relaxed repair episodes from the strict operational headline", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-02T12:00:00.000Z"));
+    const results = [
+      improvementResult("2026-08-01T10:00:00+00:00", "strict", "repo_strict", "src/strict.py", "PY-CODE-013"),
+      improvementResult("2026-08-01T10:01:00+00:00", "strict", "repo_strict", "src/strict.py", null),
+      improvementResult("2026-08-01T10:02:00+00:00", "relaxed", "repo_relaxed", "src/relaxed.py", "PY-CODE-018"),
+      improvementResult("2026-08-01T10:03:00+00:00", "relaxed", "repo_relaxed", "src/relaxed.py", "PY-CODE-018"),
+    ];
+    mockedUseTraceDataSource.mockReturnValue(sourceContext({ events: [], rules: [], results, subprocesses: [] }));
+
+    const { result } = renderHook(() => useTraceData(DEFAULT_FILTERS));
+
+    expect(result.current.drift.operationalContext).toMatchObject({
+      resolutionRate: 100,
+      blockedSessions: 1,
+      resolvedBlockedSessions: 1,
+    });
   });
 });
 

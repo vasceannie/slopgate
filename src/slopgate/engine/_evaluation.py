@@ -6,6 +6,7 @@ from pathlib import Path
 from time import monotonic
 
 from slopgate.constants import (
+    PLATFORM_KEY,
     SESSION_ID,
     PLATFORM_CLAUDE,
     TOOL_WRITE,
@@ -25,6 +26,11 @@ from slopgate.models import EngineResult
 
 from .._types import is_object_dict, object_dict
 from .advisories import compact_context_advisories
+from ._fingerprints import (
+    effective_policy_fingerprint,
+    guidance_fingerprint,
+    slopgate_version,
+)
 from ._render import serialize_findings, render_output
 from ._retry import (
     apply_loop_aware_steering,
@@ -157,7 +163,7 @@ def _payload_for_start(
     ctx: HookContext, metadata: _EvaluationMetadata
 ) -> dict[str, object]:
     return {
-        "platform": metadata.platform,
+        PLATFORM_KEY: metadata.platform,
         "platform_source": metadata.platform_source,
         "platform_capability": metadata.platform_capability,
         "degraded_reason": metadata.degraded_reason,
@@ -179,7 +185,7 @@ def _payload_for_done(
     timing: dict[str, object],
 ) -> dict[str, object]:
     return {
-        "platform": metadata.platform,
+        PLATFORM_KEY: metadata.platform,
         "platform_source": metadata.platform_source,
         "platform_capability": metadata.platform_capability,
         "degraded_reason": metadata.degraded_reason,
@@ -190,6 +196,11 @@ def _payload_for_done(
         "errors": result.errors,
         "output": result.output,
         "timing": timing,
+        "candidate_paths": ctx.candidate_paths,
+        "languages": sorted(ctx.languages),
+        "slopgate_version": slopgate_version(),
+        "effective_policy_fingerprint": effective_policy_fingerprint(ctx.config),
+        "guidance_fingerprint": guidance_fingerprint(ctx.config),
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
         **_trace_drilldown_fields(ctx),

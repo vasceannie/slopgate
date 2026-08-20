@@ -28,6 +28,11 @@ from slopgate.cli.commands import (
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
 
+_INSTALL_SCOPE_HELP = (
+    "Hook install target: user config dir, project dir (./.claude, ./.codex, "
+    "./.cursor, ./.opencode), or both"
+)
+
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("path", nargs="?", default=".")
@@ -94,16 +99,6 @@ def _add_path_command_parser(
     return parser
 
 
-def _add_install_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    add_install_scope_arguments(
-        parser,
-        help_text=(
-            "Hook install target: user config dir, project dir (./.claude, ./.codex, "
-            "./.cursor, ./.opencode), or both"
-        ),
-    )
-
-
 def _add_platform_install_parser(
     sub: SubparserRegistry,
     name: str,
@@ -125,7 +120,7 @@ def _add_platform_install_parser(
         dest="with_autoupdate",
         help="Skip installing/removing the periodic GitHub updater",
     )
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=_INSTALL_SCOPE_HELP)
     if name == "uninstall":
         return
     _ = parser.add_argument(
@@ -171,7 +166,7 @@ def _add_suite_command_parser(
 ) -> argparse.ArgumentParser:
     parser = _add_command_parser(sub, name, help_text=help_text, func=func)
     _add_suite_update_arguments(parser)
-    _add_install_scope_arguments(parser)
+    add_install_scope_arguments(parser, help_text=_INSTALL_SCOPE_HELP)
     return parser
 
 
@@ -272,6 +267,20 @@ def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     _ = stats.add_argument("--log")
     _ = stats.add_argument("--days", type=int)
     _ = stats.add_argument("--json", action="store_true")
+    for option, help_text in (
+        ("--baseline-policy", "Select the baseline effective-policy fingerprint"),
+        ("--candidate-policy", "Select the candidate effective-policy fingerprint"),
+        ("--baseline-guidance", "Select the baseline guidance fingerprint"),
+        ("--candidate-guidance", "Select the candidate guidance fingerprint"),
+    ):
+        _ = stats.add_argument(option, type=str, metavar="HASH", help=help_text)
+    _ = stats.add_argument(
+        "--cohort",
+        action="append",
+        default=[],
+        metavar="DIM=VALUE",
+        help="Restrict comparisons to one cohort dimension value (repeatable)",
+    )
 
     add_changed_test_parser(sub)
 

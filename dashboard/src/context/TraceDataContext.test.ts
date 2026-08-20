@@ -210,6 +210,35 @@ describe("live trace record validation", () => {
     });
   });
 
+  it("preserves optional improvement scope and provenance on normalized result rows", () => {
+    const rawResult = {
+      timestamp: "2026-08-01T10:00:00+00:00",
+      event_name: "PreToolUse",
+      session_id: "session-improvement-result",
+      tool_name: "Write",
+      findings: [],
+      errors: [],
+      mutating: true,
+      candidate_paths: ["/repos/demo/src/a.py"],
+      languages: ["python"],
+      slopgate_version: "2.1.0",
+      effective_policy_fingerprint: "policy-a",
+      guidance_fingerprint: "guidance-a",
+    };
+
+    expect(coerceTraceRecord(rawResult)).toMatchObject({
+      type: "result",
+      record: {
+        mutating: true,
+        candidate_paths: ["/repos/demo/src/a.py"],
+        languages: ["python"],
+        slopgate_version: "2.1.0",
+        effective_policy_fingerprint: "policy-a",
+        guidance_fingerprint: "guidance-a",
+      },
+    });
+  });
+
   it("normalizes cursor platform and lineage aliases from live rows", () => {
     const rawEvent = {
       timestamp: "2026-06-11T02:02:33.860998+00:00",

@@ -57,8 +57,8 @@ export function TimeWindowSelector({ filters, onChange }: Props) {
   );
 
   return (
-    <div className="flex items-center gap-6 py-3 border-b border-border bg-card/50">
-      <div className="flex items-center gap-1">
+    <div className="flex flex-col items-stretch gap-3 border-b border-border bg-card/50 py-3 md:flex-row md:items-center md:gap-6">
+      <div className="flex flex-wrap items-center gap-1">
         <span className="text-xs text-muted-foreground mr-2">WINDOW</span>
         {TIME_OPTIONS.map((opt) => (
           <button
@@ -77,9 +77,9 @@ export function TimeWindowSelector({ filters, onChange }: Props) {
         ))}
       </div>
 
-      <div className="w-px h-5 bg-border" />
+      <div className="hidden h-5 w-px bg-border md:block" />
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <span className="text-xs text-muted-foreground mr-2">PLATFORM</span>
         <button
           type="button"
@@ -109,7 +109,7 @@ export function TimeWindowSelector({ filters, onChange }: Props) {
         ))}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center gap-2 md:ml-auto">
         <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
         <span className="text-xs text-muted-foreground">LIVE</span>
       </div>

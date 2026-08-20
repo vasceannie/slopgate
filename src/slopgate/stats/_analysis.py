@@ -6,8 +6,14 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from slopgate._types import ObjectDict, object_dict, object_list
-from slopgate.constants import SESSION_ID
+from slopgate.constants import (
+    DECISION_KEY,
+    RULE_ID_KEY,
+    SESSION_ID,
+    STATS_TOP_RULE_LIMIT,
+)
 from slopgate.util.metadata_paths import effective_metadata_path, metadata_hit_paths
+from .improvement import build_improvement
 
 UNKNOWN_STATS_VALUE = "unknown"
 
@@ -78,8 +84,8 @@ def _process_finding(
     counters: _Counters,
 ) -> bool:
     """Process a single finding dict. Returns True if it was a deny."""
-    rule_id = str(finding.get("rule_id", UNKNOWN_STATS_VALUE))
-    decision = finding.get("decision")
+    rule_id = str(finding.get(RULE_ID_KEY, UNKNOWN_STATS_VALUE))
+    decision = finding.get(DECISION_KEY)
     severity = str(finding.get("severity", UNKNOWN_STATS_VALUE))
 
     counters.by_rule[rule_id] += 1
@@ -121,7 +127,7 @@ def _classify_findings(
             continue
         if _process_finding(finding_dict, ectx, counters):
             has_deny = True
-        if finding_dict.get("decision") is not None:
+        if finding_dict.get(DECISION_KEY) is not None:
             has_any_decision = True
 
     if not findings or (not has_deny and not has_any_decision):
@@ -214,10 +220,10 @@ def analyze(entries: list[dict[str, object]]) -> ObjectDict:
         "by_event": counters.by_event.most_common(),
         "by_decision": counters.by_decision.most_common(),
         "by_severity": counters.by_severity.most_common(),
-        "top_rules_denied": counters.denies_by_rule.most_common(20),
-        "top_rules_enforced": counters.enforcement_rules.most_common(20),
-        "advisory_rules": counters.advisory_rules.most_common(20),
-        "enrichment_rules": counters.enrichment_rules.most_common(20),
+        "top_rules_denied": counters.denies_by_rule.most_common(STATS_TOP_RULE_LIMIT),
+        "top_rules_enforced": counters.enforcement_rules.most_common(STATS_TOP_RULE_LIMIT),
+        "advisory_rules": counters.advisory_rules.most_common(STATS_TOP_RULE_LIMIT),
+        "enrichment_rules": counters.enrichment_rules.most_common(STATS_TOP_RULE_LIMIT),
         "top_files_denied": counters.denies_by_file.most_common(15),
         "top_tools": counters.by_tool.most_common(10),
         "sessions": len(counters.by_session),
@@ -225,7 +231,9 @@ def analyze(entries: list[dict[str, object]]) -> ObjectDict:
         "retry_patterns": retry_counts.most_common(15),
         "rule_examples": dict(counters.rule_examples),
         "first_time_resolution_rate": round(_first_time_resolution_rate(counters), 4),
-        "repeated_deny_rate_by_rule": repeated_by_rule.most_common(20),
+        "single_deny_scope_rate": round(_first_time_resolution_rate(counters), 4),
+        "improvement": build_improvement(entries),
+        "repeated_deny_rate_by_rule": repeated_by_rule.most_common(STATS_TOP_RULE_LIMIT),
         "median_retries_before_resolution": _median(counters.retries_before_resolution),
         "top_looping_files": top_looping_files.most_common(15),
         "top_pathless_loop_rules": counters.pathless_loop_rules.most_common(15),

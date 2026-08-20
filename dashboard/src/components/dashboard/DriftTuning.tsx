@@ -387,6 +387,9 @@ export function DriftTuning({ config, harnessStatus, hottestRepos, operationalCo
 
           <OpsCard title="Enforcement Modes" icon={ShieldCheck}>
             <CountList rows={operationalContext.enforcementModes} emptyLabel="No enforcement metadata" />
+            <div className="mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground font-mono">
+              {operationalContext.authoritativeResults} authoritative · {operationalContext.legacyResults} legacy/unknown-policy
+            </div>
           </OpsCard>
 
           <OpsCard title="Resolved Repo Roots" icon={MapPin}>
@@ -394,22 +397,31 @@ export function DriftTuning({ config, harnessStatus, hottestRepos, operationalCo
             {operationalContext.pathlessResults > 0 && (
               <div className="text-xs text-signal-ask mt-2 font-medium">
                 {operationalContext.pathlessResults} result
-                {operationalContext.pathlessResults === 1 ? "" : "s"} had no candidate paths in this window.
+                {operationalContext.pathlessResults === 1 ? "" : "s"} had no canonical target paths in this window.
               </div>
             )}
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Episode scope confidence</div>
+              <CountList rows={operationalContext.scopeConfidence} emptyLabel="No repair episodes" />
+            </div>
           </OpsCard>
 
           <OpsCard title="Deny Recovery" icon={RotateCcw}>
             <div className="px-2 py-1.5 rounded-sm bg-muted/20 text-xs flex items-center justify-between font-mono">
-              <span className="text-muted-foreground font-sans">Resolution Rate</span>
+              <span className="text-muted-foreground font-sans">Observed Repair Success</span>
               <span className="font-bold text-foreground">
                 {operationalContext.resolutionRate === null ? "—" : `${operationalContext.resolutionRate.toFixed(1)}%`}
               </span>
             </div>
             <div className="text-xs text-muted-foreground mt-2 px-1">
-              {operationalContext.resolvedBlockedSessions}/{operationalContext.blockedSessions} blocked sessions later produced
-              allow/context/warn/info.
+              {operationalContext.resolvedBlockedSessions}/{operationalContext.blockedSessions} comparable rule-local repair episodes resolved.
             </div>
+            {operationalContext.censoredRepairEpisodes > 0 && (
+              <div className="text-xs text-signal-ask mt-1 px-1">
+                {operationalContext.censoredRepairEpisodes} censored episode
+                {operationalContext.censoredRepairEpisodes === 1 ? "" : "s"} excluded.
+              </div>
+            )}
             {operationalContext.repeatedDenials.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border/50">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Repeated deny loops</div>

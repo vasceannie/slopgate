@@ -11,6 +11,7 @@ from slopgate._types import object_dict, object_list
 
 from ._analysis import analyze
 from ._load import default_log_path, load_entries
+from .improvement import ComparisonRequest, resolve_comparison
 
 _PairList = list[tuple[str, int]]
 
@@ -58,6 +59,7 @@ def print_report(stats: Mapping[str, object]) -> None:
     _print_denied_files(stats)
     _print_retry_patterns(stats)
     _print_churn_metrics(stats)
+    _print_improvement_section(stats)
     _print_daily_volume(stats)
     _print_pairs_section(
         title="Severity Breakdown",
@@ -121,6 +123,54 @@ def _print_pairs_section(
     print()
 
 
+def _print_improvement_section(stats: Mapping[str, object]) -> None:
+    improvement = object_dict(stats.get("improvement"))
+    if not improvement:
+        return
+    print("\n--- Improvement (repo_strict headline) ---")
+    legacy = object_dict(improvement.get("legacy_rows"))
+    legacy_count = legacy.get("count", 0)
+    if improvement.get("authoritative") is not True:
+        print("  Authoritative: no (only legacy rows without fingerprints)")
+    if isinstance(legacy_count, int) and legacy_count:
+        print(f"  Legacy rows (diagnostic only): {legacy_count:,}")
+    headline = object_dict(improvement.get("headline"))
+    _print_rate_row(headline, "first_attempt_clean_rate", "First-attempt clean rate")
+    _print_rate_row(headline, "repair_success_rate", "Observed repair success")
+    blocking = object_dict(headline.get("blocking_per_100_mutations"))
+    if blocking:
+        print(
+            "  Blocking per 100 mutations: "
+            f"{_fmt(blocking.get('value'))} "
+            f"({_fmt(blocking.get('numerator'))}/{_fmt(blocking.get('denominator'))})"
+        )
+    episodes = object_dict(improvement.get("episodes"))
+    if episodes:
+        print(
+            "  Episodes: "
+            f"resolved {_fmt(episodes.get('resolved'))}, "
+            f"still-failing {_fmt(episodes.get('still_failing'))}, "
+            f"no-followup {_fmt(episodes.get('no_observed_followup'))}, "
+            f"provenance-changed {_fmt(episodes.get('provenance_changed'))}, "
+            f"eval-error {_fmt(episodes.get('evaluation_error'))}"
+        )
+    comparison = object_dict(improvement.get("comparison"))
+    if comparison:
+        _print_comparison_summary(comparison)
+
+
+def _print_rate_row(
+    headline: Mapping[str, object], key: str, label: str
+) -> None:
+    payload = object_dict(headline.get(key))
+    if not payload:
+        return
+    print(
+        f"  {label}: {_fmt_pct(payload.get('rate'))} "
+        f"({_fmt(payload.get('numerator'))}/{_fmt(payload.get('denominator'))})"
+    )
+
+
 def _print_retry_patterns(stats: Mapping[str, object]) -> None:
     patterns = _pairs(stats, "retry_patterns")
     _print_pairs_section(
@@ -129,6 +179,32 @@ def _print_retry_patterns(stats: Mapping[str, object]) -> None:
         formatter=lambda desc, count: f"  {count:3,}x  {desc}",
         empty_message="(none detected)",
     )
+
+
+def _fmt(value: object) -> str:
+    return f"{value}" if value is not None else "n/a"
+
+
+def _fmt_pct(value: object) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value) * 100:.1f}%"
+    return "n/a"
+
+
+def _print_comparison_summary(comparison: Mapping[str, object]) -> None:
+    aggregate = object_dict(comparison.get("aggregate"))
+    available = aggregate.get("available") is True
+    print("  Comparison by " + _fmt(comparison.get("dimension")) + ":")
+    if not available:
+        reason = aggregate.get("suppression_reason")
+        print(f"    aggregate unavailable: {_fmt(reason)}")
+    for metric, delta in object_dict(comparison.get("metric_deltas")).items():
+        entry = object_dict(delta)
+        print(
+            f"    {metric}: {_fmt(entry.get('baseline'))} -> "
+            f"{_fmt(entry.get('candidate'))} "
+            f"(delta {_fmt(entry.get('absolute'))})"
+        )
 
 
 def _print_daily_volume(stats: Mapping[str, object]) -> None:
@@ -144,6 +220,8 @@ def _print_churn_metrics(stats: Mapping[str, object]) -> None:
     median_retries = stats.get("median_retries_before_resolution", 0.0)
     if isinstance(resolution_rate, (float, int)):
         print(f"  First-time resolution rate: {float(resolution_rate) * 100:.1f}%")
+    print("  (legacy churn metric: counts single-denial scopes, not observed")
+    print("   resolution; see the Improvement section for outcome-valid rates)")
     if isinstance(median_retries, (float, int)):
         print(f"  Median retries before resolution: {float(median_retries):.2f}")
     print("  Repeated deny rate by rule:")
@@ -161,6 +239,7 @@ def run_stats(
     log_path: str | None = None,
     days: int | None = None,
     as_json: bool = False,
+    comparison: ComparisonRequest | None = None,
 ) -> int:
     path = Path(log_path) if log_path else default_log_path()
     if not path.exists():
@@ -173,6 +252,15 @@ def run_stats(
 
     entries = load_entries(path, days)
     stats = analyze(entries)
+    if comparison is not None:
+        payload, error = resolve_comparison(entries, comparison)
+        if error is not None:
+            print(f"Comparison error: {error}", file=sys.stderr)
+            return 1
+        if payload is not None:
+            improvement = object_dict(stats.get("improvement"))
+            improvement["comparison"] = payload
+            stats["improvement"] = improvement
 
     if as_json:
         print(json.dumps(stats, indent=2, default=str))

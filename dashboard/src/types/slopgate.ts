@@ -130,6 +130,12 @@ export interface HookResult extends TraceMetadata {
   command?: string | null;
   tool_output?: string | null;
   tool_input?: Record<string, unknown> | null;
+  mutating?: boolean;
+  candidate_paths?: string[];
+  languages?: string[];
+  slopgate_version?: string | null;
+  effective_policy_fingerprint?: string | null;
+  guidance_fingerprint?: string | null;
 }
 
 export interface SubprocessRun {
@@ -170,6 +176,10 @@ export interface OperationalContext {
   resolutionRate: number | null;
   blockedSessions: number;
   resolvedBlockedSessions: number;
+  censoredRepairEpisodes: number;
+  scopeConfidence: OperationalCountRow[];
+  authoritativeResults: number;
+  legacyResults: number;
 }
 
 export type HarnessStatusValue = "installed" | "partial" | "missing" | "disabled" | "error";

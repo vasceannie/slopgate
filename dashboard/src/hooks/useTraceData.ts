@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useTraceDataSource } from "@/context/useTraceDataSource";
 import { mockConfig } from "@/data/mockTraces";
+import { episodeScopeConfidenceCounts, evaluateImprovement, repairSuccessSummary } from "@/lib/improvement";
+import { isLegacyRecord, PATHLESS_SENTINEL, STRICT_MODE } from "@/lib/improvementScope";
 import type { NativeSessionIds, SessionData, SessionGroup } from "@/lib/sessionHelpers";
 import type {
   Decision,
@@ -1090,21 +1092,17 @@ export function useTraceData(filters: FilterState) {
 
   const operationalContext = useMemo<OperationalContext>(() => {
     const traceRecords: TraceMetadata[] = results.length > 0 ? results : [...events, ...rules];
+    const improvement = evaluateImprovement(results);
+    const strictEpisodes = improvement.episodes.filter((episode) => episode.anchor.enforcementMode === STRICT_MODE);
+    const repairSuccess = repairSuccessSummary(strictEpisodes);
+    const confidenceCounts = episodeScopeConfidenceCounts(improvement.episodes);
+    const legacyResults = improvement.records.filter(isLegacyRecord).length;
     const blockingResults = results.filter((r: HookResult) => {
       const decision = traceDecision(r);
       return decision === "block" || decision === "deny";
     });
-
-    let blockedSessions = 0;
-    let resolvedBlockedSessions = 0;
-    for (const decisions of sessionIndexes.sessionDecisions.values()) {
-      const firstBlockIdx = decisions.findIndex((d) => d === "block" || d === "deny");
-      if (firstBlockIdx === -1) continue;
-      blockedSessions++;
-      if (decisions.slice(firstBlockIdx + 1).some((d) => d === "allow" || d === "context" || d === "warn" || d === "info")) {
-        resolvedBlockedSessions++;
-      }
-    }
+    const censoredRepairEpisodes =
+      repairSuccess.censored.no_observed_followup + repairSuccess.censored.provenance_changed + repairSuccess.censored.evaluation_error;
 
     const denialCounts = new Map<string, number>();
     for (const result of blockingResults) {
@@ -1125,17 +1123,27 @@ export function useTraceData(filters: FilterState) {
         traceRecords.map((r) => shortPath(r.resolved_repo_root)),
         5,
       ),
-      pathlessResults: results.filter((r: HookResult) => (sessionIndexes.sessionPathCounts.get(r.session_id) ?? 0) === 0).length,
+      pathlessResults: improvement.records.filter(
+        (record) => record.targetPaths.length === 1 && record.targetPaths[0] === PATHLESS_SENTINEL,
+      ).length,
       repeatedDenials: Array.from(denialCounts.entries())
         .filter(([, count]) => count > 1)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
         .map(([label, count]) => ({ label, count })),
-      resolutionRate: blockedSessions > 0 ? (resolvedBlockedSessions / blockedSessions) * 100 : null,
-      blockedSessions,
-      resolvedBlockedSessions,
+      resolutionRate: repairSuccess.rate === null ? null : repairSuccess.rate * 100,
+      blockedSessions: repairSuccess.denominator,
+      resolvedBlockedSessions: repairSuccess.numerator,
+      censoredRepairEpisodes,
+      scopeConfidence: [
+        { label: "high", count: confidenceCounts.high },
+        { label: "medium", count: confidenceCounts.medium },
+        { label: "low", count: confidenceCounts.low },
+      ].filter((row) => row.count > 0),
+      authoritativeResults: improvement.records.length - legacyResults,
+      legacyResults,
     };
-  }, [events, results, rules, sessionIndexes]);
+  }, [events, results, rules]);
 
   const sourceStatus = useMemo(() => {
     const windowStartAt = new Date(Date.now() - windowMs).toISOString();

@@ -132,6 +132,22 @@ def test_test_parser_rejects_smoke_with_since() -> None:
         parser.parse_args(["test", "--smoke", "--since", "HEAD"])
 
 
+def test_stats_comparison_help_describes_fingerprint_arguments(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["stats", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "--baseline-policy HASH" in help_text, help_text
+    assert "--candidate-policy HASH" in help_text, help_text
+    assert "--baseline-guidance HASH" in help_text, help_text
+    assert "--candidate-guidance HASH" in help_text, help_text
+    assert "baseline effective-policy fingerprint" in help_text, help_text
+    assert "candidate guidance fingerprint" in help_text, help_text
+
+
 def test_self_test_smoke_passes_all_cases(capsys: pytest.CaptureFixture[str]) -> None:
     args = argparse.Namespace(
         smoke=True,

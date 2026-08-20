@@ -27,6 +27,10 @@ const OPERATIONAL_CONTEXT: OperationalContext = {
   resolutionRate: null,
   blockedSessions: 0,
   resolvedBlockedSessions: 0,
+  censoredRepairEpisodes: 0,
+  scopeConfidence: [],
+  authoritativeResults: 0,
+  legacyResults: 0,
 };
 
 describe("DriftTuning", () => {
@@ -46,5 +50,33 @@ describe("DriftTuning", () => {
     expect(screen.getByText("50% (5)")).toBeInTheDocument();
     expect(screen.getByText("100% (10)")).toBeInTheDocument();
     expect(screen.queryByText("200% (10)")).not.toBeInTheDocument();
+  });
+
+  it("labels repair outcomes and provenance confidence explicitly", () => {
+    render(
+      <DriftTuning
+        config={CONFIG}
+        harnessStatus={HARNESS_STATUS}
+        hottestRepos={[]}
+        operationalContext={{
+          ...OPERATIONAL_CONTEXT,
+          resolutionRate: 50,
+          blockedSessions: 2,
+          resolvedBlockedSessions: 1,
+          censoredRepairEpisodes: 2,
+          scopeConfidence: [
+            { label: "high", count: 1 },
+            { label: "medium", count: 1 },
+          ],
+          authoritativeResults: 3,
+          legacyResults: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Observed Repair Success")).toBeInTheDocument();
+    expect(screen.getByText("1/2 comparable rule-local repair episodes resolved.")).toBeInTheDocument();
+    expect(screen.getByText("2 censored episodes excluded.")).toBeInTheDocument();
+    expect(screen.getByText("3 authoritative · 1 legacy/unknown-policy")).toBeInTheDocument();
   });
 });

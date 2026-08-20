@@ -1,0 +1,82 @@
+{
+ "name": "mixed_enforcement_first_attempt_clean",
+ "entries": [
+  {
+   "timestamp": "2026-08-01T10:00:00+00:00",
+   "session_id": "strict-session",
+   "event_name": "PreToolUse",
+   "tool_name": "Write",
+   "platform": "claude",
+   "platform_capability": "full",
+   "mutating": true,
+   "enforcement_mode": "repo_strict",
+   "resolved_repo_root": "/repos/demo",
+   "candidate_paths": ["/repos/demo/src/strict.py"],
+   "languages": ["python"],
+   "slopgate_version": "2.1.0",
+   "effective_policy_fingerprint": "pol-a",
+   "guidance_fingerprint": "gui-a",
+   "findings": [
+    {
+     "rule_id": "PY-CODE-013",
+     "decision": "deny",
+     "severity": "HIGH",
+     "message": "PY-CODE-013 fired",
+     "metadata": {"path": "src/strict.py"}
+    }
+   ],
+   "errors": [],
+   "model": "m",
+   "provider": "p",
+   "timing": {"evaluation_ms": 10, "rule_engine_ms": 7}
+  },
+  {
+   "timestamp": "2026-08-01T10:01:00+00:00",
+   "session_id": "relaxed-session",
+   "event_name": "PreToolUse",
+   "tool_name": "Write",
+   "platform": "claude",
+   "platform_capability": "partial",
+   "mutating": true,
+   "enforcement_mode": "repo_relaxed",
+   "resolved_repo_root": "/repos/demo",
+   "candidate_paths": ["/repos/demo/src/relaxed.py"],
+   "languages": ["python"],
+   "slopgate_version": "2.1.0",
+   "effective_policy_fingerprint": "pol-a",
+   "guidance_fingerprint": "gui-a",
+   "findings": [],
+   "errors": [],
+   "model": "m",
+   "provider": "p",
+   "timing": {"evaluation_ms": 8, "rule_engine_ms": 5}
+  }
+ ],
+ "expected": {
+  "authoritative": true,
+  "legacy_rows": 0,
+  "episodes": {
+   "resolved": 0,
+   "still_failing": 0,
+   "no_observed_followup": 1,
+   "provenance_changed": 0,
+   "evaluation_error": 0
+  },
+  "headline": {
+   "blocking_per_100_mutations": {"value": 100.0, "numerator": 1, "denominator": 1},
+   "first_attempt_clean_rate": {"rate": 0.0, "numerator": 0, "denominator": 1},
+   "repair_success_rate": {
+    "rate": null,
+    "numerator": 0,
+    "denominator": 0,
+    "censored": {
+     "no_observed_followup": 1,
+     "provenance_changed": 0,
+     "evaluation_error": 0
+    }
+   },
+   "median_repair_attempts": null,
+   "median_repair_latency_ms": null
+  }
+ }
+}

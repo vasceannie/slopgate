@@ -153,7 +153,7 @@ export default function Dashboard() {
       {/* Tabbed content */}
       <div className="px-6 pt-4 pb-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-secondary border border-border w-full justify-start gap-0 h-9 rounded-lg">
+          <TabsList className="h-auto min-w-0 w-full flex-wrap justify-start gap-0 rounded-lg border border-border bg-secondary md:h-9 md:flex-nowrap">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary rounded-md">
               Overview
             </TabsTrigger>

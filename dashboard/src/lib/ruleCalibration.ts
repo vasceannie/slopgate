@@ -1,4 +1,5 @@
 import { resolveDecision } from "@/hooks/useTraceData";
+import { canonicalResultScopeKey } from "@/lib/improvementScope";
 import type { Decision, HookResult, RuleFinding, Severity } from "@/types/slopgate";
 
 export type CalibrationMode = "advisory" | "error" | "variance";
@@ -37,27 +38,6 @@ export interface RuleCalibrationSignal {
   isClean: boolean;
   recentExampleMessage?: string | null;
   recentExampleError?: string | null;
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => [key, stableValue(child)]),
-    );
-  }
-  return value;
-}
-
-function resultScopeKey(result: HookResult): string {
-  return JSON.stringify({
-    event_name: result.event_name,
-    tool_name: result.tool_name,
-    command: result.command ?? null,
-    tool_input: stableValue(result.tool_input ?? null),
-  });
 }
 
 function findingsForRule(result: HookResult, ruleId: string) {
@@ -232,8 +212,8 @@ export function computeCalibrationSignals(rules: RuleFinding[], results: HookRes
       deliveredSessions++;
       const firstDelivered = deliveredResults[0];
       const firstDeliveredFindings = findingsForRule(firstDelivered, rule_id).length;
-      const scopeKey = resultScopeKey(firstDelivered);
-      const comparableResults = (resultsBySession.get(sid) || []).filter((result) => resultScopeKey(result) === scopeKey);
+      const scopeKey = canonicalResultScopeKey(firstDelivered);
+      const comparableResults = (resultsBySession.get(sid) || []).filter((result) => canonicalResultScopeKey(result) === scopeKey);
       const lastComparableResult = comparableResults[comparableResults.length - 1];
       const persistentFindings = lastComparableResult ? findingsForRule(lastComparableResult, rule_id).length : firstDeliveredFindings;
 

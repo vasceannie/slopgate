@@ -346,4 +346,59 @@ describe("rule calibration scorer", () => {
     expect(signal?.decisionVariance).toBe(51);
     expect(signal?.isVariableSuspect).toBe(true);
   });
+
+  it("compares semantic scope without hashing mutable tool content", () => {
+    const rules = [{ ...createFinding("PY-CODE-010", "warn", "session-1"), timestamp: "2026-06-14T12:00:01.000Z" }];
+    const sharedProvenance: Pick<
+      HookResult,
+      | "platform"
+      | "event_name"
+      | "session_id"
+      | "errors"
+      | "output"
+      | "mutating"
+      | "enforcement_mode"
+      | "resolved_repo_root"
+      | "candidate_paths"
+      | "languages"
+      | "slopgate_version"
+      | "effective_policy_fingerprint"
+      | "guidance_fingerprint"
+    > = {
+      platform: "opencode",
+      event_name: "PreToolUse",
+      session_id: "session-1",
+      errors: [],
+      output: null,
+      mutating: true,
+      enforcement_mode: "repo_strict",
+      resolved_repo_root: "/repos/demo",
+      candidate_paths: ["/repos/demo/src/a.ts"],
+      languages: ["typescript"],
+      slopgate_version: "2.1.0",
+      effective_policy_fingerprint: "policy-a",
+      guidance_fingerprint: "guidance-a",
+    };
+    const results: HookResult[] = [
+      {
+        ...sharedProvenance,
+        timestamp: "2026-06-14T12:00:01.000Z",
+        tool_name: "Edit",
+        tool_input: { file_path: "/repos/demo/src/a.ts", old_string: "before", new_string: "first repair" },
+        findings: [{ rule_id: "PY-CODE-010", severity: "HIGH", decision: "warn", message: "fired" }],
+      },
+      {
+        ...sharedProvenance,
+        timestamp: "2026-06-14T12:00:02.000Z",
+        tool_name: "Write",
+        tool_input: { file_path: "/repos/demo/src/a.ts", content: "second repair" },
+        findings: [],
+      },
+    ];
+
+    const signal = computeCalibrationSignals(rules, results).find((item) => item.rule_id === "PY-CODE-010");
+
+    expect(signal?.persistentDeliveredFindings).toBe(0);
+    expect(signal?.decisionVariance).toBe(0);
+  });
 });

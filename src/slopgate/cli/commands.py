@@ -246,12 +246,29 @@ def cmd_update_suite(args: argparse.Namespace) -> int:
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
-    from slopgate.stats import run_stats
+    from slopgate.stats import ComparisonRequest, run_stats
 
+    request = None
+    selectors = (
+        string_arg(args, "baseline_policy"),
+        string_arg(args, "candidate_policy"),
+        string_arg(args, "baseline_guidance"),
+        string_arg(args, "candidate_guidance"),
+    )
+    cohorts = tuple(getattr(args, "cohort", None) or [])
+    if any(value for value in selectors) or cohorts:
+        request = ComparisonRequest(
+            baseline_policy=selectors[0],
+            candidate_policy=selectors[1],
+            baseline_guidance=selectors[2],
+            candidate_guidance=selectors[3],
+            cohorts=cohorts,
+        )
     return run_stats(
         log_path=string_arg(args, "log") or None,
         days=_int_arg(args, "days"),
         as_json=_bool_arg(args, "json"),
+        comparison=request,
     )
 
 

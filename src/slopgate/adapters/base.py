@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import cast
 from slopgate._types import ObjectDict, ObjectMapping, object_dict
-from slopgate.constants import BLOCK, DENY
+from slopgate.constants import BLOCK, DECISION_KEY, DENY
 from slopgate.models import RuleFinding
 from slopgate.rules.base import join_messages
 
@@ -34,7 +34,7 @@ def render_request_from_call(
         raise TypeError("findings must be a list")
     context_value = kwargs.pop("context", None)
     updated_input_value = kwargs.pop("updated_input", None)
-    decision_value = kwargs.pop("decision", None)
+    decision_value = kwargs.pop(DECISION_KEY, None)
     if kwargs:
         unexpected = ", ".join(sorted(kwargs))
         raise TypeError(f"unexpected render_output keyword(s): {unexpected}")
@@ -81,7 +81,7 @@ def render_permission_request_output(
         inner["updatedInput"] = updated_input
     if behavior in {DENY, "ask"}:
         inner["message"] = reason
-    return {"hookSpecificOutput": {"hookEventName": event_name, "decision": inner}}
+    return {"hookSpecificOutput": {"hookEventName": event_name, DECISION_KEY: inner}}
 
 
 class PlatformAdapter(ABC):

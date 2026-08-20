@@ -34,7 +34,7 @@ function hasTraceIdentity(obj: Record<string, unknown>): obj is Record<string, u
 export function classifyLine(obj: Record<string, unknown>): TraceRecordType | null {
   // subprocess: has command + returncode
   if ("command" in obj && "returncode" in obj) return "subprocess";
-  // result rows intentionally do not carry event-only candidate path/language metadata.
+  // Historical result rows may omit evaluator scope/provenance metadata.
   if ("findings" in obj && Array.isArray(obj.findings)) return "result";
   // rules.jsonl also contains timing/metric rows keyed by rule_id; those are not UI findings.
   if ("rule_id" in obj) {
@@ -330,6 +330,12 @@ function normalizeResultRecord(obj: Record<string, unknown>): HookResult | null 
       objectRecord(obj.input) ??
       objectRecord(obj.args) ??
       objectRecord(obj.arguments),
+    mutating: obj.mutating === true,
+    candidate_paths: normalizeStringArray(obj.candidate_paths),
+    languages: normalizeStringArray(obj.languages),
+    slopgate_version: optionalAliasedString(obj, ["slopgate_version", "slopgateVersion"]),
+    effective_policy_fingerprint: optionalAliasedString(obj, ["effective_policy_fingerprint", "effectivePolicyFingerprint"]),
+    guidance_fingerprint: optionalAliasedString(obj, ["guidance_fingerprint", "guidanceFingerprint"]),
     ...traceMetadata(obj),
   };
 }

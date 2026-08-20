@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from time import time
-from slopgate.constants import METADATA_PATH, SESSION_ID
+from slopgate.constants import METADATA_PATH, RULE_ID_KEY, SESSION_ID
 from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
 from slopgate.util import logger
 from ._files import StateSnapshotMixin
@@ -32,7 +32,7 @@ class StateKeyMixin:
         normalized_path = self._normalize_path(path) if path else "__pathless__"
         data: ObjectDict = {
             SESSION_ID: session_id.strip(),
-            "rule_id": rule_id.strip(),
+            RULE_ID_KEY: rule_id.strip(),
             METADATA_PATH: normalized_path,
         }
         data.update(object_dict(extra))
@@ -45,7 +45,7 @@ class StateKeyMixin:
             return False
         if string_value(parsed.get(SESSION_ID)) != pattern.session_id.strip():
             return False
-        if string_value(parsed.get("rule_id")) != pattern.rule_id.strip():
+        if string_value(parsed.get(RULE_ID_KEY)) != pattern.rule_id.strip():
             return False
         expected_path = (
             self._normalize_path(pattern.path) if pattern.path else "__pathless__"
