@@ -1,221 +1,276 @@
-## Conclusion
+## 1. Conclusion
 
-Your hooks are not failing—the **feedback loop is**. Slopgate often identifies the right problem, but too much guidance arrives after mutation, repeated attempts are tracked too narrowly, and static instructions are less salient than the agent’s immediate coding impulse.
+Slopgate already records enough runtime evaluation data to build a useful **deterministic improvement-measurement layer without transcript mining or an LLM**. `results.jsonl` carries session, repo/enforcement mode, platform capability, model/provider, tool input, mutation intent, findings, errors, and timings. `slopgate stats` already loads that file as its canonical source. `src/slopgate/engine/_evaluation.py:139-153`, `src/slopgate/engine/_evaluation.py:175-196`, `src/slopgate/stats/_load.py:13-34`, `src/slopgate/stats/_report.py:160-182`
 
-The highest-leverage change is to replace “deny, explain, retry” with:
+The problem is that Slopgate currently has several incompatible definitions of “improved.” Python stats call a one-off denial “first-time resolved,” dashboard operational metrics treat any later non-blocking event as resolution, and rule calibration uses a comparable-attempt key that contains the entire `tool_input`, so an actual repaired write can cease to be comparable merely because, scandalously, the code changed. `src/slopgate/stats/_analysis.py:164-177`, `dashboard/src/hooks/useTraceData.ts:1091-1136`, `dashboard/src/lib/ruleCalibration.ts:54-61`
 
-**task-specific preflight → one coherent edit → projected validation → post-edit backstop**
+I would implement a **canonical repair-episode model inside the existing stats layer first**, then add policy/version fingerprints, baseline-vs-candidate comparisons, and finally make the dashboard consume those semantics. Your uploaded feedback-loop design is directionally right about episode-based deterministic metrics and cohort comparisons; the repo inspection suggests that first layer can be substantially simpler than the eventual cross-harness transcript system. 
 
-Your 54.7% first-time resolution rate should be the primary optimization target. Lowering the number of blocks would risk weakening quality; raising first-time resolution above roughly 75% would reduce development time without relaxing standards.
+## 2. Findings
 
-I reviewed the packed repository and traced the relevant indexed implementation through MCP Proxy/GitNexus. 
+| Severity | Type                 | Finding                                                                                                                                                     | Evidence                                                                                                                                                                                                    | Why it matters                                                                                                                                       | Recommended fix                                                                                                                     |
+| -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **P1**   | `confirmed behavior` | `first_time_resolution_rate` does not actually observe resolution. A `(session, rule, path)` seen exactly once is immediately counted as resolved.          | `src/slopgate/stats/_analysis.py:164-177`, `src/slopgate/stats/_analysis.py:190-192`, `src/slopgate/stats/_report.py:141-157`                                                                               | A lower repeat count can masquerade as successful remediation even when the agent abandoned the issue.                                               | Preserve it temporarily as a legacy churn metric, but introduce episode-based `repair_success_rate` and `first_attempt_clean_rate`. |
+| **P1**   | `confirmed behavior` | Dashboard session resolution is too broad: after the first deny/block, **any** later allow/context/warn/info marks the session resolved.                    | `dashboard/src/hooks/useTraceData.ts:1091-1136`                                                                                                                                                             | An unrelated Read/Bash/other-file operation can “resolve” a failed write statistically.                                                              | Replace dashboard resolution with the same canonical repair-episode evaluator used by stats.                                        |
+| **P1**   | `confirmed behavior` | `results.jsonl` intentionally omits `candidate_paths` and `languages`, even though the corresponding event trace contains them.                             | `src/slopgate/engine/_evaluation.py:156-172`, `src/slopgate/engine/_evaluation.py:175-196`, `dashboard/src/context/traceRecordValidation.ts:34-47`                                                          | The canonical stats input cannot reliably group repairs by target or stratify by language without joining another stream or reparsing tool payloads. | Add `candidate_paths` and `languages` to `_payload_for_done()`.                                                                     |
+| **P1**   | `confirmed behavior` | Result traces have no effective policy/intervention fingerprint.                                                                                            | `src/slopgate/engine/_evaluation.py:175-196`                                                                                                                                                                | Before/after numbers cannot prove which rule/config/prompt revision was active.                                                                      | Trace Slopgate version plus deterministic effective-policy and guidance fingerprints.                                               |
+| **P2**   | `confirmed behavior` | Calibration's “comparable result” key hashes the full `tool_input`.                                                                                         | `dashboard/src/lib/ruleCalibration.ts:54-61`                                                                                                                                                                | A Write/Edit repair commonly changes the content, causing the repaired attempt to fall into another scope.                                           | Introduce a content-independent `repair_scope_key`: repo + session + rule + event/tool + normalized target paths.                   |
+| **P2**   | `confirmed behavior` | Improvement logic is split between Python stats, dashboard calibration, and dashboard session ops.                                                          | `src/slopgate/stats/_analysis.py:131-192`, `dashboard/src/lib/ruleCalibration.ts:17-40`, `dashboard/src/components/dashboard/FalsePositiveAnalysis.tsx:42`, `dashboard/src/hooks/useTraceData.ts:1091-1136` | The same trace history can produce three different stories about whether behavior improved.                                                          | Put canonical semantics in Python and make CLI/dashboard presentations consume or mirror one tested contract.                       |
+| **P2**   | `confirmed behavior` | Current enforcement already correctly distinguishes strict managed-repo rules from safety-only behavior, but raw aggregate metrics can erase that boundary. | `src/slopgate/engine/_runner.py:229-267`, `src/slopgate/rules/__init__.py:228-259`, `tests/engine/test_12_enforcement_modes.py:33-111`                                                                      | Mixing `repo_strict`, `repo_relaxed`, and `outside_repo` can make an enforcement change look like an agent-quality improvement.                      | Default coding-improvement analysis to `repo_strict`; report relaxed/outside-repo cohorts separately.                               |
 
-## Findings
+One boundary is **Unverified**: if by “evaluation data” you specifically mean the output of `make eval-dataset-ats`, GitNexus exposes a test showing that target invocation is allowed, but it did not expose the target's implementation or output schema. `tests/test_shell_read_rules_public_api.py:127-143`. The plan below therefore targets Slopgate's canonical runtime evaluation data in `results.jsonl`.
 
-| Severity     | Type                       | Finding                                                                                                                                                                                                                                              | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Why it matters                                                                                                                                                                                     | Recommended fix                                                                                                                                                                                                                                            |
-| ------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Critical** | **accidental loophole**    | Retry enforcement identifies an attempt by an exact content/tool-input hash, while reporting identifies churn by rule, session, and path. Tiny patch changes therefore evade the runtime retry lock while still constituting the same failed design. | The fingerprint includes target-content hashes and the entire tool input in `src/slopgate/engine/_retry.py:43-70`. Deny-state keys include that fingerprint in `src/slopgate/state/_keys.py:155-174`. A changed fingerprint bypasses an existing retry lock in `src/slopgate/engine/_retry.py:233-248`. Stats aggregate more broadly in `src/slopgate/stats/_analysis.py:125-145`.                                                                                             | This explains how a session can accumulate 296 denials of one rule despite having retry-budget enforcement. Agents can keep making semantically equivalent edits that appear technically distinct. | Maintain two counters: an exact-attempt fingerprint for diagnostics and a semantic churn key of `repo + session + rule + normalized path`. Lock after the second semantic recurrence, regardless of patch hash. Clear it only after the rule stops firing. |
-| **High**     | **confirmed behavior**     | The strongest general guidance is injected as static prompt-context files on `UserPromptSubmit`, rather than being generated for the actual target, task, and likely rules.                                                                          | `PromptContextRule` loads and joins all configured fragments on prompt submission in `src/slopgate/rules/common/_shell_read.py:81-105`. The bundled hot-rule preflight is a fixed list in `src/slopgate/resources/prompt_context/repo.md:53-62`.                                                                                                                                                                                                                               | A large static rulebook competes with the feature request for model attention. It teaches the rules but does not force the agent to apply them to the file it is about to edit.                    | Generate a compact **First-Write Contract** containing the target path, reused pattern, predicted hot rules, design choices, and one verification command. Inject only the three to five relevant rules.                                                   |
-| **High**     | **confirmed behavior**     | `QUALITY-LINT-001`, your largest source of denials, is inherently post-edit.                                                                                                                                                                         | `PostEditLintRule` handles only `PostToolUse`, evaluates files after mutation, and optionally blocks in `src/slopgate/rules/common/quality/lint.py:215-260`.                                                                                                                                                                                                                                                                                                                   | The agent cannot avoid many collector failures “on the first try” when the first authoritative evaluation occurs after the edit has landed.                                                        | Run high-frequency lint collectors against the proposed content before mutation. Keep the current post-edit rule as a backstop.                                                                                                                            |
-| **High**     | **accidental loophole**    | A retry lock can be cleared using keyword recognition rather than verified corrective action.                                                                                                                                                        | `capture_repair_plan_signal` looks for “repair plan,” then basic “rule/constraint” and “read/reread” words in `src/slopgate/engine/_retry.py:305-313`. The state records only two booleans in `src/slopgate/state/_locks_store.py:65-81`. A qualifying plan clears the lock in `src/slopgate/engine/_retry.py:239-241`.                                                                                                                                                        | An agent can satisfy the protocol linguistically without actually rereading the target or changing its design.                                                                                     | Require recorded evidence: a target read after the lock timestamp, the actual locked rule IDs and paths in a structured plan, and a semantically different repair strategy.                                                                                |
-| **High**     | **confirmed behavior**     | Repeated-failure memory is session-scoped and short-lived, despite stats showing persistent patterns across many sessions.                                                                                                                           | Session-start guidance retrieves failures only for the current session in `src/slopgate/engine/_retry.py:198-225`. The state query filters on the current session ID in `src/slopgate/state/_keys.py:214-236`. The disk state has a one-hour TTL in `src/slopgate/state/_locks_store.py:90-94`.                                                                                                                                                                                | Every new agent session can relearn the same lessons from scratch. Your aggregate statistics know which rules are hot, but runtime steering does not use that knowledge.                           | Maintain a decayed, repo-scoped failure profile by language, path role, platform, and model. Inject the top recurring failure patterns at session start and before the first mutation.                                                                     |
-| **Medium**   | **documentation mismatch** | Universal replan guidance can conflict with rule-specific guidance, especially for thin wrappers.                                                                                                                                                    | The generic repeated-denial prompt recommends “small helper extractions” in `src/slopgate/engine/_hints/constants.py:2-6` and is appended to repeated denials in `src/slopgate/engine/_retry.py:128-138`. The `PY-CODE-013` guidance instead says to inline pass-throughs or add genuine policy in `src/slopgate/engine/_hints/constants.py:22-34`. The architecture rules also caution against unnecessary extraction in `bundle/claude/rules/quality-architecture.md:11-16`. | An agent denied for creating a thin wrapper can respond by extracting another helper, creating further churn.                                                                                      | Replace the universal replan text with rule-specific repair playbooks. Generic instructions should say “change the design,” not prescribe extraction.                                                                                                      |
-| **Medium**   | **confirmed behavior**     | `PY-LOG-002` can classify functions as boundaries from path, class name, function name, or call markers, even without proving an actual runtime handoff.                                                                                             | Boundary paths and suffixes are enumerated in `src/slopgate/rules/python_ast/_rules/_boundary_helpers.py:35-51`. Any one of several signals can establish boundary status in `src/slopgate/rules/python_ast/_rules/_boundary_helpers.py:155-173`. Public functions without logging are then reported in `src/slopgate/rules/python_ast/_rules/_boundary_rule.py:110-133`.                                                                                                      | **Unverified false-positive rate**, but 1,743 denials make this a strong calibration candidate. Pure helpers inside `adapters/` or `repositories/` may be treated like real external handoffs.     | Make an observed outbound/event call blocking evidence. Treat path-, name-, or class-only classification as advisory unless the repository explicitly opts into strict boundary logging.                                                                   |
+---
 
-## Detailed analysis
+## 3. Detailed analysis and implementation plan
 
-### 1. The retry budget protects against identical patches, not persistent bad reasoning
+### A. Define one canonical unit: the repair episode
 
-The current design records an edit fingerprint containing the content hash and complete tool input. That is appropriate for stopping an agent from submitting the exact same patch repeatedly, but it is too precise for detecting brute-force behavior. A renamed helper, changed whitespace, or slightly altered wrapper creates a new fingerprint even when the same architectural mistake remains. `src/slopgate/engine/_retry.py:43-70`
+Do not start by adding more percentages to `_analysis.py`. That merely gives the metric hydra another head.
 
-The statistics subsystem already uses the more meaningful identity: same session, same rule, and often the same path. `src/slopgate/stats/_analysis.py:125-145` That is why the report sees enormous loops that the runtime lock does not effectively stop.
+The current stats layer groups denials by `(session, rule_id, path)`, but only counts occurrences; it does not inspect a later clean attempt. `src/slopgate/stats/_analysis.py:164-177` The dashboard has the better idea of comparing attempts, but its scope key contains command plus the full stable `tool_input`. `dashboard/src/lib/ruleCalibration.ts:54-61`
 
-The runtime should track:
-
-```text
-exact attempt:
-(session, rule, path, content fingerprint)
-
-semantic churn:
-(repo, session, rule, path)
-```
-
-The exact key answers, “Did the agent repeat the same patch?” The semantic key answers, “Is the agent still failing to understand the same invariant?”
-
-After the second semantic hit, the next write should be denied until the agent has:
-
-1. Reread the complete target.
-2. Named the violated invariant.
-3. Identified why the previous design failed.
-4. Selected a rule-specific alternative.
-5. Run any needed structural lookup.
-
-The lock should not clear merely because the patch text changed.
-
-### 2. Convert the static rulebook into a target-specific preflight
-
-The repository prompt already contains valuable advice, and the dedicated Python executor has a strong pre-write scouting process: inspect the target and sibling patterns, assess likely hook risks, make one minimal patch, and run focused verification. `bundle/claude/agents/agent-python-executor.md:133-150`
-
-The problem is delivery. The manifest installs that executor as an available agent asset, but no automatic runtime selection mechanism was found in the reviewed routing paths. `bundle/manifest.yaml:106-111` **Unverified:** another harness-level configuration outside the repository could select it automatically.
-
-Instead of only telling the model about every rule, force it to produce a small artifact before its first write:
+I would add:
 
 ```text
-PRE-WRITE CONTRACT
-Target:
-Existing pattern to reuse:
-Public API or behavior being preserved:
-Likely hook risks:
-Design chosen to avoid them:
-Focused verification:
+src/slopgate/stats/
+├── _episodes.py
+├── _improvement.py
+└── _fingerprints.py
 ```
 
-This changes the model’s job from “remember dozens of rules while coding” to “apply five explicit constraints to this edit.”
+Keep this under `stats` initially rather than founding another architectural kingdom. The existing loader, report path, JSON mode, and CLI integration are already there. `src/slopgate/stats/_load.py:50-71`, `src/slopgate/stats/_report.py:160-182`, `src/slopgate/cli/parsers.py:266-299`
 
-The contract can be generated automatically from:
-
-* Path role: source, test, adapter, repository, CLI, quality harness.
-* Current file metrics: lines, methods, parameters, import shape.
-* Proposed operation: new behavior, refactor, test addition, module split.
-* Historical hot rules for that repository and model.
-* GitNexus context or impact results for shared symbols.
-
-### 3. Move predictable post-edit failures into pre-edit projection
-
-Your highest-volume rule is `QUALITY-LINT-001`, but its implementation intentionally evaluates after the mutation. `src/slopgate/rules/common/quality/lint.py:215-260`
-
-Not every collector can safely run before the write. However, many of the highest-friction collectors can evaluate a virtual file created from the proposed patch:
-
-* Long methods and excessive parameters.
-* Thin wrappers.
-* Oversized modules.
-* Flat sibling proliferation.
-* Private import chains and aliases.
-* Long lines and repeated literals.
-* Direct logger creation.
-* Common test smells.
-
-A useful model is:
+A rule-specific repair scope should conceptually be:
 
 ```text
-PreToolUse:
-    Evaluate proposed file overlay.
-    Deny predictable structural violations before disk mutation.
-
-PostToolUse:
-    Format.
-    Run filesystem-, project-, and cross-file-dependent collectors.
-    Block only unexpected residual failures.
+session_id
++ resolved_repo_root
++ enforcement_mode
++ rule_id
++ event/tool family
++ normalized candidate path(s)
 ```
 
-This is better than simply weakening `QUALITY-LINT-001`. The post-edit check remains authoritative, but fewer preventable defects reach it.
+It should **not** contain source content. For pathless rules, record `scope_confidence="low"` rather than pretending the correlation is equally precise.
 
-You should also support an **atomic edit burst**. The repository already warns that imports and their usages must be edited together because post-tool formatting can remove temporarily unused imports. `bundle/claude/rules/tool-atomic-edits.md:3-7` A coherent multi-part patch should incur one projected evaluation and one post-edit backstop, rather than many tiny mutation cycles.
+An episode becomes:
 
-### 4. Replace performative repair plans with state-backed recovery
-
-The current repair-plan unlock is easy for a language model to game because it is itself linguistic. `src/slopgate/engine/_retry.py:305-313`
-
-A structured recovery event should contain:
-
-```json
-{
-  "target_paths": ["src/example.py"],
-  "locked_rules": ["PY-CODE-013"],
-  "files_reread_after_lock": ["src/example.py"],
-  "violated_invariant": "The helper is a single-call pass-through.",
-  "previous_design_failure": "Renaming it did not add policy or behavior.",
-  "new_design": "Inline it into the caller and preserve the public facade.",
-  "verification": "focused test node"
-}
+```text
+first relevant attempt
+→ first block/deny
+→ zero or more comparable attempts
+→ first comparable clean attempt
 ```
 
-Slopgate can validate most of this mechanically. The model still writes the reasoning, but it cannot unlock itself merely by mentioning the right phrases.
+Possible terminal states should be explicit:
 
-### 5. Calibrate rule guidance before relaxing enforcement
+```text
+never_blocked
+resolved
+still_failing
+no_observed_followup
+```
 
-The `PY-CODE-013` conflict is an important example. The universal recovery prompt recommends extraction, but the specific rule often requires inlining. `src/slopgate/engine/_hints/constants.py:2-6` `src/slopgate/engine/_hints/constants.py:22-34`
+I would deliberately call the last state `no_observed_followup`, not “abandoned.” The trace proves absence of a later comparable result, not the psychological state of the agent. Humans have invented enough telemetry fan fiction already.
 
-Use rule-specific repair verbs:
+### B. Metrics worth extracting in v1
 
-| Rule               | Preferred first response                                               |
-| ------------------ | ---------------------------------------------------------------------- |
-| `PY-CODE-013`      | Inline, absorb into owner, or add real validation/policy               |
-| `PY-IMPORT-002`    | Remove invented alias; use canonical symbol name                       |
-| `PY-IMPORT-003`    | Add/use public package facade                                          |
-| `PY-LOG-002`       | Identify the actual handoff and use the existing telemetry abstraction |
-| `PY-CODE-018`      | Split by responsibility with a stable facade                           |
-| `QUALITY-LINT-001` | Repair only the named collector before resuming feature work           |
-| `SHELL-001`        | Preserve errors and explicitly branch on expected failure              |
+The result payload already records `mutating`, timing, model/provider, enforcement mode, repo, platform capability, findings and errors. `src/slopgate/engine/_evaluation.py:139-153`, `src/slopgate/engine/_evaluation.py:175-196`
 
-Do not give every structural failure the same “extract helpers” treatment.
+That supports these metrics without external histories:
 
-For `PY-LOG-002`, sample at least 100 recent denials and classify them as:
+1. **Blocking evaluations per 100 mutating evaluations**
+   `100 × mutating evaluations ending deny/block / mutating evaluations`
 
-* Real external/event boundary missing telemetry.
-* Pure helper accidentally classified because of location/name.
-* Existing telemetry not recognized.
-* Test or generated code.
-* Legitimate exception.
+2. **First-attempt clean rate**
+   Percentage of repair scopes whose first mutating attempt does not produce an enforcing finding.
 
-Its false-positive rate is currently **Unverified**. Given the path-based heuristic and denial volume, it should be measured before deciding whether to retain blocking severity for all detected boundary kinds. `src/slopgate/rules/python_ast/_rules/_boundary_helpers.py:155-173`
+3. **Observed repair success rate**
+   Blocked episodes with a later comparable clean attempt divided by blocked episodes with adequate observable follow-up. Keep `no_observed_followup` visible rather than silently treating it as success or failure.
 
-## Immediate agent steering template
+4. **Repair attempts**
+   Median and p90 attempts between initial block and clean comparable attempt.
 
-The following can be installed in the repo-level orchestrator instructions and used before dispatching coding work. It is consistent with the existing executor’s pre-write and recovery model. `bundle/claude/agents/agent-python-executor.md:131-158`
+5. **Repair latency**
+   Median and p90 elapsed wall-clock time between initial block and clean comparable attempt.
 
-## Repository Coding Protocol
+6. **Persistence rate by rule**
+   How often the same rule remains present on later comparable attempts. This replaces the current crude repeated-denial interpretation and generalizes the useful idea in dashboard calibration. `dashboard/src/lib/ruleCalibration.ts:17-40`, `dashboard/src/lib/ruleCalibration.ts:90`
 
-Before the first repository mutation, produce a **Pre-Write Contract** containing:
+7. **Runtime reliability**
+   Result error rate plus p50/p95 `evaluation_ms` and `rule_engine_ms`; those timing fields are already emitted on every completed evaluation. `src/slopgate/engine/_evaluation.py:199-240`
 
-* **Target:** exact files and symbols to change.
-* **Reuse:** the nearest existing implementation, public facade, fixture, logger, or package pattern being reused.
-* **Constraints:** the three to five Slopgate rules most likely to apply.
-* **Design:** how the proposed implementation stays within those constraints.
-* **Verification:** the smallest focused test, lint, or type-check command that proves the change.
+8. **Cohort facets**
+   Repo, enforcement mode, platform/capability, model/provider, rule, event/tool, and once the trace is enriched, language and policy fingerprint. The underlying dimensions already exist except the missing result-level language/path and fingerprints. `src/slopgate/engine/_evaluation.py:139-196`
 
-For shared, public, or architectural symbols, inspect callers and impact before editing.
+Do **not** produce a single “Slopgate improvement score.” A 12% reduction in blocks can mean the agent got better, the rule got weaker, a repo was disabled, a different model was used, or somebody simply stopped doing the thing being measured. One scalar would hide exactly the information this feature is supposed to extract.
 
-Make one coherent atomic edit. Batch imports with their usages and batch related source and test updates when partial intermediate states would be invalid.
+### C. Fix the result trace before running serious experiments
 
-Treat hook responses as follows:
+There are two small but high-value schema changes.
 
-* A **PreToolUse deny** means the mutation did not occur. Do not repeat the same design with cosmetic changes.
-* A **PostToolUse block** means the mutation may have landed. Reread the touched file before repairing it.
-* Advisory context should influence the design, but it is not a reason to rewrite otherwise-valid code.
-* After the first denial, state the violated invariant and choose a materially different repair.
-* After the same rule affects the same path twice, stop mutations. Reread the target and produce:
+First, mirror `candidate_paths` and `languages` from the start record into the result record. They exist at evaluation start but are deliberately absent from result rows today. `src/slopgate/engine/_evaluation.py:156-172`, `src/slopgate/engine/_evaluation.py:175-196`, `dashboard/src/context/traceRecordValidation.ts:34-47`
 
-  1. the violated invariant;
-  2. why the prior design failed;
-  3. the different design that will be used next.
+Change `_payload_for_done()` to include:
 
-Do not attempt a third mutation until that recovery plan is complete.
+```python
+"candidate_paths": ctx.candidate_paths,
+"languages": sorted(ctx.languages),
+```
 
-Run focused verification after the coherent edit. Run repository-wide Slopgate lint only at a meaningful checkpoint, not after every micro-edit.
+This keeps `results.jsonl` self-sufficient for the stats pipeline instead of requiring an events/results join merely to answer “what file was this repair about?”
 
-This protocol should be an enforced repo-level workflow step, not merely optional prose hidden among general instructions.
+Second, add provenance such as:
 
-## Policy Boundary Recommendations
+```text
+slopgate_version
+effective_policy_fingerprint
+guidance_fingerprint
+```
 
-Slopgate’s existing enrollment model is directionally correct. Runtime mode separates `outside_repo`, `repo_strict`, and `repo_relaxed`, and repo-strict rules run only for enrolled repositories. `src/slopgate/engine/_runner.py:199-230` Enrollment and opt-out are determined through ancestor `slopgate.toml`, disable sentinels, and `[slopgate] enabled = false`. `src/slopgate/config/_repo.py:149-183`
+`effective_policy_fingerprint` should represent the effective enforcement configuration, not raw config text. At minimum it should change when effective rule enablement, surface action, severity override, or other enforcement-relevant policy changes.
 
-Preserve that boundary while making these changes:
+There is already precedent for deterministic hashing in the lint project-index fingerprint, which hashes engine/version/config-derived state rather than relying on timestamps. `src/slopgate/lint/project_index/fingerprint.py:38-54`
 
-| Environment                 | Recommended enforcement                                                                                                                                                                                                                              |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Project repo work**       | Enable target-specific preflight, semantic churn locking, projected lint, cross-session repo failure profiles, post-edit quality gates, and rule-specific recovery. Blocking is appropriate for high-confidence violations.                          |
-| **General workstation use** | Keep coding-quality rules inactive. Do not apply semantic retry locks, logger conventions, import architecture, module-size limits, test-smell rules, or completion gates outside explicitly enrolled repositories.                                  |
-| **Server operations**       | Keep only narrow destructive-action, secret-access, and genuine system-protection controls globally active. Legitimate administration must have an explicit approval or admin escape hatch rather than being forced through repo coding conventions. |
+The trace should store the hash, not secret-bearing raw configuration.
 
-The current always-on group is already limited to protected paths, sensitive data, and system protection, while prompt, git, lint, stop, AST, and regex quality rules are repo-strict. `src/slopgate/rules/__init__.py:195-236` Do not solve agent coding friction by expanding the repo rule set globally.
+### D. Baseline vs candidate comparisons
 
-New mechanisms should follow these scope rules:
+Once provenance exists, add an improvement comparison object:
 
-* The historical failure profile must be **repo-keyed**, never a universal profile applied across unrelated work.
-* Predictive lint and semantic retry locks must activate only in `repo_strict`.
-* `PY-LOG-002`, import architecture, code-size, tests, and completion rules must remain inactive during ordinary workstation and server administration.
-* Global system-path protection should distinguish dangerous mutations from legitimate read-only inspection and authorized administrative changes.
-* Degraded platforms need persistent repo instructions because not every harness can enforce every lifecycle hook equally; platform capability handling already distinguishes OpenCode, Codex, and Cursor limitations. `src/slopgate/engine/_runner.py:69-91`
+```text
+ImprovementComparison
+  baseline
+  candidate
+  dimensions
+  metric_deltas
+  sample_counts
+```
 
-The desired outcome is not fewer guardrails. It is **earlier, narrower, evidence-backed guidance inside managed repositories, with minimal interference everywhere else**.
+A comparison should produce both absolute and relative deltas:
+
+```text
+first_attempt_clean_rate: 71% → 82%  (+11 pp)
+blocking_per_100_mutations: 24.1 → 15.8  (-34%)
+median_repair_attempts: 2 → 1
+repair_success_rate: 78% → 91%
+evaluation_p95_ms: 146 → 151  (+3%)
+```
+
+The important part is the cohort contract. Do not compare two windows unless the report can show their distribution across repo, enforcement mode, platform/capability, rule, and ideally model/provider. Those fields are already present in result traces. `src/slopgate/engine/_evaluation.py:139-196`
+
+Once fingerprints exist, `effective_policy_fingerprint` becomes a first-class cohort dimension. That lets you answer the actually useful question:
+
+> Did policy/guidance revision B reduce preventable repair churn relative to A under comparable workloads?
+
+instead of:
+
+> Number went down this week, everybody celebrate.
+
+### E. Preserve old metrics, but stop calling them outcomes
+
+I would not silently change the implementation behind the existing `first_time_resolution_rate` key. Existing scripts or consumers may rely on it.
+
+Instead:
+
+* Mark `first_time_resolution_rate` as legacy/deprecated.
+* Add an accurately named equivalent such as `single_deny_scope_rate`.
+* Introduce `repair_success_rate` as the outcome-valid successor.
+* Print a deprecation explanation in the human-readable stats report.
+
+The reason is concrete: current logic increments `first_time_resolved` solely because count is `<= 1`. `src/slopgate/stats/_analysis.py:164-177` Its current formula then presents that as resolution. `src/slopgate/stats/_analysis.py:190-192`
+
+### F. CLI integration
+
+The narrowest UI is to extend `slopgate stats`, because it already owns the JSONL loader and JSON output. `src/slopgate/cli/commands.py:248-255`, `src/slopgate/cli/parsers.py:266-299`
+
+I would land this progressively:
+
+```text
+slopgate stats --improvement --days 30
+slopgate stats --improvement --days 30 --json
+```
+
+Then, after fingerprints have accumulated enough history:
+
+```text
+slopgate stats --improvement \
+  --baseline-policy <hash-a> \
+  --candidate-policy <hash-b>
+```
+
+The JSON output should expose raw counts alongside rates so downstream consumers do not have to reverse-engineer denominators from percentages.
+
+### G. Consolidate the dashboard after the Python contract stabilizes
+
+Do not immediately rewrite `ruleCalibration.ts`. Its existing persistence idea is useful, and `FalsePositiveAnalysis` currently consumes it directly. `dashboard/src/lib/ruleCalibration.ts:90`, `dashboard/src/components/dashboard/FalsePositiveAnalysis.tsx:42`
+
+After the Python episode model has tests and fixtures:
+
+1. Generate a shared fixture from representative result sequences.
+2. Require Python improvement calculations and dashboard calculations to agree.
+3. Replace the dashboard's broad session `resolutionRate` with episode-based resolution.
+4. Replace or narrow `resultScopeKey()` so mutable source content is not part of repair identity.
+5. Eventually treat TypeScript calibration as presentation/triage logic, not the authoritative definition of resolution.
+
+This specifically removes the current case where any later non-blocking event counts as a blocked session resolving. `dashboard/src/hooks/useTraceData.ts:1091-1136`
+
+### H. Test gates I would require
+
+The core tests should encode semantics rather than merely chase the implementation:
+
+```text
+blocked write(path A, content v1)
+→ clean write(path A, content v2)
+= resolved in 1 repair attempt
+
+blocked write(path A)
+→ allowed bash/git status
+= NOT resolved
+
+blocked write(path A)
+→ clean write(path B)
+= NOT resolved
+
+blocked rule X(path A)
+→ clean attempt for rule X(path A)
+= resolved
+
+blocked rule X(path A)
+→ rule Y(path A)
+= X resolved only if comparable evaluation proves X absent
+
+single block with no comparable follow-up
+= no_observed_followup, NOT first-time resolved
+```
+
+That first test is particularly important because the existing dashboard scope key includes the complete `tool_input`, which would distinguish content v1 from v2. `dashboard/src/lib/ruleCalibration.ts:54-61`
+
+### Recommended delivery order
+
+**Slice 1: Outcome-correct metrics.** Add `_episodes.py` and `_improvement.py`, define content-independent repair scopes, add regression tests, and expose single-window metrics through `slopgate stats`. Keep existing fields intact. Existing loader and CLI seams are already suitable. `src/slopgate/stats/_load.py:50-71`, `src/slopgate/stats/_report.py:160-182`, `src/slopgate/cli/parsers.py:266-299`
+
+**Slice 2: Trace completeness.** Add result-level `candidate_paths` and `languages`, then version/effective-policy fingerprints. The corresponding event fields already exist, so the former is a very small schema change. `src/slopgate/engine/_evaluation.py:156-196`
+
+**Slice 3: Cohort comparison.** Add baseline/candidate reports keyed by policy fingerprint with deltas and raw sample counts, stratified by repo, harness capability, model/provider, rule, and language. The relevant runtime dimensions are already emitted. `src/slopgate/engine/_evaluation.py:139-196`
+
+**Slice 4: Dashboard convergence.** Make dashboard resolution and rule persistence agree with the canonical episode semantics instead of maintaining separate outcome definitions. `dashboard/src/lib/ruleCalibration.ts:54-61`, `dashboard/src/hooks/useTraceData.ts:1091-1136`
+
+**Slice 5: Causal transcript enrichment.** Only then add the broader transcript/agent-history layer from the uploaded design to answer *why* an improvement happened, rather than whether it happened. 
+
+That order gets you credible numerical feedback quickly while keeping the much more invasive cross-harness conversation analysis optional.
+
+## 4. Policy Boundary Recommendations
+
+The metrics layer should preserve Slopgate's existing enforcement boundary rather than flattening every machine action into one giant “agent performance” bucket.
+
+**Project repo work:** default improvement analysis to `enforcement_mode == "repo_strict"`. That is where Slopgate intentionally adds Git, quality, config, stop, LangGraph, Python AST, regex, and related coding guardrails. `src/slopgate/engine/_runner.py:242-267`, `src/slopgate/rules/__init__.py:228-259`
+
+**General workstation use:** exclude `outside_repo` activity from coding-improvement KPIs by default. Current implementation deliberately runs the always-on safety set while withholding repo-strict coding rules outside enrolled repositories. That is a `confirmed behavior`, and tests explicitly defend it. `src/slopgate/engine/_runner.py:229-267`, `tests/engine/test_12_enforcement_modes.py:33-47`
+
+**Server operations:** treat the same way as general workstation activity. Report narrow global-safety events and runtime health separately, but do not use fewer repo-quality findings during server administration as evidence that coding behavior improved. Current tests establish that even relaxed repositories retain safety protection while strict coding rules are suppressed. `tests/engine/test_12_enforcement_modes.py:91-111`
+
+**Repo disable/skip semantics:** treat `repo_relaxed` and skipped strict paths as explicit cohort boundaries, not successes. A candidate policy that merely moves more traffic from `repo_strict` into relaxed/skipped modes should show that distribution change prominently instead of reporting a miraculous fall in violations. Enforcement mode is already resolved explicitly and written into result traces. `src/slopgate/engine/_runner.py:229-267`, `src/slopgate/engine/_evaluation.py:175-196`
+
+Concretely, I would make the improvement analyzer default to **repo-strict only**, require an explicit flag to mix other modes, and refuse to calculate a single baseline/candidate delta across differing enforcement-mode distributions without showing the mode-specific breakdown. That keeps the measurement system aligned with Slopgate's current architecture instead of accidentally rewarding the easiest optimization known to software engineering: turning the guardrail off.
