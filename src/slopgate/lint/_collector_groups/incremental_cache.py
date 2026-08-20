@@ -7,6 +7,7 @@ import json
 import sqlite3
 
 from dataclasses import replace
+from contextlib import closing
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
 from time import perf_counter
@@ -25,6 +26,7 @@ from slopgate.lint.project_index.store import (
     mark_file_local_ready,
     replace_file_violations,
 )
+from slopgate.lint.project_index.write_lock import locked_index_connection
 from slopgate.lint._detectors.test_smells import (
     COVERAGE_JSON_NAMES,
     COVERAGE_XML_NAMES,
@@ -41,8 +43,12 @@ def complete_incremental_results(
     """Merge cached file-local hits and persist newly computed dirty-file facts."""
     if not context.plan.use_index:
         return results
-    connection = connect_index(context.plan.project_root)
-    try:
+    connection_context = (
+        locked_index_connection(context.plan.project_root)
+        if context.plan.persist_index
+        else closing(connect_index(context.plan.project_root))
+    )
+    with connection_context as connection:
         merged = results
         if context.cache_ready:
             merged = _merge_cached(connection, results, context)
@@ -53,8 +59,6 @@ def complete_incremental_results(
             mark_file_local_ready(connection)
             connection.commit()
         return merged
-    finally:
-        connection.close()
 
 
 def persist_run_results(

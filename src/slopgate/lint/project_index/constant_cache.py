@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from slopgate.constants import METADATA_PATH
+from slopgate.lint.project_index.write_lock import locked_index_connection
 from slopgate.quality.constant_index import ConstantIndex, StringConstantMatch
 
 _TABLE = "constant_index"
@@ -16,12 +17,10 @@ _SINGLETON = "constants"
 def save_constant_index(root: Path, index: ConstantIndex) -> None:
     """Store extracted constants and the file stat signature used to reuse them."""
     from slopgate.config._repo import is_repo_enrolled
-    from slopgate.lint.project_index.store import connect_index
 
     if not is_repo_enrolled(root):
         return
-    connection = connect_index(root)
-    try:
+    with locked_index_connection(root) as connection:
         connection.execute(
             f"""
             INSERT OR REPLACE INTO {_TABLE}(key, signature, payload_json)
@@ -30,8 +29,6 @@ def save_constant_index(root: Path, index: ConstantIndex) -> None:
             (_SINGLETON, _file_signature(index.files), _payload_json(index)),
         )
         connection.commit()
-    finally:
-        connection.close()
 
 
 def load_constant_index(root: Path, dirty: tuple[Path, ...]) -> ConstantIndex | None:

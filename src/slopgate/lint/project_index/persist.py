@@ -6,7 +6,6 @@ from dataclasses import replace
 
 from slopgate.lint.project_index.models import ProjectIndex, ProjectIndexRequest
 from slopgate.lint.project_index.store import (
-    connect_index,
     reset_store,
     store_matches_engine,
 )
@@ -15,14 +14,14 @@ from slopgate.lint.project_index.summarize import (
     sorted_project_paths,
     summary_payload_size,
 )
+from slopgate.lint.project_index.write_lock import locked_index_connection
 
 
 def build_persisted_index(request: ProjectIndexRequest) -> ProjectIndex:
     """Load, invalidate dirty/deleted rows, and persist updated file facts."""
     project_paths = sorted_project_paths(request.src_files, request.test_files)
     root = index_root(request.root, tuple(path for path, _ in project_paths))
-    connection = connect_index(root)
-    try:
+    with locked_index_connection(root) as connection:
         if request.rebuild or not store_matches_engine(connection, root):
             reset_store(connection, root)
         from slopgate.lint.project_index.refresh import refresh_index_summaries
@@ -40,5 +39,3 @@ def build_persisted_index(request: ProjectIndexRequest) -> ProjectIndex:
         save_integrity_index(connection, index)
         connection.commit()
         return index
-    finally:
-        connection.close()
