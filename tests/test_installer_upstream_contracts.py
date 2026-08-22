@@ -10,6 +10,7 @@ from slopgate.installer._codex import (
     _install_codex_at,
     codex_hooks_block,
 )
+from slopgate.installer._shared import InstallAt
 from slopgate.installer._pi import _PACKAGE_PAYLOAD, _is_owned_pi_package
 
 
@@ -44,8 +45,7 @@ def test_codex_install_prompts_for_hook_review(
         tmp_path / "hooks.json",
         codex_hooks_block("slopgate"),
         "slopgate",
-        dry_run=False,
-        root=tmp_path,
+        InstallAt(root=tmp_path),
     )
 
     assert status == 0

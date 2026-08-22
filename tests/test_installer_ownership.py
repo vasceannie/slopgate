@@ -6,6 +6,7 @@ import slopgate.installer
 import slopgate.installer._shared
 from slopgate.constants import PLATFORM_CLAUDE
 from slopgate.installer._shared import (
+    ContainedWrite,
     UnsafeInstallPathError,
     backup_existing_file,
     backup_existing_file_and_report,
@@ -240,31 +241,35 @@ def test_require_contained_install_path_allows_symlink_root(tmp_path: Path) -> N
     )
 
 
-@pytest.mark.parametrize(
-    ("plant", "expected_fragment"),
-    [
-        pytest.param("leaf", "symlink", id="leaf-file"),
-        pytest.param("parent", "symlink", id="parent-dir"),
-        pytest.param("outside", "outside the selected install root", id="escaped-path"),
-    ],
-)
-def test_require_contained_install_path_rejects_unsafe_targets(
-    tmp_path: Path, plant: str, expected_fragment: str
-) -> None:
-    root = tmp_path / "root"
-    root.mkdir()
-    outside = tmp_path / "outside" / "secret.ts"
+def _plant_unsafe_install_target(root: Path, plant: str) -> tuple[Path, Path]:
+    outside = root.parent / "outside" / "secret.ts"
     outside.parent.mkdir()
     outside.write_text("KEEP\n", encoding="utf-8")
     if plant == "leaf":
         target = root / "plugins" / "slopgate-plugin.ts"
         target.parent.mkdir()
         target.symlink_to(outside)
-    elif plant == "parent":
+        return target, outside
+    if plant == "parent":
         (root / "plugins").symlink_to(outside.parent)
-        target = root / "plugins" / "slopgate-plugin.ts"
-    else:
-        target = outside
+        return root / "plugins" / "slopgate-plugin.ts", outside
+    return outside, outside
+
+
+_UNSAFE_INSTALL_TARGETS = [
+    pytest.param("leaf", "symlink", id="leaf-file"),
+    pytest.param("parent", "symlink", id="parent-dir"),
+    pytest.param("outside", "outside the selected install root", id="escaped-path"),
+]
+
+
+@pytest.mark.parametrize(("plant", "expected_fragment"), _UNSAFE_INSTALL_TARGETS)
+def test_require_contained_install_path_rejects_unsafe_targets(
+    tmp_path: Path, plant: str, expected_fragment: str
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    target, outside = _plant_unsafe_install_target(root, plant)
     with pytest.raises(UnsafeInstallPathError, match=expected_fragment):
         require_contained_install_path(target, root)
     assert outside.read_text(encoding="utf-8") == "KEEP\n", (
@@ -278,7 +283,9 @@ def test_write_contained_text_replaces_real_file_and_keeps_backup(
     target = tmp_path / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir()
     target.write_text("custom plugin\n", encoding="utf-8")
-    written = write_contained_text(target, "owned plugin\n", root=tmp_path, label="file")
+    written = write_contained_text(
+        target, "owned plugin\n", ContainedWrite(root=tmp_path, label="file")
+    )
     assert written.read_text(encoding="utf-8") == "owned plugin\n", (
         "safe writes should replace the real file in place"
     )
@@ -287,17 +294,24 @@ def test_write_contained_text_replaces_real_file_and_keeps_backup(
     assert backups[0].read_text(encoding="utf-8") == "custom plugin\n"
 
 
-def test_write_contained_text_rejects_leaf_symlink_and_preserves_external(
-    tmp_path: Path,
-) -> None:
+def _plant_leaf_symlink(tmp_path: Path) -> tuple[Path, Path]:
     outside = tmp_path / "outside" / "secret.ts"
     outside.parent.mkdir()
     outside.write_text("KEEP\n", encoding="utf-8")
     target = tmp_path / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir()
     target.symlink_to(outside)
+    return target, outside
+
+
+def test_write_contained_text_rejects_leaf_symlink_and_preserves_external(
+    tmp_path: Path,
+) -> None:
+    target, outside = _plant_leaf_symlink(tmp_path)
     with pytest.raises(UnsafeInstallPathError, match="symlink"):
-        write_contained_text(target, "owned plugin\n", root=tmp_path, label="file")
+        write_contained_text(
+            target, "owned plugin\n", ContainedWrite(root=tmp_path, label="file")
+        )
     assert outside.read_text(encoding="utf-8") == "KEEP\n", (
         "leaf symlink writes must not overwrite the external target"
     )

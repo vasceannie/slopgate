@@ -61,10 +61,7 @@ def test_repair_verify_accepts_arbitrary_generation_tokens(
     assert result == 0, "Clean verification should not depend on generation syntax"
 
 
-def test_repair_verify_invokes_intended_installation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _mark_repair(tmp_path, _GENERATION_ONE)
+def _capture_lint_argv(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     captured: list[list[str]] = []
 
     def _run(_cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -73,18 +70,24 @@ def test_repair_verify_invokes_intended_installation(
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(repair_mod, "_run_lint_check", _run)
+    return captured
 
+
+def test_repair_verify_invokes_intended_installation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mark_repair(tmp_path, _GENERATION_ONE)
+    captured = _capture_lint_argv(monkeypatch)
     result = cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation=_GENERATION_ONE)
     )
+    remaining = repair_mod._store(str(tmp_path)).get_repair_required()
 
     assert result == 0, "matching generation should verify and clear"
     assert captured == [_INTENDED_LINT], (
         "verification must invoke the intended slopgate installation"
     )
-    assert repair_mod._store(str(tmp_path)).get_repair_required() is None, (
-        "successful verification should clear the matching generation"
-    )
+    assert remaining is None, "successful verification should clear the matching generation"
 
 
 def test_repair_verify_does_not_clear_replaced_generation(

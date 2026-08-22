@@ -7,11 +7,12 @@ import json
 from typing import Protocol
 
 from slopgate._types import ObjectDict, object_dict, string_value
+from slopgate.constants import UNKNOWN_VALUE
 
 FRAME_DELIMITER = b"\n"
 FRAME_ENCODING = "utf-8"
 MAX_FRAME_BYTES = 1024 * 1024
-UNKNOWN_DAEMON_VALUE = "unknown"
+UNKNOWN_DAEMON_VALUE = UNKNOWN_VALUE
 
 
 class _FrameConnection(Protocol):

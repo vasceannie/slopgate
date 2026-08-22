@@ -88,6 +88,16 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     )
 
 
+def _plant_opencode_user_leaf_symlink(tmp_path: Path) -> tuple[Path, Path]:
+    outside = tmp_path / "outside" / "secret.ts"
+    outside.parent.mkdir()
+    outside.write_text("KEEP\n", encoding="utf-8")
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(outside)
+    return target, outside
+
+
 def test_opencode_user_install_refuses_leaf_symlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -97,12 +107,7 @@ def test_opencode_user_install_refuses_leaf_symlink(
     monkeypatch.setattr(
         slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
     )
-    outside = tmp_path / "outside" / "secret.ts"
-    outside.parent.mkdir()
-    outside.write_text("KEEP\n", encoding="utf-8")
-    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
-    target.parent.mkdir(parents=True)
-    target.symlink_to(outside)
+    target, outside = _plant_opencode_user_leaf_symlink(tmp_path)
     assert _opencode.install_opencode(dry_run=False) == 1, (
         "user install must refuse a leaf symlink"
     )

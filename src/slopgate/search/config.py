@@ -71,12 +71,13 @@ PREFERRED_LITELLM_MODELS = [
     "text-embedding-3-large",
 ]
 
+LIST_COMMAND = "list"
 COMMANDS = [
     "init",
     "doctor",
     "models",
     "use",
-    "list",
+    LIST_COMMAND,
     "add",
     "search",
     "remove",

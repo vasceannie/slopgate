@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -33,7 +33,7 @@ _PROJECTION_CONTRACT = "slopgate-opencode-projection-v1"
 @contextmanager
 def _missing_trace_case(
     total: float, outcome: str
-) -> Iterator[tuple[BenchmarkConfig, subprocess.CompletedProcess[str]]]:
+) -> Generator[tuple[BenchmarkConfig, subprocess.CompletedProcess[str]]]:
     with TemporaryDirectory(prefix="slopgate-benchmark-test-") as directory:
         repo = Path(directory)
         target = repo / "target.py"

@@ -69,14 +69,14 @@ def is_full_module_candidate(ctx: HookContext, source_kind: str) -> bool:
     than a complete file. Those fragments are still useful for targeted AST rules, but
     they should not trip the fail-closed AST health rule.
     """
-    match ctx.tool_input.get("_slopgate_projection"):
-        case {"status": "projected"} if (
-            ctx.platform_event_name == "tool.execute.before"
-            and source_kind == "multi_edit"
-        ):
-            return True
-        case _:
-            pass
+    projection = ctx.tool_input.get("_slopgate_projection")
+    if (
+        isinstance(projection, dict)
+        and projection.get("status") == "projected"
+        and ctx.platform_event_name == "tool.execute.before"
+        and source_kind == "multi_edit"
+    ):
+        return True
     tool_name = ctx.tool_name.lower()
     if source_kind in {"multi_edit", "multi_edit_old", "patch"}:
         return False

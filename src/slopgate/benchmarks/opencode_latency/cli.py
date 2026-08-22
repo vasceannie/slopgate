@@ -144,7 +144,7 @@ def _finding_signature(row: ObjectDict) -> str:
 def _report(config: BenchmarkConfig, identity: ObjectDict, run: BenchmarkRun) -> ObjectDict:
     phases, dominant = _phase_report(run)
     finding_signatures = sorted({_finding_signature(row) for row in run.rows})
-    decision_signatures = sorted({str(value) for value in run.outcomes})
+    decision_signatures = sorted(set(run.outcomes))
     policies = {
         value
         for row in run.rows

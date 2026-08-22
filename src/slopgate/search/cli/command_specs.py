@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from slopgate.search.config import DEFAULT_SKILL_NAME
+from slopgate.search.config import DEFAULT_SKILL_NAME, LIST_COMMAND
 
 CommandFunc = Callable[[argparse.Namespace], int]
 
@@ -61,7 +61,7 @@ def _index_command_specs(commands: SearchCommands) -> tuple[CommandSpec, ...]:
             (ArgumentSpec("model"), ArgumentSpec("--force", action="store_true")),
         ),
         CommandSpec(
-            "list",
+            LIST_COMMAND,
             "list locally known indexes",
             commands.cmd_list,
             (ArgumentSpec("--json", action="store_true"),),

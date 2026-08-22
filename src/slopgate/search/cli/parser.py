@@ -12,6 +12,7 @@ from slopgate.search.cli.command_specs import (
     command_specs,
     init_argument_specs,
 )
+from slopgate.search.config import LIST_COMMAND
 
 _SEARCH_DESCRIPTION = "Semantic code search via islands-ollama."
 SEARCH_SUBCOMMANDS = (
@@ -19,7 +20,7 @@ SEARCH_SUBCOMMANDS = (
     "doctor",
     "models",
     "use",
-    "list",
+    LIST_COMMAND,
     "add",
     "query",
     "remove",

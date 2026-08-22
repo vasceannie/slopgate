@@ -21,10 +21,12 @@ from slopgate.installer._install_scope import (
 import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
+    InstallAt,
+    OwnedHooksWrite,
     UnsafeInstallPathError,
     contained_scope_root,
     hook_command,
-    merge_owned_hooks_into,
+    prepare_owned_hooks_document,
     remove_owned_hooks,
     report_contained_install_path,
     require_json_object,
@@ -104,28 +106,26 @@ def _write_claude_settings(
 
 
 def _install_claude_at(
-    settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool, root: Path
+    settings_path: Path, hooks: _ClaudeHooks, site: InstallAt
 ) -> int:
-    if report_contained_install_path(settings_path, root) is None:
+    if report_contained_install_path(settings_path, site.root) is None:
         return 1
-    if dry_run:
-        print(f"Would patch: {settings_path}")
-        print(json.dumps({"hooks": hooks}, indent=2))
-        return 0
-    if not settings_path.exists():
-        settings = {}
-    elif (
-        settings := require_json_object(
-            settings_path, "Claude settings", action="overwrite"
-        )
-    ) is None:
-        return 1
-    merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
+    prepared = prepare_owned_hooks_document(
+        settings_path,
+        OwnedHooksWrite(
+            label="Claude settings",
+            hooks=cast(dict[str, list[dict[str, object]]], hooks),
+            dry_run=site.dry_run,
+            verb="patch",
+        ),
+    )
+    if isinstance(prepared, int):
+        return prepared
     return _write_claude_settings(
         settings_path,
-        settings,
+        prepared,
         f"Installed slopgate hooks into {settings_path}",
-        root=root,
+        root=site.root,
     )
 
 
@@ -149,7 +149,7 @@ def install_claude(
     for settings_path in paths:
         contained_root = _claude_contained_root(settings_path, root)
         status = _install_claude_at(
-            settings_path, hooks, dry_run=dry_run, root=contained_root
+            settings_path, hooks, InstallAt(root=contained_root, dry_run=dry_run)
         )
         if status != 0:
             if not dry_run:

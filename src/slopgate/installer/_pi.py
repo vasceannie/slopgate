@@ -18,6 +18,8 @@ from slopgate.installer._install_scope import (
 )
 from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
+    ContainedWrite,
+    InstallAt,
     UnsafeInstallPathError,
     contained_scope_root,
     print_binary_install_summary,
@@ -183,13 +185,11 @@ def _remove_empty_parent(path: Path, *, dry_run: bool) -> None:
         return
 
 
-def _write_pi_json(
-    path: Path, payload: object, label: str, *, dry_run: bool, root: Path
-) -> None:
-    if dry_run:
+def _write_pi_json(path: Path, payload: object, label: str, site: InstallAt) -> None:
+    if site.dry_run:
         print(f"Would write: {path}")
         return
-    write_contained_json(path, payload, root=root, label=label)
+    write_contained_json(path, payload, root=site.root, label=label)
 
 
 def _pi_template_text() -> str | None:
@@ -222,14 +222,14 @@ def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
 
 
 def _install_pi_at(
-    target: Path, content: str, binary: str, *, dry_run: bool, root: Path
+    target: Path, content: str, binary: str, site: InstallAt
 ) -> int:
     config_path = _config_path_for(target)
     package_path = _package_path_for(target)
     for path in (target, config_path, package_path):
-        if report_contained_install_path(path, root) is None:
+        if report_contained_install_path(path, site.root) is None:
             return 1
-    if dry_run:
+    if site.dry_run:
         print(f"Would write: {target}")
         print(f"Would write: {config_path}")
         print(f"Would write: {package_path}")
@@ -244,9 +244,12 @@ def _install_pi_at(
         print(content[:500] + "...")
         return 0
     try:
-        written = write_contained_text(target, content, root=root, label="file")
-        _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=False, root=root)
-        _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=False, root=root)
+        written = write_contained_text(
+            target, content, ContainedWrite(root=site.root, label="file")
+        )
+        write_site = InstallAt(root=site.root)
+        _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", write_site)
+        _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", write_site)
     except UnsafeInstallPathError as exc:
         print(str(exc))
         return 1
@@ -282,8 +285,7 @@ def install_pi(
             target,
             content,
             binary,
-            dry_run=dry_run,
-            root=_pi_contained_root(target, root),
+            InstallAt(root=_pi_contained_root(target, root), dry_run=dry_run),
         )
         if status != 0:
             rollback_completed_installs(

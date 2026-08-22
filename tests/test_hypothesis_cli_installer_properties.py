@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from hypothesis import HealthCheck, given, settings, strategies
 
 from slopgate._types import ObjectDict
 from slopgate.cli.commands import cmd_handle
 from slopgate.cli.main import main
 from slopgate.installer._shared import (
+    UnsafeInstallPathError,
     command_is_slopgate_hook,
+    contained_scope_root,
     filter_owned_hook_commands,
     merge_owned_hooks,
+    require_contained_install_path,
 )
 from slopgate.installer._suite import SuiteUpdateOptions, update_suite
 from slopgate.installer.suite import (
@@ -200,4 +204,63 @@ def test_enable_codex_hooks_toml_is_canonical_and_idempotent_property(
     assert "codex_hooks" not in first_result, "legacy Codex hook flags must be removed"
     assert config_path.read_text(encoding="utf-8") == first_result, (
         "enabling Codex hooks twice must be idempotent"
+    )
+
+
+_SAFE_NAME = strategies.text(
+    alphabet="abcdefghijklmnopqrstuvwxyz0123456789",
+    min_size=1,
+    max_size=8,
+)
+_CONTAINED_PATH = settings(
+    suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
+
+
+@_CONTAINED_PATH
+@given(_SAFE_NAME, _SAFE_NAME)
+def test_require_contained_install_path_accepts_nested_names_property(
+    tmp_path: Path, directory: str, filename: str
+) -> None:
+    target = tmp_path / directory / filename
+    resolved = require_contained_install_path(target, tmp_path)
+    assert resolved == target.resolve(), (
+        "contained relative names must resolve under the selected root"
+    )
+
+
+@_CONTAINED_PATH
+@given(_SAFE_NAME)
+def test_require_contained_install_path_rejects_escaped_names_property(
+    tmp_path: Path, name: str
+) -> None:
+    root = tmp_path / "root"
+    outside = tmp_path / "away" / name
+    with pytest.raises(UnsafeInstallPathError):
+        require_contained_install_path(outside, root)
+
+
+@_CONTAINED_PATH
+@given(_SAFE_NAME, _SAFE_NAME)
+def test_contained_scope_root_keeps_project_children_property(
+    tmp_path: Path, child: str, leaf: str
+) -> None:
+    project = tmp_path / "project"
+    user = tmp_path / "user"
+    target = project / child / leaf
+    assert (
+        contained_scope_root(target, project_root=project, user_root=user) == project
+    ), "paths under the project root must keep the project root"
+
+
+@_CONTAINED_PATH
+@given(_SAFE_NAME)
+def test_contained_scope_root_uses_user_root_outside_project_property(
+    tmp_path: Path, name: str
+) -> None:
+    project = tmp_path / "project"
+    user = tmp_path / "user"
+    target = tmp_path / "elsewhere" / name
+    assert contained_scope_root(target, project_root=project, user_root=user) == user, (
+        "paths outside the project root must use the user root"
     )

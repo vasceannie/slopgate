@@ -41,7 +41,9 @@ def dry_run_install_json(
         return case.binary if name == "slopgate" else None
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: case.windows)
+    monkeypatch.setattr(
+        slopgate.installer._shared.binary, "is_windows", lambda: case.windows
+    )
     monkeypatch.setattr(slopgate.installer._shared.shutil, "which", which)
     monkeypatch.setattr(
         slopgate.installer._shared.subprocess,

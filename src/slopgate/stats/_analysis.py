@@ -11,11 +11,12 @@ from slopgate.constants import (
     RULE_ID_KEY,
     SESSION_ID,
     STATS_TOP_RULE_LIMIT,
+    UNKNOWN_VALUE,
 )
 from slopgate.util.metadata_paths import effective_metadata_path, metadata_hit_paths
 from .improvement import build_improvement
 
-UNKNOWN_STATS_VALUE = "unknown"
+UNKNOWN_STATS_VALUE = UNKNOWN_VALUE
 
 
 @dataclass

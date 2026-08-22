@@ -8,11 +8,12 @@ from slopgate.constants import (
     EDIT_TOOL_NAMES,
     LANGUAGE_BY_SUFFIX,
     METADATA_PATH,
+    UNKNOWN_VALUE,
 )
 from slopgate.util.platform import lower_path_for_match
 
 lower_path = lower_path_for_match
-UNKNOWN_SHELL_KIND = "unknown"
+UNKNOWN_SHELL_KIND = UNKNOWN_VALUE
 
 
 def first_present(

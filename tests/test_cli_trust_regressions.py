@@ -199,7 +199,9 @@ def _first_command(hooks: ObjectDict, event_name: str) -> str:
 def test_claude_installer_hook_command_quotes_binary_path_with_spaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: False)
+    monkeypatch.setattr(
+        slopgate.installer._shared.binary, "is_windows", lambda: False
+    )
     binary = "/tmp/Slopgate Bin/slopgate"
     command = _first_command(
         object_dict(slopgate.installer.claude_hooks_block(binary)), "PreToolUse"
@@ -213,7 +215,9 @@ def test_claude_installer_hook_command_quotes_binary_path_with_spaces(
 def test_codex_installer_hook_command_quotes_binary_path_with_spaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(slopgate.installer._shared, "is_windows", lambda: False)
+    monkeypatch.setattr(
+        slopgate.installer._shared.binary, "is_windows", lambda: False
+    )
     binary = "/tmp/Slopgate Bin/slopgate"
     command = _first_command(
         object_dict(slopgate.installer.codex_hooks_block(binary)), "PreToolUse"

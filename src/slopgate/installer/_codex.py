@@ -18,16 +18,19 @@ from slopgate.installer._install_scope import (
 import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
+    ContainedWrite,
+    HooksUninstall,
+    InstallAt,
+    OwnedHooksWrite,
     UnsafeInstallPathError,
     backup_existing_file_and_report,
     contained_scope_root,
     hook_command,
-    merge_owned_hooks_into,
+    prepare_owned_hooks_document,
     print_binary_install_summary,
     remove_owned_hooks,
     report_contained_install_path,
     require_contained_install_path,
-    require_json_object,
     uninstall_hooks_file,
     write_contained_json,
     write_contained_text,
@@ -211,7 +214,9 @@ def enable_codex_hooks_toml(config_path: Path, *, root: Path | None = None) -> N
             lines.insert(features_index + 1, "hooks = true")
         new_text = "\n".join(lines) + "\n"
     write_contained_text(
-        config_path, new_text, root=write_root, label="config", backup=False
+        config_path,
+        new_text,
+        ContainedWrite(root=write_root, label="config", backup=False),
     )
 
 
@@ -219,31 +224,29 @@ def _install_codex_at(
     hooks_path: Path,
     hooks: _CodeHooks,
     binary: str,
-    *,
-    dry_run: bool,
-    root: Path,
+    site: InstallAt,
 ) -> int:
     config_path = _codex_config_path_for_hooks(hooks_path)
-    if report_contained_install_path(hooks_path, root) is None:
+    if report_contained_install_path(hooks_path, site.root) is None:
         return 1
-    if not _existing_codex_toml_is_valid(config_path, root=root):
+    if not _existing_codex_toml_is_valid(config_path, root=site.root):
         return 1
-    if dry_run:
-        print(f"Would write: {hooks_path}")
-        print(json.dumps({"hooks": hooks}, indent=2))
-        return 0
-    if not hooks_path.exists():
-        existing = {}
-    elif (
-        existing := require_json_object(hooks_path, "Codex hooks", action="overwrite")
-    ) is None:
-        return 1
-    merge_owned_hooks_into(existing, cast(dict[str, list[dict[str, object]]], hooks))
+    prepared = prepare_owned_hooks_document(
+        hooks_path,
+        OwnedHooksWrite(
+            label="Codex hooks",
+            hooks=cast(dict[str, list[dict[str, object]]], hooks),
+            dry_run=site.dry_run,
+            verb="write",
+        ),
+    )
+    if isinstance(prepared, int):
+        return prepared
     try:
-        write_contained_json(hooks_path, existing, root=root, label="hooks")
+        write_contained_json(hooks_path, prepared, root=site.root, label="hooks")
         if config_path.exists() and not config_path.is_symlink():
             backup_existing_file_and_report(config_path, "config")
-        enable_codex_hooks_toml(config_path, root=root)
+        enable_codex_hooks_toml(config_path, root=site.root)
     except UnsafeInstallPathError as exc:
         print(str(exc))
         return 1
@@ -278,17 +281,19 @@ def install_codex(
     for hooks_path in paths:
         contained_root = _codex_contained_root(hooks_path, root)
         status = _install_codex_at(
-            hooks_path, hooks, binary, dry_run=dry_run, root=contained_root
+            hooks_path, hooks, binary, InstallAt(root=contained_root, dry_run=dry_run)
         )
         if status != 0:
             if not dry_run:
                 for rollback_path in completed:
                     _ = uninstall_hooks_file(
                         rollback_path,
-                        label="Codex",
-                        remove_owned=remove_owned_hooks,
-                        dry_run=False,
-                        root=_codex_contained_root(rollback_path, root),
+                        HooksUninstall(
+                            label="Codex",
+                            remove_owned=remove_owned_hooks,
+                            dry_run=False,
+                            root=_codex_contained_root(rollback_path, root),
+                        ),
                     )
             return status
         completed.append(hooks_path)
@@ -310,10 +315,12 @@ def uninstall_codex(
     for hooks_path in paths:
         status = uninstall_hooks_file(
             hooks_path,
-            label="Codex",
-            remove_owned=remove_owned_hooks,
-            dry_run=dry_run,
-            root=_codex_contained_root(hooks_path, root),
+            HooksUninstall(
+                label="Codex",
+                remove_owned=remove_owned_hooks,
+                dry_run=dry_run,
+                root=_codex_contained_root(hooks_path, root),
+            ),
         )
         if status != 0:
             return status

@@ -9,6 +9,7 @@ from slopgate.constants import (
     CONTEXT,
     WARN,
     SESSION_ID,
+    METADATA_TOOL_NAME,
     PLATFORM_OPENCODE,
     PLATFORM_CODEX,
     UNKNOWN_VALUE,
@@ -76,7 +77,7 @@ def _trace_identity(ctx: HookContext, platform: str) -> dict[str, object]:
         "platform": platform,
         "event_name": ctx.event_name,
         SESSION_ID: ctx.session_id,
-        "tool_name": ctx.tool_name,
+        METADATA_TOOL_NAME: ctx.tool_name,
     }
 
 

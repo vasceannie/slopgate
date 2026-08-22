@@ -1,0 +1,1 @@
+"""OpenCode projection adapter tests."""

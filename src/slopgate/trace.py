@@ -9,13 +9,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-from slopgate.constants import METADATA_COMMAND
+from slopgate.constants import METADATA_COMMAND, UNKNOWN_VALUE
 from slopgate._types import object_list
 from slopgate.util.atomic_files import append_lines_locked
 from slopgate.util import logger
 
 DEFAULT_FLUSH_THRESHOLD = int("20")
-UNKNOWN_TRACE_VALUE = "unknown"
+UNKNOWN_TRACE_VALUE = UNKNOWN_VALUE
 
 
 def make_record(payload: Mapping[str, object]) -> str:

@@ -18,6 +18,8 @@ from slopgate.installer._shared import (
     HOOK_TIMEOUT_LONG,
     HOOK_TIMEOUT_SHORT,
     HOOK_TIMEOUT_STANDARD,
+    HooksUninstall,
+    InstallAt,
     UnsafeInstallPathError,
     command_is_slopgate_hook,
     contained_scope_root,
@@ -145,13 +147,11 @@ def _install_cursor_at(
     hooks_path: Path,
     binary: str,
     hooks: _CursorHooks,
-    *,
-    dry_run: bool,
-    root: Path,
+    site: InstallAt,
 ) -> int:
-    if report_contained_install_path(hooks_path, root) is None:
+    if report_contained_install_path(hooks_path, site.root) is None:
         return 1
-    if dry_run:
+    if site.dry_run:
         print(f"Would write: {hooks_path}")
         print(f"Binary: {binary}")
         print(json.dumps({"version": 1, "hooks": hooks}, indent=2))
@@ -167,7 +167,7 @@ def _install_cursor_at(
     existing.setdefault("version", 1)
     existing["hooks"] = _merge_cursor_hooks(existing.get("hooks"), hooks)
     try:
-        write_contained_json(hooks_path, existing, root=root, label="hooks")
+        write_contained_json(hooks_path, existing, root=site.root, label="hooks")
     except UnsafeInstallPathError as exc:
         print(str(exc))
         return 1
@@ -192,17 +192,19 @@ def install_cursor(
     for hooks_path in paths:
         contained_root = _cursor_contained_root(hooks_path, root)
         status = _install_cursor_at(
-            hooks_path, binary, hooks, dry_run=dry_run, root=contained_root
+            hooks_path, binary, hooks, InstallAt(root=contained_root, dry_run=dry_run)
         )
         if status != 0:
             if not dry_run:
                 for rollback_path in completed:
                     _ = uninstall_hooks_file(
                         rollback_path,
-                        label="Cursor",
-                        remove_owned=_remove_cursor_hooks,
-                        dry_run=False,
-                        root=_cursor_contained_root(rollback_path, root),
+                        HooksUninstall(
+                            label="Cursor",
+                            remove_owned=_remove_cursor_hooks,
+                            dry_run=False,
+                            root=_cursor_contained_root(rollback_path, root),
+                        ),
                     )
             return status
         completed.append(hooks_path)
@@ -224,10 +226,12 @@ def uninstall_cursor(
     for hooks_path in paths:
         status = uninstall_hooks_file(
             hooks_path,
-            label="Cursor",
-            remove_owned=_remove_cursor_hooks,
-            dry_run=dry_run,
-            root=_cursor_contained_root(hooks_path, root),
+            HooksUninstall(
+                label="Cursor",
+                remove_owned=_remove_cursor_hooks,
+                dry_run=dry_run,
+                root=_cursor_contained_root(hooks_path, root),
+            ),
         )
         if status != 0:
             return status

@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from slopgate._types import ObjectDict
-from slopgate.constants import SELFTEST_SEPARATOR_WIDTH, SESSION_ID
+from slopgate.constants import METADATA_TOOL_NAME, SELFTEST_SEPARATOR_WIDTH, SESSION_ID
 from slopgate.models import EngineResult
 
 PlatformName = str
@@ -22,7 +22,7 @@ def _run_one_test(
     label, event, tool, tool_input, platform, expect_deny, cwd = case
     payload = {
         "hook_event_name": event,
-        "tool_name": tool,
+        METADATA_TOOL_NAME: tool,
         "tool_input": tool_input,
         "cwd": cwd,
         SESSION_ID: f"self-test-{platform}-{label}",

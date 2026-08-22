@@ -42,6 +42,7 @@ __all__ = [
 from slopgate.context import HookContext
 from slopgate.constants import (
     DENY,
+    METADATA_TOOL_NAME,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
     PRE_TOOL_USE,
@@ -141,7 +142,7 @@ def _python_ast_import_failure_rules(ctx: HookContext) -> list[Rule] | None:
                 "platform": "any",
                 "event_name": ctx.event_name,
                 SESSION_ID: ctx.session_id,
-                "tool_name": ctx.tool_name,
+                METADATA_TOOL_NAME: ctx.tool_name,
                 "rule_id": "PY-AST-IMPORT-001",
                 "severity": "high",
                 "decision": None,

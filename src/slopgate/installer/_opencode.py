@@ -25,6 +25,8 @@ from slopgate.installer._install_scope import (
 )
 from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
+    ContainedWrite,
+    InstallAt,
     UnsafeInstallPathError,
     contained_scope_root,
     print_binary_install_summary,
@@ -108,6 +110,30 @@ def _canonical_version(value: str) -> str:
     return match.group(1) if match else value.strip()
 
 
+def _opencode_lock_version(lock_content: str) -> str:
+    lock_match = re.search(
+        r'"@opencode-ai/plugin"\s*:\s*("(?:\\.|[^"\\])*")', lock_content
+    )
+    lock_literal = lock_match.group(1) if lock_match else '""'
+    try:
+        lock_value = json.loads(lock_literal)
+    except json.JSONDecodeError:
+        lock_value = ""
+    return lock_value if isinstance(lock_value, str) else ""
+
+
+def _opencode_identity_status(observed: list[str]) -> tuple[str, str]:
+    canonical = {_canonical_version(value) for value in observed}
+    if not observed:
+        return UNKNOWN_VALUE, "OpenCode identity could not be observed."
+    if len(canonical) == 1:
+        return "compatible", "none"
+    return (
+        "stale",
+        "Reinstall OpenCode plugin dependencies, then restart OpenCode.",
+    )
+
+
 def collect_opencode_install_identity(
     binary: str,
     *,
@@ -120,15 +146,7 @@ def collect_opencode_install_identity(
         lock_content = (root / "bun.lock").read_text(encoding="utf-8")
     except OSError:
         lock_content = ""
-    lock_match = re.search(
-        r'"@opencode-ai/plugin"\s*:\s*("(?:\\.|[^"\\])*")', lock_content
-    )
-    lock_literal = lock_match.group(1) if lock_match else '""'
-    try:
-        lock_value = json.loads(lock_literal)
-    except json.JSONDecodeError:
-        lock_value = ""
-    lock = lock_value if isinstance(lock_value, str) else ""
+    lock = _opencode_lock_version(lock_content)
     installed_payload = _json_file(
         root / "node_modules" / "@opencode-ai" / "plugin" / "package.json"
     )
@@ -136,19 +154,7 @@ def collect_opencode_install_identity(
     installed = installed_value if isinstance(installed_value, str) else ""
     runtime = _opencode_runtime_version() if probe_runtime else ""
     observed = [value for value in (runtime, declared, lock, installed) if value]
-    canonical = {_canonical_version(value) for value in observed}
-    if not observed:
-        status = "unknown"
-    elif len(canonical) == 1:
-        status = "compatible"
-    else:
-        status = "stale"
-    if status == "compatible":
-        remediation = "none"
-    elif status == "unknown":
-        remediation = "OpenCode identity could not be observed."
-    else:
-        remediation = "Reinstall OpenCode plugin dependencies, then restart OpenCode."
+    status, remediation = _opencode_identity_status(observed)
     return {
         "status": status,
         "opencode_version": runtime,
@@ -192,13 +198,11 @@ def _install_opencode_at(
     target: Path,
     content: str,
     binary: str,
-    *,
-    dry_run: bool,
-    root: Path,
+    site: InstallAt,
 ) -> int:
-    if report_contained_install_path(target, root) is None:
+    if report_contained_install_path(target, site.root) is None:
         return 1
-    if dry_run:
+    if site.dry_run:
         print(f"Would write: {target}")
         print(f"Binary: {binary}")
         if target.exists() and not target.is_symlink():
@@ -206,12 +210,27 @@ def _install_opencode_at(
         print(content[:500] + "...")
         return 0
     try:
-        written = write_contained_text(target, content, root=root, label="file")
+        written = write_contained_text(
+            target, content, ContainedWrite(root=site.root, label="file")
+        )
     except UnsafeInstallPathError as exc:
         print(str(exc))
         return 1
     print_binary_install_summary(f"Installed slopgate plugin to {written}", binary)
     return 0
+
+
+def _warn_stale_opencode_identity(identity: ObjectDict) -> None:
+    if identity["status"] != "stale":
+        return
+    print(
+        "OpenCode identity is stale: "
+        f"runtime={identity['opencode_version'] or UNKNOWN_VALUE}, "
+        f"declared={identity['plugin_declared_version'] or UNKNOWN_VALUE}, "
+        f"lock={identity['plugin_lock_version'] or UNKNOWN_VALUE}, "
+        f"installed={identity['plugin_installed_version'] or UNKNOWN_VALUE}. "
+        f"{identity['remediation']}"
+    )
 
 
 def install_opencode(
@@ -225,15 +244,7 @@ def install_opencode(
         return 1
     binary = slopgate.installer._shared.find_binary()
     identity = collect_opencode_install_identity(binary, probe_runtime=not dry_run)
-    if identity["status"] == "stale":
-        print(
-            "OpenCode identity is stale: "
-            f"runtime={identity['opencode_version'] or UNKNOWN_VALUE}, "
-            f"declared={identity['plugin_declared_version'] or UNKNOWN_VALUE}, "
-            f"lock={identity['plugin_lock_version'] or UNKNOWN_VALUE}, "
-            f"installed={identity['plugin_installed_version'] or UNKNOWN_VALUE}. "
-            f"{identity['remediation']}"
-        )
+    _warn_stale_opencode_identity(identity)
     root = resolve_project_root(project_root)
     paths = resolve_scoped_install_paths(
         scope,
@@ -254,8 +265,7 @@ def install_opencode(
             target,
             content,
             binary,
-            dry_run=dry_run,
-            root=_contained_root_for(target, root),
+            InstallAt(root=_contained_root_for(target, root), dry_run=dry_run),
         )
         if status != 0:
             if not dry_run:
