@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from time import monotonic
 
+from slopgate._types import ObjectDict, ObjectMapping
 from slopgate.constants import (
     PLATFORM_OPENCODE,
     PLATFORM_CLAUDE,
@@ -17,7 +17,8 @@ from slopgate.lint._helpers import (
     reset_request_analysis_cache,
     reset_request_timing,
 )
-from slopgate.models import EngineResult, RuleFinding
+from slopgate.models import EngineResult, RuleFinding, Severity
+from slopgate.opencode_tool_capabilities import opencode_tool_allowed_during_repair
 from slopgate.state import RepairRequiredPayload
 
 from .advisories import compact_context_advisories
@@ -81,8 +82,55 @@ def _record_opencode_repair_required(
     )
 
 
+def _opencode_repair_required_finding(
+    ctx: HookContext, platform: str
+) -> RuleFinding | None:
+    """Return the Python-path repair gate finding for OpenCode pre-tool calls."""
+    if platform != PLATFORM_OPENCODE or ctx.event_name != "PreToolUse":
+        return None
+    native_tool_name = ctx.payload.payload.get("opencode_native_tool_name")
+    repair_tool_name = (
+        native_tool_name if isinstance(native_tool_name, str) else ctx.tool_name
+    )
+    required = ctx.state.get_repair_required()
+    if required is None or opencode_tool_allowed_during_repair(
+        repair_tool_name, ctx.tool_input
+    ):
+        return None
+    generation = required.get("generation")
+    generation_label = generation if isinstance(generation, str) else UNKNOWN_VALUE
+    return RuleFinding(
+        rule_id="OC-REPAIR-001",
+        title="OpenCode repair required",
+        severity=Severity.CRITICAL,
+        decision=DENY,
+        message=(
+            f"Repair required for generation {generation_label}; use declared read-only "
+            "tools, write/edit/apply_patch, the repair verifier, or exact lint check."
+        ),
+        metadata={"generation": generation_label},
+    )
+
+
+def _inject_opencode_gate_findings(
+    ctx: HookContext,
+    findings: list[RuleFinding],
+    platform: str,
+) -> None:
+    if platform != PLATFORM_OPENCODE:
+        return
+    repair_required = _opencode_repair_required_finding(ctx, platform)
+    if repair_required is not None:
+        findings.append(repair_required)
+    unresolved = unresolved_opencode_projection_finding(
+        ctx.tool_name, ctx.tool_input, ctx.event_name
+    )
+    if unresolved is not None:
+        findings.append(unresolved)
+
+
 def evaluate_payload(
-    payload_dict: Mapping[str, object],
+    payload_dict: ObjectMapping,
     platform: str = UNKNOWN_VALUE,
 ) -> EngineResult:
     reset_request_analysis_cache()
@@ -108,12 +156,7 @@ def evaluate_payload(
         inject_recent_failure_context(ctx, acc.findings)
         acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
         acc.findings = dedupe_findings(acc.findings)
-        if trace_platform == PLATFORM_OPENCODE:
-            unresolved = unresolved_opencode_projection_finding(
-                ctx.tool_name, ctx.tool_input, ctx.event_name
-            )
-            if unresolved is not None:
-                acc.findings.append(unresolved)
+        _inject_opencode_gate_findings(ctx, acc.findings, trace_platform)
         _record_opencode_repair_required(ctx, acc.findings, trace_platform)
         compact_context_advisories(ctx, acc.findings)
         render_start = monotonic()
@@ -121,7 +164,7 @@ def evaluate_payload(
         render_ms = int((monotonic() - render_start) * 1000)
 
         result = EngineResult(ctx.event_name, acc.findings, output, acc.errors)
-        timing: dict[str, object] = {
+        timing: ObjectDict = {
             "collector_ms": reset_request_timing(),
             "evaluation_ms": int((monotonic() - evaluation_start) * 1000),
             "normalization_context_ms": normalization_context_ms,

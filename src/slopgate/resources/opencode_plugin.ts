@@ -586,7 +586,11 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
       const outputArgs = ensureOutputArgs(output)
       const toolName = typeof input.tool === "string" ? input.tool : ""
       const pending = await repairGateState(scopedDirectory)
-      if (managedRepo() && pending === null) {
+      if (
+        managedRepo()
+        && pending === null
+        && toolName.toLowerCase() !== "apply_patch"
+      ) {
         throw new Error("[slopgate] repair gate state is unavailable in a managed repo.")
       }
       if (

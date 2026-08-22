@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Final
 
-from slopgate.constants import BASH_TOOL_LOWER
+from slopgate._types import ObjectMapping
+from slopgate.constants import BASH_TOOL_LOWER, METADATA_COMMAND, METADATA_SLOPGATE
 
 
 class OpenCodeToolCapability(StrEnum):
@@ -70,6 +72,12 @@ EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
     }
 )
 
+REPAIR_MUTATION_TOOL_IDS: Final[frozenset[str]] = frozenset(
+    {"apply_patch", "edit", "write"}
+)
+REPAIR_LINT_FLAGS: Final[frozenset[str]] = frozenset({"--details", "--verbose"})
+VERIFY_TOOL_ID: Final = "slopgate_verify_repair"
+
 
 def opencode_tool_capability(tool_name: str) -> OpenCodeToolCapability | None:
     """Return the trusted capability for an exact normalized tool identifier."""
@@ -81,9 +89,53 @@ def opencode_tool_capability(tool_name: str) -> OpenCodeToolCapability | None:
     return None
 
 
+def opencode_tool_is_explicit_repair_command(
+    tool_name: str,
+    tool_input: ObjectMapping,
+) -> bool:
+    """Return whether an exact tool invocation is an approved repair command."""
+    normalized = tool_name.strip().lower()
+    if normalized == VERIFY_TOOL_ID:
+        return True
+    if normalized != BASH_TOOL_LOWER:
+        return False
+    command = next(
+        (
+            value.strip()
+            for key in (METADATA_COMMAND, "cmd", "script")
+            if isinstance((value := tool_input.get(key)), str) and value.strip()
+        ),
+        "",
+    )
+    tokens = command.split()
+    return (
+        len(tokens) >= 3
+        and tokens[:3] == [METADATA_SLOPGATE, "lint", "check"]
+        and all(token in REPAIR_LINT_FLAGS for token in tokens[3:])
+    )
+
+
+def opencode_tool_allowed_during_repair(
+    tool_name: str,
+    tool_input: ObjectMapping,
+) -> bool:
+    """Return whether an exact OpenCode invocation may run during repair."""
+    normalized = tool_name.strip().lower()
+    return (
+        normalized in READ_ONLY_TOOL_IDS
+        or normalized in REPAIR_MUTATION_TOOL_IDS
+        or opencode_tool_is_explicit_repair_command(tool_name, tool_input)
+    )
+
+
 __all__ = [
     "EFFECTFUL_TOOL_IDS",
     "OpenCodeToolCapability",
     "READ_ONLY_TOOL_IDS",
+    "REPAIR_LINT_FLAGS",
+    "REPAIR_MUTATION_TOOL_IDS",
+    "VERIFY_TOOL_ID",
+    "opencode_tool_allowed_during_repair",
     "opencode_tool_capability",
+    "opencode_tool_is_explicit_repair_command",
 ]

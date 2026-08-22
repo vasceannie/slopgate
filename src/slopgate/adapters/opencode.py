@@ -97,6 +97,7 @@ class OpenCodeAdapter(PlatformAdapter):
         if not tool_name and oc_event in OPENCODE_MUTATION_EVENTS:
             tool_name = "Write"
         if tool_name:
+            canonical["opencode_native_tool_name"] = tool_name.strip().lower()
             lowered = tool_name.strip().lower().replace("-", "_")
             canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
 

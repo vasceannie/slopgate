@@ -13,7 +13,6 @@ from slopgate.opencode_tool_capabilities import (
     opencode_tool_capability,
 )
 from slopgate.util import logger
-from slopgate.util.payloads import is_read_only_tool_use, is_shell_tool
 from .models import (
     OPENCODE_TOOL_CONTRACT_VERSION,
     PROJECTION_KEY,
@@ -135,7 +134,6 @@ def _section_content(
             return apply_update(source, section.lines)
         case "delete":
             return "" if not section.lines else None
-    return None
 
 
 def _project_patch(request: ProjectionRequest) -> Projection:
@@ -191,14 +189,8 @@ def unresolved_opencode_projection_finding(
     if status == "projected":
         return None
     capability = opencode_tool_capability(tool_name)
-    if (
-        is_read_only_tool_use({"tool_name": tool_name, "hook_event_name": event_name})
-        or is_shell_tool(tool_name)
-        or capability is OpenCodeToolCapability.READ_ONLY
-        or (
-            status == "unsupported"
-            and capability is OpenCodeToolCapability.EFFECTFUL
-        )
+    if capability is OpenCodeToolCapability.READ_ONLY or (
+        status == "unsupported" and capability is OpenCodeToolCapability.EFFECTFUL
     ):
         return None
     return RuleFinding(
@@ -219,15 +211,12 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
     logger.debug("OpenCode tool projection requested", tool=request.tool_name)
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
         return Projection("protocol_mismatch").to_dict()
-    match request.tool_name.strip().lower():
-        case "write":
-            result = _project_write(request)
-        case "edit":
-            result = _project_edit(request)
-        case "apply_patch":
-            result = _project_patch(request)
-        case _:
-            result = Projection("unsupported")
+    projector = {
+        "write": _project_write,
+        "edit": _project_edit,
+        "apply_patch": _project_patch,
+    }.get(request.tool_name.strip().lower())
+    result = projector(request) if projector is not None else Projection("unsupported")
     return result.to_dict()
 
 

@@ -211,6 +211,8 @@ interface PiExtensionAPI {
   ): void
 }
 
+type PiMessageRenderer = Parameters<PiExtensionAPI["registerMessageRenderer"]>[1]
+
 function findManagedRepoRoot(start: string): string | null {
   let current = start
   while (true) {
@@ -356,32 +358,27 @@ function beforeAgentStartResult(
   event: PiEventLike,
   result: PiEnforcerResult | null,
 ): PiBeforeAgentStartResult | void {
-  const hasContext: boolean = !!result?.context
+  const context = result?.context ?? ""
   const guidance: string = lastStopGuidance
-  if (!hasContext && !guidance) {
+  if (!context && !guidance) {
     return
   }
-  if (hasContext) {
-    lastSlopgateContext = result!.context!
+  if (context) {
+    lastSlopgateContext = context
   }
   // Build system prompt from hook context + stop guidance
-  let promptContext = ""
-  if (hasContext) promptContext += result!.context
-  if (guidance) {
-    if (promptContext) promptContext += "\n\n"
-    promptContext += guidance
-  }
+  const promptContext = [context, guidance].filter(Boolean).join("\n\n")
   lastStopGuidance = ""
 
   const response: PiBeforeAgentStartResult = {
     systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, promptContext),
   }
-  if (hasContext) {
+  if (result && context) {
     response.message = {
       customType: SLOPGATE_EVENT_MESSAGE_TYPE,
-      content: chatMessageContent("context", "before_agent_start", result!),
+      content: chatMessageContent("context", "before_agent_start", result),
       display: true,
-      details: slopgateMessageDetails("context", "before_agent_start", result!),
+      details: slopgateMessageDetails("context", "before_agent_start", result),
     }
   }
   return response
@@ -429,11 +426,9 @@ function stringDetail(details: Record<string, unknown> | undefined, key: string)
 }
 
 function renderSlopgateMessage(
-  message: {
-    customType: string
-    content: PiMessageContent
-    details?: Record<string, unknown>
-  },
+  message: Parameters<PiMessageRenderer>[0],
+  options: Parameters<PiMessageRenderer>[1],
+  theme: Parameters<PiMessageRenderer>[2],
 ): unknown {
   const state: string = stringDetail(message.details, "state")
   const eventName: string = stringDetail(message.details, "event")
@@ -450,7 +445,7 @@ function renderSlopgateMessage(
   const lines: string[] = [title]
 
   // Expanded: show full reason and metadata
-  if (_options.expanded && reason) {
+  if (options.expanded && reason) {
     lines.push("", theme.fg("dim", reason))
   } else {
     lines.push(summary)
@@ -523,9 +518,9 @@ function mergeToolResultPatch(
   if (!result) {
     return
   }
-  const patch: Record<string, unknown> | undefined = result.tool_result_patch
+  const patch: PiToolResultPatch | undefined = result.tool_result_patch
   const merged: PiToolResultPatch = {}
-  if (patch && "isError" in patch) {
+  if (patch?.isError !== undefined) {
     merged.isError = patch.isError
   }
   if (patch?.details) {
@@ -650,7 +645,10 @@ function callEnforcer(
       try {
         resolve(JSON.parse(trimmed) as PiEnforcerResult)
       } catch (error) {
-        console.error(`[slopgate] invalid enforcer JSON: ${error}`)
+        if (!(error instanceof Error)) {
+          throw error
+        }
+        console.error(`[slopgate] invalid enforcer JSON: ${error.message}`)
         resolve(
           managedRepo
             ? {

@@ -1,0 +1,8 @@
+{
+  "name": "slopgate-tooling",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "typescript": "6.0.3"
+  }
+}
