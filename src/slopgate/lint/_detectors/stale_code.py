@@ -30,7 +30,7 @@ def detect_stale_patterns(
         except re.error:
             continue
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:

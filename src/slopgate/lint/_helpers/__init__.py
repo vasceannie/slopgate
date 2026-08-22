@@ -18,8 +18,10 @@ from .parsing import (
     parse_file,
     parse_files,
     read_lines,
+    record_request_collector_ms,
     request_analysis_cache_stats,
     reset_request_analysis_cache,
+    reset_request_timing,
     safe_parse,
 )
 from .paths import (
@@ -47,9 +49,11 @@ __all__ = [
     "parse_files",
     "project_root",
     "read_lines",
+    "record_request_collector_ms",
     "relative_path",
     "request_analysis_cache_stats",
     "reset_request_analysis_cache",
+    "reset_request_timing",
     "safe_parse",
     "src_root",
     "src_roots",

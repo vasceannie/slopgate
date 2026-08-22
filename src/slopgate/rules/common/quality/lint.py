@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 from typing import TYPE_CHECKING
 
 from typing_extensions import override
@@ -11,11 +12,13 @@ from typing_extensions import override
 from slopgate.constants import (
     BLOCK,
     METADATA_PATH,
+    MILLISECONDS_PER_SECOND,
     POST_TOOL_USE,
     PRE_TOOL_USE,
     PYTEST_TEST_PREFIX,
     QUALITY_FAILURE_PREVIEW_LIMIT,
 )
+from slopgate.lint._helpers import record_request_collector_ms
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
 from slopgate.util.path_filters import is_third_party_or_virtualenv_path
@@ -224,7 +227,12 @@ class PostEditLintRule(Rule):
             return []
         if not is_mutating_tool_use(ctx):
             return []
+        collector_start = monotonic()
         report = _collect_touched_lint_report(ctx)
+        collector_ms = int(
+            (monotonic() - collector_start) * MILLISECONDS_PER_SECOND
+        )
+        record_request_collector_ms(collector_ms)
         if not report.failures:
             return []
         targets = report.targets or python_lint_targets(ctx)
@@ -234,6 +242,7 @@ class PostEditLintRule(Rule):
         metadata: dict[str, object] = {
             "failing_collectors": report.failures,
             "collector_details": report.details,
+            "collector_ms": collector_ms,
             "paths": targets,
         }
         if report.first_diagnostic is not None:

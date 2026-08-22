@@ -9,9 +9,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from time import time
 from typing import TextIO
-from slopgate._types import ObjectDict, ObjectMapping, object_dict
+from slopgate._types import ObjectDict, ObjectMapping, is_object_dict, object_dict
 from slopgate.util.logger import warning
 from ._models import HookStateSnapshot, fcntl, msvcrt
+
+
+class HookStateCorruptionError(RuntimeError):
+    """Raised when persisted hook state cannot be trusted."""
 
 
 class StateFileMixin:
@@ -50,12 +54,19 @@ class StateFileMixin:
 
     def _read_state_file(self) -> ObjectDict:
         try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            raw: object = json.loads(self._path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
-        except (OSError, json.JSONDecodeError):
-            return {}
-        return object_dict(raw)
+        except (OSError, json.JSONDecodeError) as exc:
+            warning("hook state read failed", path=str(self._path), error=str(exc))
+            raise HookStateCorruptionError(
+                f"hook state cannot be trusted: {self._path}"
+            ) from exc
+        if not is_object_dict(raw):
+            raise HookStateCorruptionError(
+                f"hook state must contain a JSON object: {self._path}"
+            )
+        return raw
 
     def _save_state(self, state: ObjectMapping) -> None:
         fd, tmp_name = tempfile.mkstemp(
@@ -73,7 +84,7 @@ class StateFileMixin:
                 warning("hook state temp cleanup failed", path=tmp_name, error=str(exc))
 
 
-__all__ = ["StateSnapshotMixin"]
+__all__ = ["HookStateCorruptionError", "StateSnapshotMixin"]
 
 
 class StateSnapshotMixin(StateFileMixin):
@@ -91,6 +102,7 @@ class StateSnapshotMixin(StateFileMixin):
         advisory_hits = self._coerce_object_map(state.get("advisory_hits"), cutoff)
         retry_locks = self._coerce_object_map(state.get("retry_locks"), cutoff)
         repair_plans = self._coerce_object_map(state.get("repair_plans"), cutoff)
+        repair_required = object_dict(state.get("repair_required"))
         return {
             "full_reads": full_reads,
             "search_reminders": search_reminders,
@@ -98,6 +110,7 @@ class StateSnapshotMixin(StateFileMixin):
             "advisory_hits": advisory_hits,
             "retry_locks": retry_locks,
             "repair_plans": repair_plans,
+            "repair_required": repair_required,
         }
 
     @staticmethod

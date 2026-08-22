@@ -72,6 +72,11 @@ def test_source_detectors_reuse_parsed_files_without_reparsing(
     )
     monkeypatch.setattr(_helpers, "safe_parse", _fail_parse)
     monkeypatch.setattr(_helpers, "read_lines", _fail_read)
+    monkeypatch.setattr(
+        code_smells,
+        "find_source_files",
+        lambda: pytest.fail("detector rediscovered sources for a ParsedFile"),
+    )
 
     assert _source_detector_results(parsed) == (
         [],

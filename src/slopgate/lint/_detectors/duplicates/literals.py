@@ -187,7 +187,7 @@ def detect_repeated_literals(
 ) -> list[Violation]:
     """Flag magic numbers and string literals used excessively."""
     cfg = get_config()
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     if constant_index is None:
         constant_index = build_project_constant_index(cfg.project_root)
     set_session_constant_index(constant_index)

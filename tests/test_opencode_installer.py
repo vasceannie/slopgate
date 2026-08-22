@@ -1,13 +1,38 @@
 from __future__ import annotations
-import pytest
+
 import json
 from pathlib import Path
+
+import pytest
+
 from slopgate.installer import _opencode
 import slopgate.installer._shared
 from slopgate.resources import resource_path
 from slopgate.util import platform
 
 OPENCODE_PLUGIN_RESOURCE = "opencode_plugin.ts"
+
+
+def test_opencode_renderer_embeds_install_identity_snapshot() -> None:
+    template = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    identity = {
+        "status": "compatible",
+        "opencode_version": "1.18.19",
+        "plugin_declared_version": "1.18.19",
+        "plugin_lock_version": "1.18.19",
+        "plugin_installed_version": "1.18.19",
+        "slopgate_version": "2.1.6",
+        "slopgate_binary": "/tmp/slopgate",
+        "captured_at": "2026-08-22T00:00:00+00:00",
+        "provenance": "install",
+        "remediation": "none",
+    }
+
+    rendered = _opencode.render_opencode_plugin(template, "/tmp/slopgate", identity)
+
+    assert '"__SLOPGATE_OPENCODE_IDENTITY__"' not in rendered, "placeholder leaked"
+    assert '"opencode_version":"1.18.19"' in rendered, "runtime version not embedded"
+    assert '"slopgate_binary":"/tmp/slopgate"' in rendered, "binary path not embedded"
 
 
 def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
@@ -124,62 +149,6 @@ def test_opencode_plugin_forwards_documented_runtime_events() -> None:
     )
 
 
-def _assert_posttool_arg_cache_contract(plugin: str) -> None:
-    expected_cache_contract = [
-        "const postToolArgCache: ToolArgsCacheEntry[] = []",
-        "function rememberToolArgs(",
-        "function inputToolArgs(",
-        "function outputToolArgs(",
-        "function takeRememberedToolArgs(",
-        "const preToolArgs = mergeToolArgs(inputToolArgs(input), outputToolArgs(output))",
-        "tool_input: preToolArgs",
-        "rememberToolArgs(input.tool, currentDirectory, preToolArgs)",
-        "const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)",
-        "const postToolArgs = mergeToolArgs(",
-        "tool_input: postToolArgs",
-    ]
-    missing_contract = [line for line in expected_cache_contract if line not in plugin]
-    assert missing_contract == [], (
-        "OpenCode plugin lost pretool/posttool arg cache contract"
-    )
-
-
-def _assert_posttool_arg_cache_policy(plugin: str) -> None:
-    expected_policy = [
-        "POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000",
-        "POST_TOOL_ARG_CACHE_MAX_ENTRIES = 50",
-        "entry.tool === toolName && entry.cwd === cwd",
-        "postToolArgCache.splice(index, 1)",
-    ]
-    missing_policy = [line for line in expected_policy if line not in plugin]
-    assert missing_policy == [], (
-        "OpenCode plugin cache should stay TTL-bounded, scoped, and consumed"
-    )
-
-
-def test_opencode_plugin_caches_pretool_args_for_posttool_backstops() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    assert "tool_input: preToolArgs" in plugin
-    _assert_posttool_arg_cache_contract(plugin)
-
-
-def test_opencode_plugin_preserves_input_side_tool_arguments_for_traces() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    expected_sources = [
-        "input.args",
-        "input.arguments",
-        "input.input",
-        "input.tool_input",
-        "input.toolInput",
-        "cloneArgs(input.call).args",
-        "output.args",
-        "output.arguments",
-        "output.input",
-    ]
-    missing_sources = [source for source in expected_sources if source not in plugin]
-    assert missing_sources == [], "OpenCode plugin must preserve tool call bodies"
-
-
 def test_opencode_plugin_preserves_session_created_identity_for_traces() -> None:
     plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
     expected_fragments = [
@@ -189,6 +158,7 @@ def test_opencode_plugin_preserves_session_created_identity_for_traces() -> None
         "const directSessionIdKeys = [",
         "const infoSessionIdKeys = [",
         '"sessionID"',
+        '"callID"',
         '"id"',
         '"threadTitle"',
         '"conversationTitle"',
@@ -204,7 +174,54 @@ def test_opencode_plugin_preserves_session_created_identity_for_traces() -> None
     )
 
 
-def test_opencode_plugin_cache_is_bounded_ttl_scoped_and_consumed() -> None:
+def test_opencode_plugin_uses_native_tool_fields_without_correlation_cache() -> None:
     plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    assert "POST_TOOL_ARG_CACHE_TTL_MS" in plugin
-    _assert_posttool_arg_cache_policy(plugin)
+    forbidden_fragments = (
+        "SESSION_ID",
+        "postToolArgCache",
+        "rememberToolArgs",
+        "takeRememberedToolArgs",
+        "POST_TOOL_ARG_CACHE_TTL_MS",
+        "output.result",
+        "input.cwd",
+        "event.cwd",
+    )
+    required_fragments = (
+        "input.sessionID",
+        "input.callID",
+        "output.args",
+        "input.args",
+        "output.title",
+        "output.output",
+        "output.metadata",
+        'objectValue(event, "properties")',
+    )
+    assert not any(fragment in plugin for fragment in forbidden_fragments)
+    assert all(fragment in plugin for fragment in required_fragments)
+
+
+def test_opencode_plugin_records_conservative_tool_outcome_axes() -> None:
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    required_fragments = (
+        "interface OpenCodeToolBeforeInput",
+        "interface OpenCodeToolBeforeOutput",
+        "interface OpenCodeToolAfterInput",
+        "interface OpenCodeToolAfterOutput",
+        "const preToolArgs = cloneArgs(outputArgs)",
+        "const postToolArgs = cloneArgs(input.args)",
+        '...outcomeFields("unknown", "unresolved", "unknown", "unresolved")',
+        '...outcomeFields("returned", "pinned-source", "unknown", "unresolved")',
+        '...outcomeFields("unknown", "unresolved", "partial", "local-observed")',
+        "execution_outcome",
+        "mutation_outcome",
+        "evidence_tier",
+        "tool_title: output.title",
+        "tool_metadata: output.metadata",
+        "tool_output: output.output",
+    )
+    assert all(fragment in plugin for fragment in required_fragments), (
+        "OpenCode outcomes must use typed fields and conservative evidence tiers"
+    )
+    assert 'mutation_outcome: "committed"' not in plugin, (
+        "OpenCode after hooks must not claim that a mutation was committed"
+    )

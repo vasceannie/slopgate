@@ -51,7 +51,7 @@ def detect_direct_get_logger(
         # No custom factory configured — nothing to enforce
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -94,7 +94,7 @@ def detect_wrong_logger_name(
     if not disallowed:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -118,7 +118,7 @@ def detect_boundary_logging(
     files: Sequence[Path | ParsedFile] | None = None,
 ) -> list[Violation]:
     """Flag event/package boundary functions without logging or telemetry calls."""
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
     for pf in parsed:
         if is_test_module_path(pf.rel):

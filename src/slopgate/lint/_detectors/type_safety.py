@@ -179,7 +179,7 @@ def detect_any_usage(
     if not cfg.ban_any:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -218,7 +218,7 @@ def detect_type_suppressions(
     if not cfg.ban_type_suppressions:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     patterns = _get_compiled_patterns(cfg.suppression_patterns)
     violations: list[Violation] = []
 

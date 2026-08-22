@@ -11,6 +11,7 @@ from tests.test_adapters import (
 from slopgate.adapters.opencode import OPENCODE_EVENT_MAP
 
 CONTRACT_SESSION_ID = "opencode-contract"
+CONTRACT_CALL_ID = "call-opencode-contract"
 CONTRACT_CWD = "/tmp/slopgate-opencode-contract"
 CONTRACT_CONTEXT = "surface advisory context"
 
@@ -54,7 +55,11 @@ def _raw_opencode_payload(native_event: str) -> dict[str, object]:
     return {
         "hook_event_name": native_event,
         "cwd": CONTRACT_CWD,
-        "session_id": CONTRACT_SESSION_ID,
+        "worktree": CONTRACT_CWD,
+        "properties": {
+            "sessionID": CONTRACT_SESSION_ID,
+            "callID": CONTRACT_CALL_ID,
+        },
     }
 
 
@@ -115,6 +120,22 @@ def test_opencode_file_edited_contract_synthesizes_write_tool() -> None:
     )
     assert normalized["opencode_hook_event"] == "file.edited", (
         "file.edited should stay available for platform-specific trace attribution"
+    )
+
+
+def test_opencode_identity_contract_preserves_native_ids_and_worktree_scope() -> None:
+    normalized = OpenCodeAdapter().normalize_payload(
+        _raw_opencode_payload("tool.execute.after")
+    )
+
+    assert normalized["opencode_session_id"] == CONTRACT_SESSION_ID, (
+        "OpenCode should preserve the native session ID from event properties"
+    )
+    assert normalized["call_id"] == CONTRACT_CALL_ID, (
+        "OpenCode should preserve the native call ID from event properties"
+    )
+    assert normalized["cwd"] == CONTRACT_CWD, (
+        "OpenCode scope should use the stable plugin worktree"
     )
 
 

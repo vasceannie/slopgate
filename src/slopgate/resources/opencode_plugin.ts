@@ -19,9 +19,9 @@
  *     intercepting user prompts before they're sent to the model. Rules
  *     like BUILTIN-INJECT-PROMPT are inactive on OpenCode.
  *   - file.edited is preferred for post-edit quality/lint when available.
- *     tool.execute.after may omit original tool args on some OpenCode
- *     versions; this shim caches tool.execute.before args in-memory and
- *     reattaches them best-effort for post-tool backstops.
+ *     tool.execute.after receives its final input args directly on supported
+ *     OpenCode versions; missing args remain unknown rather than being
+ *     correlated through mutable plugin state.
  *   - permission.replied, session.compacted, session.error, session.status,
  *     shell.env, and command.executed are forwarded for replay/trace coverage;
  *     findings on those events are advisory.
@@ -56,8 +56,9 @@ interface OpenCodeClient {
 
 interface OpenCodeEvent extends Record<string, unknown> {
   type: string
-  cwd?: unknown
-  tool?: unknown
+  properties?: Record<string, unknown>
+  data?: Record<string, unknown>
+  info?: Record<string, unknown>
 }
 
 interface OpenCodeEventEnvelope {
@@ -67,18 +68,26 @@ interface OpenCodeEventEnvelope {
 interface OpenCodePluginContext {
   client: OpenCodeClient
   directory: string
+  worktree?: string
 }
 
 interface OpenCodePluginHandlers {
   "tool.execute.before": (
-    input: OpenCodeToolInput,
-    output: OpenCodeToolOutput,
+    input: OpenCodeToolBeforeInput,
+    output: OpenCodeToolBeforeOutput,
   ) => Promise<void>
   "tool.execute.after": (
-    input: OpenCodeToolInput,
-    output: OpenCodeToolOutput,
+    input: OpenCodeToolAfterInput,
+    output: OpenCodeToolAfterOutput,
   ) => Promise<void>
   event(input: OpenCodeEventEnvelope): Promise<void>
+  tool: Record<string, OpenCodeCustomTool>
+}
+
+interface OpenCodeCustomTool {
+  description: string
+  args: Record<string, unknown>
+  execute(args: Record<string, unknown>): Promise<string>
 }
 
 type Plugin = (context: OpenCodePluginContext) => Promise<OpenCodePluginHandlers>
@@ -114,9 +123,9 @@ declare const Bun: BunRuntime
 
 const SLOPGATE_ARGV = Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SLOPGATE_BIN = SLOPGATE_ARGV.join(" ")
-
-// Generate a unique session ID per plugin load (= per OpenCode session).
-const SESSION_ID = `opencode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const OPENCODE_INSTALL_IDENTITY: Record<string, unknown> = {"placeholder":"__SLOPGATE_OPENCODE_IDENTITY__"}
+const OPENCODE_TOOL_CONTRACT_VERSION = "slopgate-opencode-projection-v1" as const
+const PLUGIN_INSTANCE_ID = crypto.randomUUID()
 
 interface EnforcerResult {
   action?: "block" | "allow" | "warn" | "context" | "continue"
@@ -125,26 +134,65 @@ interface EnforcerResult {
   updated_args?: Record<string, unknown>
 }
 
-interface ToolArgsCacheEntry {
+interface RepairGateState {
+  status: string
+  generation?: string
+  reason?: string
+}
+
+const READ_ONLY_TOOLS = new Set([
+  "read",
+  "glob",
+  "grep",
+  "list",
+  "find",
+  "webfetch",
+  "websearch",
+])
+const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
+const VERIFY_TOOL = "slopgate_verify_repair"
+
+type ExecutionOutcome = "returned" | "failed" | "blocked" | "cancelled" | "unknown"
+type MutationOutcome = "committed" | "partial" | "none" | "unknown"
+type EvidenceTier = "documented" | "typed" | "pinned-source" | "local-observed" | "unresolved"
+
+interface OpenCodeToolHookInput extends Record<string, unknown> {
   tool: string
-  cwd: string
+  sessionID: string
+  callID: string
+}
+
+interface OpenCodeToolBeforeInput extends OpenCodeToolHookInput {}
+
+interface OpenCodeToolBeforeOutput extends Record<string, unknown> {
   args: Record<string, unknown>
-  timestamp: number
 }
 
-interface OpenCodeToolInput extends Record<string, unknown> {
-  cwd?: unknown
-  tool?: unknown
+interface OpenCodeToolAfterInput extends OpenCodeToolHookInput {
+  args: Record<string, unknown>
 }
 
-interface OpenCodeToolOutput extends Record<string, unknown> {
-  args?: Record<string, unknown>
-  result?: unknown
+interface OpenCodeToolAfterOutput extends Record<string, unknown> {
+  title: string
+  output: unknown
+  metadata: Record<string, unknown>
 }
 
-const POST_TOOL_ARG_CACHE_TTL_MS = 5 * 60 * 1000
-const POST_TOOL_ARG_CACHE_MAX_ENTRIES = 50
-const postToolArgCache: ToolArgsCacheEntry[] = []
+function outcomeFields(
+  executionOutcome: ExecutionOutcome,
+  executionEvidenceTier: EvidenceTier,
+  mutationOutcome: MutationOutcome,
+  mutationEvidenceTier: EvidenceTier,
+): Record<string, unknown> {
+  return {
+    execution_outcome: executionOutcome,
+    mutation_outcome: mutationOutcome,
+    evidence_tier: {
+      execution: executionEvidenceTier,
+      mutation: mutationEvidenceTier,
+    },
+  }
+}
 
 function cloneArgs(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -165,24 +213,7 @@ function mergeToolArgs(...values: unknown[]): Record<string, unknown> {
   return merged
 }
 
-function inputToolArgs(input: Record<string, unknown>): Record<string, unknown> {
-  return mergeToolArgs(
-    input.args,
-    input.arguments,
-    input.input,
-    input.tool_input,
-    input.toolInput,
-    cloneArgs(input.call).args,
-    cloneArgs(input.call).arguments,
-    cloneArgs(input.call).input,
-  )
-}
-
-function outputToolArgs(output: Record<string, unknown>): Record<string, unknown> {
-  return mergeToolArgs(output.args, output.arguments, output.input)
-}
-
-function ensureOutputArgs(output: OpenCodeToolOutput): Record<string, unknown> {
+function ensureOutputArgs(output: OpenCodeToolBeforeOutput): Record<string, unknown> {
   if (!output.args || typeof output.args !== "object" || Array.isArray(output.args)) {
     output.args = {}
   }
@@ -251,6 +282,7 @@ function eventIdentityFields(
     "aggregate_id",
     "aggregateId",
   ]
+  const directCallIdKeys = ["call_id", "callId", "callID", "opencode_call_id", "opencodeCallId"]
   const infoSessionIdKeys = [
     ...directSessionIdKeys,
     "id",
@@ -274,6 +306,13 @@ function eventIdentityFields(
     infoSources
       .map((source) => firstString(source, ...infoSessionIdKeys))
       .find(Boolean)
+  const callId =
+    directSources
+      .map((source) => firstString(source, ...directCallIdKeys))
+      .find(Boolean) ||
+    infoSources
+      .map((source) => firstString(source, ...directCallIdKeys))
+      .find(Boolean)
   const title =
     directSources
       .map((source) => firstString(source, ...directTitleKeys))
@@ -283,6 +322,7 @@ function eventIdentityFields(
       .find(Boolean)
 
   return {
+    ...(opencodeSessionId ? { session_id: opencodeSessionId } : {}),
     ...(title ? { session_title: title, session_title_source: "opencode-event" } : {}),
     ...(opencodeSessionId
       ? {
@@ -290,65 +330,22 @@ function eventIdentityFields(
           session_identity_source: "opencode-event",
         }
       : {}),
+    ...(callId ? { call_id: callId } : {}),
   }
 }
 
 function eventToolArgs(event: Record<string, unknown>): Record<string, unknown> {
+  const properties = objectValue(event, "properties")
+  const data = objectValue(event, "data")
   return mergeToolArgs(
     event.args,
     event.arguments,
     event.input,
     event.tool_input,
     event.toolInput,
+    properties,
+    data,
   )
-}
-
-function pruneToolArgCache(now: number = Date.now()): void {
-  while (
-    postToolArgCache.length > 0
-    && now - postToolArgCache[0].timestamp > POST_TOOL_ARG_CACHE_TTL_MS
-  ) {
-    postToolArgCache.shift()
-  }
-  while (postToolArgCache.length > POST_TOOL_ARG_CACHE_MAX_ENTRIES) {
-    postToolArgCache.shift()
-  }
-}
-
-function rememberToolArgs(tool: unknown, cwd: string, args: Record<string, unknown>): void {
-  const toolName = typeof tool === "string" ? tool : ""
-  pruneToolArgCache()
-  postToolArgCache.push({
-    tool: toolName,
-    cwd,
-    args: cloneArgs(args),
-    timestamp: Date.now(),
-  })
-  pruneToolArgCache()
-}
-
-function takeRememberedToolArgs(tool: unknown, cwd: string): Record<string, unknown> {
-  const toolName = typeof tool === "string" ? tool : ""
-  pruneToolArgCache()
-  let index = -1
-  for (let i = postToolArgCache.length - 1; i >= 0; i -= 1) {
-    const entry = postToolArgCache[i]
-    if (entry.tool === toolName && entry.cwd === cwd) {
-      index = i
-      break
-    }
-  }
-  if (index === -1) {
-    for (let i = postToolArgCache.length - 1; i >= 0; i -= 1) {
-      if (postToolArgCache[i].tool === toolName) {
-        index = i
-        break
-      }
-    }
-  }
-  if (index === -1) return {}
-  const [entry] = postToolArgCache.splice(index, 1)
-  return cloneArgs(entry.args)
 }
 
 function findManagedRepoRoot(start: string): string | null {
@@ -369,6 +366,7 @@ async function callEnforcer(
 ): Promise<EnforcerResult | null> {
   try {
     const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
+    const subprocessStartedAtMs = Date.now()
     const proc = Bun.spawn(
       [...SLOPGATE_ARGV, "handle", "--platform", "opencode"],
       {
@@ -382,7 +380,10 @@ async function callEnforcer(
 
     // Bun.spawn with stdin:"pipe" returns a FileSink, not a WritableStream.
     // FileSink API: .write(data), .flush(), .end()
-    proc.stdin.write(JSON.stringify(payload))
+    proc.stdin.write(JSON.stringify({
+      ...payload,
+      slopgate_subprocess_started_at_ms: subprocessStartedAtMs,
+    }))
     proc.stdin.flush()
     proc.stdin.end()
 
@@ -422,21 +423,91 @@ async function callEnforcer(
   }
 }
 
-export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
-  // `directory` is set at init time. OpenCode may change CWD mid-session;
-  // tool hooks receive the current CWD via their input object.
-  // For event hooks (session.idle, etc.), we fall back to the init-time value.
-  let currentDirectory = directory
+async function callRepairCommand(
+  command: string[],
+  cwd: string,
+): Promise<{ exitCode: number; output: string }> {
+  const proc = Bun.spawn([...SLOPGATE_ARGV, ...command], {
+    env: Bun.env,
+    cwd,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  proc.stdin.end()
+  const output = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  return { exitCode, output: output || stderr }
+}
+
+async function repairGateState(cwd: string): Promise<RepairGateState | null> {
+  const result = await callRepairCommand(["repair", "status", "--cwd", cwd], cwd)
+  if (result.exitCode !== 0 || !result.output.trim()) return null
+  try {
+    return JSON.parse(result.output) as RepairGateState
+  } catch {
+    return null
+  }
+}
+
+function isExplicitRepairCommand(toolName: string, args: Record<string, unknown>): boolean {
+  if (toolName.toLowerCase() === VERIFY_TOOL) return true
+  if (toolName.toLowerCase() !== "bash") return false
+  const command = firstString(args, "command", "cmd", "script")
+  const tokens = command.trim().split(/\s+/)
+  return (
+    tokens.length >= 3
+    && tokens[0] === "slopgate"
+    && tokens[1] === "lint"
+    && tokens[2] === "check"
+    && tokens.slice(3).every((token) => REPAIR_LINT_FLAGS.has(token))
+  )
+}
+
+function isAllowedWhileRepairRequired(
+  toolName: string,
+  args: Record<string, unknown>,
+): boolean {
+  return READ_ONLY_TOOLS.has(toolName.toLowerCase()) || isExplicitRepairCommand(toolName, args)
+}
+
+export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) => {
+  const scopedDirectory = worktree || directory
 
   await client.app.log({
     body: {
       service: "slopgate",
       level: "info",
-      message: `Slopgate plugin loaded (${SLOPGATE_BIN}, session: ${SESSION_ID})`,
+      message: JSON.stringify({
+        event: "slopgate.plugin.loaded",
+        plugin_instance_id: PLUGIN_INSTANCE_ID,
+        directory,
+        worktree: scopedDirectory,
+        resolved_binary: SLOPGATE_BIN,
+        install_identity: OPENCODE_INSTALL_IDENTITY,
+      }),
     },
   })
 
-  const managedRepo = (): boolean => findManagedRepoRoot(currentDirectory) !== null
+  const managedRepo = (): boolean => findManagedRepoRoot(scopedDirectory) !== null
+
+  const nativeIdentityFields = (
+    input: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const sessionId =
+      typeof input.sessionID === "string" && input.sessionID.trim()
+        ? input.sessionID.trim()
+        : firstString(input, "sessionId", "session_id")
+    const callId =
+      typeof input.callID === "string" && input.callID.trim()
+        ? input.callID.trim()
+        : firstString(input, "callId", "call_id")
+    return {
+      ...(sessionId ? { session_id: sessionId, opencode_session_id: sessionId } : {}),
+      ...(callId ? { call_id: callId } : {}),
+    }
+  }
 
   const payloadForEvent = (
     hookEventName: string,
@@ -447,9 +518,11 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
     hook_event_name: hookEventName,
     tool_name: toolName,
     tool_input: toolInput,
-    cwd: currentDirectory,
-    session_id: SESSION_ID,
+    cwd: scopedDirectory,
+    worktree: scopedDirectory,
+    opencode_tool_contract_version: OPENCODE_TOOL_CONTRACT_VERSION,
     transcript_path: null,
+    ...outcomeFields("unknown", "unresolved", "unknown", "unresolved"),
     ...extra,
   })
 
@@ -493,31 +566,35 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
 
   return {
     // -- Pre-tool: intercept before execution ---------------------------------
-    "tool.execute.before": async (input: OpenCodeToolInput, output: OpenCodeToolOutput) => {
-      if (input.cwd && typeof input.cwd === "string") {
-        currentDirectory = input.cwd
-      }
-
+    "tool.execute.before": async (input: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput) => {
       const outputArgs = ensureOutputArgs(output)
-
-      const preToolArgs = mergeToolArgs(inputToolArgs(input), outputToolArgs(output))
-      const payload = {
-        hook_event_name: "tool.execute.before",
-        tool_name: input.tool,
-        tool_input: preToolArgs,
-        cwd: currentDirectory,
-        session_id: SESSION_ID,
-        transcript_path: null,
+      const toolName = typeof input.tool === "string" ? input.tool : ""
+      const pending = await repairGateState(scopedDirectory)
+      if (managedRepo() && pending === null) {
+        throw new Error("[slopgate] repair gate state is unavailable in a managed repo.")
       }
+      if (
+        pending?.status === "REPAIR_REQUIRED"
+        && !isAllowedWhileRepairRequired(toolName, outputArgs)
+      ) {
+        throw new Error(
+          `[slopgate] repair required for generation ${pending.generation || "unknown"}; `
+          + "use read-only tools, repair, or clean verification first.",
+        )
+      }
+      const preToolArgs = cloneArgs(outputArgs)
+      const payload = payloadForEvent(
+        "tool.execute.before",
+        toolName,
+        preToolArgs,
+        nativeIdentityFields(input),
+      )
 
       const result = await callEnforcer(
         payload,
         managedRepo(),
       )
-      if (!result) {
-        rememberToolArgs(input.tool, currentDirectory, preToolArgs)
-        return
-      }
+      if (!result) return
 
       switch (result.action) {
         case "block":
@@ -527,7 +604,6 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
           if (result.updated_args) {
             Object.assign(outputArgs, result.updated_args)
           }
-          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
 
         case "context":
@@ -540,37 +616,51 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
               },
             })
           }
-          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
 
         default:
-          rememberToolArgs(input.tool, currentDirectory, mergeToolArgs(preToolArgs, outputToolArgs(output)))
           break
       }
     },
 
-    // -- Post-tool: review after execution ------------------------------------
-    "tool.execute.after": async (input: OpenCodeToolInput, output: OpenCodeToolOutput) => {
-      if (input.cwd && typeof input.cwd === "string") {
-        currentDirectory = input.cwd
-      }
+    tool: {
+      [VERIFY_TOOL]: {
+        description: "Run clean verification and clear the matching Slopgate repair generation.",
+        args: {},
+        execute: async (args: Record<string, unknown>): Promise<string> => {
+          const cwd = firstString(args, "cwd") || scopedDirectory
+          const pending = await repairGateState(cwd)
+          if (!pending?.generation) return "No repair-required generation is pending."
+          const result = await callRepairCommand(
+            ["repair", "verify", "--cwd", cwd, "--generation", pending.generation],
+            cwd,
+          )
+          if (result.exitCode !== 0) {
+            throw new Error(result.output.trim() || "Clean verification failed.")
+          }
+          return result.output.trim() || "Repair generation cleared."
+        },
+      },
+    },
 
-      const rememberedArgs = takeRememberedToolArgs(input.tool, currentDirectory)
-      const postToolArgs = mergeToolArgs(
-        rememberedArgs,
-        inputToolArgs(input),
-        outputToolArgs(output),
+    // -- Post-tool: review after execution ------------------------------------
+    "tool.execute.after": async (input: OpenCodeToolAfterInput, output: OpenCodeToolAfterOutput) => {
+      const toolName = typeof input.tool === "string" ? input.tool : ""
+      const postToolArgs = cloneArgs(input.args)
+      const payload = payloadForEvent(
+        "tool.execute.after",
+        toolName,
+        postToolArgs,
+        {
+          ...nativeIdentityFields(input),
+          ...outcomeFields("returned", "pinned-source", "unknown", "unresolved"),
+          tool_title: output.title,
+          tool_metadata: output.metadata,
+          tool_output: output.output,
+          tool_result: output.output,
+          tool_response: output.output,
+        },
       )
-      const payload = {
-        hook_event_name: "tool.execute.after",
-        tool_name: input.tool,
-        tool_input: postToolArgs,
-        cwd: currentDirectory,
-        session_id: SESSION_ID,
-        transcript_path: null,
-        tool_result: output.result,
-        tool_response: output.result,
-      }
 
       const result = await callEnforcer(
         payload,
@@ -580,11 +670,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
     },
 
     // -- Events: session lifecycle + permissions --------------------------------
-    event: async ({ event }: { event: { type: string; [key: string]: unknown } }) => {
-      if (event.cwd && typeof event.cwd === "string") {
-        currentDirectory = event.cwd
-      }
-
+    event: ({ event }: OpenCodeEventEnvelope) => (async () => {
       // -- SessionStart (session.created) ------------------------------------
       if (event.type === "session.created") {
         const payload = payloadForEvent("session.created", "", {}, eventIdentityFields(event, true))
@@ -641,26 +727,29 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
       }
 
       if (event.type === "file.edited") {
+        const properties = objectValue(event, "properties")
         const filePath = firstString(
-          event,
+          properties || {},
+          "file",
           "path",
           "file_path",
           "filePath",
           "filename",
-        )
+        ) || firstString(event, "path", "file_path", "filePath", "filename")
         const toolInput = eventToolArgs(event)
         if (filePath) {
           toolInput.file_path = filePath
         }
         const payload = payloadForEvent("file.edited", "Write", toolInput, {
           path: filePath,
+          ...outcomeFields("unknown", "unresolved", "partial", "local-observed"),
           tool_result: event,
           tool_response: event,
           ...eventIdentityFields(event),
         })
 
         const result = await callEnforcer(payload, managedRepo())
-        await handlePostToolResult("slopgate-file-edited", result)
+        await logAdvisoryResult("slopgate-file-edited", result)
       }
 
       if (
@@ -671,6 +760,18 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
         || event.type === "shell.env"
         || event.type === "command.executed"
       ) {
+        if (event.type === "session.compacted") {
+          const pending = await repairGateState(scopedDirectory)
+          if (pending?.status === "REPAIR_REQUIRED") {
+            await client.app.log({
+              body: {
+                service: "slopgate",
+                level: "warn",
+                message: `[repair-required] generation ${pending.generation || "unknown"} remains pending; verify before mutating tools.`,
+              },
+            })
+          }
+        }
         const toolName = typeof event.tool === "string" ? event.tool : ""
         const payload = payloadForEvent(event.type, toolName, eventToolArgs(event), {
           tool_result: event,
@@ -680,6 +781,19 @@ export const EnforcerPlugin: Plugin = async ({ client, directory }) => {
         const result = await callEnforcer(payload, managedRepo())
         await logAdvisoryResult(event.type, result)
       }
-    },
+    })().catch(async (error: unknown) => { // no-excuse-ok: catch -- generic event boundary must never reject
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        await client.app.log({
+          body: {
+            service: "slopgate",
+            level: "error",
+            message: `[event-advisory-failed] ${event.type}: ${message}`,
+          },
+        })
+      } catch (logError: unknown) { // no-excuse-ok: catch -- last-resort boundary fallback
+        console.error(`[slopgate] event logging failed: ${String(logError)}`)
+      }
+    }),
   }
 }

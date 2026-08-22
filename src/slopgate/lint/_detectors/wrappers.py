@@ -101,7 +101,7 @@ def detect_unnecessary_wrappers(
     """Find thin wrapper functions that simply delegate to another call."""
     cfg = get_config()
     allowed = cfg.allowed_wrappers
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:

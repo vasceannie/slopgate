@@ -273,7 +273,7 @@ def detect_semantic_clones(
     """Find functions with identical AST structure despite different names."""
     cfg = get_config()
     min_lines = cfg.min_function_body_lines
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
 
     groups: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
     for pf in parsed:

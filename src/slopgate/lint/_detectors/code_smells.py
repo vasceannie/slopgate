@@ -25,7 +25,8 @@ DetectorState = tuple[QualityConfig, list[ParsedFile], list[Violation]]
 
 
 def _detector_state(files: Sequence[Path | ParsedFile] | None) -> DetectorState:
-    return get_config(), ensure_parsed(files, fallback=find_source_files()), []
+    fallback = find_source_files() if files is None else None
+    return get_config(), ensure_parsed(files, fallback=fallback), []
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ from slopgate.cli.commands import (
     cmd_version,
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
+from slopgate.cli.repair import add_repair_parsers
 
 _INSTALL_SCOPE_HELP = (
     "Hook install target: user config dir, project dir (./.claude, ./.codex, "
@@ -72,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = build_search_parser(sub)
     version = sub.add_parser("version", help="Print version")
     version.set_defaults(func=cmd_version)
+    add_repair_parsers(sub)
     return parser
 
 

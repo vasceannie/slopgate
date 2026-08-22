@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from slopgate.constants import METADATA_SLOPGATE
+from slopgate.constants import METADATA_CONTENT, METADATA_SLOPGATE
 from slopgate.models import RegexRuleConfig, RuleSurfaceConfig, RuntimeConfig
 
 from ._coerce import (
@@ -48,7 +48,7 @@ def _regex_rule_configs(value: object) -> list[RegexRuleConfig]:
                     title=string_value(data.get("title")),
                     severity=string_value(data.get("severity"), "MEDIUM"),
                     events=string_list(data.get("events")) or ["PreToolUse"],
-                    target=string_value(data.get("target"), "content"),
+                    target=string_value(data.get("target"), METADATA_CONTENT),
                     action=string_value(data.get("action"), "deny"),
                     message=string_value(data.get("message")),
                     additional_context=(

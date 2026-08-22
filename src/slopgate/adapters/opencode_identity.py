@@ -23,6 +23,13 @@ OPENCODE_DIRECT_SESSION_ID_KEYS = (
     "aggregateId",
 )
 OPENCODE_INFO_SESSION_ID_KEYS = (*OPENCODE_DIRECT_SESSION_ID_KEYS, "id")
+OPENCODE_DIRECT_CALL_ID_KEYS = (
+    "call_id",
+    "callId",
+    "callID",
+    "opencode_call_id",
+    "opencodeCallId",
+)
 OPENCODE_DIRECT_SESSION_TITLE_KEYS = SESSION_IDENTITY_TITLE_KEYS
 OPENCODE_INFO_SESSION_TITLE_KEYS = (*OPENCODE_DIRECT_SESSION_TITLE_KEYS, "title")
 OPENCODE_EVENT_IDENTITY_SOURCE = "opencode-event"
@@ -32,6 +39,7 @@ OPENCODE_EVENT_IDENTITY_SOURCE = "opencode-event"
 class OpenCodeSessionIdentity:
     session_id: str
     title: str
+    call_id: str = ""
 
     def apply_to(self, canonical: ObjectDict) -> None:
         SESSION_IDENTITY_TELEMETRY.record_metric("opencode.identity.apply")
@@ -43,6 +51,8 @@ class OpenCodeSessionIdentity:
         if self.title:
             canonical.setdefault("session_title", self.title)
             canonical.setdefault("session_title_source", OPENCODE_EVENT_IDENTITY_SOURCE)
+        if self.call_id:
+            canonical.setdefault("call_id", self.call_id)
 
 
 def opencode_session_identity(raw: ObjectMapping) -> OpenCodeSessionIdentity:
@@ -68,6 +78,16 @@ def opencode_session_identity(raw: ObjectMapping) -> OpenCodeSessionIdentity:
             info_sources,
             OPENCODE_INFO_SESSION_TITLE_KEYS,
             metric_name="opencode.identity.info_title",
+        ),
+        call_id=first_nested_identity_value(
+            direct_sources,
+            OPENCODE_DIRECT_CALL_ID_KEYS,
+            metric_name="opencode.identity.first_call_id",
+        )
+        or first_nested_identity_value(
+            info_sources,
+            OPENCODE_DIRECT_CALL_ID_KEYS,
+            metric_name="opencode.identity.info_call_id",
         ),
     )
 

@@ -39,6 +39,14 @@ class DenyKeyPattern:
     attempt_fingerprint: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class RepairRequiredPayload:
+    session_id: str
+    call_id: str
+    rule_ids: list[str]
+    paths: list[str]
+
+
 class HookStateSnapshot(TypedDict):
     full_reads: dict[str, int]
     search_reminders: dict[str, int]
@@ -46,6 +54,7 @@ class HookStateSnapshot(TypedDict):
     advisory_hits: dict[str, ObjectDict]
     retry_locks: dict[str, ObjectDict]
     repair_plans: dict[str, ObjectDict]
+    repair_required: ObjectDict
 
 
 ObjectStateSection = Literal["retry_locks", "repair_plans"]

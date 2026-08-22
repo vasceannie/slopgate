@@ -1,37 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
 from time import monotonic
 
 from slopgate.constants import (
-    PLATFORM_KEY,
-    SESSION_ID,
+    PLATFORM_OPENCODE,
     PLATFORM_CLAUDE,
-    TOOL_WRITE,
-    TOOL_EDIT,
-    TOOL_READ,
-    TOOL_GLOB,
-    TOOL_GREP,
-    TOOL_WEB_SEARCH,
-    TOOL_WEB_FETCH,
     UNKNOWN_VALUE,
+    BLOCK,
+    DENY,
 )
 from slopgate.adapters import get_adapter
-from slopgate.config import resolve_repo_root
 from slopgate.context import HookContext, build_context
-from slopgate.lint._helpers import reset_request_analysis_cache
-from slopgate.models import EngineResult
-
-from .._types import is_object_dict, object_dict
-from .advisories import compact_context_advisories
-from ._fingerprints import (
-    effective_policy_fingerprint,
-    guidance_fingerprint,
-    slopgate_version,
+from slopgate.lint._helpers import (
+    reset_request_analysis_cache,
+    reset_request_timing,
 )
-from ._render import serialize_findings, render_output
+from slopgate.models import EngineResult, RuleFinding
+from slopgate.state import RepairRequiredPayload
+
+from .advisories import compact_context_advisories
+from ._render import render_output
 from ._retry import (
     apply_loop_aware_steering,
     capture_repair_plan_signal,
@@ -40,171 +29,46 @@ from ._retry import (
     filter_search_reminder_dedupe,
     inject_recent_failure_context,
 )
-from ._runner import (
-    EnforcementMode,
-    platform_capability,
-    resolve_enforcement_mode,
-    run_rules,
+from ._runner import run_rules
+from ._trace_payloads import (
+    evaluation_metadata,
+    payload_for_done,
+    subprocess_startup_ms,
+    write_start_trace,
 )
 
 
-@dataclass(frozen=True, slots=True)
-class _EvaluationMetadata:
-    platform: str
-    platform_source: str
-    enforcement_mode: EnforcementMode
-    resolved_repo_root: Path | None
-    platform_capability: str
-    degraded_reason: str | None
-
-    @property
-    def repo_root_text(self) -> str | None:
-        return str(self.resolved_repo_root) if self.resolved_repo_root else None
-
-
-def _evaluation_metadata(ctx: HookContext, platform: str) -> _EvaluationMetadata:
-    capability, degraded_reason = platform_capability(platform)
-    return _EvaluationMetadata(
-        platform=platform,
-        platform_source=platform,
-        enforcement_mode=resolve_enforcement_mode(ctx),
-        resolved_repo_root=resolve_repo_root(Path(ctx.cwd)),
-        platform_capability=capability,
-        degraded_reason=degraded_reason,
+def _record_opencode_repair_required(
+    ctx: HookContext, findings: list[RuleFinding], platform: str
+) -> None:
+    if platform != PLATFORM_OPENCODE:
+        return
+    if ctx.event_name not in {"PostToolUse", "PostToolUseFailure"}:
+        return
+    quality_findings = [
+        finding
+        for finding in findings
+        if finding.decision in {DENY, BLOCK}
+    ]
+    if not quality_findings:
+        return
+    rule_ids = [finding.rule_id for finding in quality_findings]
+    paths = [target.path for target in ctx.content_targets]
+    call_id = str(ctx.payload.payload.get("call_id", ""))
+    generation = ctx.state.repair_generation(
+        rule_ids=rule_ids,
+        paths=paths,
+        event_identity=f"{ctx.session_id}\n{call_id}",
     )
-
-
-_FILE_TOOLS = (TOOL_WRITE, TOOL_EDIT, TOOL_READ)
-_SEARCH_TOOLS = (TOOL_GLOB, TOOL_GREP)
-_WEB_TOOLS = (TOOL_WEB_SEARCH, TOOL_WEB_FETCH)
-
-
-def _extract_model_provider(
-    payload: Mapping[str, object],
-) -> tuple[str | None, str | None]:
-    model = payload.get("model") or payload.get("model_name")
-    provider = (
-        payload.get("provider")
-        or payload.get("model_provider")
-        or payload.get("modelProvider")
+    ctx.state.mark_repair_required(
+        generation,
+        RepairRequiredPayload(
+            session_id=ctx.session_id,
+            call_id=call_id,
+            rule_ids=rule_ids,
+            paths=paths,
+        ),
     )
-    return (str(model) if model else None, str(provider) if provider else None)
-
-
-def _fallback_command(tool_name: str, tool_input: dict[str, object]) -> str | None:
-    if tool_name in _FILE_TOOLS:
-        path = (
-            tool_input.get("filePath")
-            or tool_input.get("file_path")
-            or tool_input.get("path")
-        )
-        return f"{tool_name.lower()} {path}" if path else None
-    if tool_name in _SEARCH_TOOLS:
-        pattern = tool_input.get("pattern")
-        return f"{tool_name.lower()} {pattern}" if pattern else None
-    if tool_name in _WEB_TOOLS:
-        url = tool_input.get("url") or tool_input.get("query")
-        return f"{tool_name.lower()} {url}" if url else None
-    return None
-
-
-def _extract_command(ctx: HookContext) -> str | None:
-    command = ctx.payload.shell_command
-    if command:
-        return command
-    tool_input = ctx.payload.tool_input
-    if not tool_input:
-        return None
-    cmd = tool_input.get("command") or tool_input.get("script") or tool_input.get("cmd")
-    if cmd:
-        return str(cmd)
-    return _fallback_command(ctx.tool_name, tool_input)
-
-
-def _extract_tool_output(payload: Mapping[str, object]) -> str | None:
-    tool_output = (
-        payload.get("tool_result")
-        or payload.get("tool_response")
-        or payload.get("tool_output")
-    )
-    if tool_output is None:
-        return None
-    if is_object_dict(tool_output):
-        output_data = object_dict(tool_output)
-        stdout = output_data.get("stdout")
-        stderr = output_data.get("stderr")
-        if stdout or stderr:
-            parts: list[str] = [f"stdout:\n{stdout or ''}"]
-            if stderr:
-                parts.append(f"stderr:\n{stderr}")
-            return "\n".join(parts)
-        return str(tool_output)
-    return str(tool_output)
-
-
-def _trace_drilldown_fields(ctx: HookContext) -> dict[str, object]:
-    model, provider = _extract_model_provider(ctx.payload.payload)
-    return {
-        "model": model,
-        "provider": provider,
-        "command": _extract_command(ctx),
-        "tool_output": _extract_tool_output(ctx.payload.payload),
-        "tool_input": ctx.tool_input,
-        "tool_intent": ctx.tool_intent,
-        "intent_reason": ctx.intent_reason,
-        "read_only": ctx.read_only,
-        "mutating": ctx.mutating,
-        "candidate_path_source": ctx.candidate_path_source,
-        "platform_event_name": ctx.platform_event_name,
-    }
-
-
-def _payload_for_start(
-    ctx: HookContext, metadata: _EvaluationMetadata
-) -> dict[str, object]:
-    return {
-        PLATFORM_KEY: metadata.platform,
-        "platform_source": metadata.platform_source,
-        "platform_capability": metadata.platform_capability,
-        "degraded_reason": metadata.degraded_reason,
-        "event_name": ctx.event_name,
-        SESSION_ID: ctx.session_id,
-        "tool_name": ctx.tool_name,
-        "candidate_paths": ctx.candidate_paths,
-        "languages": sorted(ctx.languages),
-        "enforcement_mode": metadata.enforcement_mode,
-        "resolved_repo_root": metadata.repo_root_text,
-        **_trace_drilldown_fields(ctx),
-    }
-
-
-def _payload_for_done(
-    ctx: HookContext,
-    metadata: _EvaluationMetadata,
-    result: EngineResult,
-    timing: dict[str, object],
-) -> dict[str, object]:
-    return {
-        PLATFORM_KEY: metadata.platform,
-        "platform_source": metadata.platform_source,
-        "platform_capability": metadata.platform_capability,
-        "degraded_reason": metadata.degraded_reason,
-        "event_name": ctx.event_name,
-        SESSION_ID: ctx.session_id,
-        "tool_name": ctx.tool_name,
-        "findings": serialize_findings(result.findings),
-        "errors": result.errors,
-        "output": result.output,
-        "timing": timing,
-        "candidate_paths": ctx.candidate_paths,
-        "languages": sorted(ctx.languages),
-        "slopgate_version": slopgate_version(),
-        "effective_policy_fingerprint": effective_policy_fingerprint(ctx.config),
-        "guidance_fingerprint": guidance_fingerprint(ctx.config),
-        "enforcement_mode": metadata.enforcement_mode,
-        "resolved_repo_root": metadata.repo_root_text,
-        **_trace_drilldown_fields(ctx),
-    }
 
 
 def evaluate_payload(
@@ -212,16 +76,18 @@ def evaluate_payload(
     platform: str = UNKNOWN_VALUE,
 ) -> EngineResult:
     reset_request_analysis_cache()
+    reset_request_timing()
+    startup_ms = subprocess_startup_ms(payload_dict)
     evaluation_start = monotonic()
     try:
         trace_platform = platform.strip().lower() or UNKNOWN_VALUE
-        adapter_platform = (
-            PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
-        )
+        adapter_platform = PLATFORM_CLAUDE if trace_platform == UNKNOWN_VALUE else trace_platform
+        normalization_context_start = monotonic()
         adapter = get_adapter(adapter_platform)
         ctx = build_context(adapter.normalize_payload(payload_dict))
-        metadata = _evaluation_metadata(ctx, trace_platform)
-        ctx.trace.event(_payload_for_start(ctx, metadata))
+        metadata = evaluation_metadata(ctx, trace_platform)
+        normalization_context_ms = int((monotonic() - normalization_context_start) * 1000)
+        trace_event_ms = write_start_trace(ctx, metadata)
 
         capture_repair_plan_signal(ctx)
         rule_engine_start = monotonic()
@@ -232,20 +98,24 @@ def evaluate_payload(
         inject_recent_failure_context(ctx, acc.findings)
         acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
         acc.findings = dedupe_findings(acc.findings)
+        _record_opencode_repair_required(ctx, acc.findings, trace_platform)
         compact_context_advisories(ctx, acc.findings)
+        render_start = monotonic()
         output = render_output(ctx, acc.findings, adapter=adapter)
+        render_ms = int((monotonic() - render_start) * 1000)
 
-        result = EngineResult(
-            event_name=ctx.event_name,
-            findings=acc.findings,
-            output=output,
-            errors=acc.errors,
-        )
+        result = EngineResult(ctx.event_name, acc.findings, output, acc.errors)
         timing: dict[str, object] = {
+            "collector_ms": reset_request_timing(),
             "evaluation_ms": int((monotonic() - evaluation_start) * 1000),
+            "normalization_context_ms": normalization_context_ms,
+            "render_ms": render_ms,
             "rule_engine_ms": rule_engine_ms,
+            "subprocess_startup_ms": startup_ms,
+            "trace_event_ms": trace_event_ms,
         }
-        ctx.trace.result(_payload_for_done(ctx, metadata, result, timing))
+        ctx.trace.result(payload_for_done(ctx, metadata, result, timing))
         return result
     finally:
         reset_request_analysis_cache()
+        reset_request_timing()

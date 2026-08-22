@@ -6,10 +6,13 @@ import ast
 import hashlib
 import os
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeAlias
+
+from typing_extensions import TypeIs
 
 from slopgate.constants import LINT_CACHE_COUNTER_STEP
 from slopgate.lint._helpers.ast_utils import (
@@ -28,6 +31,13 @@ from slopgate.lint._helpers.models import (
 from slopgate.lint._helpers.paths import relative_path
 
 _TEXT_DECODE_ERROR_POLICY = "replace"
+
+_PathFallback: TypeAlias = list[Path] | Callable[[], list[Path]]
+
+
+def _is_eager_fallback(fallback: _PathFallback) -> TypeIs[list[Path]]:
+    """Narrow the legacy eager fallback form for strict type checking."""
+    return isinstance(fallback, list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +69,9 @@ class _RequestAnalysisCache:
 
 _REQUEST_ANALYSIS_CACHE: ContextVar[_RequestAnalysisCache | None] = ContextVar(
     "slopgate_request_analysis_cache", default=None
+)
+_REQUEST_COLLECTOR_MS: ContextVar[int] = ContextVar(
+    "slopgate_request_collector_ms", default=0
 )
 
 
@@ -93,6 +106,18 @@ def reset_request_analysis_cache() -> None:
     """Clear request-local parsed source/AST analysis."""
 
     _REQUEST_ANALYSIS_CACHE.set(None)
+
+
+def record_request_collector_ms(elapsed_ms: int) -> None:
+    """Accumulate collector latency for the active evaluation request."""
+    _REQUEST_COLLECTOR_MS.set(_REQUEST_COLLECTOR_MS.get() + elapsed_ms)
+
+
+def reset_request_timing() -> int:
+    """Return and clear request-local collector latency."""
+    elapsed_ms = _REQUEST_COLLECTOR_MS.get()
+    _REQUEST_COLLECTOR_MS.set(0)
+    return elapsed_ms
 
 
 def request_analysis_cache_stats() -> _RequestAnalysisCacheStats:
@@ -248,12 +273,14 @@ def parse_files(paths: list[Path]) -> list[ParsedFile]:
 
 def ensure_parsed(
     files: Sequence[Path | ParsedFile] | None,
-    fallback: list[Path] | None = None,
+    fallback: _PathFallback | None = None,
 ) -> list[ParsedFile]:
     """Accept raw ``Path`` list, ``ParsedFile`` list, or ``None``."""
     if files is None:
         if fallback is not None:
-            return parse_files(fallback)
+            if _is_eager_fallback(fallback):
+                return parse_files(fallback)
+            return parse_files(fallback())
         return []
     if not files:
         return []

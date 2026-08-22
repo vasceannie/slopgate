@@ -35,7 +35,7 @@ def detect_long_lines(
     """
     cfg = get_config()
     max_len = cfg.max_line_length
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:

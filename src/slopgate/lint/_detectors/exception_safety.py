@@ -140,7 +140,7 @@ def detect_broad_except_swallow(
     if not cfg.ban_broad_except_swallow:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -206,7 +206,7 @@ def detect_silent_fallback(
     if not cfg.ban_silent_fallback:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:
@@ -279,7 +279,7 @@ def detect_silent_except(
     if not cfg.ban_silent_except:
         return []
 
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     violations: list[Violation] = []
 
     for pf in parsed:

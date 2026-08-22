@@ -1,7 +1,11 @@
 from __future__ import annotations
+
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock
+
 from hypothesis import given, strategies
+
 from slopgate.lint._config import load_config, reset_config, set_config
 from slopgate.lint._detectors.duplicates import detect_repeated_literals
 from slopgate.lint._helpers import ParsedFile, ensure_parsed, parse_files
@@ -10,6 +14,49 @@ from slopgate.lint._helpers.parsing import parse_file_attempts
 from slopgate.lint._parse_errors import detect_python_parse_errors
 from slopgate.lint.project_index.integrity_store import index_content_signature
 from slopgate.lint.project_index.models import ProjectIndex, ProjectIndexRequest
+
+
+def test_ensure_parsed_invokes_callable_fallback_for_missing_input(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "fallback.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    calls = 0
+
+    def fallback() -> list[Path]:
+        nonlocal calls
+        calls += 1
+        return [source]
+
+    parsed = ensure_parsed(None, fallback=fallback)
+
+    assert calls == 1, "missing input should invoke fallback exactly once"
+    assert [item.path for item in parsed] == [source], (
+        "callable fallback should supply paths for parsing"
+    )
+
+
+def test_ensure_parsed_skips_callable_fallback_for_parsed_input(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "explicit.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    explicit = parse_files([source])
+    fallback = Mock(return_value=[])
+
+    parsed = ensure_parsed(explicit, fallback=fallback)
+
+    fallback.assert_not_called()
+    assert parsed == explicit, "explicit parsed input should pass through unchanged"
+
+
+def test_ensure_parsed_skips_callable_fallback_for_explicit_empty_input() -> None:
+    fallback = Mock(return_value=[])
+
+    parsed = ensure_parsed([], fallback=fallback)
+
+    fallback.assert_not_called()
+    assert parsed == [], "explicit empty input should continue to mean analyze nothing"
 
 
 @given(value=strategies.integers(min_value=-100, max_value=100))
@@ -37,9 +84,9 @@ def test_lint_parse_pipeline_skips_invalid_python_files(tmp_path: Path) -> None:
     invalid = tmp_path / "invalid.py"
     valid.write_text("ANSWER = 42\n", encoding="utf-8")
     invalid.write_text("def broken(:\n", encoding="utf-8")
-    assert [item.path for item in ensure_parsed(None, fallback=[valid, invalid])] == [
-        valid
-    ]
+    assert [
+        item.path for item in ensure_parsed(None, fallback=lambda: [valid, invalid])
+    ] == [valid]
 
 
 def _parse_error_from_attempts_and_detect(tmp_path: Path):

@@ -8,6 +8,7 @@ from slopgate.config import load_config
 from slopgate.models import ContentTarget, RuntimeConfig
 from slopgate.state import HookStateStore
 from slopgate.trace import TraceWriter
+from slopgate.util import logger
 from slopgate.util.payloads import HookPayload, ToolIntent
 
 
@@ -16,7 +17,9 @@ class _CoreContextProperties:
 
     @property
     def event_name(self) -> str:
-        return self.payload.event_name
+        event_name = self.payload.event_name
+        logger.debug("hook context event name accessed", event_name=event_name)
+        return event_name
 
     @property
     def tool_name(self) -> str:
@@ -88,7 +91,12 @@ class _TargetContextProperties(_ShellContextProperties):
 
     @property
     def platform_event_name(self) -> str:
-        return self.payload.platform_event_name
+        platform_event_name = self.payload.platform_event_name
+        logger.debug(
+            "hook context platform event name accessed",
+            platform_event_name=platform_event_name,
+        )
+        return platform_event_name
 
 
 @dataclass(slots=True)
@@ -109,5 +117,11 @@ def build_context(payload_dict: ObjectMapping) -> HookContext:
     config = load_config(repo_root=repo_root)
     trace = TraceWriter(config.trace_dir)
     payload = HookPayload(payload_dict, config)
-    state = HookStateStore(config.trace_dir)
+    raw_scope = payload_dict.get("worktree")
+    state_scope = (
+        raw_scope.strip()
+        if isinstance(raw_scope, str) and raw_scope.strip()
+        else str(repo_root) if repo_root is not None else None
+    )
+    state = HookStateStore(config.trace_dir, scope=state_scope)
     return HookContext(payload=payload, config=config, trace=trace, state=state)

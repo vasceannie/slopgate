@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "compatibility_target": {
+    "version": "1.18.21",
+    "source_sha": "e00890c",
+    "review_sha": "3a4c253"
+  },
+  "cases": [
+    {
+      "id": "before-args-mutation",
+      "behavior": "tool.execute.before mutates output.args in place",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_typed_before_hook_mutates_output_args_in_place"
+    },
+    {
+      "id": "before-throw-blocks",
+      "behavior": "throwing from tool.execute.before blocks execution",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": true,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_typed_before_hook_still_throws_for_block"
+    },
+    {
+      "id": "ignored-hook-return",
+      "behavior": "typed tool hooks resolve without a consumed return value",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_typed_hook_return_value_is_ignored"
+    },
+    {
+      "id": "after-typed-fields",
+      "behavior": "after input.args and output title/output/metadata are consumed",
+      "evidence_tier": "typed",
+      "status": "experimental",
+      "public_contract": false,
+      "test_path": "tests/test_opencode_installer.py",
+      "test_name": "test_opencode_plugin_uses_native_tool_fields_without_correlation_cache"
+    },
+    {
+      "id": "missing-after-uncertain",
+      "behavior": "missing after events never imply successful execution or committed mutation",
+      "evidence_tier": "pinned-source",
+      "status": "conservative",
+      "public_contract": false,
+      "test_path": "tests/test_opencode_installer.py",
+      "test_name": "test_opencode_plugin_records_conservative_tool_outcome_axes"
+    },
+    {
+      "id": "independent-outcome-axes",
+      "behavior": "execution, mutation, and evidence remain independent trace axes",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/engine/test_15_opencode_outcome_trace.py",
+      "test_name": "test_opencode_trace_preserves_independent_outcome_axes"
+    },
+    {
+      "id": "native-session-call-ids",
+      "behavior": "native sessionID and callID are preserved without output.result or cwd inventions",
+      "evidence_tier": "typed",
+      "status": "experimental",
+      "public_contract": false,
+      "test_path": "tests/engine/test_15_opencode_outcome_trace.py",
+      "test_name": "test_opencode_trace_preserves_native_ids_and_raw_after_output"
+    },
+    {
+      "id": "same-worktree-shared-state",
+      "behavior": "sessions in one worktree share repair state",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/test_hook_state_scope.py",
+      "test_name": "test_hook_state_store_shares_same_worktree_scope"
+    },
+    {
+      "id": "separate-worktree-isolation",
+      "behavior": "different worktrees isolate repair state",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/test_hook_state_scope.py",
+      "test_name": "test_hook_state_store_isolates_different_worktree_scopes"
+    },
+    {
+      "id": "generation-race",
+      "behavior": "stale generations cannot clear newer repair requirements",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/test_hook_state_scope.py",
+      "test_name": "test_repair_required_state_requires_matching_generation"
+    },
+    {
+      "id": "event-properties-envelope",
+      "behavior": "generic events use the typed id/type/properties envelope",
+      "evidence_tier": "typed",
+      "status": "experimental",
+      "public_contract": false,
+      "test_path": "tests/adapters/test_12_opencode_adapter_harness_contract.py",
+      "test_name": "test_opencode_harness_events_match_adapter_normalization_contract"
+    },
+    {
+      "id": "file-edited-reordered-advisory",
+      "behavior": "delayed or reordered file.edited evidence remains append-only advisory",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": true,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_file_edited_block_is_logged_without_throwing"
+    },
+    {
+      "id": "permission-ask-untriggered",
+      "behavior": "permission.ask is typed but not relied upon as an observed control hook",
+      "evidence_tier": "typed",
+      "status": "negative-coverage",
+      "public_contract": false,
+      "test_path": "tests/test_harness_schema_context.py",
+      "test_name": "test_opencode_schema_summary_contains_relevant_permission_contract_defs"
+    },
+    {
+      "id": "system-transform-session-present",
+      "behavior": "experimental system transform may expose sessionID",
+      "evidence_tier": "typed",
+      "status": "experimental",
+      "public_contract": false,
+      "probe": "rg -n 'experimental.chat.system.transform' node_modules/@opencode-ai/plugin"
+    },
+    {
+      "id": "system-transform-session-absent",
+      "behavior": "experimental system transform must tolerate missing sessionID",
+      "evidence_tier": "unresolved",
+      "status": "unresolved",
+      "public_contract": false,
+      "probe": "opencode run --pure 'report whether system transform receives sessionID'"
+    },
+    {
+      "id": "compaction-advisory",
+      "behavior": "session.compacted contributes advisory context only",
+      "evidence_tier": "documented",
+      "status": "supported",
+      "public_contract": true,
+      "test_path": "tests/test_opencode_installer.py",
+      "test_name": "test_opencode_plugin_forwards_documented_runtime_events"
+    },
+    {
+      "id": "unknown-effect-deny",
+      "behavior": "unknown custom or MCP tool effects deny by default",
+      "evidence_tier": "pinned-source",
+      "status": "conservative",
+      "public_contract": false,
+      "test_path": "tests/test_opencode_installer.py",
+      "test_name": "test_opencode_plugin_records_conservative_tool_outcome_axes"
+    },
+    {
+      "id": "verification-generation-clear",
+      "behavior": "custom verification clears only the matching generation independent of interception",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": false,
+      "test_path": "tests/test_repair_cli.py",
+      "test_name": "test_repair_verify_accepts_arbitrary_generation_tokens"
+    },
+    {
+      "id": "headless-pure-control",
+      "behavior": "headless run supports documented --pure plugin control",
+      "evidence_tier": "documented",
+      "status": "supported",
+      "public_contract": true,
+      "probe": "opencode run --pure 'reply with ok'"
+    },
+    {
+      "id": "headless-plugin-tool-hooks",
+      "behavior": "headless plugin-tool calls trigger built-in hook callbacks",
+      "evidence_tier": "unresolved",
+      "status": "unresolved",
+      "public_contract": false,
+      "probe": "opencode run 'invoke a plugin-defined tool once'"
+    },
+    {
+      "id": "headless-app-log",
+      "behavior": "client.app.log works headlessly while toast is TUI-only",
+      "evidence_tier": "pinned-source",
+      "status": "supported",
+      "public_contract": true,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_file_edited_block_is_logged_without_throwing"
+    },
+    {
+      "id": "stale-version-identity",
+      "behavior": "runtime, declared, lock, and installed version skew is diagnosed",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": true,
+      "test_path": "tests/test_opencode_identity.py",
+      "test_name": "test_opencode_identity_reports_stale_declared_lock_and_installed_versions"
+    }
+  ]
+}

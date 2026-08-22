@@ -42,7 +42,7 @@ def _langgraph_files(
 ) -> list[tuple[ParsedFile, str]]:
     root = str(get_config().project_root)
     pairs: list[tuple[ParsedFile, str]] = []
-    for parsed_file in ensure_parsed(files, fallback=find_source_files()):
+    for parsed_file in ensure_parsed(files, fallback=find_source_files):
         source = _source(parsed_file)
         if is_langgraph_context(source, root):
             pairs.append((parsed_file, source))

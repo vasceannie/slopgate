@@ -59,7 +59,7 @@ def detect_repeated_blocks(
     files: list[Path] | list[ParsedFile] | None = None,
 ) -> list[Violation]:
     """Find blocks of consecutive statements that appear in multiple places."""
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     groups = collect_block_windows(parsed)
     violations: list[Violation] = []
     for h, members in groups.items():
@@ -103,7 +103,7 @@ def detect_duplicate_call_sequences(
     """Find functions that make the same ordered sequence of calls."""
     cfg = get_config()
     min_len = cfg.min_call_sequence_length
-    parsed = ensure_parsed(files, fallback=find_source_files())
+    parsed = ensure_parsed(files, fallback=find_source_files)
     groups: dict[tuple[str, ...], list[tuple[str, str, int]]] = defaultdict(list)
     for pf in parsed:
         for node in ast.walk(pf.tree):

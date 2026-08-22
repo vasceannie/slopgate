@@ -6,12 +6,14 @@ __all__ = [
     "RetryLockPayload",
     "DenyKeyPattern",
     "HookStateSnapshot",
+    "RepairRequiredPayload",
     "IntStateSection",
     "ObjectStateSection",
     "fcntl",
     "msvcrt",
     "StateFileMixin",
     "StateSnapshotMixin",
+    "HookStateCorruptionError",
     "AdvisoryHitStateMixin",
     "DenyHitStateMixin",
     "FullReadStateMixin",
@@ -25,6 +27,7 @@ __all__ = [
 ]
 from ._models import (
     RetryLockPayload,
+    RepairRequiredPayload,
     DenyKeyPattern,
     HookStateSnapshot,
     IntStateSection,
@@ -32,7 +35,7 @@ from ._models import (
     fcntl,
     msvcrt,
 )
-from ._files import StateFileMixin, StateSnapshotMixin
+from ._files import HookStateCorruptionError, StateFileMixin, StateSnapshotMixin
 from ._keys import (
     AdvisoryHitStateMixin,
     DenyHitStateMixin,

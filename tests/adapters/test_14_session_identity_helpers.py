@@ -95,7 +95,13 @@ def test_identity_value_objects_apply_to_canonical_payloads() -> None:
         {"params": {"thread": {"id": "thread-1", "name": "Named thread"}}}
     )
     opencode_identity = opencode_session_identity(
-        {"info": {"id": "session-1", "title": "Named session"}}
+        {
+            "properties": {
+                "sessionID": "session-1",
+                "callID": "call-1",
+                "title": "Named session",
+            }
+        }
     )
     canonical: dict[str, object] = {}
 
@@ -116,4 +122,7 @@ def test_identity_value_objects_apply_to_canonical_payloads() -> None:
     )
     assert canonical["opencode_session_id"] == "session-1", (
         "OpenCode identity should preserve native session id metadata"
+    )
+    assert canonical["call_id"] == "call-1", (
+        "OpenCode identity should preserve native call id metadata"
     )

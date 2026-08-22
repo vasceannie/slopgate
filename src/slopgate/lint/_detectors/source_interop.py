@@ -58,7 +58,7 @@ _IMPORT_FANOUT_LIMIT = int(RUNTIME_POLICY_DEFAULTS["import_fanout_limit"])
 
 
 def _parsed_files(files: Sequence[Path | ParsedFile] | None) -> list[ParsedFile]:
-    return ensure_parsed(files, fallback=find_source_files())
+    return ensure_parsed(files, fallback=find_source_files)
 
 
 def _function_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:

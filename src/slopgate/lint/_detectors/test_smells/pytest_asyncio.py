@@ -113,7 +113,7 @@ def detect_pytest_asyncio_patterns(
 ) -> list[Violation]:
     """Find pytest-asyncio patterns that are unsafe for the project config."""
     violations: list[Violation] = []
-    for parsed_file in ensure_parsed(files, fallback=find_test_files()):
+    for parsed_file in ensure_parsed(files, fallback=find_test_files):
         if not is_pytest_path(parsed_file.rel):
             continue
         violations.extend(_async_test_violations(parsed_file))

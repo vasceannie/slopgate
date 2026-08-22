@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "GIT_BIN",
     "config_dir",
     "detect_root",
     "ensure_trace_directories",
@@ -20,6 +21,7 @@ __all__ = [
 from ._discovery import config_dir, detect_root, resolve_config_path
 from ._loader import load_config
 from ._repo import (
+    GIT_BIN,
     ensure_worktree_enrollment,
     enroll_repo,
     is_path_skipped,
@@ -33,6 +35,7 @@ from ._repo import (
 from ._settings import ensure_trace_directories
 
 __all__ = [
+    "GIT_BIN",
     "config_dir",
     "detect_root",
     "ensure_trace_directories",
