@@ -6,13 +6,18 @@ import slopgate.installer
 import slopgate.installer._shared
 from slopgate.constants import PLATFORM_CLAUDE
 from slopgate.installer._shared import (
+    UnsafeInstallPathError,
     backup_existing_file,
     backup_existing_file_and_report,
     base_invocation,
     coerce_hook_entries,
+    contained_scope_root,
     find_binary,
     merge_owned_hooks_into,
+    require_contained_install_path,
     require_json_object,
+    write_contained_json,
+    write_contained_text,
     write_json_with_backup,
 )
 
@@ -212,3 +217,116 @@ def test_write_json_with_backup_writes_formatted_json(tmp_path: Path) -> None:
     write_json_with_backup(target, payload, "output")
     written = json.loads(target.read_text(encoding="utf-8"))
     assert written == payload
+
+
+def test_require_contained_install_path_accepts_real_nested_file(tmp_path: Path) -> None:
+    target = tmp_path / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir()
+    resolved = require_contained_install_path(target, tmp_path)
+    assert resolved == target.resolve(), (
+        "contained real paths should resolve under the selected root"
+    )
+
+
+def test_require_contained_install_path_allows_symlink_root(tmp_path: Path) -> None:
+    real_root = tmp_path / "real-root"
+    real_root.mkdir()
+    linked_root = tmp_path / "linked-root"
+    linked_root.symlink_to(real_root)
+    target = linked_root / "plugins" / "slopgate-plugin.ts"
+    resolved = require_contained_install_path(target, linked_root)
+    assert resolved == real_root / "plugins" / "slopgate-plugin.ts", (
+        "a symlink install root is trusted; only hops after that root are checked"
+    )
+
+
+@pytest.mark.parametrize(
+    ("plant", "expected_fragment"),
+    [
+        pytest.param("leaf", "symlink", id="leaf-file"),
+        pytest.param("parent", "symlink", id="parent-dir"),
+        pytest.param("outside", "outside the selected install root", id="escaped-path"),
+    ],
+)
+def test_require_contained_install_path_rejects_unsafe_targets(
+    tmp_path: Path, plant: str, expected_fragment: str
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside" / "secret.ts"
+    outside.parent.mkdir()
+    outside.write_text("KEEP\n", encoding="utf-8")
+    if plant == "leaf":
+        target = root / "plugins" / "slopgate-plugin.ts"
+        target.parent.mkdir()
+        target.symlink_to(outside)
+    elif plant == "parent":
+        (root / "plugins").symlink_to(outside.parent)
+        target = root / "plugins" / "slopgate-plugin.ts"
+    else:
+        target = outside
+    with pytest.raises(UnsafeInstallPathError, match=expected_fragment):
+        require_contained_install_path(target, root)
+    assert outside.read_text(encoding="utf-8") == "KEEP\n", (
+        "rejected paths must leave the external target unchanged"
+    )
+
+
+def test_write_contained_text_replaces_real_file_and_keeps_backup(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir()
+    target.write_text("custom plugin\n", encoding="utf-8")
+    written = write_contained_text(target, "owned plugin\n", root=tmp_path, label="file")
+    assert written.read_text(encoding="utf-8") == "owned plugin\n", (
+        "safe writes should replace the real file in place"
+    )
+    backups = sorted(target.parent.glob("slopgate-plugin.ts.slopgate-bak-*"))
+    assert len(backups) == 1, "existing real files should be backed up before replace"
+    assert backups[0].read_text(encoding="utf-8") == "custom plugin\n"
+
+
+def test_write_contained_text_rejects_leaf_symlink_and_preserves_external(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside" / "secret.ts"
+    outside.parent.mkdir()
+    outside.write_text("KEEP\n", encoding="utf-8")
+    target = tmp_path / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir()
+    target.symlink_to(outside)
+    with pytest.raises(UnsafeInstallPathError, match="symlink"):
+        write_contained_text(target, "owned plugin\n", root=tmp_path, label="file")
+    assert outside.read_text(encoding="utf-8") == "KEEP\n", (
+        "leaf symlink writes must not overwrite the external target"
+    )
+    assert target.is_symlink(), "the planted leaf symlink must remain a symlink"
+
+
+def test_contained_scope_root_selects_project_or_user(tmp_path: Path) -> None:
+    project_root = tmp_path / "repo"
+    user_root = tmp_path / "home" / ".claude"
+    project_target = project_root / ".claude" / "settings.json"
+    user_target = user_root / "settings.json"
+    assert (
+        contained_scope_root(
+            project_target, project_root=project_root, user_root=user_root
+        )
+        == project_root
+    ), "paths under the project root must use the project root"
+    assert (
+        contained_scope_root(
+            user_target, project_root=project_root, user_root=user_root
+        )
+        == user_root
+    ), "paths outside the project root must use the user root"
+
+
+def test_write_contained_json_writes_formatted_object(tmp_path: Path) -> None:
+    target = tmp_path / "hooks" / "hooks.json"
+    payload: dict[str, object] = {"hooks": {}, "version": 1}
+    written = write_contained_json(target, payload, root=tmp_path, label="hooks")
+    assert json.loads(written.read_text(encoding="utf-8")) == payload, (
+        "contained JSON writes should match write_json_with_backup formatting"
+    )

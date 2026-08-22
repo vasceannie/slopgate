@@ -25,9 +25,12 @@ from slopgate.installer._install_scope import (
 )
 from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
-    backup_existing_file_and_report,
+    UnsafeInstallPathError,
+    contained_scope_root,
     print_binary_install_summary,
     remove_file_with_backup,
+    report_contained_install_path,
+    write_contained_text,
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
 from slopgate.util.platform import user_config_dir
@@ -38,11 +41,12 @@ _PLUGIN_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL = (
     '{"placeholder":"__SLOPGATE_OPENCODE_IDENTITY__"}'
 )
+OPENCODE_TYPES_TARGET = "1.18.21"
 PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Slopgate Plugin",
     "const SLOPGATE_BIN",
-    "const SLOPGATE_ARGV",
 )
+_VERSION_TOKEN = re.compile(r"v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)")
 
 
 class OpenCodeTemplateError(RuntimeError):
@@ -99,6 +103,11 @@ def _opencode_runtime_version() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _canonical_version(value: str) -> str:
+    match = _VERSION_TOKEN.search(value.strip())
+    return match.group(1) if match else value.strip()
+
+
 def collect_opencode_install_identity(
     binary: str,
     *,
@@ -127,12 +136,19 @@ def collect_opencode_install_identity(
     installed = installed_value if isinstance(installed_value, str) else ""
     runtime = _opencode_runtime_version() if probe_runtime else ""
     observed = [value for value in (runtime, declared, lock, installed) if value]
-    status = "compatible" if observed and len(set(observed)) == 1 else "stale"
-    remediation = (
-        "none"
-        if status == "compatible"
-        else "Reinstall OpenCode plugin dependencies, then restart OpenCode."
-    )
+    canonical = {_canonical_version(value) for value in observed}
+    if not observed:
+        status = "unknown"
+    elif len(canonical) == 1:
+        status = "compatible"
+    else:
+        status = "stale"
+    if status == "compatible":
+        remediation = "none"
+    elif status == "unknown":
+        remediation = "OpenCode identity could not be observed."
+    else:
+        remediation = "Reinstall OpenCode plugin dependencies, then restart OpenCode."
     return {
         "status": status,
         "opencode_version": runtime,
@@ -166,21 +182,35 @@ def render_opencode_plugin(
     return rendered.replace(_PLUGIN_IDENTITY_PLACEHOLDER_LITERAL, identity_json)
 
 
+def _contained_root_for(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_opencode_config_dir()
+    )
+
+
 def _install_opencode_at(
-    target: Path, content: str, binary: str, *, dry_run: bool
+    target: Path,
+    content: str,
+    binary: str,
+    *,
+    dry_run: bool,
+    root: Path,
 ) -> int:
-    target_dir = target.parent
+    if report_contained_install_path(target, root) is None:
+        return 1
     if dry_run:
         print(f"Would write: {target}")
         print(f"Binary: {binary}")
-        if target.exists():
+        if target.exists() and not target.is_symlink():
             print(f"Would back up existing file before writing: {target}")
         print(content[:500] + "...")
         return 0
-    target_dir.mkdir(parents=True, exist_ok=True)
-    backup_existing_file_and_report(target, "file")
-    _ = target.write_text(content, encoding="utf-8")
-    print_binary_install_summary(f"Installed slopgate plugin to {target}", binary)
+    try:
+        written = write_contained_text(target, content, root=root, label="file")
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
+        return 1
+    print_binary_install_summary(f"Installed slopgate plugin to {written}", binary)
     return 0
 
 
@@ -204,6 +234,7 @@ def install_opencode(
             f"installed={identity['plugin_installed_version'] or UNKNOWN_VALUE}. "
             f"{identity['remediation']}"
         )
+    root = resolve_project_root(project_root)
     paths = resolve_scoped_install_paths(
         scope,
         project_root,
@@ -219,7 +250,13 @@ def install_opencode(
     completed: list[Path] = []
     last_status = 0
     for target in paths:
-        status = _install_opencode_at(target, content, binary, dry_run=dry_run)
+        status = _install_opencode_at(
+            target,
+            content,
+            binary,
+            dry_run=dry_run,
+            root=_contained_root_for(target, root),
+        )
         if status != 0:
             if not dry_run:
                 rollback_completed_installs(

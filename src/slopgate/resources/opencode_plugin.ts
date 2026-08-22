@@ -65,10 +65,15 @@ interface OpenCodeEventEnvelope {
   event: OpenCodeEvent
 }
 
+/** Official types target: @opencode-ai/plugin@1.18.21 */
 interface OpenCodePluginContext {
   client: OpenCodeClient
+  project?: unknown
   directory: string
-  worktree?: string
+  worktree: string
+  experimental_workspace?: unknown
+  serverUrl?: URL
+  $?: unknown
 }
 
 interface OpenCodePluginHandlers {
@@ -90,7 +95,10 @@ interface OpenCodeCustomTool {
   execute(args: Record<string, unknown>): Promise<string>
 }
 
-type Plugin = (context: OpenCodePluginContext) => Promise<OpenCodePluginHandlers>
+type Plugin = (
+  context: OpenCodePluginContext,
+  options?: Record<string, unknown>,
+) => Promise<OpenCodePluginHandlers>
 
 interface BunFileSink {
   write(data: string): number | undefined
@@ -149,6 +157,14 @@ const READ_ONLY_TOOLS = new Set([
   "webfetch",
   "websearch",
 ])
+const KNOWN_EFFECT_TOOLS = new Set([
+  ...READ_ONLY_TOOLS,
+  "write",
+  "edit",
+  "apply_patch",
+  "bash",
+  "todowrite",
+])
 const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
 const VERIFY_TOOL = "slopgate_verify_repair"
 
@@ -174,7 +190,7 @@ interface OpenCodeToolAfterInput extends OpenCodeToolHookInput {
 
 interface OpenCodeToolAfterOutput extends Record<string, unknown> {
   title: string
-  output: unknown
+  output: string
   metadata: Record<string, unknown>
 }
 
@@ -472,6 +488,15 @@ function isAllowedWhileRepairRequired(
   return READ_ONLY_TOOLS.has(toolName.toLowerCase()) || isExplicitRepairCommand(toolName, args)
 }
 
+function isKnownEffectTool(toolName: string, args: Record<string, unknown>): boolean {
+  const lowered = toolName.toLowerCase()
+  return (
+    KNOWN_EFFECT_TOOLS.has(lowered)
+    || lowered === VERIFY_TOOL
+    || isExplicitRepairCommand(toolName, args)
+  )
+}
+
 export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) => {
   const scopedDirectory = worktree || directory
 
@@ -581,6 +606,9 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
           `[slopgate] repair required for generation ${pending.generation || "unknown"}; `
           + "use read-only tools, repair, or clean verification first.",
         )
+      }
+      if (!isKnownEffectTool(toolName, outputArgs)) {
+        throw new Error("[slopgate] unknown OpenCode tool effect; denying by default.")
       }
       const preToolArgs = cloneArgs(outputArgs)
       const payload = payloadForEvent(

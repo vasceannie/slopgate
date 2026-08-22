@@ -154,8 +154,8 @@
       "evidence_tier": "pinned-source",
       "status": "conservative",
       "public_contract": false,
-      "test_path": "tests/test_opencode_installer.py",
-      "test_name": "test_opencode_plugin_records_conservative_tool_outcome_axes"
+      "test_path": "tests/adapters/test_opencode_projection.py",
+      "test_name": "test_unresolved_mutating_projections_are_blocked"
     },
     {
       "id": "verification-generation-clear",

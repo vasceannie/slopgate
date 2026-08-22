@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from slopgate.util import logger
-
 from .models import PatchOperation, PatchSection
 
 _HEADERS: tuple[tuple[str, PatchOperation], ...] = (
@@ -16,7 +14,6 @@ _UpdateChunk = tuple[tuple[str, ...], tuple[str, ...]]
 
 def parse_patch(text: str) -> tuple[PatchSection, ...] | None:
     """Parse the documented OpenCode patch envelope into file sections."""
-    logger.debug("OpenCode patch projection parse started")
     lines = text.splitlines()
     valid_envelope = (
         len(lines) >= 3
@@ -50,7 +47,6 @@ def parse_patch(text: str) -> tuple[PatchSection, ...] | None:
 
 
 def _parse_update_chunks(lines: tuple[str, ...]) -> tuple[_UpdateChunk, ...]:
-    logger.debug("OpenCode patch projection update chunks parsed")
     chunks: list[_UpdateChunk] = []
     old_lines: list[str] = []
     new_lines: list[str] = []
@@ -74,7 +70,6 @@ def _parse_update_chunks(lines: tuple[str, ...]) -> tuple[_UpdateChunk, ...]:
 
 
 def _unique_line_match(source: list[str], expected: tuple[str, ...]) -> int | None:
-    logger.debug("OpenCode patch projection exact line match resolved")
     width = len(expected)
     matches = [
         index
@@ -86,7 +81,6 @@ def _unique_line_match(source: list[str], expected: tuple[str, ...]) -> int | No
 
 def apply_update(source: str, lines: tuple[str, ...]) -> str | None:
     """Apply exact, uniquely matching update hunks to in-memory content."""
-    logger.debug("OpenCode patch projection update started")
     chunks = _parse_update_chunks(lines)
     if not chunks:
         return None

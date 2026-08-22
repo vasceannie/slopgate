@@ -88,6 +88,75 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     )
 
 
+def test_opencode_user_install_refuses_leaf_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(platform, "is_windows", lambda: False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    outside = tmp_path / "outside" / "secret.ts"
+    outside.parent.mkdir()
+    outside.write_text("KEEP\n", encoding="utf-8")
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(outside)
+    assert _opencode.install_opencode(dry_run=False) == 1, (
+        "user install must refuse a leaf symlink"
+    )
+    assert outside.read_text(encoding="utf-8") == "KEEP\n", (
+        "external symlink targets must remain unchanged"
+    )
+    assert target.is_symlink(), "the planted leaf symlink must not be replaced"
+
+
+def test_opencode_uninstall_removes_legacy_owned_plugin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(platform, "is_windows", lambda: False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "/* OpenCode Slopgate Plugin */\nconst SLOPGATE_BIN = \"slopgate\";\n",
+        encoding="utf-8",
+    )
+
+    assert _opencode.uninstall_opencode(dry_run=False) == 0, (
+        "legacy owned plugins must remain uninstallable"
+    )
+    assert not target.exists(), "legacy owned plugin should be removed"
+
+
+def test_official_opencode_types_match_declared_target() -> None:
+    matrix = json.loads(
+        (Path(__file__).with_name("fixtures") / "opencode_hook_contract_matrix.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
+    target = matrix["compatibility_target"]["version"]
+
+    assert target == _opencode.OPENCODE_TYPES_TARGET, (
+        "installer types target must match the published OpenCode compatibility version"
+    )
+    assert f"@opencode-ai/plugin@{target}" in plugin, (
+        "generated plugin types must name the official OpenCode package target"
+    )
+    assert "project?: unknown" in plugin, "official PluginInput.project is missing"
+    assert "experimental_workspace?: unknown" in plugin, (
+        "official PluginInput.experimental_workspace is missing"
+    )
+    assert "serverUrl?: URL" in plugin, "official PluginInput.serverUrl is missing"
+    assert "options?: Record<string, unknown>" in plugin, (
+        "official Plugin options argument is missing"
+    )
+    assert "output: string" in plugin, "official after-hook output must be a string"
+
+
 def test_opencode_uninstall_refuses_unrecognized_plugin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -218,6 +287,8 @@ def test_opencode_plugin_records_conservative_tool_outcome_axes() -> None:
         "tool_title: output.title",
         "tool_metadata: output.metadata",
         "tool_output: output.output",
+        "unknown OpenCode tool effect; denying by default.",
+        "isKnownEffectTool(",
     )
     assert all(fragment in plugin for fragment in required_fragments), (
         "OpenCode outcomes must use typed fields and conservative evidence tiers"

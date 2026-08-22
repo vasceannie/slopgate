@@ -5,11 +5,25 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 from slopgate._argparse_types import SubparserRegistry
 
 from slopgate.config import load_config
 from slopgate.state import HookStateCorruptionError, HookStateStore
+
+
+def _lint_check_command() -> list[str]:
+    return [sys.executable, "-m", "slopgate", "lint", "check"]
+
+
+def _run_lint_check(cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        _lint_check_command(),
+        cwd=cwd,
+        check=False,
+        text=True,
+    )
 
 
 def _store(cwd: str) -> HookStateStore:
@@ -41,14 +55,11 @@ def cmd_repair_verify(args: argparse.Namespace) -> int:
     if required.get("generation") != args.generation:
         print(json.dumps({"status": "generation_mismatch"}, sort_keys=True))
         return 1
-    completed = subprocess.run(
-        ["slopgate", "lint", "check"],
-        cwd=Path(args.cwd).resolve(),
-        check=False,
-    )
+    completed = _run_lint_check(Path(args.cwd).resolve())
     if completed.returncode != 0:
         return completed.returncode
     if not store.clear_repair_required(args.generation):
+        print(json.dumps({"status": "generation_mismatch"}, sort_keys=True))
         return 1
     print(json.dumps({"status": "cleared", "generation": args.generation}))
     return 0

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from slopgate.installer._codex import enable_codex_hooks_toml
+from slopgate.installer._shared import UnsafeInstallPathError
 
 
 class TestEnableCodexHooksToml:
@@ -97,3 +100,16 @@ class TestEnableCodexHooksToml:
         assert "hooks = true" in content, (
             f"should set hooks = true preserving comment, got: {content!r}"
         )
+
+    def test_refuses_leaf_symlink_and_preserves_external(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside" / "secret.toml"
+        outside.parent.mkdir()
+        outside.write_text("KEEP = true\n", encoding="utf-8")
+        config_path = tmp_path / "config.toml"
+        config_path.symlink_to(outside)
+        with pytest.raises(UnsafeInstallPathError, match="symlink"):
+            enable_codex_hooks_toml(config_path)
+        assert outside.read_text(encoding="utf-8") == "KEEP = true\n", (
+            "TOML leaf symlink writes must not overwrite the external target"
+        )
+        assert config_path.is_symlink(), "the planted leaf symlink must remain a symlink"

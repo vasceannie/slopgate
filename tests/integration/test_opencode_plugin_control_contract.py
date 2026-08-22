@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -96,7 +97,7 @@ if ({json.dumps(native_event)} === "file.edited") {{
   await handlers.event({{ event: {{ type: "file.edited", properties: {{ file: "sample.py" }} }} }})
 }} else {{
   hookReturn = await handlers["tool.execute.before"](
-    {{ tool: {json.dumps("bash" if response_mode.startswith("repair-required-command") else "custom_mutator" if response_mode == "repair-required" else "read" if response_mode == "repair-required-read" else "write")}, sessionID: "session", callID: "call" }},
+    {{ tool: {json.dumps("bash" if response_mode.startswith("repair-required-command") else "custom_mutator" if response_mode in {"repair-required", "unknown-effect"} else "read" if response_mode == "repair-required-read" else "write")}, sessionID: "session", callID: "call" }},
     output,
   )
 }}
@@ -197,3 +198,73 @@ def test_typed_hook_return_value_is_ignored(tmp_path: Path) -> None:
     observation = object_dict(json.loads(result.stdout))
 
     assert "hookReturn" not in observation, "typed hook must resolve without a value"
+
+
+def test_generated_plugin_denies_unknown_effect_tool(tmp_path: Path) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", "unknown-effect")
+
+    assert result.returncode != 0, "unknown custom tools must be denied by the plugin"
+    assert "unknown OpenCode tool effect" in result.stderr
+
+
+def _run_plugin_with_real_slopgate(
+    tmp_path: Path,
+    tool_name: str,
+    tool_args: dict[str, object],
+) -> subprocess.CompletedProcess[str]:
+    (tmp_path / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
+    plugin_path = tmp_path / "slopgate-plugin.ts"
+    plugin_path.write_text(
+        render_opencode_plugin(
+            resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
+            sys.executable,
+            {"opencode_version": "1.18.21"},
+        ),
+        encoding="utf-8",
+    )
+    runner = tmp_path / "runner.ts"
+    runner.write_text(
+        f"""
+import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
+
+const handlers = await EnforcerPlugin({{
+  client: {{ app: {{ log: async () => {{}} }} }},
+  directory: {json.dumps(str(tmp_path))},
+  worktree: {json.dumps(str(tmp_path))},
+}})
+await handlers["tool.execute.before"](
+  {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
+  {{ args: {json.dumps(tool_args)} }},
+)
+console.log("allowed")
+""",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env.pop("SLOPGATE_BIN", None)
+    env["SLOPGATE_DAEMON_SOCKET"] = str(tmp_path / "no-daemon.sock")
+    env["SLOPGATE_ROOT"] = str(tmp_path / "slopgate-root")
+    return subprocess.run(
+        ["bun", "run", str(runner)],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_generated_plugin_blocks_invalid_mutating_projection(tmp_path: Path) -> None:
+    result = _run_plugin_with_real_slopgate(
+        tmp_path, "apply_patch", {"patchText": "not a patch"}
+    )
+    assert result.returncode != 0, "unresolved mutating projections must not execute"
+    assert "invalid" in result.stderr, "the plugin must surface the engine denial"
+
+
+def test_generated_plugin_allows_known_read_only_tool(tmp_path: Path) -> None:
+    result = _run_plugin_with_real_slopgate(tmp_path, "read", {"filePath": "sample.py"})
+    assert result.returncode == 0, result.stderr
+    assert "allowed" in result.stdout

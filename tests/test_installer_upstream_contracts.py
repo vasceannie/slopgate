@@ -45,6 +45,7 @@ def test_codex_install_prompts_for_hook_review(
         codex_hooks_block("slopgate"),
         "slopgate",
         dry_run=False,
+        root=tmp_path,
     )
 
     assert status == 0

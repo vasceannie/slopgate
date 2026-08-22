@@ -18,12 +18,15 @@ from slopgate.installer._shared import (
     HOOK_TIMEOUT_LONG,
     HOOK_TIMEOUT_SHORT,
     HOOK_TIMEOUT_STANDARD,
+    UnsafeInstallPathError,
     command_is_slopgate_hook,
+    contained_scope_root,
     hook_command,
     print_binary_install_summary,
+    report_contained_install_path,
     require_json_object,
     uninstall_hooks_file,
-    write_json_with_backup,
+    write_contained_json,
 )
 
 _CursorHookEntry = dict[str, object]
@@ -57,6 +60,16 @@ def cursor_user_hooks_path() -> Path:
 
 def cursor_project_hooks_path(project_root: Path) -> Path:
     return project_root.resolve() / ".cursor" / "hooks.json"
+
+
+def _cursor_user_root() -> Path:
+    return Path.home() / ".cursor"
+
+
+def _cursor_contained_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_cursor_user_root()
+    )
 
 
 def cursor_hooks_block(binary: str) -> _CursorHooks:
@@ -129,14 +142,20 @@ def _remove_cursor_hooks(existing_hooks: object) -> _CursorHooks:
 
 
 def _install_cursor_at(
-    hooks_path: Path, binary: str, hooks: _CursorHooks, *, dry_run: bool
+    hooks_path: Path,
+    binary: str,
+    hooks: _CursorHooks,
+    *,
+    dry_run: bool,
+    root: Path,
 ) -> int:
+    if report_contained_install_path(hooks_path, root) is None:
+        return 1
     if dry_run:
         print(f"Would write: {hooks_path}")
         print(f"Binary: {binary}")
         print(json.dumps({"version": 1, "hooks": hooks}, indent=2))
         return 0
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, object]
     if not hooks_path.exists():
         existing = {"version": 1}
@@ -147,7 +166,11 @@ def _install_cursor_at(
         existing = parsed
     existing.setdefault("version", 1)
     existing["hooks"] = _merge_cursor_hooks(existing.get("hooks"), hooks)
-    write_json_with_backup(hooks_path, existing, "hooks")
+    try:
+        write_contained_json(hooks_path, existing, root=root, label="hooks")
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
+        return 1
     print_binary_install_summary(f"Installed slopgate hooks into {hooks_path}", binary)
     return 0
 
@@ -167,7 +190,10 @@ def install_cursor(
     completed: list[Path] = []
     last_status = 0
     for hooks_path in paths:
-        status = _install_cursor_at(hooks_path, binary, hooks, dry_run=dry_run)
+        contained_root = _cursor_contained_root(hooks_path, root)
+        status = _install_cursor_at(
+            hooks_path, binary, hooks, dry_run=dry_run, root=contained_root
+        )
         if status != 0:
             if not dry_run:
                 for rollback_path in completed:
@@ -176,6 +202,7 @@ def install_cursor(
                         label="Cursor",
                         remove_owned=_remove_cursor_hooks,
                         dry_run=False,
+                        root=_cursor_contained_root(rollback_path, root),
                     )
             return status
         completed.append(hooks_path)
@@ -200,6 +227,7 @@ def uninstall_cursor(
             label="Cursor",
             remove_owned=_remove_cursor_hooks,
             dry_run=dry_run,
+            root=_cursor_contained_root(hooks_path, root),
         )
         if status != 0:
             return status

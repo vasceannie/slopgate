@@ -18,14 +18,19 @@ from slopgate.installer._install_scope import (
 import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
+    UnsafeInstallPathError,
     backup_existing_file_and_report,
+    contained_scope_root,
     hook_command,
     merge_owned_hooks_into,
     print_binary_install_summary,
     remove_owned_hooks,
+    report_contained_install_path,
+    require_contained_install_path,
     require_json_object,
     uninstall_hooks_file,
-    write_json_with_backup,
+    write_contained_json,
+    write_contained_text,
 )
 
 __all__ = ["install_codex", "uninstall_codex"]
@@ -65,6 +70,16 @@ def _codex_user_hooks_path() -> Path:
 
 def _codex_project_hooks_path(project_root: Path) -> Path:
     return project_root / ".codex" / "hooks.json"
+
+
+def _codex_user_root() -> Path:
+    return Path.home() / ".codex"
+
+
+def _codex_contained_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_codex_user_root()
+    )
 
 
 def _codex_config_path_for_hooks(hooks_path: Path) -> Path:
@@ -129,7 +144,9 @@ def _find_codex_feature_flags(
     return (hooks_index, codex_hooks_indexes)
 
 
-def _existing_codex_toml_is_valid(config_path: Path) -> bool:
+def _existing_codex_toml_is_valid(config_path: Path, *, root: Path) -> bool:
+    if report_contained_install_path(config_path, root) is None:
+        return False
     if not config_path.exists():
         return True
     try:
@@ -146,7 +163,6 @@ def _drop_lines(lines: list[str], indexes: list[int]) -> None:
 
 
 def _set_existing_hooks_flag(
-    config_path: Path,
     lines: list[str],
     hooks_index: int,
     codex_hooks_indexes: list[int],
@@ -155,11 +171,10 @@ def _set_existing_hooks_flag(
     if match:
         lines[hooks_index] = f"{match.group(1)}true{match.group(2)}"
     _drop_lines(lines, codex_hooks_indexes)
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _replace_legacy_codex_hooks_flag(
-    config_path: Path, lines: list[str], codex_hooks_indexes: list[int]
+    lines: list[str], codex_hooks_indexes: list[int]
 ) -> None:
     first_index = codex_hooks_indexes[0]
     match = _CODEX_HOOKS_RE.match(lines[first_index])
@@ -168,42 +183,55 @@ def _replace_legacy_codex_hooks_flag(
             f"{match.group(1)}hooks{match.group(2)}true{match.group(3)}"
         )
     _drop_lines(lines, codex_hooks_indexes[1:])
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def enable_codex_hooks_toml(config_path: Path) -> None:
+def enable_codex_hooks_toml(config_path: Path, *, root: Path | None = None) -> None:
     """Enable the current Codex hooks feature flag without rewriting config.toml."""
-    text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    write_root = config_path.parent if root is None else root
+    require_contained_install_path(config_path, write_root)
+    text = (
+        config_path.read_text(encoding="utf-8")
+        if config_path.exists() and not config_path.is_symlink()
+        else ""
+    )
     lines = text.splitlines()
     features_index, next_section_index = _feature_section_bounds(lines)
     if features_index is None:
         suffix = "" if not lines else "\n\n"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(
-            text.rstrip("\n") + suffix + "[features]\nhooks = true\n", encoding="utf-8"
+        new_text = text.rstrip("\n") + suffix + "[features]\nhooks = true\n"
+    else:
+        hooks_index, codex_hooks_indexes = _find_codex_feature_flags(
+            lines, features_index + 1, next_section_index
         )
-        return
-    hooks_index, codex_hooks_indexes = _find_codex_feature_flags(
-        lines, features_index + 1, next_section_index
+        if hooks_index is not None:
+            _set_existing_hooks_flag(lines, hooks_index, codex_hooks_indexes)
+        elif codex_hooks_indexes:
+            _replace_legacy_codex_hooks_flag(lines, codex_hooks_indexes)
+        else:
+            lines.insert(features_index + 1, "hooks = true")
+        new_text = "\n".join(lines) + "\n"
+    write_contained_text(
+        config_path, new_text, root=write_root, label="config", backup=False
     )
-    if hooks_index is not None:
-        _set_existing_hooks_flag(config_path, lines, hooks_index, codex_hooks_indexes)
-        return
-    if codex_hooks_indexes:
-        _replace_legacy_codex_hooks_flag(config_path, lines, codex_hooks_indexes)
-        return
-    lines.insert(features_index + 1, "hooks = true")
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _install_codex_at(
-    hooks_path: Path, hooks: _CodeHooks, binary: str, *, dry_run: bool
+    hooks_path: Path,
+    hooks: _CodeHooks,
+    binary: str,
+    *,
+    dry_run: bool,
+    root: Path,
 ) -> int:
+    config_path = _codex_config_path_for_hooks(hooks_path)
+    if report_contained_install_path(hooks_path, root) is None:
+        return 1
+    if not _existing_codex_toml_is_valid(config_path, root=root):
+        return 1
     if dry_run:
         print(f"Would write: {hooks_path}")
         print(json.dumps({"hooks": hooks}, indent=2))
         return 0
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
     if not hooks_path.exists():
         existing = {}
     elif (
@@ -211,13 +239,14 @@ def _install_codex_at(
     ) is None:
         return 1
     merge_owned_hooks_into(existing, cast(dict[str, list[dict[str, object]]], hooks))
-    write_json_with_backup(hooks_path, existing, "hooks")
-    config_path = _codex_config_path_for_hooks(hooks_path)
-    if not _existing_codex_toml_is_valid(config_path):
+    try:
+        write_contained_json(hooks_path, existing, root=root, label="hooks")
+        if config_path.exists() and not config_path.is_symlink():
+            backup_existing_file_and_report(config_path, "config")
+        enable_codex_hooks_toml(config_path, root=root)
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
         return 1
-    if config_path.exists():
-        backup_existing_file_and_report(config_path, "config")
-    enable_codex_hooks_toml(config_path)
     print_binary_install_summary(
         f"Installed slopgate hooks into {hooks_path}\nEnabled hooks feature flag in {config_path}",
         binary,
@@ -239,12 +268,18 @@ def install_codex(
         project_path=_codex_project_hooks_path(root),
     )
     for hooks_path in paths:
-        if not _existing_codex_toml_is_valid(_codex_config_path_for_hooks(hooks_path)):
+        contained_root = _codex_contained_root(hooks_path, root)
+        if not _existing_codex_toml_is_valid(
+            _codex_config_path_for_hooks(hooks_path), root=contained_root
+        ):
             return 1
     completed: list[Path] = []
     last_status = 0
     for hooks_path in paths:
-        status = _install_codex_at(hooks_path, hooks, binary, dry_run=dry_run)
+        contained_root = _codex_contained_root(hooks_path, root)
+        status = _install_codex_at(
+            hooks_path, hooks, binary, dry_run=dry_run, root=contained_root
+        )
         if status != 0:
             if not dry_run:
                 for rollback_path in completed:
@@ -253,6 +288,7 @@ def install_codex(
                         label="Codex",
                         remove_owned=remove_owned_hooks,
                         dry_run=False,
+                        root=_codex_contained_root(rollback_path, root),
                     )
             return status
         completed.append(hooks_path)
@@ -273,7 +309,11 @@ def uninstall_codex(
     last_status = 0
     for hooks_path in paths:
         status = uninstall_hooks_file(
-            hooks_path, label="Codex", remove_owned=remove_owned_hooks, dry_run=dry_run
+            hooks_path,
+            label="Codex",
+            remove_owned=remove_owned_hooks,
+            dry_run=dry_run,
+            root=_codex_contained_root(hooks_path, root),
         )
         if status != 0:
             return status

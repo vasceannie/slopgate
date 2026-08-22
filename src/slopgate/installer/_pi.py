@@ -18,10 +18,13 @@ from slopgate.installer._install_scope import (
 )
 from slopgate.installer.install_flow import rollback_completed_installs
 from slopgate.installer._shared import (
-    backup_existing_file_and_report,
+    UnsafeInstallPathError,
+    contained_scope_root,
     print_binary_install_summary,
     remove_file_with_backup,
-    write_json_with_backup,
+    report_contained_install_path,
+    write_contained_json,
+    write_contained_text,
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
 
@@ -82,6 +85,16 @@ def pi_project_extension_path(project_root: Path) -> Path:
         / "extensions"
         / _EXTENSION_DIR_NAME
         / _EXTENSION_ENTRY_NAME
+    )
+
+
+def _pi_user_root() -> Path:
+    return Path.home() / ".pi"
+
+
+def _pi_contained_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_pi_user_root()
     )
 
 
@@ -170,11 +183,13 @@ def _remove_empty_parent(path: Path, *, dry_run: bool) -> None:
         return
 
 
-def _write_pi_json(path: Path, payload: object, label: str, *, dry_run: bool) -> None:
+def _write_pi_json(
+    path: Path, payload: object, label: str, *, dry_run: bool, root: Path
+) -> None:
     if dry_run:
         print(f"Would write: {path}")
         return
-    write_json_with_backup(path, payload, label)
+    write_contained_json(path, payload, root=root, label=label)
 
 
 def _pi_template_text() -> str | None:
@@ -206,30 +221,39 @@ def _cleanup_migrated_pi_extensions(target: Path, *, dry_run: bool) -> int:
     return status
 
 
-def _install_pi_at(target: Path, content: str, binary: str, *, dry_run: bool) -> int:
+def _install_pi_at(
+    target: Path, content: str, binary: str, *, dry_run: bool, root: Path
+) -> int:
     config_path = _config_path_for(target)
     package_path = _package_path_for(target)
+    for path in (target, config_path, package_path):
+        if report_contained_install_path(path, root) is None:
+            return 1
     if dry_run:
         print(f"Would write: {target}")
         print(f"Would write: {config_path}")
         print(f"Would write: {package_path}")
         print(f"Binary: {binary}")
-        if target.exists():
+        if target.exists() and not target.is_symlink():
             print(f"Would back up existing file before writing: {target}")
-        if config_path.exists():
+        if config_path.exists() and not config_path.is_symlink():
             print(f"Would back up existing file before writing: {config_path}")
-        if package_path.exists():
+        if package_path.exists() and not package_path.is_symlink():
             print(f"Would back up existing file before writing: {package_path}")
         _cleanup_migrated_pi_extensions(target, dry_run=True)
         print(content[:500] + "...")
         return 0
-    target.parent.mkdir(parents=True, exist_ok=True)
-    backup_existing_file_and_report(target, "file")
-    target.write_text(content, encoding="utf-8")
-    _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=False)
-    _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=False)
+    try:
+        written = write_contained_text(target, content, root=root, label="file")
+        _write_pi_json(config_path, _CONFIG_PAYLOAD, "file", dry_run=False, root=root)
+        _write_pi_json(package_path, _PACKAGE_PAYLOAD, "file", dry_run=False, root=root)
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
+        return 1
     status = _cleanup_migrated_pi_extensions(target, dry_run=False)
-    print_binary_install_summary(f"Installed slopgate Pi extension to {target}", binary)
+    print_binary_install_summary(
+        f"Installed slopgate Pi extension to {written}", binary
+    )
     return status
 
 
@@ -240,6 +264,7 @@ def install_pi(
     if template_text is None:
         return 1
     binary = slopgate.installer._shared.find_binary()
+    root = resolve_project_root(project_root)
     paths = resolve_scoped_install_paths(
         scope,
         project_root,
@@ -253,7 +278,13 @@ def install_pi(
         return 1
     completed: list[Path] = []
     for target in paths:
-        status = _install_pi_at(target, content, binary, dry_run=dry_run)
+        status = _install_pi_at(
+            target,
+            content,
+            binary,
+            dry_run=dry_run,
+            root=_pi_contained_root(target, root),
+        )
         if status != 0:
             rollback_completed_installs(
                 completed,

@@ -5,18 +5,15 @@ from __future__ import annotations
 import hashlib
 import errno
 import os
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
-
-from slopgate.util import logger
 
 from .models import Snapshot, SnapshotStatus
 
 
 @contextmanager
-def _closing_descriptor(descriptor: int) -> Iterator[int]:
-    logger.debug("OpenCode projection descriptor closing", descriptor=descriptor)
+def _closing_descriptor(descriptor: int) -> Generator[int]:
     try:
         yield descriptor
     finally:
@@ -24,7 +21,6 @@ def _closing_descriptor(descriptor: int) -> Iterator[int]:
 
 
 def _directory_flags() -> int:
-    logger.debug("OpenCode projection directory flags resolved")
     nofollow = getattr(os, "O_NOFOLLOW", None)
     directory = getattr(os, "O_DIRECTORY", None)
     if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
@@ -33,7 +29,6 @@ def _directory_flags() -> int:
 
 
 def _open_directory(path: Path) -> int:
-    logger.debug("OpenCode projection directory opened", path=str(path))
     resolved = path.resolve(strict=True)
     flags = _directory_flags()
     with ExitStack() as descriptors:
@@ -48,7 +43,6 @@ def _open_directory(path: Path) -> int:
 
 
 def _open_relative_file(root: Path, relative: str) -> int:
-    logger.debug("OpenCode projection relative file opened", path=relative)
     parts = Path(relative).parts
     if not parts or any(part in {"", ".", ".."} for part in parts):
         raise OSError(errno.EINVAL, "snapshot path must be a non-empty relative path")
@@ -64,7 +58,6 @@ def _open_relative_file(root: Path, relative: str) -> int:
 
 
 def _identity_key(stat_result: os.stat_result) -> tuple[int, int, int, int]:
-    logger.debug("OpenCode projection file identity captured")
     return (
         stat_result.st_dev,
         stat_result.st_ino,
@@ -75,7 +68,6 @@ def _identity_key(stat_result: os.stat_result) -> tuple[int, int, int, int]:
 
 def read_snapshot(root: Path, relative: str) -> Snapshot | SnapshotStatus:
     """Read content only when file identity is stable across the read."""
-    logger.debug("OpenCode projection snapshot started", path=relative)
     try:
         descriptor = _open_relative_file(root, relative)
     except FileNotFoundError:

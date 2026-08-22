@@ -118,9 +118,9 @@ def patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
 
 
 def unique_content_targets(targets: list[ContentTarget]) -> list[ContentTarget]:
-    unique_by_key: dict[tuple[str, str, str], ContentTarget] = {}
+    unique_by_key: dict[tuple[str, str], ContentTarget] = {}
     for target in targets:
-        key = (target.path, target.content, target.source)
+        key = (target.path, target.content)
         _ = unique_by_key.setdefault(key, target)
     return list(unique_by_key.values())
 

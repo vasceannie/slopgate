@@ -8,12 +8,13 @@ from typing import Final, Literal, TypeAlias
 
 from slopgate._types import ObjectDict, ObjectMapping
 from slopgate.constants import METADATA_CONTENT, METADATA_PATH
-from slopgate.util import logger
 
 OPENCODE_TOOL_CONTRACT_VERSION: Final = "slopgate-opencode-projection-v1"
 PROJECTION_KEY: Final = "_slopgate_projection"
 
-ProjectionStatus: TypeAlias = Literal["projected", "invalid", "stale", "unsupported"]
+ProjectionStatus: TypeAlias = Literal[
+    "projected", "invalid", "stale", "unsupported", "protocol_mismatch"
+]
 SnapshotStatus: TypeAlias = Literal["invalid", "missing", "stale"]
 PatchOperation: TypeAlias = Literal["add", "update", "delete"]
 
@@ -40,7 +41,6 @@ class ProjectedFile:
     preimage_sha256: str | None
 
     def to_dict(self) -> ObjectDict:
-        logger.debug("OpenCode projected file serialized", path=self.path)
         return {
             METADATA_PATH: self.path,
             METADATA_CONTENT: self.content,
@@ -55,11 +55,6 @@ class Projection:
     files: tuple[ProjectedFile, ...] = ()
 
     def to_dict(self) -> ObjectDict:
-        logger.debug(
-            "OpenCode projection serialized",
-            status=self.status,
-            files_count=len(self.files),
-        )
         return {
             "status": self.status,
             "contract_version": OPENCODE_TOOL_CONTRACT_VERSION,

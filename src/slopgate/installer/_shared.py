@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import shlex
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
@@ -277,6 +279,132 @@ def merge_owned_hooks_into(
     config["hooks"] = merge_owned_hooks(config.get("hooks"), managed_hooks)
 
 
+class UnsafeInstallPathError(ValueError):
+    """Raised when an installer path escapes its selected root via a symlink."""
+
+
+def require_contained_install_path(target: Path, root: Path) -> Path:
+    """Return the path under resolved root if no post-root component is a symlink."""
+    root_lex = Path(os.path.abspath(os.fspath(root)))
+    target_lex = Path(os.path.abspath(os.fspath(target)))
+    try:
+        relative = target_lex.relative_to(root_lex)
+    except ValueError as exc:
+        raise UnsafeInstallPathError(
+            f"Refusing to write outside the selected install root: {target_lex}"
+        ) from exc
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise UnsafeInstallPathError(
+            f"Refusing to write through a non-contained path: {target_lex}"
+        )
+    current = root.resolve()
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise UnsafeInstallPathError(
+                f"Refusing to install through a symlink: {current}"
+            )
+    return current
+
+
+def report_contained_install_path(target: Path, root: Path) -> Path | None:
+    """Return the contained path, or print the refusal and return None."""
+    try:
+        return require_contained_install_path(target, root)
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
+        return None
+
+
+def contained_scope_root(
+    target: Path, *, project_root: Path, user_root: Path
+) -> Path:
+    """Choose the project root when target stays inside it, otherwise user_root."""
+    target_lex = Path(os.path.abspath(os.fspath(target)))
+    project_lex = Path(os.path.abspath(os.fspath(project_root)))
+    try:
+        relative = target_lex.relative_to(project_lex)
+    except ValueError:
+        return user_root
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        return user_root
+    return project_root
+
+
+def _ensure_real_parent_dirs(target: Path, root: Path) -> None:
+    root_abs = root.resolve()
+    relative = target.relative_to(root_abs)
+    current = root_abs
+    if not current.exists():
+        current.mkdir(parents=True)
+    if current.is_symlink() or not current.is_dir():
+        raise UnsafeInstallPathError(
+            f"Refusing to install through a symlink: {current}"
+        )
+    for part in relative.parts[:-1]:
+        current /= part
+        if current.is_symlink():
+            raise UnsafeInstallPathError(
+                f"Refusing to install through a symlink: {current}"
+            )
+        if not current.exists():
+            current.mkdir()
+        if current.is_symlink() or not current.is_dir():
+            raise UnsafeInstallPathError(
+                f"Refusing to install through a symlink: {current}"
+            )
+
+
+def _replace_text_atomically(target: Path, content: str) -> None:
+    parent = target.parent
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".slopgate-write-", suffix=".tmp", dir=str(parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if target.is_symlink():
+            raise UnsafeInstallPathError(
+                f"Refusing to install through a symlink: {target}"
+            )
+        os.replace(tmp_name, target)
+    except Exception:
+        if os.path.lexists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
+def write_contained_text(
+    target: Path,
+    content: str,
+    *,
+    root: Path,
+    label: str,
+    backup: bool = True,
+) -> Path:
+    """Atomically replace a file that stays inside root, optionally backing it up."""
+    safe_target = require_contained_install_path(target, root)
+    _ensure_real_parent_dirs(safe_target, root)
+    if backup:
+        backup_existing_file_and_report(safe_target, label)
+    _replace_text_atomically(safe_target, content)
+    return safe_target
+
+
+def write_contained_json(
+    target: Path, payload: object, *, root: Path, label: str
+) -> Path:
+    """Back up and atomically replace a JSON file that stays inside root."""
+    return write_contained_text(
+        target,
+        json.dumps(payload, indent=2) + "\n",
+        root=root,
+        label=label,
+    )
+
+
 def backup_existing_file(path: Path) -> Path | None:
     """Create a timestamped sibling backup for an existing config/plugin file."""
     if not path.exists():
@@ -312,8 +440,11 @@ def uninstall_hooks_file(
     label: str,
     remove_owned: Callable[[object], dict[str, list[dict[str, object]]]],
     dry_run: bool = False,
+    root: Path | None = None,
 ) -> int:
     """Remove slopgate-owned hook entries from a platform hooks.json file."""
+    if root is not None and report_contained_install_path(hooks_path, root) is None:
+        return 1
     if not hooks_path.exists():
         print(f"No {label} hooks found.")
         return 0
@@ -328,13 +459,19 @@ def uninstall_hooks_file(
     remaining_hooks = remove_owned(existing.get("hooks"))
     if remaining_hooks:
         existing["hooks"] = remaining_hooks
-        write_json_with_backup(hooks_path, existing, "hooks")
+        if root is None:
+            write_json_with_backup(hooks_path, existing, "hooks")
+        else:
+            write_contained_json(hooks_path, existing, root=root, label="hooks")
         print(f"Removed slopgate hooks from {hooks_path}")
         return 0
 
     existing.pop("hooks", None)
     if existing:
-        write_json_with_backup(hooks_path, existing, "hooks")
+        if root is None:
+            write_json_with_backup(hooks_path, existing, "hooks")
+        else:
+            write_contained_json(hooks_path, existing, root=root, label="hooks")
         print(f"Removed slopgate hooks from {hooks_path}")
         return 0
 

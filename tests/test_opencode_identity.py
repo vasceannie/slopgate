@@ -122,3 +122,46 @@ def test_opencode_identity_is_compatible_when_all_observed_versions_match(
     assert _matching_identity_status(version) == "compatible", (
         "matching non-empty version observations must remain compatible"
     )
+
+
+def test_opencode_identity_is_compatible_for_equivalent_version_states(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / "opencode"
+    _write_identity_metadata(
+        config_dir,
+        IdentityVersions(declared="^1.18.21", locked="1.18.21", installed="v1.18.21"),
+    )
+    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: "opencode 1.18.21")
+
+    identity = _opencode.collect_opencode_install_identity(
+        str(tmp_path / "slopgate"), config_dir=config_dir
+    )
+
+    assert identity["status"] == "compatible", (
+        "range, prefix, and exact plugin versions should be treated as one identity"
+    )
+    assert identity["plugin_declared_version"] == "^1.18.21", (
+        "declared specifier should remain the raw observed value"
+    )
+
+
+def test_opencode_identity_is_unknown_when_no_versions_are_observed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / "opencode"
+    config_dir.mkdir()
+    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: "")
+
+    identity = _opencode.collect_opencode_install_identity(
+        str(tmp_path / "slopgate"),
+        config_dir=config_dir,
+        probe_runtime=False,
+    )
+
+    assert identity["status"] == "unknown", (
+        "missing runtime, declared, lock, and installed versions are unknown, not stale"
+    )
+    assert "could not be observed" in str(identity["remediation"]), (
+        "unknown identity should explain that no versions were observed"
+    )

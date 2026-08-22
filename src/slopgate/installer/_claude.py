@@ -21,11 +21,14 @@ from slopgate.installer._install_scope import (
 import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
+    UnsafeInstallPathError,
+    contained_scope_root,
     hook_command,
     merge_owned_hooks_into,
     remove_owned_hooks,
+    report_contained_install_path,
     require_json_object,
-    write_json_with_backup,
+    write_contained_json,
 )
 
 __all__ = ["install_claude", "uninstall_claude"]
@@ -74,23 +77,42 @@ def claude_hooks_block(binary: str) -> _ClaudeHooks:
     return hooks
 
 
+def _claude_user_root() -> Path:
+    return Path.home() / ".claude"
+
+
+def _claude_contained_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_claude_user_root()
+    )
+
+
 def _write_claude_settings(
-    settings_path: Path, settings: dict[str, object], status_line: str
+    settings_path: Path,
+    settings: dict[str, object],
+    status_line: str,
+    *,
+    root: Path,
 ) -> int:
-    write_json_with_backup(settings_path, settings, "settings")
+    try:
+        write_contained_json(settings_path, settings, root=root, label="settings")
+    except UnsafeInstallPathError as exc:
+        print(str(exc))
+        return 1
     print(status_line)
     return 0
 
 
 def _install_claude_at(
-    settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool
+    settings_path: Path, hooks: _ClaudeHooks, *, dry_run: bool, root: Path
 ) -> int:
+    if report_contained_install_path(settings_path, root) is None:
+        return 1
     if dry_run:
         print(f"Would patch: {settings_path}")
         print(json.dumps({"hooks": hooks}, indent=2))
         return 0
     if not settings_path.exists():
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings = {}
     elif (
         settings := require_json_object(
@@ -100,7 +122,10 @@ def _install_claude_at(
         return 1
     merge_owned_hooks_into(settings, cast(dict[str, list[dict[str, object]]], hooks))
     return _write_claude_settings(
-        settings_path, settings, f"Installed slopgate hooks into {settings_path}"
+        settings_path,
+        settings,
+        f"Installed slopgate hooks into {settings_path}",
+        root=root,
     )
 
 
@@ -122,11 +147,18 @@ def install_claude(
     completed: list[Path] = []
     last_status = 0
     for settings_path in paths:
-        status = _install_claude_at(settings_path, hooks, dry_run=dry_run)
+        contained_root = _claude_contained_root(settings_path, root)
+        status = _install_claude_at(
+            settings_path, hooks, dry_run=dry_run, root=contained_root
+        )
         if status != 0:
             if not dry_run:
                 for rollback_path in completed:
-                    _ = _uninstall_claude_at(rollback_path, dry_run=False)
+                    _ = _uninstall_claude_at(
+                        rollback_path,
+                        dry_run=False,
+                        root=_claude_contained_root(rollback_path, root),
+                    )
             return status
         completed.append(settings_path)
         last_status = status
@@ -136,7 +168,9 @@ def install_claude(
     return last_status
 
 
-def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
+def _uninstall_claude_at(settings_path: Path, *, dry_run: bool, root: Path) -> int:
+    if report_contained_install_path(settings_path, root) is None:
+        return 1
     if not settings_path.exists():
         return 0
     settings = require_json_object(settings_path, "Claude settings", action="modify")
@@ -153,7 +187,10 @@ def _uninstall_claude_at(settings_path: Path, *, dry_run: bool) -> int:
     else:
         del settings["hooks"]
     return _write_claude_settings(
-        settings_path, settings, f"Removed slopgate hooks from {settings_path}"
+        settings_path,
+        settings,
+        f"Removed slopgate hooks from {settings_path}",
+        root=root,
     )
 
 
@@ -172,7 +209,11 @@ def uninstall_claude(
     for settings_path in paths:
         if settings_path.exists():
             any_found = True
-        status = _uninstall_claude_at(settings_path, dry_run=dry_run)
+        status = _uninstall_claude_at(
+            settings_path,
+            dry_run=dry_run,
+            root=_claude_contained_root(settings_path, root),
+        )
         if status != 0:
             return status
         last_status = status

@@ -1,6 +1,7 @@
 """Install-scope tests for Claude, Codex, OpenCode, and Cursor harnesses."""
 
 from __future__ import annotations
+from collections.abc import Callable
 import pytest
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ import slopgate.installer._claude
 import slopgate.installer._codex
 import slopgate.installer._cursor
 import slopgate.installer._opencode
+import slopgate.installer._pi
 import slopgate.installer._shared
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
@@ -69,6 +71,186 @@ def test_opencode_project_scope_writes_repo_plugin(
     plugin_path = tmp_path / ".opencode" / "plugins" / "slopgate-plugin.ts"
     content = plugin_path.read_text(encoding="utf-8")
     assert all((marker in content for marker in PLUGIN_OWNERSHIP_MARKERS))
+
+
+def _plant_opencode_project_symlink(tmp_path: Path, kind: str) -> Path:
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    external = outside_dir / ("secret.ts" if kind == "leaf" else "keep.txt")
+    external.write_text("KEEP\n", encoding="utf-8")
+    plugin = tmp_path / ".opencode" / "plugins" / "slopgate-plugin.ts"
+    if kind == "leaf":
+        plugin.parent.mkdir(parents=True)
+        plugin.symlink_to(external)
+    elif kind == "opencode-dir":
+        (tmp_path / ".opencode").symlink_to(outside_dir)
+    else:
+        (tmp_path / ".opencode").mkdir()
+        (tmp_path / ".opencode" / "plugins").symlink_to(outside_dir)
+    return external
+
+
+@pytest.mark.parametrize(
+    ("kind", "dry_run"),
+    [
+        pytest.param("leaf", False, id="leaf-symlink"),
+        pytest.param("opencode-dir", False, id="opencode-dir-symlink"),
+        pytest.param("plugins-dir", False, id="plugins-dir-symlink"),
+        pytest.param("leaf", True, id="leaf-symlink-dry-run"),
+        pytest.param("opencode-dir", True, id="opencode-dir-symlink-dry-run"),
+    ],
+)
+def test_opencode_project_scope_refuses_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    dry_run: bool,
+) -> None:
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    monkeypatch.chdir(tmp_path)
+    external = _plant_opencode_project_symlink(tmp_path, kind)
+    outside_names = {path.name for path in external.parent.iterdir()}
+    assert (
+        slopgate.installer._opencode.install_opencode(
+            dry_run=dry_run, scope="project"
+        )
+        == 1
+    ), "project install must refuse symlink targets and parents"
+    assert external.read_text(encoding="utf-8") == "KEEP\n", (
+        "external symlink targets must remain unchanged"
+    )
+    assert {path.name for path in external.parent.iterdir()} == outside_names, (
+        "install must not create files beside the external target"
+    )
+    plugin = tmp_path / ".opencode" / "plugins" / "slopgate-plugin.ts"
+    if kind == "leaf":
+        assert plugin.is_symlink(), "the planted leaf symlink must not be replaced"
+
+
+def _plant_project_symlink(tmp_path: Path, relative_leaf: str, kind: str) -> Path:
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    external = outside_dir / ("secret" if kind == "leaf" else "keep.txt")
+    external.write_text("KEEP\n", encoding="utf-8")
+    leaf = tmp_path / relative_leaf
+    if kind == "leaf":
+        leaf.parent.mkdir(parents=True)
+        leaf.symlink_to(external)
+        return external
+    first = Path(relative_leaf).parts[0]
+    (tmp_path / first).symlink_to(outside_dir)
+    return external
+
+
+@pytest.mark.parametrize(
+    ("install", "relative_leaf"),
+    [
+        pytest.param(
+            slopgate.installer._claude.install_claude,
+            ".claude/settings.json",
+            id="claude",
+        ),
+        pytest.param(
+            slopgate.installer._cursor.install_cursor,
+            ".cursor/hooks.json",
+            id="cursor",
+        ),
+        pytest.param(
+            slopgate.installer._codex.install_codex,
+            ".codex/hooks.json",
+            id="codex",
+        ),
+        pytest.param(
+            slopgate.installer._pi.install_pi,
+            ".pi/extensions/pi-slopgate/index.ts",
+            id="pi",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "kind",
+    [
+        pytest.param("leaf", id="leaf-symlink"),
+        pytest.param("parent", id="parent-dir-symlink"),
+    ],
+)
+def test_project_scope_refuses_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    install: Callable[..., int],
+    relative_leaf: str,
+    kind: str,
+) -> None:
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    monkeypatch.chdir(tmp_path)
+    external = _plant_project_symlink(tmp_path, relative_leaf, kind)
+    outside_names = {path.name for path in external.parent.iterdir()}
+    assert install(dry_run=False, scope="project") == 1, (
+        "project install must refuse symlink targets and parents"
+    )
+    assert external.read_text(encoding="utf-8") == "KEEP\n", (
+        "external symlink targets must remain unchanged"
+    )
+    assert {path.name for path in external.parent.iterdir()} == outside_names, (
+        "install must not create files beside the external target"
+    )
+    leaf = tmp_path / relative_leaf
+    if kind == "leaf":
+        assert leaf.is_symlink(), "the planted leaf symlink must not be replaced"
+
+
+@pytest.mark.parametrize(
+    ("install", "relative_leaf"),
+    [
+        pytest.param(
+            slopgate.installer._claude.install_claude,
+            ".claude/settings.json",
+            id="claude",
+        ),
+        pytest.param(
+            slopgate.installer._cursor.install_cursor,
+            ".cursor/hooks.json",
+            id="cursor",
+        ),
+        pytest.param(
+            slopgate.installer._codex.install_codex,
+            ".codex/hooks.json",
+            id="codex",
+        ),
+        pytest.param(
+            slopgate.installer._pi.install_pi,
+            ".pi/agent/extensions/pi-slopgate/index.ts",
+            id="pi",
+        ),
+    ],
+)
+def test_user_scope_refuses_leaf_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    install: Callable[..., int],
+    relative_leaf: str,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
+    )
+    outside = tmp_path / "outside" / "secret"
+    outside.parent.mkdir()
+    outside.write_text("KEEP\n", encoding="utf-8")
+    target = tmp_path / relative_leaf
+    target.parent.mkdir(parents=True)
+    target.symlink_to(outside)
+    assert install(dry_run=False, scope="user") == 1, (
+        "user install must refuse a leaf symlink"
+    )
+    assert outside.read_text(encoding="utf-8") == "KEEP\n", (
+        "external symlink targets must remain unchanged"
+    )
+    assert target.is_symlink(), "the planted leaf symlink must not be replaced"
 
 
 def test_cursor_project_scope_still_supported(

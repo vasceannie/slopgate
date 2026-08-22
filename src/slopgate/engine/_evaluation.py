@@ -11,6 +11,7 @@ from slopgate.constants import (
     DENY,
 )
 from slopgate.adapters import get_adapter
+from slopgate.adapters.opencode_projection import unresolved_opencode_projection_finding
 from slopgate.context import HookContext, build_context
 from slopgate.lint._helpers import (
     reset_request_analysis_cache,
@@ -98,6 +99,12 @@ def evaluate_payload(
         inject_recent_failure_context(ctx, acc.findings)
         acc.findings = filter_search_reminder_dedupe(ctx, acc.findings)
         acc.findings = dedupe_findings(acc.findings)
+        if trace_platform == PLATFORM_OPENCODE:
+            unresolved = unresolved_opencode_projection_finding(
+                ctx.tool_name, ctx.tool_input, ctx.event_name
+            )
+            if unresolved is not None:
+                acc.findings.append(unresolved)
         _record_opencode_repair_required(ctx, acc.findings, trace_platform)
         compact_context_advisories(ctx, acc.findings)
         render_start = monotonic()

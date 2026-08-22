@@ -133,9 +133,10 @@ class RepairPlanStateMixin(StateKeyMixin, StateSnapshotMixin):
             self._save_state(state)
 
     def get_repair_required(self) -> ObjectDict | None:
-        state = self._load_state()
-        required = state["repair_required"]
-        return dict(required) if required else None
+        with self._locked_state():
+            state = self._load_state()
+            required = state["repair_required"]
+            return dict(required) if required else None
 
     def clear_repair_required(self, generation: str) -> bool:
         with self._locked_state():
