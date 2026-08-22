@@ -41,6 +41,9 @@ _CODEX_FEATURE_LINE = strategies.sampled_from(
         "hooks = false\ncodex_hooks = true\n",
     ]
 )
+# Installer dry-run walks config/FS. Hypothesis's 200ms deadline flakes under
+# slopgate xdist load (observed 216-319ms); these pass in isolation.
+_INSTALLER_DRY_RUN = settings(deadline=None, max_examples=1)
 
 
 @given(strategies.just(None))
@@ -68,18 +71,21 @@ def test_command_is_slopgate_hook_rejects_non_string_inputs_property(_: None) ->
     assert command_is_slopgate_hook([]) is False
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_update_suite_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = update_suite(SuiteUpdateOptions(dry_run=dry_run))
     assert result == 0, f"update_suite(dry_run=True) must return 0, got {result}"
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = install_autoupdate(dry_run=dry_run)
     assert result == 0, f"install_autoupdate(dry_run=True) must return 0, got {result}"
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> None:
     result = uninstall_autoupdate(dry_run=dry_run)
@@ -116,41 +122,49 @@ def test_filter_owned_hook_commands_keeps_external_hooks_property(_: None) -> No
     assert isinstance(filtered["hooks"], list)
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_claude(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_claude(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_codex_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_codex(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_codex_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_codex(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_cursor_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_cursor(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_cursor_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_cursor(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_opencode_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_opencode(dry_run=dry_run) == 0
 
 
+@_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_opencode_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert uninstall_opencode(dry_run=dry_run) == 0

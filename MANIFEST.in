@@ -1,0 +1,7 @@
+global-exclude */__pycache__/*
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+include LICENSE
+include README.md
+include pyproject.toml

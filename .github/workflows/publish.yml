@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +26,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Required for trusted publishing (OIDC)
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +37,36 @@ jobs:
         run: uv python install 3.12
 
       - name: Build source distribution and wheel
-        run: uv build
+        run: |
+          find src -type d -name __pycache__ -prune -exec rm -rf {} +
+          find src -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.pyd' \) -delete
+          uv build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Check artifacts
+        run: |
+          uvx twine check --strict dist/*
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          forbidden = (".pyc", ".pyo", ".pyd")
+          for artifact in Path("dist").iterdir():
+              if artifact.suffix != ".whl" and not artifact.name.endswith(".tar.gz"):
+                  continue
+              names = (
+                  zipfile.ZipFile(artifact).namelist()
+                  if artifact.suffix == ".whl"
+                  else tarfile.open(artifact).getnames()
+              )
+              leaked = [
+                  name
+                  for name in names
+                  if "__pycache__" in name or name.endswith(forbidden)
+              ]
+              if leaked:
+                  raise SystemExit(f"{artifact.name} contains build provenance: {leaked}")
+          PY
+
+      - name: Skip upload
+        run: echo "PyPI upload is make publish (token), not trusted publishing."

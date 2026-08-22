@@ -54,13 +54,14 @@ publish:
 	CURRENT=$$(cut -d'"' -f2 $(VERSION_FILE)); \
 	[ -n "$$CURRENT" ] || { echo "ERROR: could not read version from $(VERSION_FILE)"; exit 1; }; \
 	case "${BUMP}" in \
-		""|major|minor|patch) ;; \
-		*) echo "ERROR: BUMP must be major, minor, or patch"; exit 1 ;; \
+		""|major|minor|patch|none) ;; \
+		*) echo "ERROR: BUMP must be major, minor, patch, or none"; exit 1 ;; \
 	esac; \
 	MAJ=$$(echo "$$CURRENT" | cut -d. -f1); \
 	MIN=$$(echo "$$CURRENT" | cut -d. -f2); \
 	PAT=$$(echo "$$CURRENT" | cut -d. -f3); \
 	case "${BUMP}" in \
+		none)  NEW="$$CURRENT" ;; \
 		major) NEW="$$((MAJ + 1)).0.0" ;; \
 		minor) NEW="$$MAJ.$$((MIN + 1)).0" ;; \
 		*)     NEW="$$MAJ.$$MIN.$$((10#$$PAT + 1))" ;; \
@@ -68,11 +69,18 @@ publish:
 	echo "Bumping $$CURRENT → $$NEW"; \
 	echo "__version__ = \"$$NEW\"" > $(VERSION_FILE); \
 	echo "Building..."; \
-	rm -rf dist; \
+	rm -rf dist build src/ai_slopgate.egg-info; \
+	find src -type d -name __pycache__ -prune -exec rm -rf {} +; \
+	find src -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.pyd' \) -delete; \
 	uv build; \
+	uv tool run twine check --strict dist/*; \
 	uv publish; \
 	git add $(VERSION_FILE); \
-	git commit -m "Bump version to $$NEW"; \
+	if git diff --cached --quiet; then \
+		echo "Version file already $$NEW"; \
+	else \
+		git commit -m "Bump version to $$NEW"; \
+	fi; \
 	git tag -f "v$$NEW" -m "Release v$$NEW"; \
 	BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	git push origin v$$NEW && git push github v$$NEW; \
