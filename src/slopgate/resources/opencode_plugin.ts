@@ -33,6 +33,8 @@
  * Bun.spawn: https://bun.sh/docs/api/spawn
  */
 
+/// <reference types="node" />
+
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 
@@ -241,23 +243,6 @@ function objectValue(
     return null
   }
   return Object.fromEntries(Object.entries(candidate))
-}
-
-function sessionTitleFields(
-  value: Record<string, unknown>,
-  includeBareTitle: boolean = false,
-): Record<string, unknown> {
-  const keys = [
-    "session_title",
-    "sessionTitle",
-    "thread_title",
-    "threadTitle",
-    "conversation_title",
-    "conversationTitle",
-    ...(includeBareTitle ? ["title"] : []),
-  ]
-  const title = firstString(value, ...keys)
-  return title ? { session_title: title } : {}
 }
 
 function eventIdentityFields(
