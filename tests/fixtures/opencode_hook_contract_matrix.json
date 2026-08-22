@@ -150,11 +150,11 @@
     },
     {
       "id": "unknown-effect-deny",
-      "behavior": "unknown custom or MCP tool effects deny by default",
+      "behavior": "unknown tools that name a filesystem mutation and carry a file target deny by default; other MCP and host-control tools pass through",
       "evidence_tier": "pinned-source",
       "status": "conservative",
       "public_contract": false,
-      "test_path": "tests/adapters/test_opencode_projection.py",
+      "test_path": "tests/adapters/test_opencode_projection/test_engine.py",
       "test_name": "test_unresolved_mutating_projections_are_blocked"
     },
     {

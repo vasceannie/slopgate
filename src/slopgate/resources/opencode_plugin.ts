@@ -148,23 +148,8 @@ interface RepairGateState {
   reason?: string
 }
 
-const READ_ONLY_TOOLS = new Set([
-  "read",
-  "glob",
-  "grep",
-  "list",
-  "find",
-  "webfetch",
-  "websearch",
-])
-const KNOWN_EFFECT_TOOLS = new Set([
-  ...READ_ONLY_TOOLS,
-  "write",
-  "edit",
-  "apply_patch",
-  "bash",
-  "todowrite",
-])
+const READ_ONLY_TOOLS = new Set(["__SLOPGATE_READ_ONLY_TOOL_IDS__"])
+const KNOWN_EFFECT_TOOLS = new Set(["__SLOPGATE_EFFECTFUL_TOOL_IDS__"])
 const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
 const VERIFY_TOOL = "slopgate_verify_repair"
 
@@ -485,14 +470,15 @@ function isAllowedWhileRepairRequired(
   toolName: string,
   args: Record<string, unknown>,
 ): boolean {
-  return READ_ONLY_TOOLS.has(toolName.toLowerCase()) || isExplicitRepairCommand(toolName, args)
+  const lowered = toolName.toLowerCase()
+  return READ_ONLY_TOOLS.has(lowered) || isExplicitRepairCommand(toolName, args)
 }
 
 function isKnownEffectTool(toolName: string, args: Record<string, unknown>): boolean {
   const lowered = toolName.toLowerCase()
   return (
     KNOWN_EFFECT_TOOLS.has(lowered)
-    || lowered === VERIFY_TOOL
+    || READ_ONLY_TOOLS.has(lowered)
     || isExplicitRepairCommand(toolName, args)
   )
 }

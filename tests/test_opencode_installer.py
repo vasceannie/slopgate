@@ -31,7 +31,11 @@ def test_opencode_renderer_embeds_install_identity_snapshot() -> None:
     rendered = _opencode.render_opencode_plugin(template, "/tmp/slopgate", identity)
 
     assert '"__SLOPGATE_OPENCODE_IDENTITY__"' not in rendered, "placeholder leaked"
+    assert '"__SLOPGATE_READ_ONLY_TOOL_IDS__"' not in rendered
+    assert '"__SLOPGATE_EFFECTFUL_TOOL_IDS__"' not in rendered
     assert '"opencode_version":"1.18.19"' in rendered, "runtime version not embedded"
+    assert '"gitnexus_context"' in rendered, "read-only capability not embedded"
+    assert '"github_update_issue"' in rendered, "effectful capability not embedded"
     assert '"slopgate_binary":"/tmp/slopgate"' in rendered, "binary path not embedded"
 
 

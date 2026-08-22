@@ -8,6 +8,10 @@ from pathlib import Path
 from slopgate._types import ObjectDict, ObjectMapping, object_dict, object_list, string_value
 from slopgate.constants import DENY, METADATA_CONTENT, METADATA_PATH, PRE_TOOL_USE
 from slopgate.models import RuleFinding, Severity
+from slopgate.opencode_tool_capabilities import (
+    OpenCodeToolCapability,
+    opencode_tool_capability,
+)
 from slopgate.util.payloads import is_read_only_tool_use, is_shell_tool
 from .models import (
     OPENCODE_TOOL_CONTRACT_VERSION,
@@ -154,21 +158,6 @@ def _project_patch(request: ProjectionRequest) -> Projection:
     return Projection("projected", tuple(files.values()))
 
 
-OPENCODE_PASS_THROUGH_TOOLS = frozenset(
-    {
-        "read",
-        "glob",
-        "grep",
-        "list",
-        "find",
-        "ls",
-        "webfetch",
-        "websearch",
-        "todowrite",
-        "todo_write",
-        "slopgate_verify_repair",
-    }
-)
 _UNRESOLVED_PROJECTION_MESSAGES = {
     "invalid": "OpenCode mutation projection is invalid; refusing execution.",
     "stale": "OpenCode mutation projection is stale; refusing execution.",
@@ -191,11 +180,15 @@ def unresolved_opencode_projection_finding(
     status = string_value(projection.get("status")) or ""
     if status == "projected":
         return None
-    lowered = tool_name.strip().lower().replace("-", "_")
+    capability = opencode_tool_capability(tool_name)
     if (
         is_read_only_tool_use({"tool_name": tool_name, "hook_event_name": event_name})
         or is_shell_tool(tool_name)
-        or lowered in OPENCODE_PASS_THROUGH_TOOLS
+        or capability is OpenCodeToolCapability.READ_ONLY
+        or (
+            status == "unsupported"
+            and capability is OpenCodeToolCapability.EFFECTFUL
+        )
     ):
         return None
     return RuleFinding(

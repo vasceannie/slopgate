@@ -11,7 +11,11 @@ from ._basic import (
     extract_path_from_mapping,
     first_present,
 )
-from ._patches import extract_added_patch_content, parse_patch_candidate_paths
+from ._patches import (
+    extract_added_patch_content,
+    parse_patch_candidate_paths,
+    parse_patch_content_targets,
+)
 
 _CTX_EXECUTE_TOOL_NAMES = frozenset({"ctx_execute", "ctx_execute_file"})
 _LANGUAGE_SYNTHETIC_PATHS = {
@@ -110,6 +114,12 @@ def patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
     patch_blob = first_present(tool_input, ("patch", "patchText", "patch_text"))
     if not patch_blob:
         return []
+    partitioned = [
+        ContentTarget(path=path_item, content=content, source="patch")
+        for path_item, content in parse_patch_content_targets(patch_blob)
+    ]
+    if partitioned:
+        return partitioned
     patch_content = extract_added_patch_content(patch_blob) or patch_blob
     return [
         ContentTarget(path=path_item, content=patch_content, source="patch")

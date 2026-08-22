@@ -10,13 +10,18 @@ from slopgate.daemon.protocol import (
     UNKNOWN_DAEMON_VALUE,
 )
 from slopgate.engine import evaluate_payload
+from slopgate.hook_platform import resolve_hook_platform
 from slopgate.util import logger
 
 CLAUDE_TEAM_EVENT_EXIT_CODE = 2
 
 
 def evaluate_hook_request(request: DaemonRequest) -> DaemonResponse:
-    platform = (request.platform or UNKNOWN_VALUE).strip().lower()
+    platform = (
+        resolve_hook_platform(request.platform or UNKNOWN_VALUE, request.payload)
+        .strip()
+        .lower()
+    )
     if not request.payload:
         logger.info(
             "hook daemon empty payload noop",

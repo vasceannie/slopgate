@@ -85,6 +85,30 @@ def test_patch_helpers_extract_unique_paths_and_added_content() -> None:
     assert extract_added_patch_content(patch_blob) == "added line\nassert True"
 
 
+def test_patch_content_targets_keep_added_lines_with_their_file() -> None:
+    from slopgate.util.payloads.targets import patch_content_targets
+
+    patch_blob = "\n".join(
+        [
+            "*** Begin Patch",
+            "*** Update File: src/first.py",
+            "@@",
+            "+FIRST = 1",
+            "*** Update File: src/second.py",
+            "@@",
+            "+SECOND = 2",
+            "*** End Patch",
+        ]
+    )
+
+    targets = patch_content_targets({"patch": patch_blob})
+
+    assert [(target.path, target.content) for target in targets] == [
+        ("src/first.py", "FIRST = 1"),
+        ("src/second.py", "SECOND = 2"),
+    ]
+
+
 def test_hook_specific_context_output_renders_event_and_context() -> None:
     assert hook_specific_context_output("PreToolUse", "read files first") == {
         "hookSpecificOutput": {

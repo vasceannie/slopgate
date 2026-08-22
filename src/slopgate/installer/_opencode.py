@@ -35,6 +35,10 @@ from slopgate.installer._shared import (
     write_contained_text,
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
+from slopgate.opencode_tool_capabilities import (
+    EFFECTFUL_TOOL_IDS,
+    READ_ONLY_TOOL_IDS,
+)
 from slopgate.util.platform import user_config_dir
 
 __all__ = ["install_opencode", "uninstall_opencode"]
@@ -43,6 +47,8 @@ _PLUGIN_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL = (
     '{"placeholder":"__SLOPGATE_OPENCODE_IDENTITY__"}'
 )
+_READ_ONLY_TOOLS_PLACEHOLDER_LITERAL = '["__SLOPGATE_READ_ONLY_TOOL_IDS__"]'
+_EFFECTFUL_TOOLS_PLACEHOLDER_LITERAL = '["__SLOPGATE_EFFECTFUL_TOOL_IDS__"]'
 OPENCODE_TYPES_TARGET = "1.18.21"
 PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Slopgate Plugin",
@@ -181,11 +187,30 @@ def render_opencode_plugin(
     rendered = _render_opencode_invocation(template, binary)
     snapshot = identity or collect_opencode_install_identity(binary)
     identity_json = json.dumps(dict(snapshot), separators=(",", ":"), sort_keys=True)
-    if _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL not in rendered:
-        raise OpenCodeTemplateError(
-            "OpenCode plugin template is missing the install identity placeholder"
-        )
-    return rendered.replace(_PLUGIN_IDENTITY_PLACEHOLDER_LITERAL, identity_json)
+    replacements = (
+        (
+            _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL,
+            identity_json,
+            "install identity",
+        ),
+        (
+            _READ_ONLY_TOOLS_PLACEHOLDER_LITERAL,
+            json.dumps(sorted(READ_ONLY_TOOL_IDS), separators=(",", ":")),
+            "read-only tool capabilities",
+        ),
+        (
+            _EFFECTFUL_TOOLS_PLACEHOLDER_LITERAL,
+            json.dumps(sorted(EFFECTFUL_TOOL_IDS), separators=(",", ":")),
+            "effectful tool capabilities",
+        ),
+    )
+    for placeholder, value, label in replacements:
+        if placeholder not in rendered:
+            raise OpenCodeTemplateError(
+                f"OpenCode plugin template is missing the {label} placeholder"
+            )
+        rendered = rendered.replace(placeholder, value)
+    return rendered
 
 
 def _contained_root_for(target: Path, project_root: Path) -> Path:

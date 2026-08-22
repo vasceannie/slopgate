@@ -15,11 +15,12 @@ from slopgate.cli.io import (
     report_cli_input_error,
     string_arg,
 )
-from slopgate.constants import PLATFORM_CLAUDE, PLATFORM_OPENCODE, UNKNOWN_VALUE
+from slopgate.constants import PLATFORM_CLAUDE, UNKNOWN_VALUE
 from slopgate.daemon.paths import (
     daemon_socket_path_candidates,
     default_daemon_socket_path,
 )
+from slopgate.hook_platform import resolve_hook_platform
 from slopgate.util import logger
 
 SLOPGATE_DAEMON_SOCKET_ENV = "SLOPGATE_DAEMON_SOCKET"
@@ -60,12 +61,7 @@ def cmd_handle(args: argparse.Namespace) -> int:
     if not payload:
         return 0
     requested_platform = string_arg(args, "platform", UNKNOWN_VALUE)
-    platform = (
-        PLATFORM_OPENCODE
-        if requested_platform.strip().lower() == PLATFORM_CLAUDE
-        and payload.get("hook_source") == "opencode-plugin"
-        else requested_platform
-    )
+    platform = resolve_hook_platform(requested_platform, payload)
     logger.info(
         "hook cli handle payload",
         platform=platform,

@@ -7,6 +7,9 @@ from typing import Protocol, cast
 
 from hypothesis import given, strategies
 
+from slopgate.constants import PLATFORM_CLAUDE, PLATFORM_OPENCODE
+from slopgate.hook_platform import HOOK_SOURCE_OPENCODE_PLUGIN
+
 
 class _ObjectFactory(Protocol):
     def __call__(self, **kwargs: object) -> object: ...
@@ -121,6 +124,30 @@ def test_evaluate_hook_request_returns_engine_output() -> None:
     )
     assert evaluator.payload == {"command": "pytest"}, "Handler should forward payload"
     assert evaluator.platform == "codex", "Handler should normalize platform for engine"
+
+
+def test_evaluate_hook_request_remaps_claude_opencode_plugin_source() -> None:
+    evaluator, response = _evaluate_with_stubbed_hook(
+        daemon.DaemonRequest(
+            payload={
+                "command": "probe",
+                "hook_source": HOOK_SOURCE_OPENCODE_PLUGIN,
+            },
+            platform=PLATFORM_CLAUDE,
+        ),
+        feedback="repair this",
+        output={"decision": "allow"},
+    )
+
+    assert evaluator.platform == PLATFORM_OPENCODE, (
+        "Daemon should remap Claude-labelled OpenCode plugin payloads to opencode"
+    )
+    assert response.stderr is None, (
+        "Remapped OpenCode plugin payloads must not emit Claude team-event feedback"
+    )
+    assert response.output == {"decision": "allow"}, (
+        "Remapped payloads should still return engine output"
+    )
 
 
 def test_evaluate_hook_request_preserves_claude_feedback_exit() -> None:

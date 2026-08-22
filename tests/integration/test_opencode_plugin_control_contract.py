@@ -24,7 +24,83 @@ _TOOL_ARGS_BY_MODE: dict[str, dict[str, object]] = {
     "repair-required-command-compound": {
         "command": "slopgate lint check && touch bypassed"
     },
+    "repair-required-wrapper-interactive": {
+        "tmux_command": "send-keys -t dev 'touch sample.py' Enter"
+    },
+    "repair-required-wrapper-skill-mcp": {
+        "mcp_name": "fs",
+        "tool_name": "write_file",
+        "arguments": {"path": "sample.py", "content": "x"},
+    },
+    "repair-required-wrapper-task": {
+        "category": "quick",
+        "prompt": "edit sample.py",
+    },
 }
+_TOOL_NAME_BY_MODE = {
+    "repair-required": "custom_mutator",
+    "unknown-effect": "custom_mutator",
+    "unknown-readonly": "gitnexus_context",
+    "repair-required-read": "read",
+    "repair-required-read-gitnexus": "gitnexus_context",
+    "repair-required-read-skill": "skill",
+    "repair-required-wrapper-interactive": "interactive_bash",
+    "repair-required-wrapper-skill-mcp": "skill_mcp",
+    "repair-required-wrapper-task": "task",
+}
+_FAIL_CLOSED_TOOL_CASES = [
+    pytest.param(
+        "custom_write",
+        {"filename": "sample.py", "content": "x"},
+        id="filename-mutator",
+    ),
+    pytest.param(
+        "custom_write",
+        {"paths": ["sample.py"], "content": "x"},
+        id="paths-mutator",
+    ),
+    pytest.param(
+        "custom_write",
+        {"uri": "file:///tmp/sample.py", "content": "x"},
+        id="file-uri-mutator",
+    ),
+    pytest.param(
+        "custom_write",
+        {"input": {"path": "sample.py", "content": "x"}},
+        id="nested-mutator",
+    ),
+    pytest.param(
+        "interactive_bash",
+        {"tmux_command": "send-keys -t dev 'touch sample.py' Enter"},
+        id="interactive-shell-wrapper",
+    ),
+    pytest.param(
+        "skill_mcp",
+        {
+            "mcp_name": "fs",
+            "tool_name": "write_file",
+            "arguments": {"path": "sample.py", "content": "x"},
+        },
+        id="mcp-dispatch-wrapper",
+    ),
+    pytest.param(
+        "task",
+        {"category": "quick", "prompt": "edit sample.py"},
+        id="task-delegation-wrapper",
+    ),
+]
+_REMOTE_EFFECT_TOOL_CASES = [
+    pytest.param(
+        "github_update_issue",
+        {"path": "/repos/o/r/issues/1", "body": "fixed"},
+        id="github-api-resource-path",
+    ),
+    pytest.param(
+        "api_delete_resource",
+        {"path": "/v1/items/1"},
+        id="declared-api-resource-path",
+    ),
+]
 
 
 def _write_fake_slopgate(tmp_path: Path) -> Path:
@@ -51,7 +127,9 @@ else:
         print(json.dumps({"action": "allow", "updated_args": {"content": "mutated"}}))
     elif mode.startswith("repair-required-command"):
         print(json.dumps({"action": "allow"}))
-    elif mode == "repair-required-read":
+    elif mode == "unknown-readonly":
+        print(json.dumps({"action": "allow"}))
+    elif mode.startswith("repair-required-read"):
         pass
     else:
         version = payload.get("opencode_tool_contract_version", "missing")
@@ -71,6 +149,11 @@ def _run_plugin_contract(
     runner = tmp_path / "runner.ts"
     executable = _write_fake_slopgate(tmp_path)
     selected_args = _TOOL_ARGS_BY_MODE.get(response_mode, _DEFAULT_TOOL_ARGS)
+    tool_name = (
+        "bash"
+        if response_mode.startswith("repair-required-command")
+        else _TOOL_NAME_BY_MODE.get(response_mode, "write")
+    )
     plugin_path = tmp_path / "slopgate-plugin.ts"
     plugin_path.write_text(
         render_opencode_plugin(
@@ -97,7 +180,7 @@ if ({json.dumps(native_event)} === "file.edited") {{
   await handlers.event({{ event: {{ type: "file.edited", properties: {{ file: "sample.py" }} }} }})
 }} else {{
   hookReturn = await handlers["tool.execute.before"](
-    {{ tool: {json.dumps("bash" if response_mode.startswith("repair-required-command") else "custom_mutator" if response_mode in {"repair-required", "unknown-effect"} else "read" if response_mode == "repair-required-read" else "write")}, sessionID: "session", callID: "call" }},
+    {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
     output,
   )
 }}
@@ -147,6 +230,45 @@ def test_pending_repair_allows_read_only_tool(tmp_path: Path) -> None:
     result = _run_plugin_contract(tmp_path, "tool.execute.before", "repair-required-read")
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "response_mode",
+    [
+        pytest.param("repair-required-read-gitnexus", id="gitnexus-context"),
+        pytest.param("repair-required-read-skill", id="skill-loader"),
+    ],
+)
+def test_pending_repair_allows_trusted_read_only_tool(
+    tmp_path: Path,
+    response_mode: str,
+) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", response_mode)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "response_mode",
+    [
+        pytest.param(
+            "repair-required-wrapper-interactive",
+            id="interactive-shell-wrapper",
+        ),
+        pytest.param("repair-required-wrapper-skill-mcp", id="mcp-dispatch-wrapper"),
+        pytest.param("repair-required-wrapper-task", id="task-delegation-wrapper"),
+    ],
+)
+def test_pending_repair_blocks_opaque_wrappers(
+    tmp_path: Path,
+    response_mode: str,
+) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", response_mode)
+
+    assert result.returncode != 0, "opaque wrappers must not bypass pending repair"
+    assert "repair required for generation generation-1" in result.stderr, (
+        "the repair gate must reject wrappers before delegating to the engine"
+    )
 
 
 def test_pending_repair_allows_exact_lint_check_command(tmp_path: Path) -> None:
@@ -205,6 +327,12 @@ def test_generated_plugin_denies_unknown_effect_tool(tmp_path: Path) -> None:
 
     assert result.returncode != 0, "unknown custom tools must be denied by the plugin"
     assert "unknown OpenCode tool effect" in result.stderr
+
+
+def test_generated_plugin_allows_unknown_read_only_tool(tmp_path: Path) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", "unknown-readonly")
+
+    assert result.returncode == 0, result.stderr
 
 
 def _run_plugin_with_real_slopgate(
@@ -266,5 +394,37 @@ def test_generated_plugin_blocks_invalid_mutating_projection(tmp_path: Path) -> 
 
 def test_generated_plugin_allows_known_read_only_tool(tmp_path: Path) -> None:
     result = _run_plugin_with_real_slopgate(tmp_path, "read", {"filePath": "sample.py"})
+    assert result.returncode == 0, result.stderr
+    assert "allowed" in result.stdout
+
+
+def test_generated_plugin_allows_unprojected_read_only_mcp_tool(tmp_path: Path) -> None:
+    result = _run_plugin_with_real_slopgate(
+        tmp_path, "gitnexus_context", {"name": "sample"}
+    )
+    assert result.returncode == 0, result.stderr
+    assert "allowed" in result.stdout
+
+
+@pytest.mark.parametrize(("tool_name", "tool_args"), _FAIL_CLOSED_TOOL_CASES)
+def test_generated_plugin_denies_unknown_mutations_and_wrappers(
+    tmp_path: Path,
+    tool_name: str,
+    tool_args: dict[str, object],
+) -> None:
+    result = _run_plugin_with_real_slopgate(tmp_path, tool_name, tool_args)
+
+    assert result.returncode != 0, "unknown mutations and wrappers must fail closed"
+    assert "unknown OpenCode tool effect" in result.stderr
+
+
+@pytest.mark.parametrize(("tool_name", "tool_args"), _REMOTE_EFFECT_TOOL_CASES)
+def test_generated_plugin_allows_declared_remote_effects_in_clean_state(
+    tmp_path: Path,
+    tool_name: str,
+    tool_args: dict[str, object],
+) -> None:
+    result = _run_plugin_with_real_slopgate(tmp_path, tool_name, tool_args)
+
     assert result.returncode == 0, result.stderr
     assert "allowed" in result.stdout

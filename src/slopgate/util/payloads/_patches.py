@@ -34,3 +34,48 @@ def extract_added_patch_content(patch_blob: str) -> str:
         if line.startswith("+") and not line.startswith("+++"):
             added.append(line[1:])
     return "\n".join(added)
+
+
+def _record_patch_content(
+    contents: dict[str, list[str]], path: str, added: list[str]
+) -> None:
+    if path and added:
+        contents.setdefault(path, []).extend(added)
+
+
+def _render_patch_contents(contents: dict[str, list[str]]) -> list[tuple[str, str]]:
+    return [(path, "\n".join(lines)) for path, lines in contents.items()]
+
+
+def _parse_patch_contents(
+    lines: list[str],
+    path_prefixes: tuple[str, ...],
+    reset_prefixes: tuple[str, ...],
+) -> dict[str, list[str]]:
+    contents: dict[str, list[str]] = {}
+    active_path = ""
+    added: list[str] = []
+    for line in lines:
+        if line.startswith(path_prefixes):
+            _record_patch_content(contents, active_path, added)
+            active_path, added = _patch_path_from_line(line), []
+        elif line.startswith(reset_prefixes):
+            _record_patch_content(contents, active_path, added)
+            active_path, added = "", []
+        elif active_path and line.startswith("+") and not line.startswith("+++"):
+            added.append(line[1:])
+    _record_patch_content(contents, active_path, added)
+    return contents
+
+
+def parse_patch_content_targets(patch_blob: str) -> list[tuple[str, str]]:
+    """Return added content partitioned by the file section that owns it."""
+    lines = patch_blob.splitlines()
+    contents = _parse_patch_contents(
+        lines,
+        ("*** Add File: ", "*** Update File: "),
+        ("*** End Patch",),
+    )
+    if not contents:
+        contents = _parse_patch_contents(lines, ("+++ ",), ("diff --git ",))
+    return _render_patch_contents(contents)
