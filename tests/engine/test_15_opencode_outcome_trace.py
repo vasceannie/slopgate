@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from slopgate._types import object_dict
+from slopgate.constants import BLOCK, PLATFORM_OPENCODE
+from slopgate.context import HookContext
+from slopgate.engine._evaluation import _record_opencode_repair_required
 from slopgate.engine._trace_payloads import (
     EvaluationMetadata,
     evaluation_metadata,
@@ -16,6 +20,7 @@ from slopgate.engine._trace_payloads import (
     subprocess_startup_ms,
     write_start_trace,
 )
+from slopgate.models import ContentTarget, RuleFinding, Severity
 from tests.test_engine import (
     MonkeyPatch,
     evaluate_payload,
@@ -49,6 +54,68 @@ class OutcomeCase:
     evidence_tier: dict[str, str]
 
 
+@dataclass(slots=True)
+class _RepairStateSpy:
+    marked: list[object] = field(default_factory=list)
+    cleared: list[str] = field(default_factory=list)
+
+    def repair_generation(self, **_kwargs: object) -> str:
+        return "generation-1"
+
+    def mark_repair_required(self, *args: object) -> None:
+        self.marked.append(args)
+
+    def get_repair_required(self) -> dict[str, str]:
+        return {"generation": "generation-1"}
+
+    def clear_repair_required(self, generation: str) -> bool:
+        self.cleared.append(generation)
+        return True
+
+
+@dataclass(slots=True)
+class _RepairPayloadSpy:
+    payload: dict[str, object]
+
+
+@dataclass(slots=True)
+class _RepairContextSpy:
+    event_name: str
+    payload: _RepairPayloadSpy
+    session_id: str
+    content_targets: list[ContentTarget]
+    state: _RepairStateSpy
+    mutating: bool
+
+
+def _repair_context(
+    *,
+    execution_outcome: str = "",
+    mutating: bool = False,
+    state: _RepairStateSpy | None = None,
+) -> _RepairContextSpy:
+    payload: dict[str, object] = {"call_id": "call-1"}
+    if execution_outcome:
+        payload["execution_outcome"] = execution_outcome
+    return _RepairContextSpy(
+        event_name="PostToolUse",
+        payload=_RepairPayloadSpy(payload),
+        session_id="session-1",
+        content_targets=[ContentTarget("src/app.py", "value = 1", "tool_input")],
+        state=state if state is not None else _RepairStateSpy(),
+        mutating=mutating,
+    )
+
+
+def _blocking_finding() -> RuleFinding:
+    return RuleFinding(
+        rule_id="PY-CODE-010",
+        title="long line",
+        severity=Severity.MEDIUM,
+        decision=BLOCK,
+    )
+
+
 def test_trace_payload_interface_keeps_typed_metadata_and_timing_contract(
     tmp_path: Path,
 ) -> None:
@@ -64,6 +131,31 @@ def test_trace_payload_interface_keeps_typed_metadata_and_timing_contract(
     )
     assert all(callable(helper) for helper in _TRACE_PAYLOAD_CALLABLES), (
         "the evaluation orchestrator should receive callable trace boundaries"
+    )
+
+
+@pytest.mark.parametrize("execution_outcome", ("failed", "cancelled"))
+def test_failed_opencode_execution_does_not_create_repair_lock(
+    execution_outcome: str,
+) -> None:
+    context = _repair_context(execution_outcome=execution_outcome)
+
+    _record_opencode_repair_required(
+        cast(HookContext, context), [_blocking_finding()], PLATFORM_OPENCODE
+    )
+
+    assert context.state.marked == [], (
+        "failed executions must not create persistent repair state"
+    )
+
+
+def test_clean_completed_opencode_mutation_clears_repair_lock() -> None:
+    context = _repair_context(execution_outcome="returned", mutating=True)
+
+    _record_opencode_repair_required(cast(HookContext, context), [], PLATFORM_OPENCODE)
+
+    assert context.state.cleared == ["generation-1"], (
+        "a clean completed repair mutation should clear its pending generation"
     )
 
 

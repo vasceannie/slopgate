@@ -12,6 +12,7 @@ from slopgate.opencode_tool_capabilities import (
     OpenCodeToolCapability,
     opencode_tool_capability,
 )
+from slopgate.util import logger
 from slopgate.util.payloads import is_read_only_tool_use, is_shell_tool
 from .models import (
     OPENCODE_TOOL_CONTRACT_VERSION,
@@ -34,6 +35,7 @@ class _SectionSource:
 
 
 def _target(root: Path, value: str) -> tuple[Path, str] | None:
+    logger.debug("OpenCode projection target requested", root=root, value=value)
     if not value.strip():
         return None
     root = root.resolve()
@@ -46,11 +48,13 @@ def _target(root: Path, value: str) -> tuple[Path, str] | None:
 
 
 def _request_target(request: ProjectionRequest) -> tuple[Path, str] | None:
+    logger.debug("OpenCode request target requested", tool=request.tool_name)
     raw_path = string_value(request.tool_input.get("filePath")) or ""
     return _target(request.root, raw_path)
 
 
 def _snapshot_digest(root: Path, relative: str) -> str | None | SnapshotStatus:
+    logger.debug("OpenCode snapshot requested", root=root, relative=relative)
     snapshot = read_snapshot(root, relative)
     if isinstance(snapshot, Snapshot):
         return snapshot.sha256
@@ -60,6 +64,7 @@ def _snapshot_digest(root: Path, relative: str) -> str | None | SnapshotStatus:
 
 
 def _project_write(request: ProjectionRequest) -> Projection:
+    logger.debug("OpenCode write projection requested", tool=request.tool_name)
     target = _request_target(request)
     content = string_value(request.tool_input.get(METADATA_CONTENT))
     if target is None or content is None:
@@ -75,6 +80,7 @@ def _project_write(request: ProjectionRequest) -> Projection:
 
 
 def _project_edit(request: ProjectionRequest) -> Projection:
+    logger.debug("OpenCode edit projection requested", tool=request.tool_name)
     target = _request_target(request)
     old = string_value(request.tool_input.get("oldString"))
     new = string_value(request.tool_input.get("newString"))
@@ -99,6 +105,7 @@ def _section_source(
     root: Path,
     section: PatchSection,
 ) -> _SectionSource | SnapshotStatus:
+    logger.debug("OpenCode patch source requested", operation=section.operation)
     target = _target(root, section.path)
     if target is None:
         return "invalid"
@@ -117,6 +124,7 @@ def _section_content(
     section: PatchSection,
     source: str,
 ) -> str | None:
+    logger.debug("OpenCode patch content requested", operation=section.operation)
     match section.operation:
         case "add":
             valid_add = all(line.startswith("+") for line in section.lines)
@@ -131,6 +139,7 @@ def _section_content(
 
 
 def _project_patch(request: ProjectionRequest) -> Projection:
+    logger.debug("OpenCode patch projection requested", tool=request.tool_name)
     patch_text = string_value(request.tool_input.get("patchText")) or ""
     sections = parse_patch(patch_text)
     if sections is None:
@@ -174,6 +183,7 @@ def unresolved_opencode_projection_finding(
     event_name: str,
 ) -> RuleFinding | None:
     """Return a deny finding when an OpenCode mutation cannot be projected safely."""
+    logger.debug("OpenCode unresolved projection evaluated", event=event_name, tool=tool_name)
     if event_name != PRE_TOOL_USE:
         return None
     projection = object_dict(tool_input.get(PROJECTION_KEY))
@@ -206,6 +216,7 @@ def unresolved_opencode_projection_finding(
 
 def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
     """Return projection metadata without mutating arguments or files."""
+    logger.debug("OpenCode tool projection requested", tool=request.tool_name)
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
         return Projection("protocol_mismatch").to_dict()
     match request.tool_name.strip().lower():
@@ -222,6 +233,7 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
 
 def normalize_projected_tool_input(request: ProjectionRequest) -> ObjectDict:
     """Return canonical analysis input containing complete projected edits."""
+    logger.debug("OpenCode projection normalization requested", tool=request.tool_name)
     projection = project_opencode_tool_input(request)
     enriched_input = dict(request.tool_input)
     enriched_input[PROJECTION_KEY] = projection

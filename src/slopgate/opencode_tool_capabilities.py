@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Final
 
+from slopgate.constants import BASH_TOOL_LOWER
+
 
 class OpenCodeToolCapability(StrEnum):
     """Trusted effect classes for exact OpenCode tool identifiers."""
@@ -13,7 +15,7 @@ class OpenCodeToolCapability(StrEnum):
     EFFECTFUL = "effectful"
 
 
-READ_ONLY_TOOL_IDS: Final = frozenset(
+READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
     {
         "codegraph_codegraph_explore",
         "find",
@@ -30,20 +32,35 @@ READ_ONLY_TOOL_IDS: Final = frozenset(
         "gitnexus_tool_map",
         "glob",
         "grep",
+        "lsp_diagnostics",
+        "lsp_find_references",
+        "lsp_goto_definition",
+        "lsp_prepare_rename",
+        "lsp_status",
+        "lsp_symbols",
         "list",
         "ls",
+        "question",
         "read",
+        "read_mcp_resource",
+        "read_session",
+        "session_info",
+        "session_list",
+        "session_read",
+        "session_search",
         "skill",
         "webfetch",
         "websearch",
+        "websearch_cited",
+        "websearch_web_search_exa",
     }
 )
 
-EFFECTFUL_TOOL_IDS: Final = frozenset(
+EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
     {
         "api_delete_resource",
         "apply_patch",
-        "bash",
+        BASH_TOOL_LOWER,
         "edit",
         "github_update_issue",
         "slopgate_verify_repair",

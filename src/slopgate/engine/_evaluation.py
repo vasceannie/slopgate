@@ -44,7 +44,10 @@ def _record_opencode_repair_required(
 ) -> None:
     if platform != PLATFORM_OPENCODE:
         return
-    if ctx.event_name not in {"PostToolUse", "PostToolUseFailure"}:
+    if ctx.event_name != "PostToolUse":
+        return
+    execution_outcome = str(ctx.payload.payload.get("execution_outcome", ""))
+    if execution_outcome.strip().lower() in {"failed", "cancelled"}:
         return
     quality_findings = [
         finding
@@ -52,6 +55,12 @@ def _record_opencode_repair_required(
         if finding.decision in {DENY, BLOCK}
     ]
     if not quality_findings:
+        if not ctx.mutating:
+            return
+        required = ctx.state.get_repair_required()
+        generation = required.get("generation") if required else None
+        if isinstance(generation, str) and generation:
+            ctx.state.clear_repair_required(generation)
         return
     rule_ids = [finding.rule_id for finding in quality_findings]
     paths = [target.path for target in ctx.content_targets]
