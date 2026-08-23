@@ -796,7 +796,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
         args: {},
         execute: async (
           args: Record<string, unknown>,
-          extra?: { abort?: AbortSignal },
+          _extra?: { abort?: AbortSignal },
         ): Promise<string> => {
           const cwd = firstString(args, "cwd") || scopedDirectory
           const pending = await repairGateState(cwd)
