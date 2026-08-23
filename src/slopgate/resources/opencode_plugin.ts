@@ -368,7 +368,7 @@ const DISABLE_SENTINELS = [".noslopgate", ".no-slop-gate"] as const
 function tomlDisablesRepo(content: string): boolean {
   let section = ""
   for (const line of content.split(/\r?\n/)) {
-    const header = line.match(/^\s*\[([^\]]+)\]\s*$/)
+    const header = line.match(/^\s*\[([^\]]+)\]\s*(?:#.*)?$/)
     if (header) {
       section = header[1] || ""
       continue
@@ -552,7 +552,6 @@ function callRepairCommand(
 function verifyRepairFlight(
   cwd: string,
   generation: string,
-  signal?: AbortSignal,
 ): Promise<RepairCommandResult> {
   const key = `${cwd}::${generation}`
   const existing = verifyFlights.get(key)
@@ -560,7 +559,6 @@ function verifyRepairFlight(
   const pending = callRepairCommand(
     ["repair", "verify", "--cwd", cwd, "--generation", generation],
     cwd,
-    { signal },
   ).finally(() => {
     verifyFlights.delete(key)
   })
@@ -806,7 +804,6 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
           const result = await verifyRepairFlight(
             cwd,
             pending.generation,
-            extra?.abort,
           )
           if (result.status !== "ok" || result.exitCode !== 0) {
             throw new Error(

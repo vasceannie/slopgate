@@ -227,7 +227,11 @@ def install_opencode(
     for target in paths:
         target_spec = _OpenCodeInstallTarget(
             path=target,
-            identity_root=_opencode_config_dir() if target == user_target else root,
+            identity_root=(
+                _opencode_config_dir()
+                if target == user_target
+                else root / ".opencode"
+            ),
             scope="user" if target == user_target else "project",
             dry_run=dry_run,
         )

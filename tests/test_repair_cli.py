@@ -254,6 +254,117 @@ def test_repair_verify_retains_when_recorded_path_is_dirty(
     )
 
 
+def test_repair_verify_fails_on_known_targeted_debt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_repair_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "baselines.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "fixed-for-test",
+                "rules": {
+                    "oversized-module-soft": [
+                        "oversized-module-soft|src/huge.py|huge.py|lines=371 (soft limit=350)"
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    _mark_repair(
+        tmp_path,
+        _GENERATION_ONE,
+        rule_ids=["PY-CODE-018"],
+        paths=[_DECOY_PATH],
+    )
+    reset_config()
+
+    try:
+        result = _verify(tmp_path, _GENERATION_ONE)
+    finally:
+        reset_config()
+
+    assert result == 1, "known targeted debt must fail all-violation verification"
+    remaining = _required(tmp_path)
+    assert remaining is not None
+    assert remaining["generation"] == _GENERATION_ONE
+
+
+def test_repair_verify_does_not_sync_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_repair_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    baseline = tmp_path / "baselines.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "fixed-for-test",
+                "rules": {"unrelated-rule": ["unrelated-id"]},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    before = baseline.read_bytes()
+    _mark_repair(
+        tmp_path,
+        _GENERATION_ONE,
+        rule_ids=[_COMPLEXITY_RULE],
+        paths=[_REPAIR_PATH],
+    )
+    reset_config()
+
+    try:
+        result = _verify(tmp_path, _GENERATION_ONE)
+    finally:
+        reset_config()
+
+    assert result == 0, "clean verification should clear the repair generation"
+    assert baseline.read_bytes() == before, (
+        "repair verification must not prune or rewrite the repository baseline"
+    )
+
+
+def test_repair_verify_retains_generation_when_recorded_path_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_repair_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _mark_repair(
+        tmp_path,
+        _GENERATION_ONE,
+        rule_ids=[_COMPLEXITY_RULE],
+        paths=["src/does-not-exist.py"],
+    )
+    reset_config()
+
+    try:
+        result = _verify(tmp_path, _GENERATION_ONE)
+    finally:
+        reset_config()
+
+    assert result == 1, "unresolvable recorded paths must fail closed"
+    assert "do not resolve to files" in capsys.readouterr().out
+    remaining = _required(tmp_path)
+    assert remaining is not None, "missing paths must retain REPAIR_REQUIRED"
+    assert remaining["generation"] == _GENERATION_ONE
+
+
+def test_locate_repair_path_rejects_project_escapes(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("value = 1\n", encoding="utf-8")
+
+    assert repair_mod._locate_repair_path(project, str(outside)) is None
+    assert repair_mod._locate_repair_path(project, "../outside.py") is None
+
+
 def test_full_repo_lint_check_still_scans_unrelated_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -20,9 +20,10 @@ from slopgate.cli.commands import (
     cmd_config_show,
     cmd_handle,
 )
+from slopgate.cli import check as check_mod
 from slopgate.cli.lint import cmd_lint
 from slopgate.cli.main import main
-from slopgate.config import resolve_git_root
+from slopgate.config import load_config, resolve_git_root
 from slopgate.constants import METADATA_COMMAND
 from slopgate.lint._config import reset_config
 
@@ -151,6 +152,50 @@ def test_check_non_git_path_is_quiet_and_does_not_create_trace_dirs(
     captured = capfd.readouterr()
     assert "fatal: not a git repository" not in captured.err
     assert not (tmp_path / "xdg" / "slopgate" / "logs").exists()
+
+
+def test_check_anchors_relative_skip_paths_to_enrolled_repo_root(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    target = repo / "generated" / "output.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("value = 1\n", encoding="utf-8")
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
+    resolved_repo_root, _git_root, _main_repo_root = check_mod._check_roots(target)
+    assert resolved_repo_root == repo
+    config = load_config(
+        repo_root=repo, ensure_enrollment=False, ensure_trace=False
+    )
+    config.skip_paths = ["generated/*"]
+
+    assert check_mod._check_skip_state(target, config, resolved_repo_root) == (
+        True,
+        False,
+    )
+
+
+def test_check_reports_repo_skip_as_skipped_status(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    target = repo / "src" / "app.py"
+    target.parent.mkdir()
+    target.write_text("value = 1\n", encoding="utf-8")
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
+    config = load_config(
+        repo_root=repo, ensure_enrollment=False, ensure_trace=False
+    )
+    config.skip_paths = [str(repo)]
+
+    report = check_mod._check_report(target, config)
+
+    assert report["repo_path_skipped"] is True
+    assert report["target_path_skipped"] is False
+    assert report["status"] == "SKIPPED"
 
 
 def test_resolve_git_root_suppresses_git_stderr(

@@ -29,7 +29,7 @@ def _check_skip_state(
 ) -> tuple[bool, bool]:
     from slopgate.config import is_path_skipped
 
-    base_dir = target if target.is_dir() else target.parent
+    base_dir = resolved_repo_root or (target if target.is_dir() else target.parent)
     target_skipped = is_path_skipped(target, config.skip_paths, base_dir=base_dir)
     repo_skipped = (
         resolved_repo_root is not None
@@ -50,7 +50,7 @@ def _check_report(target: Path, config: RuntimeConfig) -> dict[str, object]:
         "NOT_ENROLLED"
         if resolved_repo_root is None
         else "SKIPPED"
-        if target_skipped
+        if target_skipped or repo_skipped
         else "RELAXED"
         if disabled
         else "ENROLLED"

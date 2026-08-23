@@ -300,6 +300,7 @@ def print_collector_results(
     *,
     gate: LintGateMode = "new",
     details: bool,
+    sync_baseline: bool = True,
 ) -> int:
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     baseline_inputs = _coerce_baseline_inputs(baseline)
@@ -322,16 +323,17 @@ def print_collector_results(
             totals.fixed + rule_fixed,
         )
     exit_code = print_lint_summary(totals, color, gate=gate)
-    _sync_baseline_after_lint(
-        _BaselineLintSyncContext(
-            collectors=collectors,
-            baseline=baseline_inputs.stored,
-            accepted_baseline=baseline_inputs.accepted,
-            totals=totals,
-            gate=gate,
-            color=color,
+    if sync_baseline:
+        _sync_baseline_after_lint(
+            _BaselineLintSyncContext(
+                collectors=collectors,
+                baseline=baseline_inputs.stored,
+                accepted_baseline=baseline_inputs.accepted,
+                totals=totals,
+                gate=gate,
+                color=color,
+            )
         )
-    )
     from slopgate.lint._helpers.profile import flush_lint_profile
 
     flush_lint_profile()

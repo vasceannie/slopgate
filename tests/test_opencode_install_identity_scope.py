@@ -30,7 +30,7 @@ def _install_both_scope_plugins(
     user_root = tmp_path / ".config" / "opencode"
     project_root = tmp_path / "project"
     _write_opencode_package_metadata(user_root, "1.18.21")
-    _write_opencode_package_metadata(project_root, "1.19.0")
+    _write_opencode_package_metadata(project_root / ".opencode", "1.19.0")
     status = _opencode.install_opencode(
         dry_run=False, scope="both", project_root=project_root
     )
@@ -63,7 +63,7 @@ def test_opencode_project_identity_uses_project_install_root(
     status, _, project_plugin = _install_both_scope_plugins(tmp_path, monkeypatch)
     expected = (
         '"install_scope":"project"',
-        f'"install_root":{json.dumps(str(tmp_path / "project"))}',
+        f'"install_root":{json.dumps(str(tmp_path / "project" / ".opencode"))}',
         '"plugin_declared_version":"1.19.0"',
     )
 
