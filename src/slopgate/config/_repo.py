@@ -224,12 +224,26 @@ def is_repo_disabled(repo_root: Path | None = None) -> bool:
     return False
 
 
-def is_path_skipped(repo_path: Path, skip_paths: list[str]) -> bool:
-    """Check if *repo_path* matches any glob in the central skip_paths list."""
+def is_path_skipped(
+    repo_path: Path,
+    skip_paths: list[str],
+    *,
+    base_dir: Path | None = None,
+) -> bool:
+    """Check if *repo_path* matches a skip glob, resolving relative values."""
     import fnmatch
 
-    resolved = str(repo_path.resolve())
+    base = (base_dir or Path.cwd()).resolve()
+    candidate = repo_path if repo_path.is_absolute() else base / repo_path
+    resolved = str(candidate.resolve())
     for pattern in skip_paths:
-        if fnmatch.fnmatch(resolved, pattern):
+        raw_pattern = pattern.strip()
+        if not raw_pattern:
+            continue
+        pattern_path = Path(raw_pattern).expanduser()
+        normalized_pattern = (
+            pattern_path if pattern_path.is_absolute() else base / pattern_path
+        )
+        if fnmatch.fnmatch(resolved, str(normalized_pattern)):
             return True
     return False

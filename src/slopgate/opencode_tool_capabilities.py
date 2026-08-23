@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from enum import StrEnum
 from typing import Final
 
@@ -34,6 +33,7 @@ READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "gitnexus_tool_map",
         "glob",
         "grep",
+        "lsp",
         "lsp_diagnostics",
         "lsp_find_references",
         "lsp_goto_definition",
@@ -66,6 +66,7 @@ EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "edit",
         "github_update_issue",
         "slopgate_verify_repair",
+        "task",
         "todo_write",
         "todowrite",
         "write",

@@ -20,13 +20,17 @@ BOUNDARY_LOG_NAMES = frozenset(
     {
         "audit",
         "audit_logger",
+        "debug",
         "event_logger",
+        "error",
+        "info",
         "logger",
         "log",
         "metrics",
         "observability",
         "telemetry",
         "tracer",
+        "warning",
     }
 )
 EVENT_PATH_PARTS = frozenset(

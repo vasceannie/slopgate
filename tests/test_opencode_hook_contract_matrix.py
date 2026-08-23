@@ -33,6 +33,7 @@ REQUIRED_CASES: Final = {
     "generation-race",
     "event-properties-envelope",
     "file-edited-reordered-advisory",
+    "after-detection-no-prevention",
     "permission-ask-untriggered",
     "system-transform-session-present",
     "system-transform-session-absent",

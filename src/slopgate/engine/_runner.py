@@ -22,10 +22,11 @@ from slopgate.config import (
 )
 from slopgate.context import HookContext
 from slopgate.enrichment import enrich_findings
-from slopgate.models import RuleFinding, Severity
+from slopgate.models import ContentTarget, RuleFinding, Severity
 from slopgate.rules import build_always_on_rules, build_repo_strict_rules
 from slopgate.rules.base import Rule
-from slopgate.util import warning
+from slopgate.util import debug, warning
+from slopgate.util.payloads import detect_language
 
 
 def _apply_severity_overrides(
@@ -46,9 +47,16 @@ def _apply_severity_overrides(
 
 def _hook_surface_allows_event(rule: Rule, ctx: HookContext) -> bool:
     surface = ctx.config.rule_surfaces.get(rule.rule_id)
-    if surface is None or not surface.hook.events:
-        return True
-    return ctx.event_name in surface.hook.events
+    events = surface.hook.events if surface is not None else ()
+    allowed = not events or ctx.event_name in events
+    debug(
+        "Evaluated configured hook event surface",
+        rule_id=rule.rule_id,
+        event_name=ctx.event_name,
+        configured_events=events,
+        allowed=allowed,
+    )
+    return allowed
 
 
 def _hook_surface_enabled(rule: Rule, ctx: HookContext) -> bool:
@@ -227,6 +235,63 @@ def _safe_enrich(
 EnforcementMode = Literal["outside_repo", "repo_strict", "repo_relaxed"]
 
 
+@dataclass(slots=True)
+class _ScopedHookContext(HookContext):
+    """Expose only unskipped candidates to repo-strict rules."""
+
+    scoped_content_targets: list[ContentTarget]
+    scoped_candidate_paths: list[str]
+    scoped_languages: set[str]
+
+    @property
+    def content_targets(self) -> list[ContentTarget]:
+        return self.scoped_content_targets
+
+    @property
+    def candidate_paths(self) -> list[str]:
+        return self.scoped_candidate_paths
+
+    @property
+    def languages(self) -> set[str]:
+        return self.scoped_languages
+
+
+def _strict_context(ctx: HookContext) -> HookContext:
+    """Return a context whose strict-rule targets exclude configured skips."""
+    if not ctx.config.skip_paths:
+        return ctx
+
+    candidate_paths = [
+        path
+        for path in ctx.candidate_paths
+        if not is_path_skipped(Path(path), ctx.config.skip_paths, base_dir=ctx.cwd)
+    ]
+    content_targets = [
+        target
+        for target in ctx.content_targets
+        if not is_path_skipped(
+            Path(target.path), ctx.config.skip_paths, base_dir=ctx.cwd
+        )
+    ]
+    if candidate_paths == ctx.candidate_paths and content_targets == ctx.content_targets:
+        return ctx
+
+    languages = {
+        language
+        for path in candidate_paths
+        if (language := detect_language(path)) is not None
+    }
+    return _ScopedHookContext(
+        payload=ctx.payload,
+        config=ctx.config,
+        trace=ctx.trace,
+        state=ctx.state,
+        scoped_content_targets=content_targets,
+        scoped_candidate_paths=candidate_paths,
+        scoped_languages=languages,
+    )
+
+
 def resolve_enforcement_mode(ctx: HookContext) -> EnforcementMode:
     repo_cwd = Path(ctx.cwd) if ctx.cwd else Path.cwd()
     repo_root = resolve_repo_root(repo_cwd) or repo_cwd.resolve()
@@ -247,22 +312,22 @@ def run_rules(
     acc = EvalAccumulator()
     disabled = set(ctx.config.disabled_rules)
 
-    rules: list[Rule] = [*build_always_on_rules(ctx)]
-    repo_root = resolve_repo_root(Path(ctx.cwd) if ctx.cwd else Path.cwd())
-    effective_root = repo_root or (Path(ctx.cwd) if ctx.cwd else Path.cwd())
+    rules: list[tuple[Rule, HookContext]] = [
+        (rule, ctx) for rule in build_always_on_rules(ctx)
+    ]
+    strict_ctx = ctx
+    if mode == "repo_strict":
+        strict_ctx = _strict_context(ctx)
+        if not is_path_skipped(ctx.cwd, ctx.config.skip_paths, base_dir=ctx.cwd):
+            rules.extend((rule, strict_ctx) for rule in build_repo_strict_rules(ctx))
 
-    if mode == "repo_strict" and not is_path_skipped(
-        effective_root, ctx.config.skip_paths
-    ):
-        rules.extend(build_repo_strict_rules(ctx))
-
-    for rule in rules:
+    for rule, rule_ctx in rules:
         if (
             rule.rule_id not in disabled
-            and _hook_surface_enabled(rule, ctx)
-            and rule.supports(ctx.event_name)
-            and _hook_surface_allows_event(rule, ctx)
+            and _hook_surface_enabled(rule, rule_ctx)
+            and rule.supports(rule_ctx.event_name)
+            and _hook_surface_allows_event(rule, rule_ctx)
         ):
-            _run_rule(rule, ctx, platform, acc)
-    _safe_enrich(ctx, platform, acc)
+            _run_rule(rule, rule_ctx, platform, acc)
+    _safe_enrich(strict_ctx, platform, acc)
     return acc

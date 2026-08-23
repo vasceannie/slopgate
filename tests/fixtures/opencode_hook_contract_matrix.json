@@ -115,6 +115,15 @@
       "test_name": "test_file_edited_block_is_logged_without_throwing"
     },
     {
+      "id": "after-detection-no-prevention",
+      "behavior": "tool.execute.after findings state detection and repair without claiming prevention or rollback",
+      "evidence_tier": "local-observed",
+      "status": "verified",
+      "public_contract": true,
+      "test_path": "tests/integration/test_opencode_plugin_control_contract.py",
+      "test_name": "test_typed_after_hook_logs_detection_without_claiming_prevention"
+    },
+    {
       "id": "permission-ask-untriggered",
       "behavior": "permission.ask is typed but not relied upon as an observed control hook",
       "evidence_tier": "typed",

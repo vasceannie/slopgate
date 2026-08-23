@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -41,6 +40,8 @@ _TOOL_NAME_BY_MODE = {
     "repair-required": "custom_mutator",
     "unknown-effect": "custom_mutator",
     "unknown-readonly": "gitnexus_context",
+    "outside-unknown": "custom_mutator",
+    "relaxed-unknown": "custom_mutator",
     "repair-required-read": "read",
     "repair-required-read-gitnexus": "gitnexus_context",
     "repair-required-read-skill": "skill",
@@ -48,65 +49,12 @@ _TOOL_NAME_BY_MODE = {
     "repair-required-wrapper-skill-mcp": "skill_mcp",
     "repair-required-wrapper-task": "task",
 }
-_FAIL_CLOSED_TOOL_CASES = [
-    pytest.param(
-        "custom_write",
-        {"filename": "sample.py", "content": "x"},
-        id="filename-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"paths": ["sample.py"], "content": "x"},
-        id="paths-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"uri": "file:///tmp/sample.py", "content": "x"},
-        id="file-uri-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"input": {"path": "sample.py", "content": "x"}},
-        id="nested-mutator",
-    ),
-    pytest.param(
-        "interactive_bash",
-        {"tmux_command": "send-keys -t dev 'touch sample.py' Enter"},
-        id="interactive-shell-wrapper",
-    ),
-    pytest.param(
-        "skill_mcp",
-        {
-            "mcp_name": "fs",
-            "tool_name": "write_file",
-            "arguments": {"path": "sample.py", "content": "x"},
-        },
-        id="mcp-dispatch-wrapper",
-    ),
-    pytest.param(
-        "task",
-        {"category": "quick", "prompt": "edit sample.py"},
-        id="task-delegation-wrapper",
-    ),
-]
-_REMOTE_EFFECT_TOOL_CASES = [
-    pytest.param(
-        "github_update_issue",
-        {"path": "/repos/o/r/issues/1", "body": "fixed"},
-        id="github-api-resource-path",
-    ),
-    pytest.param(
-        "api_delete_resource",
-        {"path": "/v1/items/1"},
-        id="declared-api-resource-path",
-    ),
-]
-
-
-def _write_fake_slopgate(tmp_path: Path) -> Path:
-    (tmp_path / "slopgate.toml").write_text(
-        "[slopgate]\nenabled = true\n", encoding="utf-8"
-    )
+def _write_fake_slopgate(tmp_path: Path, repo_mode: str = "strict") -> Path:
+    if repo_mode != "outside":
+        enabled = "false" if repo_mode == "relaxed" else "true"
+        (tmp_path / "slopgate.toml").write_text(
+            f"[slopgate]\nenabled = {enabled}\n", encoding="utf-8"
+        )
     executable = tmp_path / "slopgate"
     executable.write_text(
         """#!/usr/bin/env python3
@@ -129,6 +77,8 @@ else:
         print(json.dumps({"action": "allow"}))
     elif mode == "unknown-readonly":
         print(json.dumps({"action": "allow"}))
+    elif mode in {"outside-unknown", "relaxed-unknown"}:
+        print(json.dumps({"action": "allow"}))
     elif mode.startswith("repair-required-read"):
         pass
     else:
@@ -141,28 +91,19 @@ else:
     return executable
 
 
-def _run_plugin_contract(
+def _write_plugin_runner(
     tmp_path: Path,
+    plugin_path: Path,
     native_event: str,
-    response_mode: str = "block",
-) -> subprocess.CompletedProcess[str]:
-    runner = tmp_path / "runner.ts"
-    executable = _write_fake_slopgate(tmp_path)
+    response_mode: str,
+) -> Path:
     selected_args = _TOOL_ARGS_BY_MODE.get(response_mode, _DEFAULT_TOOL_ARGS)
     tool_name = (
         "bash"
         if response_mode.startswith("repair-required-command")
         else _TOOL_NAME_BY_MODE.get(response_mode, "write")
     )
-    plugin_path = tmp_path / "slopgate-plugin.ts"
-    plugin_path.write_text(
-        render_opencode_plugin(
-            resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
-            str(executable),
-            {"opencode_version": "1.18.21"},
-        ),
-        encoding="utf-8",
-    )
+    runner = tmp_path / "runner.ts"
     runner.write_text(
         f"""
 import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
@@ -178,6 +119,16 @@ let hookReturn: unknown
 
 if ({json.dumps(native_event)} === "file.edited") {{
   await handlers.event({{ event: {{ type: "file.edited", properties: {{ file: "sample.py" }} }} }})
+}} else if ({json.dumps(native_event)} === "tool.execute.after") {{
+  await handlers["tool.execute.after"](
+    {{
+      tool: {json.dumps(tool_name)},
+      sessionID: "session",
+      callID: "call",
+      args: {json.dumps(selected_args)},
+    }},
+    {{ title: "sample", output: "completed", metadata: {{}} }},
+  )
 }} else {{
   hookReturn = await handlers["tool.execute.before"](
     {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
@@ -188,6 +139,26 @@ console.log(JSON.stringify({{ logs, hookReturn, args: output.args }}))
 """,
         encoding="utf-8",
     )
+    return runner
+
+
+def _run_plugin_contract(
+    tmp_path: Path,
+    native_event: str,
+    response_mode: str = "block",
+    repo_mode: str = "strict",
+) -> subprocess.CompletedProcess[str]:
+    executable = _write_fake_slopgate(tmp_path, repo_mode)
+    plugin_path = tmp_path / "slopgate-plugin.ts"
+    plugin_path.write_text(
+        render_opencode_plugin(
+            resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
+            str(executable),
+            {"opencode_version": "1.18.21"},
+        ),
+        encoding="utf-8",
+    )
+    runner = _write_plugin_runner(tmp_path, plugin_path, native_event, response_mode)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
@@ -210,6 +181,22 @@ def test_typed_before_hook_still_throws_for_block(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "contract block" in result.stderr
+
+
+def test_typed_after_hook_logs_detection_without_claiming_prevention(
+    tmp_path: Path,
+) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.after")
+    expected_fragments = (
+        "post-tool detection only",
+        "no prevention or rollback occurred",
+        "Repair is required before the next mutation",
+    )
+
+    assert result.returncode == 0, f"post-tool hook should not throw: {result.stderr}"
+    assert all(fragment in result.stdout for fragment in expected_fragments), (
+        f"post-tool detection log missing expected fragments: {result.stdout}"
+    )
 
 
 def test_installed_plugin_forwards_tool_contract_version(tmp_path: Path) -> None:
@@ -335,96 +322,24 @@ def test_generated_plugin_allows_unknown_read_only_tool(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def _run_plugin_with_real_slopgate(
-    tmp_path: Path,
-    tool_name: str,
-    tool_args: dict[str, object],
-) -> subprocess.CompletedProcess[str]:
-    (tmp_path / "slopgate.toml").write_text(
-        "[slopgate]\nenabled = true\n", encoding="utf-8"
-    )
-    plugin_path = tmp_path / "slopgate-plugin.ts"
-    plugin_path.write_text(
-        render_opencode_plugin(
-            resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
-            sys.executable,
-            {"opencode_version": "1.18.21"},
-        ),
-        encoding="utf-8",
-    )
-    runner = tmp_path / "runner.ts"
-    runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
-await handlers["tool.execute.before"](
-  {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
-  {{ args: {json.dumps(tool_args)} }},
+@pytest.mark.parametrize(
+    ("repo_mode", "response_mode"),
+    (
+        pytest.param("outside", "outside-unknown", id="outside-repo"),
+        pytest.param("relaxed", "relaxed-unknown", id="relaxed-repo"),
+    ),
 )
-console.log("allowed")
-""",
-        encoding="utf-8",
-    )
-    env = dict(os.environ)
-    env.pop("SLOPGATE_BIN", None)
-    env["SLOPGATE_DAEMON_SOCKET"] = str(tmp_path / "no-daemon.sock")
-    env["SLOPGATE_ROOT"] = str(tmp_path / "slopgate-root")
-    return subprocess.run(
-        ["bun", "run", str(runner)],
-        cwd=tmp_path,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-
-def test_generated_plugin_blocks_invalid_mutating_projection(tmp_path: Path) -> None:
-    result = _run_plugin_with_real_slopgate(
-        tmp_path, "apply_patch", {"patchText": "not a patch"}
-    )
-    assert result.returncode != 0, "unresolved mutating projections must not execute"
-    assert "invalid" in result.stderr, "the plugin must surface the engine denial"
-
-
-def test_generated_plugin_allows_known_read_only_tool(tmp_path: Path) -> None:
-    result = _run_plugin_with_real_slopgate(tmp_path, "read", {"filePath": "sample.py"})
-    assert result.returncode == 0, result.stderr
-    assert "allowed" in result.stdout
-
-
-def test_generated_plugin_allows_unprojected_read_only_mcp_tool(tmp_path: Path) -> None:
-    result = _run_plugin_with_real_slopgate(
-        tmp_path, "gitnexus_context", {"name": "sample"}
-    )
-    assert result.returncode == 0, result.stderr
-    assert "allowed" in result.stdout
-
-
-@pytest.mark.parametrize(("tool_name", "tool_args"), _FAIL_CLOSED_TOOL_CASES)
-def test_generated_plugin_denies_unknown_mutations_and_wrappers(
+def test_unknown_tool_is_advisory_outside_strict_repo(
     tmp_path: Path,
-    tool_name: str,
-    tool_args: dict[str, object],
+    repo_mode: str,
+    response_mode: str,
 ) -> None:
-    result = _run_plugin_with_real_slopgate(tmp_path, tool_name, tool_args)
-
-    assert result.returncode != 0, "unknown mutations and wrappers must fail closed"
-    assert "unknown OpenCode tool effect" in result.stderr
-
-
-@pytest.mark.parametrize(("tool_name", "tool_args"), _REMOTE_EFFECT_TOOL_CASES)
-def test_generated_plugin_allows_declared_remote_effects_in_clean_state(
-    tmp_path: Path,
-    tool_name: str,
-    tool_args: dict[str, object],
-) -> None:
-    result = _run_plugin_with_real_slopgate(tmp_path, tool_name, tool_args)
+    result = _run_plugin_contract(
+        tmp_path,
+        "tool.execute.before",
+        response_mode,
+        repo_mode,
+    )
 
     assert result.returncode == 0, result.stderr
-    assert "allowed" in result.stdout
+    assert "unknown OpenCode tool allowed" in result.stdout

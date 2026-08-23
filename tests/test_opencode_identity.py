@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import pytest
 from hypothesis import given, strategies
 
-from slopgate.installer import _opencode
+from slopgate.installer import _opencode, opencode_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +48,7 @@ def _matching_identity_status(version: str) -> str:
         config_dir = temporary_path / "opencode"
         versions = IdentityVersions(declared=version, locked=version, installed=version)
         _write_identity_metadata(config_dir, versions)
-        patch.setattr(_opencode, "_opencode_runtime_version", lambda: version)
+        patch.setattr(opencode_identity, "opencode_runtime_version", lambda: version)
         identity = _opencode.collect_opencode_install_identity(
             str(temporary_path / "slopgate"), config_dir=config_dir
         )
@@ -63,7 +63,7 @@ def test_opencode_identity_reports_stale_declared_lock_and_installed_versions(
         config_dir,
         IdentityVersions(declared="1.18.5", locked="1.2.27", installed="1.18.5"),
     )
-    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: "1.18.19")
+    monkeypatch.setattr(opencode_identity, "opencode_runtime_version", lambda: "1.18.19")
 
     identity = _opencode.collect_opencode_install_identity(
         str(tmp_path / "slopgate"), config_dir=config_dir
@@ -101,7 +101,7 @@ def test_opencode_identity_reads_bun_generated_lockfile(
 """,
         encoding="utf-8",
     )
-    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: version)
+    monkeypatch.setattr(opencode_identity, "opencode_runtime_version", lambda: version)
 
     identity = _opencode.collect_opencode_install_identity(
         str(tmp_path / "slopgate"), config_dir=config_dir
@@ -132,7 +132,11 @@ def test_opencode_identity_is_compatible_for_equivalent_version_states(
         config_dir,
         IdentityVersions(declared="^1.18.21", locked="1.18.21", installed="v1.18.21"),
     )
-    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: "opencode 1.18.21")
+    monkeypatch.setattr(
+        opencode_identity,
+        "opencode_runtime_version",
+        lambda: "opencode 1.18.21",
+    )
 
     identity = _opencode.collect_opencode_install_identity(
         str(tmp_path / "slopgate"), config_dir=config_dir
@@ -151,7 +155,7 @@ def test_opencode_identity_is_unknown_when_no_versions_are_observed(
 ) -> None:
     config_dir = tmp_path / "opencode"
     config_dir.mkdir()
-    monkeypatch.setattr(_opencode, "_opencode_runtime_version", lambda: "")
+    monkeypatch.setattr(opencode_identity, "opencode_runtime_version", lambda: "")
 
     identity = _opencode.collect_opencode_install_identity(
         str(tmp_path / "slopgate"),

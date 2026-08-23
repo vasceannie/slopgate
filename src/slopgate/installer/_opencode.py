@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 import json
-import re
-import shutil
-import subprocess
-from datetime import datetime, timezone
-from functools import cache
+from dataclasses import dataclass
 from pathlib import Path
 
 import slopgate.installer._shared
-from slopgate import __version__
-from slopgate._types import ObjectDict, ObjectMapping, object_dict
-from slopgate.constants import REPLACE, UNKNOWN_VALUE
+from slopgate._types import ObjectDict, ObjectMapping
+from slopgate.constants import PLATFORM_OPENCODE, REPLACE, UNKNOWN_VALUE
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     normalize_install_scope,
@@ -35,6 +30,7 @@ from slopgate.installer._shared import (
     write_contained_text,
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
+from slopgate.installer.opencode_identity import collect_opencode_install_identity
 from slopgate.opencode_tool_capabilities import (
     EFFECTFUL_TOOL_IDS,
     READ_ONLY_TOOL_IDS,
@@ -54,16 +50,21 @@ PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Slopgate Plugin",
     "const SLOPGATE_BIN",
 )
-_VERSION_TOKEN = re.compile(r"v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)")
-
-
 class OpenCodeTemplateError(RuntimeError):
     """Raised when the bundled OpenCode plugin template cannot be rendered."""
 
 
+@dataclass(frozen=True, slots=True)
+class _OpenCodeInstallTarget:
+    path: Path
+    identity_root: Path
+    scope: str
+    dry_run: bool
+
+
 def _opencode_config_dir() -> Path:
     """Resolve OpenCode's user config directory across native platforms."""
-    return user_config_dir("opencode")
+    return user_config_dir(PLATFORM_OPENCODE)
 
 
 def opencode_user_plugin_path() -> Path:
@@ -78,105 +79,6 @@ _render_opencode_invocation = InvocationTemplateRenderer(
     _PLUGIN_ARGV_PLACEHOLDER_LITERAL,
     "OpenCode plugin template is missing the slopgate binary placeholder",
 )
-
-
-def _json_file(path: Path) -> ObjectDict:
-    try:
-        return object_dict(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _dependency_version(payload: ObjectMapping) -> str:
-    dependencies = object_dict(payload.get("dependencies"))
-    value = dependencies.get("@opencode-ai/plugin")
-    return value if isinstance(value, str) else ""
-
-
-@cache
-def _opencode_runtime_version() -> str:
-    executable = shutil.which("opencode")
-    if executable is None:
-        return ""
-    try:
-        result = subprocess.run(
-            [executable, "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
-
-
-def _canonical_version(value: str) -> str:
-    match = _VERSION_TOKEN.search(value.strip())
-    return match.group(1) if match else value.strip()
-
-
-def _opencode_lock_version(lock_content: str) -> str:
-    lock_match = re.search(
-        r'"@opencode-ai/plugin"\s*:\s*("(?:\\.|[^"\\])*")', lock_content
-    )
-    lock_literal = lock_match.group(1) if lock_match else '""'
-    try:
-        lock_value = json.loads(lock_literal)
-    except json.JSONDecodeError:
-        lock_value = ""
-    return lock_value if isinstance(lock_value, str) else ""
-
-
-def _opencode_identity_status(observed: list[str]) -> tuple[str, str]:
-    canonical = {_canonical_version(value) for value in observed}
-    if not observed:
-        return UNKNOWN_VALUE, "OpenCode identity could not be observed."
-    if len(canonical) == 1:
-        return "compatible", "none"
-    return (
-        "stale",
-        "Reinstall OpenCode plugin dependencies, then restart OpenCode.",
-    )
-
-
-def collect_opencode_install_identity(
-    binary: str,
-    *,
-    config_dir: Path | None = None,
-    probe_runtime: bool = True,
-) -> ObjectDict:
-    root = config_dir or _opencode_config_dir()
-    declared = _dependency_version(_json_file(root / "package.json"))
-    try:
-        lock_content = (root / "bun.lock").read_text(encoding="utf-8")
-    except OSError:
-        lock_content = ""
-    lock = _opencode_lock_version(lock_content)
-    installed_payload = _json_file(
-        root / "node_modules" / "@opencode-ai" / "plugin" / "package.json"
-    )
-    installed_value = installed_payload.get("version")
-    installed = installed_value if isinstance(installed_value, str) else ""
-    runtime = _opencode_runtime_version() if probe_runtime else ""
-    observed = [value for value in (runtime, declared, lock, installed) if value]
-    status, remediation = _opencode_identity_status(observed)
-    return {
-        "status": status,
-        "opencode_version": runtime,
-        "opencode_version_source": "opencode --version",
-        "plugin_declared_version": declared,
-        "plugin_declared_source": str(root / "package.json"),
-        "plugin_lock_version": lock,
-        "plugin_lock_source": str(root / "bun.lock"),
-        "plugin_installed_version": installed,
-        "plugin_installed_source": str(root / "node_modules" / "@opencode-ai" / "plugin" / "package.json"),
-        "slopgate_version": __version__,
-        "slopgate_binary": str(Path(binary).expanduser().resolve()),
-        "captured_at": datetime.now(timezone.utc).isoformat(),
-        "provenance": "install",
-        "remediation": remediation,
-    }
 
 
 def render_opencode_plugin(
@@ -211,12 +113,6 @@ def render_opencode_plugin(
             )
         rendered = rendered.replace(placeholder, value)
     return rendered
-
-
-def _contained_root_for(target: Path, project_root: Path) -> Path:
-    return contained_scope_root(
-        target, project_root=project_root, user_root=_opencode_config_dir()
-    )
 
 
 def _install_opencode_at(
@@ -258,6 +154,55 @@ def _warn_stale_opencode_identity(identity: ObjectDict) -> None:
     )
 
 
+def _opencode_install_content(
+    template: str,
+    binary: str,
+    target: _OpenCodeInstallTarget,
+) -> str | None:
+    identity = collect_opencode_install_identity(
+        binary,
+        config_dir=target.identity_root,
+        probe_runtime=not target.dry_run,
+    )
+    identity.update(
+        {
+            "install_scope": target.scope,
+            "install_root": str(target.identity_root),
+            "plugin_path": str(target.path),
+        }
+    )
+    _warn_stale_opencode_identity(identity)
+    try:
+        return render_opencode_plugin(template, binary, identity)
+    except OpenCodeTemplateError as exc:
+        print(str(exc))
+        return None
+
+
+def _install_opencode_target(
+    template: str,
+    binary: str,
+    target: _OpenCodeInstallTarget,
+    project_root: Path,
+) -> int:
+    content = _opencode_install_content(template, binary, target)
+    if content is None:
+        return 1
+    return _install_opencode_at(
+        target.path,
+        content,
+        binary,
+        InstallAt(
+            root=contained_scope_root(
+                target.path,
+                project_root=project_root,
+                user_root=_opencode_config_dir(),
+            ),
+            dry_run=target.dry_run,
+        ),
+    )
+
+
 def install_opencode(
     dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
@@ -268,29 +213,26 @@ def install_opencode(
         print(f"OpenCode plugin template not found at {template}")
         return 1
     binary = slopgate.installer._shared.find_binary()
-    identity = collect_opencode_install_identity(binary, probe_runtime=not dry_run)
-    _warn_stale_opencode_identity(identity)
     root = resolve_project_root(project_root)
+    user_target = opencode_user_plugin_path()
     paths = resolve_scoped_install_paths(
         scope,
-        project_root,
-        user_path=opencode_user_plugin_path(),
+        root,
+        user_path=user_target,
         project_path_for_root=_opencode_project_plugin_path,
     )
-    content = template.read_text(encoding="utf-8")
-    try:
-        content = render_opencode_plugin(content, binary, identity)
-    except OpenCodeTemplateError as exc:
-        print(str(exc))
-        return 1
+    template_content = template.read_text(encoding="utf-8")
     completed: list[Path] = []
     last_status = 0
     for target in paths:
-        status = _install_opencode_at(
-            target,
-            content,
-            binary,
-            InstallAt(root=_contained_root_for(target, root), dry_run=dry_run),
+        target_spec = _OpenCodeInstallTarget(
+            path=target,
+            identity_root=_opencode_config_dir() if target == user_target else root,
+            scope="user" if target == user_target else "project",
+            dry_run=dry_run,
+        )
+        status = _install_opencode_target(
+            template_content, binary, target_spec, root
         )
         if status != 0:
             if not dry_run:

@@ -17,6 +17,7 @@ from slopgate.cli.platforms import (
     RUNTIME_PLATFORMS,
     VALID_PLATFORMS,
 )
+from .check import cmd_check
 from slopgate.cli._config_commands import (
     cmd_config_init,
     cmd_config_path,
@@ -34,6 +35,7 @@ __all__ = [
     "cmd_config_init",
     "cmd_config_path",
     "cmd_config_show",
+    "cmd_check",
     "cmd_daemon",
     "cmd_handle",
     "cmd_handle_async",
@@ -55,53 +57,6 @@ def _project_root_arg(args: argparse.Namespace) -> Path | None:
     if not value.strip():
         return None
     return Path(value).expanduser().resolve()
-
-
-def cmd_check(args: argparse.Namespace) -> int:
-    from slopgate.config import (
-        is_path_skipped,
-        is_repo_disabled,
-        load_config,
-        resolve_git_root,
-        resolve_main_git_repo_root,
-        resolve_repo_root,
-    )
-
-    target = Path(string_arg(args, METADATA_PATH, ".")).resolve()
-    config = load_config(repo_root=target, ensure_enrollment=False, ensure_trace=False)
-    resolved_repo_root = resolve_repo_root(target)
-    git_root = resolve_git_root(target)
-    main_repo_root = resolve_main_git_repo_root(target)
-    disabled = resolved_repo_root is not None and is_repo_disabled(resolved_repo_root)
-    skipped = is_path_skipped(resolved_repo_root or target, config.skip_paths)
-    if resolved_repo_root is None:
-        status = "NOT_ENROLLED"
-    elif skipped:
-        status = "SKIPPED"
-    elif disabled:
-        status = "RELAXED"
-    else:
-        status = "ENROLLED"
-    print(
-        json.dumps(
-            {
-                METADATA_PATH: str(target),
-                "status": status,
-                "resolved_repo_root": str(resolved_repo_root)
-                if resolved_repo_root is not None
-                else None,
-                "git_root": str(git_root) if git_root is not None else None,
-                "main_repo_root": str(main_repo_root)
-                if main_repo_root is not None
-                else None,
-                "repo_disabled": disabled,
-                "path_skipped": skipped,
-                "skip_paths": config.skip_paths,
-            },
-            indent=2,
-        )
-    )
-    return 0
 
 
 def cmd_enroll(args: argparse.Namespace) -> int:

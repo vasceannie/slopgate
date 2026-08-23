@@ -198,9 +198,17 @@ def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
 
 def test_opencode_plugin_logs_posttool_context_actions() -> None:
     plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    assert 'result.action === "warn" || result.action === "context"' in plugin
-    assert "const message = result.reason || result.context" in plugin
-    assert 'level: "warn"' in plugin
+    expected_fragments = (
+        'result.action !== "block" && result.action !== "warn"',
+        'const detail = result.reason || result.context',
+        'level: "warn"',
+        "post-tool detection only",
+        "no prevention or rollback occurred",
+        "Repair is required before the next mutation",
+    )
+
+    missing = [fragment for fragment in expected_fragments if fragment not in plugin]
+    assert not missing, f"post-tool contract fragments missing: {missing}"
 
 
 def test_opencode_plugin_forwards_documented_runtime_events() -> None:

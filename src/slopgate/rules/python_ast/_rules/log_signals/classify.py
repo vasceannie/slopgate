@@ -57,8 +57,10 @@ def called_name(node: ast.Call) -> str:
 def _call_has_logger(inner: ast.Call) -> bool:
     """Return True when inner is a project logger or metric call."""
     func = inner.func
-    if isinstance(func, ast.Name) and func.id.startswith(("log_", "record_metric")):
-        return True
+    if isinstance(func, ast.Name):
+        return func.id in BOUNDARY_LOG_NAMES or func.id.startswith(
+            ("log_", "record_metric")
+        )
     if not isinstance(func, ast.Attribute):
         return False
     attr = func.attr

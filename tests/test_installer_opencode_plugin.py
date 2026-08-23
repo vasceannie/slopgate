@@ -65,3 +65,24 @@ def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
     assert "empty enforcer response" not in plugin
     assert "if (!trimmed) return null" in plugin
     assert "exits 0 with no stdout" in plugin
+
+
+def test_opencode_plugin_verify_repair_times_out_single_flights_and_kills() -> None:
+    from slopgate.resources import resource_path
+
+    plugin = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
+    assert "SLOPGATE_REPAIR_VERIFY_TIMEOUT_MS" in plugin, (
+        "verify repair must honor a plugin timeout"
+    )
+    assert 'status: "timeout"' in plugin, (
+        "timeout must return structured timeout JSON"
+    )
+    assert "killProcessGroup" in plugin, (
+        "timeout or cancel must kill the verify process group"
+    )
+    assert "verifyFlights" in plugin, (
+        "stacked verify calls must single-flight per worktree and generation"
+    )
+    assert "signal?.aborted" in plugin, (
+        "OpenCode abort must cancel the in-flight verify child"
+    )

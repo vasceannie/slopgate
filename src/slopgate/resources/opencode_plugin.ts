@@ -35,7 +35,8 @@
 
 /// <reference types="node" />
 
-import { existsSync } from "node:fs"
+import { spawn, type ChildProcess } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
 type BunResponseBody = ConstructorParameters<typeof Response>[0]
@@ -94,7 +95,10 @@ interface OpenCodePluginHandlers {
 interface OpenCodeCustomTool {
   description: string
   args: Record<string, unknown>
-  execute(args: Record<string, unknown>): Promise<string>
+  execute(
+    args: Record<string, unknown>,
+    extra?: { abort?: AbortSignal },
+  ): Promise<string>
 }
 
 type Plugin = (
@@ -150,11 +154,21 @@ interface RepairGateState {
   reason?: string
 }
 
+type RepairCommandStatus = "ok" | "timeout" | "failed" | "cancelled"
+
+interface RepairCommandResult {
+  exitCode: number
+  output: string
+  status: RepairCommandStatus
+}
+
 const READ_ONLY_TOOLS = new Set(["__SLOPGATE_READ_ONLY_TOOL_IDS__"])
 const KNOWN_EFFECT_TOOLS = new Set(["__SLOPGATE_EFFECTFUL_TOOL_IDS__"])
 const REPAIR_MUTATION_TOOLS = new Set(["apply_patch", "edit", "write"])
 const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
 const VERIFY_TOOL = "slopgate_verify_repair"
+const DEFAULT_REPAIR_TIMEOUT_MS = 60_000
+const verifyFlights = new Map<string, Promise<RepairCommandResult>>()
 
 type ExecutionOutcome = "returned" | "failed" | "blocked" | "cancelled" | "unknown"
 type MutationOutcome = "committed" | "partial" | "none" | "unknown"
@@ -347,6 +361,42 @@ function findManagedRepoRoot(start: string): string | null {
   }
 }
 
+type EnforcementMode = "outside_repo" | "repo_strict" | "repo_relaxed"
+
+const DISABLE_SENTINELS = [".noslopgate", ".no-slop-gate"] as const
+
+function tomlDisablesRepo(content: string): boolean {
+  let section = ""
+  for (const line of content.split(/\r?\n/)) {
+    const header = line.match(/^\s*\[([^\]]+)\]\s*$/)
+    if (header) {
+      section = header[1] || ""
+      continue
+    }
+    if (
+      section === "slopgate"
+      && /^\s*enabled\s*=\s*false(?:\s*#.*)?$/i.test(line)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function enforcementModeFor(start: string): EnforcementMode {
+  const root = findManagedRepoRoot(start)
+  if (!root) return "outside_repo"
+  if (DISABLE_SENTINELS.some((sentinel) => existsSync(join(root, sentinel)))) {
+    return "repo_relaxed"
+  }
+  try {
+    const content = readFileSync(join(root, "slopgate.toml"), "utf8")
+    return tomlDisablesRepo(content) ? "repo_relaxed" : "repo_strict"
+  } catch {
+    return "repo_strict"
+  }
+}
+
 async function callEnforcer(
   payload: Record<string, unknown>,
   managedRepo: boolean,
@@ -410,22 +460,112 @@ async function callEnforcer(
   }
 }
 
-async function callRepairCommand(
+function repairTimeoutMs(): number {
+  const raw = Bun.env.SLOPGATE_REPAIR_VERIFY_TIMEOUT_MS
+  const parsed = raw === undefined ? DEFAULT_REPAIR_TIMEOUT_MS : Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REPAIR_TIMEOUT_MS
+}
+
+function killProcessGroup(child: ChildProcess): void {
+  const pid = child.pid
+  if (pid == null) return
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/PID", String(pid), "/T", "/F"])
+    return
+  }
+  try {
+    process.kill(-pid, "SIGKILL")
+  } catch {
+    child.kill("SIGKILL")
+  }
+}
+
+function callRepairCommand(
   command: string[],
   cwd: string,
-): Promise<{ exitCode: number; output: string }> {
-  const proc = Bun.spawn([...SLOPGATE_ARGV, ...command], {
-    env: Bun.env,
-    cwd,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<RepairCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn(SLOPGATE_ARGV[0], [...SLOPGATE_ARGV.slice(1), ...command], {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+    })
+    let stdout = ""
+    let stderr = ""
+    let settled = false
+    const finish = (result: RepairCommandResult) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener("abort", onAbort)
+      resolve(result)
+    }
+    const signal = options?.signal
+    const onAbort = () => {
+      killProcessGroup(child)
+      finish({
+        exitCode: 1,
+        output: JSON.stringify({ status: "cancelled" }),
+        status: "cancelled",
+      })
+    }
+    const timer = setTimeout(() => {
+      killProcessGroup(child)
+      finish({
+        exitCode: 1,
+        output: JSON.stringify({ status: "timeout" }),
+        status: "timeout",
+      })
+    }, options?.timeoutMs ?? repairTimeoutMs())
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      stdout += chunk.toString()
+    })
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      stderr += chunk.toString()
+    })
+    child.on("error", (err: Error) => {
+      finish({
+        exitCode: 1,
+        output: JSON.stringify({ status: "failed", reason: String(err) }),
+        status: "failed",
+      })
+    })
+    child.on("close", (code: number | null) => {
+      if (settled) return
+      const exitCode = code ?? 1
+      finish({
+        exitCode,
+        output: stdout || stderr,
+        status: exitCode === 0 ? "ok" : "failed",
+      })
+    })
   })
-  proc.stdin.end()
-  const output = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  const exitCode = await proc.exited
-  return { exitCode, output: output || stderr }
+}
+
+function verifyRepairFlight(
+  cwd: string,
+  generation: string,
+  signal?: AbortSignal,
+): Promise<RepairCommandResult> {
+  const key = `${cwd}::${generation}`
+  const existing = verifyFlights.get(key)
+  if (existing) return existing
+  const pending = callRepairCommand(
+    ["repair", "verify", "--cwd", cwd, "--generation", generation],
+    cwd,
+    { signal },
+  ).finally(() => {
+    verifyFlights.delete(key)
+  })
+  verifyFlights.set(key, pending)
+  return pending
 }
 
 async function repairGateState(cwd: string): Promise<RepairGateState | null> {
@@ -548,21 +688,25 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
     result: EnforcerResult | null,
   ): Promise<void> => {
     if (!result) return
-    if (result.action === "block") {
-      throw new Error(`[${prefix}] ${result.reason || "Post-tool policy violation"}`)
+    if (result.action !== "block" && result.action !== "warn" && result.action !== "context") {
+      return
     }
-    if (result.action === "warn" || result.action === "context") {
-      const message = result.reason || result.context
-      if (message) {
-        await client.app.log({
-          body: {
-            service: "slopgate",
-            level: "warn",
-            message,
-          },
-        })
-      }
-    }
+    const detail = result.reason || result.context || "Post-tool policy finding."
+    const repairHint = result.action === "block"
+      ? " Repair is required before the next mutation."
+      : ""
+    await client.app.log({
+      body: {
+        service: "slopgate",
+        level: "warn",
+        message: (
+          `[${prefix}] post-tool detection only: execution already completed; `
+          + "no prevention or rollback occurred. "
+          + detail
+          + repairHint
+        ),
+      },
+    })
   }
 
   return {
@@ -570,15 +714,19 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
     "tool.execute.before": async (input: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput) => {
       const outputArgs = ensureOutputArgs(output)
       const toolName = typeof input.tool === "string" ? input.tool : ""
-      const pending = await repairGateState(scopedDirectory)
+      const mode = enforcementModeFor(scopedDirectory)
+      const strictRepo = mode === "repo_strict"
+      const pending = strictRepo ? await repairGateState(scopedDirectory) : null
       if (
-        managedRepo()
+        strictRepo
         && pending === null
         && toolName.toLowerCase() !== "apply_patch"
       ) {
         throw new Error("[slopgate] repair gate state is unavailable in a managed repo.")
       }
       if (
+        strictRepo
+        &&
         pending?.status === "REPAIR_REQUIRED"
         && !isAllowedWhileRepairRequired(toolName, outputArgs)
       ) {
@@ -587,8 +735,21 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
           + "use read-only tools, repair, or clean verification first.",
         )
       }
-      if (!isKnownEffectTool(toolName, outputArgs)) {
+      const knownEffectTool = isKnownEffectTool(toolName, outputArgs)
+      if (strictRepo && !knownEffectTool) {
         throw new Error("[slopgate] unknown OpenCode tool effect; denying by default.")
+      }
+      if (!strictRepo && !knownEffectTool) {
+        await client.app.log({
+          body: {
+            service: "slopgate",
+            level: "warn",
+            message: (
+              `[scope=${mode}] unknown OpenCode tool allowed; `
+              + "global safety rules still apply."
+            ),
+          },
+        })
       }
       const preToolArgs = cloneArgs(outputArgs)
       const payload = payloadForEvent(
@@ -600,7 +761,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
 
       const result = await callEnforcer(
         payload,
-        managedRepo(),
+        mode !== "outside_repo",
       )
       if (!result) return
 
@@ -635,16 +796,22 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
       [VERIFY_TOOL]: {
         description: "Run clean verification and clear the matching Slopgate repair generation.",
         args: {},
-        execute: async (args: Record<string, unknown>): Promise<string> => {
+        execute: async (
+          args: Record<string, unknown>,
+          extra?: { abort?: AbortSignal },
+        ): Promise<string> => {
           const cwd = firstString(args, "cwd") || scopedDirectory
           const pending = await repairGateState(cwd)
           if (!pending?.generation) return "No repair-required generation is pending."
-          const result = await callRepairCommand(
-            ["repair", "verify", "--cwd", cwd, "--generation", pending.generation],
+          const result = await verifyRepairFlight(
             cwd,
+            pending.generation,
+            extra?.abort,
           )
-          if (result.exitCode !== 0) {
-            throw new Error(result.output.trim() || "Clean verification failed.")
+          if (result.status !== "ok" || result.exitCode !== 0) {
+            throw new Error(
+              result.output.trim() || JSON.stringify({ status: result.status }),
+            )
           }
           return result.output.trim() || "Repair generation cleared."
         },
