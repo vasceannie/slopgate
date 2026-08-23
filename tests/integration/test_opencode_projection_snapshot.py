@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import os
 from pathlib import Path
+from typing import cast
 
 import pytest
 from hypothesis import HealthCheck, given, settings, strategies
 
+import slopgate.adapters.opencode_projection.hashline
+from slopgate.adapters.opencode_projection.hashline import apply_hashline_edits
 from slopgate.adapters.opencode_projection.models import Snapshot
 from slopgate.adapters.opencode_projection.snapshot import read_snapshot
 
@@ -13,6 +17,25 @@ SNAPSHOT_TEXTS = strategies.text(
     alphabet=strategies.characters(blacklist_categories=("Cs",)),
     max_size=256,
 )
+
+
+def test_omo_hashline_helpers_preserve_known_anchor_contract() -> None:
+    source = "class LintHeader:\n"
+    line_hash = cast(
+        Callable[[int, str], str],
+        getattr(slopgate.adapters.opencode_projection.hashline, "line_hash"),
+    )
+    marker = line_hash(1, source.rstrip("\n"))
+
+    projected = apply_hashline_edits(
+        source,
+        [{"op": "replace", "pos": f"1#{marker}", "lines": ["class Header:"]}],
+    )
+
+    assert marker == "PS", "the OMO xxHash32 marker must remain compatible"
+    assert projected == "class Header:\n", (
+        "the public hashline helper must project a trusted replacement"
+    )
 
 
 def test_projection_snapshot_rejects_file_identity_change(

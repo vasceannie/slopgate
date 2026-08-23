@@ -17,6 +17,16 @@ from slopgate.opencode_tool_capabilities import (
     (
         pytest.param("read", OpenCodeToolCapability.READ_ONLY, id="read-only"),
         pytest.param("bash", OpenCodeToolCapability.EFFECTFUL, id="effectful"),
+        pytest.param(
+            "library-skills_list_skills",
+            OpenCodeToolCapability.READ_ONLY,
+            id="library-skill-list",
+        ),
+        pytest.param(
+            "library-skills_save_skill",
+            OpenCodeToolCapability.EFFECTFUL,
+            id="library-skill-save",
+        ),
         pytest.param("powershell", None, id="undeclared-shell"),
     ),
 )
@@ -24,6 +34,22 @@ def test_opencode_tool_capability_uses_exact_declared_ids(
     tool_name: str, expected: OpenCodeToolCapability | None
 ) -> None:
     assert opencode_tool_capability(tool_name) is expected
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    (
+        "agentmemory_memory_diagnose",
+        "agentmemory_memory_recall",
+        "agentmemory_memory_sessions",
+        "agentmemory_memory_smart_search",
+        "browser_control",
+        "memory_update",
+    ),
+)
+def test_agentmemory_read_tools_remain_allowed_during_repair(tool_name: str) -> None:
+    assert opencode_tool_capability(tool_name) is OpenCodeToolCapability.READ_ONLY
+    assert opencode_tool_allowed_during_repair(tool_name, {})
 
 
 @pytest.mark.parametrize(
@@ -65,7 +91,9 @@ def test_exact_file_repair_tools_remain_allowed(tool_name: str) -> None:
 
 
 @given(
-    tool_name=strategies.sampled_from(("read", "apply_patch", "slopgate_verify_repair")),
+    tool_name=strategies.sampled_from(
+        ("read", "apply_patch", "slopgate_verify_repair")
+    ),
     prefix=strategies.text(alphabet=" \t", max_size=3),
     suffix=strategies.text(alphabet=" \t", max_size=3),
 )

@@ -82,6 +82,91 @@ def test_versioned_edit_projects_exact_replacement_from_current_state(
     )
 
 
+def test_omo_hashline_edit_projects_exact_replacement_without_mutation(
+    tmp_path: Path,
+) -> None:
+    source = write_source(tmp_path, "src/app.py", "class LintHeader:\n")
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [{"op": "replace", "pos": "1#PS", "lines": ["class Header:"]}],
+        },
+    )
+    projected = object_dict(object_list(projection.get("files"))[0])
+
+    assert projection["status"] == "projected", (
+        "fresh OMO hashline edits should project"
+    )
+    assert projected["content"] == "class Header:\n"
+    assert source.read_text(encoding="utf-8") == "class LintHeader:\n"
+
+
+def test_omo_hashline_edits_apply_against_original_snapshot_bottom_up(
+    tmp_path: Path,
+) -> None:
+    write_source(tmp_path, "src/app.py", "class LintHeader:\n    lint_version: str\n")
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {"op": "replace", "pos": "1#PS", "lines": ["class Header:"]},
+                {"op": "replace", "pos": "2#RQ", "lines": ["    version: str"]},
+            ],
+        },
+    )
+    projected = object_dict(object_list(projection.get("files"))[0])
+
+    assert projection["status"] == "projected", "multiple fresh anchors should project"
+    assert projected["content"] == "class Header:\n    version: str\n"
+
+
+def test_omo_hashline_append_uses_anchor_as_original_snapshot_position(
+    tmp_path: Path,
+) -> None:
+    write_source(tmp_path, "src/app.py", "class LintHeader:\n")
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [{"op": "append", "pos": "1#PS", "lines": ["class Footer:"]}],
+        },
+    )
+    projected = object_dict(object_list(projection.get("files"))[0])
+
+    assert projection["status"] == "projected", "anchored append should project"
+    assert projected["content"] == "class LintHeader:\nclass Footer:\n"
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"op": "replace", "pos": "1#ZZ", "lines": ["changed"]},
+        {"op": "delete", "pos": "1#PS", "lines": []},
+        {"op": "replace", "pos": "1#PS", "lines": [1]},
+    ],
+    ids=["stale-anchor", "unsupported-operation", "non-string-line"],
+)
+def test_omo_hashline_invalid_edits_remain_unprojected(
+    tmp_path: Path, edit: dict[str, object]
+) -> None:
+    write_source(tmp_path, "src/app.py", "class LintHeader:\n")
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {"filePath": "src/app.py", "edits": [edit]},
+    )
+
+    assert projection["status"] == "invalid", (
+        "stale and unsupported OMO edits must remain fail-closed"
+    )
+
+
 def test_versioned_apply_patch_projects_multiple_files_without_mutation(
     tmp_path: Path,
 ) -> None:
@@ -106,7 +191,9 @@ def test_versioned_apply_patch_projects_multiple_files_without_mutation(
     assert source.read_text(encoding="utf-8") == "VALUE = 1\n", (
         "patch projection must be read-only"
     )
-    assert not (tmp_path / "src/new.py").exists(), "add projection must not create files"
+    assert not (tmp_path / "src/new.py").exists(), (
+        "add projection must not create files"
+    )
 
 
 @pytest.mark.parametrize(
@@ -140,9 +227,9 @@ def test_projection_public_contract_returns_complete_write_metadata(
     assert projection["status"] == "projected", (
         "public projection should trust a valid write"
     )
-    assert normalized["edits"] == [
-        {"file_path": "new.py", "content": "VALUE = 1\n"}
-    ], "normalization should expose complete content through the canonical edits seam"
+    assert normalized["edits"] == [{"file_path": "new.py", "content": "VALUE = 1\n"}], (
+        "normalization should expose complete content through the canonical edits seam"
+    )
 
 
 def test_patch_primitives_preserve_typed_sections_and_apply_exact_updates() -> None:
@@ -168,9 +255,7 @@ def test_normalized_delete_preserves_candidate_path(tmp_path: Path) -> None:
     request = ProjectionRequest(
         tool_name="apply_patch",
         tool_input={
-            "patchText": (
-                "*** Begin Patch\n*** Delete File: src/app.py\n*** End Patch"
-            )
+            "patchText": ("*** Begin Patch\n*** Delete File: src/app.py\n*** End Patch")
         },
         root=tmp_path,
         contract_version=OPENCODE_TOOL_CONTRACT_VERSION,

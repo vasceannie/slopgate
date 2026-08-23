@@ -5,7 +5,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from slopgate._types import ObjectDict, ObjectMapping, object_dict, object_list, string_value
+from slopgate._types import (
+    ObjectDict,
+    ObjectMapping,
+    object_dict,
+    object_list,
+    string_value,
+)
 from slopgate.constants import DENY, METADATA_CONTENT, METADATA_PATH, PRE_TOOL_USE
 from slopgate.models import RuleFinding, Severity
 from slopgate.opencode_tool_capabilities import (
@@ -23,6 +29,7 @@ from .models import (
     Snapshot,
     SnapshotStatus,
 )
+from .hashline import apply_hashline_edits
 from .patch import apply_update, parse_patch
 from .snapshot import read_snapshot
 
@@ -81,19 +88,28 @@ def _project_write(request: ProjectionRequest) -> Projection:
 def _project_edit(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode edit projection requested", tool=request.tool_name)
     target = _request_target(request)
-    old = string_value(request.tool_input.get("oldString"))
-    new = string_value(request.tool_input.get("newString"))
-    if target is None or not old or new is None:
+    if target is None:
         return Projection("invalid")
     _path, relative = target
     snapshot = read_snapshot(request.root, relative)
     if not isinstance(snapshot, Snapshot):
         return Projection("invalid" if snapshot == "missing" else snapshot)
-    count = snapshot.content.count(old)
-    replace_all = request.tool_input.get("replaceAll") is True
-    if count == 0 or (not replace_all and count != 1):
-        return Projection("invalid")
-    content = snapshot.content.replace(old, new, -1 if replace_all else 1)
+    if "edits" in request.tool_input:
+        content = apply_hashline_edits(
+            snapshot.content, request.tool_input.get("edits")
+        )
+        if content is None:
+            return Projection("invalid")
+    else:
+        old = string_value(request.tool_input.get("oldString"))
+        new = string_value(request.tool_input.get("newString"))
+        if not old or new is None:
+            return Projection("invalid")
+        count = snapshot.content.count(old)
+        replace_all = request.tool_input.get("replaceAll") is True
+        if count == 0 or (not replace_all and count != 1):
+            return Projection("invalid")
+        content = snapshot.content.replace(old, new, -1 if replace_all else 1)
     return Projection(
         "projected",
         (ProjectedFile(relative, content, "edit", snapshot.sha256),),
@@ -181,7 +197,9 @@ def unresolved_opencode_projection_finding(
     event_name: str,
 ) -> RuleFinding | None:
     """Return a deny finding when an OpenCode mutation cannot be projected safely."""
-    logger.debug("OpenCode unresolved projection evaluated", event=event_name, tool=tool_name)
+    logger.debug(
+        "OpenCode unresolved projection evaluated", event=event_name, tool=tool_name
+    )
     if event_name != PRE_TOOL_USE:
         return None
     projection = object_dict(tool_input.get(PROJECTION_KEY))

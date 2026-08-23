@@ -18,6 +18,11 @@ class OpenCodeToolCapability(StrEnum):
 
 READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
     {
+        "agentmemory_memory_diagnose",
+        "agentmemory_memory_recall",
+        "agentmemory_memory_sessions",
+        "agentmemory_memory_smart_search",
+        "browser_control",
         "codegraph_codegraph_explore",
         "find",
         "gitnexus_api_impact",
@@ -40,8 +45,12 @@ READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "lsp_prepare_rename",
         "lsp_status",
         "lsp_symbols",
+        "library-git_status",
+        "library-skills_get_skill",
+        "library-skills_list_skills",
         "list",
         "ls",
+        "memory_update",
         "question",
         "read",
         "read_mcp_resource",
@@ -65,6 +74,7 @@ EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
         BASH_TOOL_LOWER,
         "edit",
         "github_update_issue",
+        "library-skills_save_skill",
         "slopgate_verify_repair",
         "task",
         "todo_write",
