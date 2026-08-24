@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
 from slopgate._types import (
     ObjectDict,
     ObjectMapping,
@@ -31,7 +32,7 @@ from .models import (
     SnapshotStatus,
 )
 from .hashline import apply_hashline_edits
-from .patch import apply_update, parse_patch
+from .patch import parse_patch, patch_text, section_content
 from .snapshot import read_snapshot
 
 
@@ -136,44 +137,10 @@ def _section_source(
     return snapshot
 
 
-def _section_content(
-    section: PatchSection,
-    source: str,
-) -> str | None:
-    logger.debug("OpenCode patch content requested", operation=section.operation)
-    match section.operation:
-        case "add":
-            valid_add = all(line.startswith("+") for line in section.lines)
-            if not valid_add:
-                return None
-            return "\n".join(line[1:] for line in section.lines) + "\n"
-        case "update":
-            return apply_update(source, section.lines)
-        case "delete":
-            return "" if not section.lines else None
-
-
-def _patch_text(tool_input: ObjectMapping) -> str | None:
-    camel_present = "patchText" in tool_input
-    snake_present = "patch_text" in tool_input
-    camel_text = string_value(tool_input.get("patchText"))
-    snake_text = string_value(tool_input.get("patch_text"))
-    aliases_conflict = camel_present and snake_present and camel_text != snake_text
-    logger.debug(
-        "OpenCode patch text aliases normalized",
-        camel_present=camel_present,
-        snake_present=snake_present,
-        aliases_conflict=aliases_conflict,
-    )
-    if aliases_conflict:
-        return None
-    return camel_text if camel_present else snake_text
-
-
 def _project_patch(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode patch projection requested", tool=request.tool_name)
-    patch_text = _patch_text(request.tool_input) or ""
-    sections = parse_patch(patch_text)
+    text = patch_text(request.tool_input) or ""
+    sections = parse_patch(text)
     if sections is None:
         return Projection("invalid")
     files: dict[str, ProjectedFile] = {}
@@ -187,8 +154,14 @@ def _project_patch(request: ProjectionRequest) -> Projection:
         resolved = _section_source(request.root, section)
         if not isinstance(resolved, _SectionSource):
             return Projection("invalid" if resolved == "missing" else resolved)
-        content = _section_content(section, resolved.content)
+        content = section_content(section, resolved.content)
         if content is None:
+            if section.operation == "update":
+                return Projection(
+                    "invalid",
+                    reason="update_hunk_mismatch",
+                    target_path=relative,
+                )
             return Projection("invalid")
         files[relative] = ProjectedFile(
             relative,
@@ -229,16 +202,26 @@ def unresolved_opencode_projection_finding(
     capability = opencode_tool_capability(tool_name)
     if capability is OpenCodeToolCapability.READ_ONLY:
         return None
+    reason = string_value(projection.get("reason"))
+    target_path = string_value(projection.get(METADATA_PATH))
+    message = _UNRESOLVED_PROJECTION_MESSAGES.get(
+        status,
+        "Unresolved OpenCode mutation projection; refusing execution.",
+    )
+    if target_path is not None:
+        message = f"{message} Target: {target_path}."
+    metadata: ObjectDict = {"projection_status": status or "missing"}
+    if reason is not None:
+        metadata["projection_reason"] = reason
+    if target_path is not None:
+        metadata[METADATA_PATH] = target_path
     return RuleFinding(
         rule_id="OC-PROJECTION-001",
         title="Unresolved OpenCode mutation projection",
         severity=Severity.CRITICAL,
         decision=DENY,
-        message=_UNRESOLVED_PROJECTION_MESSAGES.get(
-            status,
-            "Unresolved OpenCode mutation projection; refusing execution.",
-        ),
-        metadata={"projection_status": status or "missing"},
+        message=message,
+        metadata=metadata,
     )
 
 
@@ -275,8 +258,8 @@ def normalize_projected_tool_input(request: ProjectionRequest) -> ObjectDict:
         projected_edits.append(edit)
     enriched_input["edits"] = projected_edits
     if normalize_opencode_tool_id(request.tool_name) == "apply_patch":
-        patch_text = _patch_text(enriched_input) or ""
+        original_patch_text = patch_text(enriched_input) or ""
         enriched_input.pop("patchText", None)
         enriched_input.pop("patch_text", None)
-        enriched_input["_slopgate_original_patch_text"] = patch_text
+        enriched_input["_slopgate_original_patch_text"] = original_patch_text
     return enriched_input

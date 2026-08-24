@@ -8,6 +8,7 @@ from typing import Final, Literal, TypeAlias
 
 from slopgate._types import ObjectDict, ObjectMapping
 from slopgate.constants import METADATA_CONTENT, METADATA_PATH
+from slopgate.util import logger
 
 OPENCODE_TOOL_CONTRACT_VERSION: Final = "slopgate-opencode-projection-v1"
 PROJECTION_KEY: Final = "_slopgate_projection"
@@ -15,6 +16,7 @@ PROJECTION_KEY: Final = "_slopgate_projection"
 ProjectionStatus: TypeAlias = Literal[
     "projected", "invalid", "stale", "unsupported", "protocol_mismatch"
 ]
+ProjectionReason: TypeAlias = Literal["update_hunk_mismatch"]
 SnapshotStatus: TypeAlias = Literal["invalid", "missing", "stale"]
 PatchOperation: TypeAlias = Literal["add", "update", "delete"]
 
@@ -41,6 +43,7 @@ class ProjectedFile:
     preimage_sha256: str | None
 
     def to_dict(self) -> ObjectDict:
+        logger.debug("OpenCode projected file serialized", path=self.path)
         return {
             METADATA_PATH: self.path,
             METADATA_CONTENT: self.content,
@@ -53,13 +56,21 @@ class ProjectedFile:
 class Projection:
     status: ProjectionStatus
     files: tuple[ProjectedFile, ...] = ()
+    reason: ProjectionReason | None = None
+    target_path: str | None = None
 
     def to_dict(self) -> ObjectDict:
-        return {
+        logger.debug("OpenCode projection serialized", status=self.status)
+        result: ObjectDict = {
             "status": self.status,
             "contract_version": OPENCODE_TOOL_CONTRACT_VERSION,
             "files": [item.to_dict() for item in self.files],
         }
+        if self.reason is not None:
+            result["reason"] = self.reason
+        if self.target_path is not None:
+            result[METADATA_PATH] = self.target_path
+        return result
 
 
 @dataclass(frozen=True, slots=True)
