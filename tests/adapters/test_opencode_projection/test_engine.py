@@ -38,6 +38,13 @@ _UNRESOLVED_MUTATIONS = [
         id="invalid-patch",
     ),
     pytest.param(
+        "ApplyPatch",
+        {"patchText": "not a patch"},
+        "invalid",
+        "invalid",
+        id="invalid-pascal-case-patch",
+    ),
+    pytest.param(
         "edit",
         {"filePath": "missing.py"},
         "invalid",
@@ -50,66 +57,6 @@ _UNRESOLVED_MUTATIONS = [
         "protocol_mismatch",
         "contract mismatch",
         id="protocol-mismatch",
-    ),
-    pytest.param(
-        "custom_mutator",
-        {"path": "src/app.py"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-mutator",
-    ),
-    pytest.param(
-        "mcp__docs__write",
-        {"path": "src/app.py"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-mcp-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"filename": "src/app.py", "content": "VALUE = 1\n"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-filename-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"paths": ["src/app.py"], "content": "VALUE = 1\n"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-paths-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"uri": "file:///tmp/app.py", "content": "VALUE = 1\n"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-file-uri-mutator",
-    ),
-    pytest.param(
-        "custom_write",
-        {"input": {"path": "src/app.py", "content": "VALUE = 1\n"}},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="unknown-nested-mutator",
-    ),
-    pytest.param(
-        "interactive_bash",
-        {"tmux_command": "send-keys -t dev 'touch src/app.py' Enter"},
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="interactive-shell-wrapper",
-    ),
-    pytest.param(
-        "skill_mcp",
-        {
-            "mcp_name": "fs",
-            "tool_name": "write_file",
-            "arguments": {"path": "src/app.py", "content": "VALUE = 1\n"},
-        },
-        "unsupported",
-        "Unknown OpenCode tool effect",
-        id="mcp-dispatch-wrapper",
     ),
 ]
 _UNRESOLVED_MUTATION_CASES = [
@@ -130,9 +77,11 @@ _READ_ONLY_TOOLS = [
     pytest.param("glob", id="glob"),
     pytest.param("webfetch", id="webfetch"),
     pytest.param("gitnexus_context", id="unprojected-mcp-read"),
+    pytest.param("LspDiagnostics", id="pascal-case-read"),
+    pytest.param("CodegraphCodegraphExplore", id="multiword-pascal-case-read"),
     pytest.param("skill", id="host-control-tool"),
 ]
-_REMOTE_EFFECT_TOOLS = [
+_UNPROJECTED_EFFECT_TOOLS = [
     pytest.param(
         "github_update_issue",
         {"path": "/repos/o/r/issues/1", "body": "fixed"},
@@ -142,6 +91,33 @@ _REMOTE_EFFECT_TOOLS = [
         "api_delete_resource",
         {"path": "/v1/items/1"},
         id="declared-api-resource-path",
+    ),
+    pytest.param(
+        "interactive_bash",
+        {"tmux_command": "send-keys -t dev 'touch src/app.py' Enter"},
+        id="interactive-shell-wrapper",
+    ),
+    pytest.param(
+        "skill_mcp",
+        {
+            "mcp_name": "fs",
+            "tool_name": "write_file",
+            "arguments": {"path": "src/app.py", "content": "VALUE = 1\n"},
+        },
+        id="mcp-dispatch-wrapper",
+    ),
+]
+_UNCLASSIFIED_TOOLS = [
+    pytest.param("custom_mutator", {"path": "src/app.py"}, id="unknown-mutator"),
+    pytest.param(
+        "mcp__docs__write",
+        {"path": "src/app.py"},
+        id="unknown-mcp-mutator",
+    ),
+    pytest.param(
+        "custom_write",
+        {"filename": "src/app.py", "content": "VALUE = 1\n"},
+        id="unknown-filename-mutator",
     ),
 ]
 
@@ -253,8 +229,8 @@ def test_unknown_tools_are_not_hard_denied_outside_strict_repos(
     )
 
 
-@pytest.mark.parametrize(("tool_name", "tool_input"), _REMOTE_EFFECT_TOOLS)
-def test_declared_remote_effects_do_not_use_filesystem_projection(
+@pytest.mark.parametrize(("tool_name", "tool_input"), _UNPROJECTED_EFFECT_TOOLS)
+def test_declared_unprojected_effects_remain_available_in_clean_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     tool_name: str,
@@ -268,14 +244,39 @@ def test_declared_remote_effects_do_not_use_filesystem_projection(
     )
 
     assert projection["status"] == "unsupported", (
-        "remote effects should remain outside local filesystem projection"
+        "unprojected effects should remain outside local filesystem projection"
     )
     assert result.output is None or result.output.get("action") != "block", (
         "explicitly classified remote effects should remain available in clean state"
     )
     assert all(
         finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
-    ), "remote resource paths must not be reported as local filesystem mutations"
+    ), "declared unprojected effects must not be reported as unknown mutations"
+
+
+@pytest.mark.parametrize(("tool_name", "tool_input"), _UNCLASSIFIED_TOOLS)
+def test_unclassified_tools_remain_available_in_clean_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    tool_input: dict[str, object],
+) -> None:
+    result, projection = evaluate_before(
+        tmp_path,
+        monkeypatch,
+        tool_name,
+        tool_input,
+    )
+
+    assert projection["status"] == "unsupported", (
+        "unclassified tools should remain outside filesystem projection"
+    )
+    assert result.output is None or result.output.get("action") != "block", (
+        "registry drift must not block unclassified tools while the repo is clean"
+    )
+    assert all(
+        finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
+    ), "clean unclassified tools must not emit projection denials"
 
 
 def test_projected_write_emits_one_finding_for_one_edit(

@@ -16,6 +16,7 @@ from slopgate.constants import DENY, METADATA_CONTENT, METADATA_PATH, PRE_TOOL_U
 from slopgate.models import RuleFinding, Severity
 from slopgate.opencode_tool_capabilities import (
     OpenCodeToolCapability,
+    normalize_opencode_tool_id,
     opencode_tool_capability,
 )
 from slopgate.util import logger
@@ -152,9 +153,26 @@ def _section_content(
             return "" if not section.lines else None
 
 
+def _patch_text(tool_input: ObjectMapping) -> str | None:
+    camel_present = "patchText" in tool_input
+    snake_present = "patch_text" in tool_input
+    camel_text = string_value(tool_input.get("patchText"))
+    snake_text = string_value(tool_input.get("patch_text"))
+    aliases_conflict = camel_present and snake_present and camel_text != snake_text
+    logger.debug(
+        "OpenCode patch text aliases normalized",
+        camel_present=camel_present,
+        snake_present=snake_present,
+        aliases_conflict=aliases_conflict,
+    )
+    if aliases_conflict:
+        return None
+    return camel_text if camel_present else snake_text
+
+
 def _project_patch(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode patch projection requested", tool=request.tool_name)
-    patch_text = string_value(request.tool_input.get("patchText")) or ""
+    patch_text = _patch_text(request.tool_input) or ""
     sections = parse_patch(patch_text)
     if sections is None:
         return Projection("invalid")
@@ -206,10 +224,10 @@ def unresolved_opencode_projection_finding(
     status = string_value(projection.get("status")) or ""
     if status == "projected":
         return None
+    if status == "unsupported":
+        return None
     capability = opencode_tool_capability(tool_name)
-    if capability is OpenCodeToolCapability.READ_ONLY or (
-        status == "unsupported" and capability is OpenCodeToolCapability.EFFECTFUL
-    ):
+    if capability is OpenCodeToolCapability.READ_ONLY:
         return None
     return RuleFinding(
         rule_id="OC-PROJECTION-001",
@@ -233,7 +251,7 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
         "write": _project_write,
         "edit": _project_edit,
         "apply_patch": _project_patch,
-    }.get(request.tool_name.strip().lower())
+    }.get(normalize_opencode_tool_id(request.tool_name))
     result = projector(request) if projector is not None else Projection("unsupported")
     return result.to_dict()
 
@@ -256,7 +274,9 @@ def normalize_projected_tool_input(request: ProjectionRequest) -> ObjectDict:
             edit[METADATA_CONTENT] = item.get(METADATA_CONTENT, "")
         projected_edits.append(edit)
     enriched_input["edits"] = projected_edits
-    if request.tool_name.strip().lower() == "apply_patch":
-        patch_text = enriched_input.pop("patchText", "")
+    if normalize_opencode_tool_id(request.tool_name) == "apply_patch":
+        patch_text = _patch_text(enriched_input) or ""
+        enriched_input.pop("patchText", None)
+        enriched_input.pop("patch_text", None)
         enriched_input["_slopgate_original_patch_text"] = patch_text
     return enriched_input

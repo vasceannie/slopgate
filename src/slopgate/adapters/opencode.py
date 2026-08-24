@@ -25,6 +25,7 @@ from slopgate.adapters.opencode_projection.models import (
 )
 from slopgate.adapters.opencode_projection.projector import normalize_projected_tool_input
 from slopgate.models import RuleFinding
+from slopgate.opencode_tool_capabilities import normalize_opencode_tool_id
 from slopgate.util import logger
 
 from slopgate.constants import (
@@ -97,9 +98,11 @@ class OpenCodeAdapter(PlatformAdapter):
         if not tool_name and oc_event in OPENCODE_MUTATION_EVENTS:
             tool_name = "Write"
         if tool_name:
-            canonical["opencode_native_tool_name"] = tool_name.strip().lower()
-            lowered = tool_name.strip().lower().replace("-", "_")
-            canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(lowered, tool_name)
+            normalized_tool_id = normalize_opencode_tool_id(tool_name)
+            canonical["opencode_native_tool_name"] = normalized_tool_id
+            canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(
+                normalized_tool_id, normalized_tool_id
+            )
 
         merge_standard_session_fields(
             raw,
@@ -121,7 +124,7 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["tool_input"] = normalized_tool_input
             projection = object_dict(normalized_tool_input.get(PROJECTION_KEY))
             if (
-                tool_name.strip().lower().replace("-", "_") == "apply_patch"
+                normalize_opencode_tool_id(tool_name) == "apply_patch"
                 and projection.get("status") == "projected"
             ):
                 canonical[METADATA_TOOL_NAME] = "MultiEdit"

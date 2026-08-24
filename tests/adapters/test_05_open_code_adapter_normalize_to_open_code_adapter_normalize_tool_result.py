@@ -66,6 +66,25 @@ class TestOpenCodeAdapterNormalize:
             "unknown or structured tool names should not be title-cased"
         )
 
+    def test_normalize_maps_camel_case_tool_id_for_capability_checks(self) -> None:
+        adapter = OpenCodeAdapter()
+        raw: ObjectDict = {
+            "hook_event_name": "tool.execute.before",
+            "tool_name": "LspDiagnostics",
+            "tool_input": {"filePath": "src/app.py"},
+            "cwd": "/tmp",
+            "session_id": "oc-camel-case",
+        }
+
+        canonical = adapter.normalize_payload(raw)
+
+        assert canonical["tool_name"] == "lsp_diagnostics", (
+            "OpenCode PascalCase IDs should normalize to declared snake_case IDs"
+        )
+        assert canonical["opencode_native_tool_name"] == "lsp_diagnostics", (
+            "native capability checks should receive the normalized tool ID"
+        )
+
     def test_normalize_session_idle_maps_to_stop(self) -> None:
         """session.idle → Stop."""
         adapter = OpenCodeAdapter()

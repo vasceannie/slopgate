@@ -15,7 +15,7 @@ from slopgate.resources import resource_path
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
 
-_FAIL_CLOSED_TOOL_CASES = [
+_UNCLASSIFIED_TOOL_CASES = [
     pytest.param(
         "custom_write",
         {"filename": "sample.py", "content": "x"},
@@ -144,16 +144,16 @@ def test_generated_plugin_allows_task_delegation(tmp_path: Path) -> None:
     assert "allowed" in result.stdout
 
 
-@pytest.mark.parametrize(("tool_name", "tool_args"), _FAIL_CLOSED_TOOL_CASES)
-def test_generated_plugin_denies_unknown_mutations_and_wrappers(
+@pytest.mark.parametrize(("tool_name", "tool_args"), _UNCLASSIFIED_TOOL_CASES)
+def test_generated_plugin_allows_unclassified_tools_in_clean_state(
     tmp_path: Path,
     tool_name: str,
     tool_args: dict[str, object],
 ) -> None:
     result = _run_plugin_with_real_slopgate(tmp_path, tool_name, tool_args)
 
-    assert result.returncode != 0, "unknown mutations and wrappers must fail closed"
-    assert "unknown OpenCode tool effect" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "allowed" in result.stdout
 
 
 @pytest.mark.parametrize(("tool_name", "tool_args"), _REMOTE_EFFECT_TOOL_CASES)

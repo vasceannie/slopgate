@@ -31,8 +31,12 @@ def test_opencode_renderer_embeds_install_identity_snapshot() -> None:
     rendered = _opencode.render_opencode_plugin(template, "/tmp/slopgate", identity)
 
     assert '"__SLOPGATE_OPENCODE_IDENTITY__"' not in rendered, "placeholder leaked"
-    assert '"__SLOPGATE_READ_ONLY_TOOL_IDS__"' not in rendered
-    assert '"__SLOPGATE_EFFECTFUL_TOOL_IDS__"' not in rendered
+    assert '"__SLOPGATE_READ_ONLY_TOOL_IDS__"' not in rendered, (
+        "read-only capability placeholder should be rendered"
+    )
+    assert '"__SLOPGATE_EFFECTFUL_TOOL_IDS__"' not in rendered, (
+        "effectful capability placeholder should be rendered"
+    )
     assert '"opencode_version":"1.18.19"' in rendered, "runtime version not embedded"
     assert '"gitnexus_context"' in rendered, "read-only capability not embedded"
     assert '"github_update_issue"' in rendered, "effectful capability not embedded"
@@ -41,9 +45,15 @@ def test_opencode_renderer_embeds_install_identity_snapshot() -> None:
 
 def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
     plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    assert "empty enforcer response" not in plugin
-    assert "if (!trimmed) return null" in plugin
-    assert "exits 0 with no stdout" in plugin
+    assert "empty enforcer response" not in plugin, (
+        "empty plugin output should not be treated as an enforcer error"
+    )
+    assert "if (!trimmed) return null" in plugin, (
+        "empty plugin output should return no-op"
+    )
+    assert "exits 0 with no stdout" in plugin, (
+        "the plugin should document empty stdout as a successful no-op"
+    )
 
 
 def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
@@ -55,7 +65,7 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
     assert (
         _opencode.opencode_user_plugin_path()
         == appdata / "opencode" / "plugins" / "slopgate-plugin.ts"
-    )
+    ), "Windows installs should use the AppData OpenCode plugin directory"
 
 
 def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
@@ -65,8 +75,10 @@ def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
     assert (
         f"Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : {json.dumps([binary])}"
         in rendered
+    ), "binary fallback should be safely quoted in the rendered plugin"
+    assert '"__SLOPGATE_BIN__"' not in rendered, (
+        "binary placeholder should not remain in the rendered plugin"
     )
-    assert '"__SLOPGATE_BIN__"' not in rendered
 
 
 def test_opencode_install_backs_up_existing_plugin_before_overwrite(
@@ -81,15 +93,19 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text("custom plugin\n", encoding="utf-8")
-    assert _opencode.install_opencode(dry_run=False) == 0
+    assert _opencode.install_opencode(dry_run=False) == 0, (
+        "install should succeed before verifying its backup"
+    )
     backups = sorted(target.parent.glob("slopgate-plugin.ts.slopgate-bak-*"))
-    assert len(backups) == 1
-    assert backups[0].read_text(encoding="utf-8") == "custom plugin\n"
+    assert len(backups) == 1, "install should create exactly one plugin backup"
+    assert backups[0].read_text(encoding="utf-8") == "custom plugin\n", (
+        "the backup should preserve the existing plugin"
+    )
     installed = target.read_text(encoding="utf-8")
     assert (
         'Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : ["/tmp/Slopgate Bin/slopgate"]'
         in installed
-    )
+    ), "installed plugin should contain the safely quoted binary fallback"
 
 
 def _plant_opencode_user_leaf_symlink(tmp_path: Path) -> tuple[Path, Path]:
@@ -175,8 +191,12 @@ def test_opencode_uninstall_refuses_unrecognized_plugin(
     target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text("custom plugin\n", encoding="utf-8")
-    assert _opencode.uninstall_opencode(dry_run=False) == 1
-    assert target.read_text(encoding="utf-8") == "custom plugin\n"
+    assert _opencode.uninstall_opencode(dry_run=False) == 1, (
+        "uninstall should refuse an unrecognized plugin"
+    )
+    assert target.read_text(encoding="utf-8") == "custom plugin\n", (
+        "uninstall should preserve an unrecognized plugin"
+    )
 
 
 def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
@@ -191,9 +211,13 @@ def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
         "// docs mention slopgate handle --platform opencode, but this is custom\n",
         encoding="utf-8",
     )
-    assert _opencode.uninstall_opencode(dry_run=False) == 1
-    assert target.exists()
-    assert "this is custom" in target.read_text(encoding="utf-8")
+    assert _opencode.uninstall_opencode(dry_run=False) == 1, (
+        "uninstall should refuse a custom plugin with incidental marker text"
+    )
+    assert target.exists(), "custom plugin should remain after refused uninstall"
+    assert "this is custom" in target.read_text(encoding="utf-8"), (
+        "refused uninstall should preserve custom plugin content"
+    )
 
 
 def test_opencode_plugin_logs_posttool_context_actions() -> None:
@@ -282,8 +306,12 @@ def test_opencode_plugin_uses_native_tool_fields_without_correlation_cache() -> 
         "output.metadata",
         'objectValue(event, "properties")',
     )
-    assert not any(fragment in plugin for fragment in forbidden_fragments)
-    assert all(fragment in plugin for fragment in required_fragments)
+    assert not any(fragment in plugin for fragment in forbidden_fragments), (
+        "native tool field handling should not use the removed correlation cache"
+    )
+    assert all(fragment in plugin for fragment in required_fragments), (
+        "native tool field handling should preserve required OpenCode fields"
+    )
 
 
 def test_opencode_plugin_records_conservative_tool_outcome_axes() -> None:
@@ -304,7 +332,7 @@ def test_opencode_plugin_records_conservative_tool_outcome_axes() -> None:
         "tool_title: output.title",
         "tool_metadata: output.metadata",
         "tool_output: output.output",
-        "unknown OpenCode tool effect; denying by default.",
+        "unknown OpenCode tool allowed;",
         "isKnownEffectTool(",
     )
     assert all(fragment in plugin for fragment in required_fragments), (

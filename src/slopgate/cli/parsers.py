@@ -11,6 +11,7 @@ from slopgate.cli.commands import (
     INSTALL_TARGETS,
     VALID_PLATFORMS,
     cmd_check,
+    cmd_config_allow_skill_directories,
     cmd_config_init,
     cmd_config_path,
     cmd_config_show,
@@ -339,6 +340,11 @@ def _add_config_parsers(sub: SubparserRegistry) -> None:
         func=cmd_config_init,
     )
     _ = init.add_argument("--force", action="store_true")
+    _add_command_parser(
+        config_sub, "allow-skill-directories",
+        help_text="Allow .claude/skills/ while preserving other protected paths",
+        func=cmd_config_allow_skill_directories,
+    )
     _add_command_parser(
         config_sub, "path", help_text="Print config file path", func=cmd_config_path
     )

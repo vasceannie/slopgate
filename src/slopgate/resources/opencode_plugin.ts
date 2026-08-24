@@ -169,6 +169,24 @@ const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
 const VERIFY_TOOL = "slopgate_verify_repair"
 const DEFAULT_REPAIR_TIMEOUT_MS = 60_000
 const verifyFlights = new Map<string, Promise<RepairCommandResult>>()
+const DECLARED_TOOL_IDS_BY_COMPACT = new Map<string, string>(
+  [...READ_ONLY_TOOLS, ...KNOWN_EFFECT_TOOLS].map((toolId) => [
+    toolId.replace(/[-_]/g, ""),
+    toolId,
+  ]),
+)
+
+function normalizeToolId(toolName: string): string {
+  const normalized = toolName.trim()
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+  if (READ_ONLY_TOOLS.has(normalized) || KNOWN_EFFECT_TOOLS.has(normalized)) {
+    return normalized
+  }
+  const compact = normalized.replace(/_/g, "")
+  return DECLARED_TOOL_IDS_BY_COMPACT.get(compact) ?? normalized
+}
 
 type ExecutionOutcome = "returned" | "failed" | "blocked" | "cancelled" | "unknown"
 type MutationOutcome = "committed" | "partial" | "none" | "unknown"
@@ -577,8 +595,9 @@ async function repairGateState(cwd: string): Promise<RepairGateState | null> {
 }
 
 function isExplicitRepairCommand(toolName: string, args: Record<string, unknown>): boolean {
-  if (toolName.toLowerCase() === VERIFY_TOOL) return true
-  if (toolName.toLowerCase() !== "bash") return false
+  const normalized = normalizeToolId(toolName)
+  if (normalized === VERIFY_TOOL) return true
+  if (normalized !== "bash") return false
   const command = firstString(args, "command", "cmd", "script")
   const tokens = command.trim().split(/\s+/)
   return (
@@ -594,7 +613,7 @@ function isAllowedWhileRepairRequired(
   toolName: string,
   args: Record<string, unknown>,
 ): boolean {
-  const lowered = toolName.toLowerCase()
+  const lowered = normalizeToolId(toolName)
   return (
     READ_ONLY_TOOLS.has(lowered)
     || REPAIR_MUTATION_TOOLS.has(lowered)
@@ -603,7 +622,7 @@ function isAllowedWhileRepairRequired(
 }
 
 function isKnownEffectTool(toolName: string, args: Record<string, unknown>): boolean {
-  const lowered = toolName.toLowerCase()
+  const lowered = normalizeToolId(toolName)
   return (
     KNOWN_EFFECT_TOOLS.has(lowered)
     || READ_ONLY_TOOLS.has(lowered)
@@ -734,10 +753,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
         )
       }
       const knownEffectTool = isKnownEffectTool(toolName, outputArgs)
-      if (strictRepo && !knownEffectTool) {
-        throw new Error("[slopgate] unknown OpenCode tool effect; denying by default.")
-      }
-      if (!strictRepo && !knownEffectTool) {
+      if (!knownEffectTool) {
         await client.app.log({
           body: {
             service: "slopgate",

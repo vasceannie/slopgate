@@ -19,6 +19,7 @@ from slopgate.cli.platforms import (
 )
 from .check import cmd_check
 from slopgate.cli._config_commands import (
+    cmd_config_allow_skill_directories,
     cmd_config_init,
     cmd_config_path,
     cmd_config_show,
@@ -32,6 +33,7 @@ __all__ = [
     "INSTALL_TARGETS",
     "PLATFORM_HELP",
     "CliInputError",
+    "cmd_config_allow_skill_directories",
     "cmd_config_init",
     "cmd_config_path",
     "cmd_config_show",

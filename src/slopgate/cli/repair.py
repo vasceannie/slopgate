@@ -10,10 +10,10 @@ from slopgate._argparse_types import SubparserRegistry
 from slopgate._types import object_list
 
 from slopgate.config import load_config
+from slopgate.constants import LINT_SCOPE_ALL
 from slopgate.state import HookStateCorruptionError, HookStateStore
 
 if TYPE_CHECKING:
-    from slopgate.cli.lint.report import LintFiles
     from slopgate.lint._collector_groups.types import CollectorResults
 
 
@@ -84,29 +84,6 @@ def _resolve_repair_files(
     return src_files, test_files, unresolved
 
 
-def _project_lint_files(cwd: Path) -> LintFiles:
-    """Return the full project lint inventory with CLI analysis context."""
-    from slopgate.cli.lint.commands import discover_project_root
-    from slopgate.cli.lint.report import LintFiles
-    from slopgate.constants import LINT_SCOPE_ALL
-    from slopgate.lint._config import (
-        load_config,
-        reset_quality_scope,
-        set_config,
-        set_quality_scope,
-    )
-    from slopgate.lint._helpers import find_source_files, find_test_files
-
-    project = discover_project_root(cwd)
-    scope_token = set_quality_scope(LINT_SCOPE_ALL)
-    cfg = load_config(project)
-    set_config(cfg)
-    try:
-        return LintFiles(cfg, find_source_files(), find_test_files())
-    finally:
-        reset_quality_scope(scope_token)
-
-
 def _filter_scoped_results(
     results: CollectorResults,
     *,
@@ -114,8 +91,6 @@ def _filter_scoped_results(
     recorded_relative: set[str],
 ) -> CollectorResults:
     """Restrict collector output to targeted collectors and recorded paths."""
-    from slopgate.lint._baseline import Violation
-
     scoped: CollectorResults = []
     for name, violations in results:
         if collector_ids and name not in collector_ids:
@@ -123,16 +98,19 @@ def _filter_scoped_results(
         kept = [
             item
             for item in violations
-            if isinstance(item, Violation) and item.relative_path in recorded_relative
+            if item.relative_path in recorded_relative
         ]
         if kept:
             scoped.append((name, kept))
     return scoped
 
 
-def _run_scoped_lint(cwd: Path, paths: Sequence[str], rule_ids: Sequence[str]) -> int:
+def _print_scoped_lint(
+    src_files: list[Path], test_files: list[Path], rule_ids: Sequence[str]
+) -> int:
     from slopgate.cli.lint.report import (
         BaselineInputs,
+        LintFiles,
         LintHeader,
         print_collector_results,
         print_lint_header,
@@ -140,8 +118,33 @@ def _run_scoped_lint(cwd: Path, paths: Sequence[str], rule_ids: Sequence[str]) -
     from slopgate.lint import __version__
     from slopgate.lint._baseline import load_baseline
     from slopgate.lint._collectors import run_all_collectors
+    from slopgate.lint._config import get_config
     from slopgate.lint._helpers import relative_path
 
+    files = LintFiles(get_config(), src_files, test_files)
+    results = run_all_collectors(src_files, test_files)
+    collector_ids = _collector_ids_for_rules(rule_ids)
+    recorded_relative = {relative_path(path) for path in [*src_files, *test_files]}
+    if src_files:
+        recorded_relative.add("<project>")
+    scoped = _filter_scoped_results(
+        results,
+        collector_ids=collector_ids,
+        recorded_relative=recorded_relative,
+    )
+    print_lint_header(
+        LintHeader(__version__, "repair-verify", files, gate=LINT_SCOPE_ALL)
+    )
+    return print_collector_results(
+        scoped,
+        BaselineInputs(stored=load_baseline(), accepted={}),
+        gate=LINT_SCOPE_ALL,
+        details=False,
+        sync_baseline=False,
+    )
+
+
+def _run_scoped_lint(cwd: Path, paths: Sequence[str], rule_ids: Sequence[str]) -> int:
     if not paths:
         print(
             json.dumps(
@@ -164,27 +167,7 @@ def _run_scoped_lint(cwd: Path, paths: Sequence[str], rule_ids: Sequence[str]) -
             )
         )
         return 1
-    files = _project_lint_files(cwd)
-    results = run_all_collectors(files.src_files, files.test_files)
-    collector_ids = _collector_ids_for_rules(rule_ids)
-    recorded_relative = {relative_path(path) for path in [*src_files, *test_files]}
-    if src_files:
-        recorded_relative.add("<project>")
-    scoped = _filter_scoped_results(
-        results,
-        collector_ids=collector_ids,
-        recorded_relative=recorded_relative,
-    )
-    print_lint_header(
-        LintHeader(__version__, "repair-verify", files, gate="all")
-    )
-    return print_collector_results(
-        scoped,
-        BaselineInputs(stored=load_baseline(), accepted={}),
-        gate="all",
-        details=False,
-        sync_baseline=False,
-    )
+    return _print_scoped_lint(src_files, test_files, rule_ids)
 
 
 def cmd_repair_status(args: argparse.Namespace) -> int:
