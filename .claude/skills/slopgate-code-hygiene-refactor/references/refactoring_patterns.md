@@ -73,7 +73,7 @@ Checklist:
 
 Run before moving a single line. The full command set lives in `code-hygiene-refactor/SKILL.md` under "Blast-radius measurement." Minimum:
 
-1. **GitNexus** (preferred): `gitnexus_impact({target, direction: "upstream"})` + `gitnexus_context({name})`. If stale → `npx gitnexus analyze` first.
+1. **GitNexus** (preferred): `gitnexus_impact({target, direction: "upstream"})` + `gitnexus_context({name})`. If stale, run `./scripts/gitnexus status` from the repository root first; only after status confirms staleness and an index write is approved, run `./scripts/gitnexus analyze`. Never use `npx`, `pnpm dlx`, or `bunx` fallback, run `analyze` concurrently, or add `--force` without explicit approval.
 2. **Fallback** when GitNexus is unavailable:
    - `rg -n --pcre2 "^\s*(from\s+<MODULE>\s+import|import\s+<MODULE>)" -t py` — direct importers
    - `rg -nw "<SYMBOL>" -t py` — symbol mentions

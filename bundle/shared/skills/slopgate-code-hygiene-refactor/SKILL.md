@@ -241,7 +241,7 @@ gitnexus_context({name: "<symbol>"})
 gitnexus_detect_changes()   # before commit, after refactor
 ```
 
-If any GitNexus tool reports the index is stale, run `npx gitnexus analyze` first; do not proceed on stale graph data.
+If any GitNexus tool reports the index is stale, run `./scripts/gitnexus status` from the repository root first. Only after status confirms staleness and an index write is approved, run `./scripts/gitnexus analyze`; do not proceed on stale graph data. The tracked wrapper is the only allowed runner: never use `npx`, `pnpm dlx`, `bunx`, or another package-manager fallback, never run `analyze` concurrently with another index writer, and never add `--force` without explicit approval.
 
 **Fallback recipe when GitNexus is unavailable, stale, or not configured for this repo.** Each command is deterministic, fast, and avoids global filesystem scans. Replace `<MODULE>` with the dotted import path (e.g. `cloud.services.event_buffer._buffer`) and `<SYMBOL>` with the class/function name.
 

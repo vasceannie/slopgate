@@ -22,7 +22,7 @@
 
 This project is indexed by GitNexus as **slopgate** (19038 symbols, 32403 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+> If any GitNexus tool warns the index is stale, run `./scripts/gitnexus status` from the repository root first. Only after status confirms staleness and an index write is approved, run `./scripts/gitnexus analyze`; never use `npx`, `pnpm dlx`, or `bunx` fallback commands, never run analyze concurrently with another index writer, and never add `--force` without explicit approval.
 
 ## Always Do
 

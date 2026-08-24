@@ -17,14 +17,14 @@ description: "Use when the user wants to know what will break if they change som
 ## Workflow
 
 ```
-1. impact({target: "X", direction: "upstream"}) or `node .gitnexus/run.cjs impact "X" --direction upstream --repo .`
+1. impact({target: "X", direction: "upstream"}) or `./scripts/gitnexus impact "X" --direction upstream --repo .`
 2. READ gitnexus://repo/{name}/processes                   → Check affected execution flows
-3. detect_changes({scope: "all"}) or `node .gitnexus/run.cjs detect-changes --scope all --repo .`
+3. detect_changes({scope: "all"}) or `./scripts/gitnexus detect-changes --scope all --repo .`
 4. Assess risk and report to user
 ```
 
-> If "Index is stale" → run `node .gitnexus/run.cjs analyze` in terminal.
-> If `.gitnexus/run.cjs` is missing, replace `node .gitnexus/run.cjs` with `npx gitnexus` in the fallback commands.
+> If "Index is stale" → run `./scripts/gitnexus analyze` in terminal.
+> If `scripts/gitnexus` is missing or reports a version mismatch, restore or update the pinned wrapper path deliberately; do not replace it with package-runner fallbacks.
 
 ## Checklist
 
@@ -64,7 +64,7 @@ treating the symbol as safe to change or delete.
 
 ## Tools
 
-**impact** — the primary tool for symbol blast radius. If MCP is unavailable, use `node .gitnexus/run.cjs impact <symbol> --direction upstream --repo .` instead:
+**impact** — the primary tool for symbol blast radius. If MCP is unavailable, use `./scripts/gitnexus impact <symbol> --direction upstream --repo .` instead:
 
 ```
 impact({
@@ -82,7 +82,7 @@ impact({
   - authRouter (src/routes/auth.ts:22) [CALLS, 95%]
 ```
 
-**detect_changes** — git-diff based impact analysis. If MCP is unavailable, use `node .gitnexus/run.cjs detect-changes --scope all --repo .` instead:
+**detect_changes** — git-diff based impact analysis. If MCP is unavailable, use `./scripts/gitnexus detect-changes --scope all --repo .` instead:
 
 ```
 detect_changes({scope: "all"})
@@ -100,7 +100,7 @@ than tick the pre-commit check.
 ## Example: "What breaks if I change validateUser?"
 
 ```
-1. impact({target: "validateUser", direction: "upstream"}) or `node .gitnexus/run.cjs impact "validateUser" --direction upstream --repo .`
+1. impact({target: "validateUser", direction: "upstream"}) or `./scripts/gitnexus impact "validateUser" --direction upstream --repo .`
    → d=1: loginHandler, apiMiddleware (WILL BREAK)
    → d=2: authRouter, sessionManager (LIKELY AFFECTED)
 

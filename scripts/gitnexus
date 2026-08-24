@@ -1,0 +1,33 @@
+#!/bin/bash
+set -euo pipefail
+
+script_path="${BASH_SOURCE[0]}"
+if [[ "${script_path}" != /* ]]; then
+    script_path="${PWD}/${script_path}"
+fi
+readonly REPO_ROOT="$(cd -- "${script_path%/*}/.." && builtin pwd -P)"
+readonly VERSION_FILE="${REPO_ROOT}/.gitnexus-version"
+readonly GITNEXUS_BIN="/home/trav/.local/bin/gitnexus"
+
+if [[ ! -f "${VERSION_FILE}" ]]; then
+    printf 'GitNexus version file not found: %s\n' "${VERSION_FILE}" >&2
+    exit 1
+fi
+if [[ ! -x "${GITNEXUS_BIN}" ]]; then
+    printf 'GitNexus binary is not executable: %s\n' "${GITNEXUS_BIN}" >&2
+    exit 1
+fi
+
+expected_version="$(<"${VERSION_FILE}")"
+if [[ -z "${expected_version}" ]]; then
+    printf 'GitNexus version file is empty: %s\n' "${VERSION_FILE}" >&2
+    exit 1
+fi
+actual_version="$("${GITNEXUS_BIN}" --version)"
+if [[ "${actual_version}" != "${expected_version}" ]]; then
+    printf 'GitNexus version mismatch: expected %s, got %s\n' \
+        "${expected_version}" "${actual_version}" >&2
+    exit 1
+fi
+
+exec "${GITNEXUS_BIN}" "$@"
