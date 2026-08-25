@@ -78,3 +78,4 @@ class PatchSection:
     operation: PatchOperation
     path: str
     lines: tuple[str, ...]
+    move_to: str | None = None

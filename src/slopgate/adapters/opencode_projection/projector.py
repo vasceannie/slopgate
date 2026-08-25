@@ -137,6 +137,39 @@ def _section_source(
     return snapshot
 
 
+def _project_move(
+    request: ProjectionRequest,
+    section: PatchSection,
+    resolved: _SectionSource,
+    files: dict[str, ProjectedFile],
+) -> Projection | None:
+    logger.debug("OpenCode move projection requested", path=section.path)
+    if section.move_to is None:
+        return None
+    target = _target(request.root, section.path)
+    if target is None:
+        return Projection("invalid")
+    _source_path, relative = target
+    content = section_content(section, resolved.content)
+    if content is None:
+        return Projection(
+            "invalid", reason="update_hunk_mismatch", target_path=relative
+        )
+    destination = _target(request.root, section.move_to)
+    if destination is None:
+        return Projection("invalid")
+    _destination_path, destination_relative = destination
+    if destination_relative == relative or destination_relative in files:
+        return Projection("invalid")
+    if _snapshot_digest(request.root, destination_relative) is not None:
+        return Projection("invalid")
+    files[relative] = ProjectedFile(relative, "", "delete", resolved.sha256)
+    files[destination_relative] = ProjectedFile(
+        destination_relative, content, "add", None
+    )
+    return Projection("projected")
+
+
 def _project_patch(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode patch projection requested", tool=request.tool_name)
     text = patch_text(request.tool_input) or ""
@@ -154,6 +187,11 @@ def _project_patch(request: ProjectionRequest) -> Projection:
         resolved = _section_source(request.root, section)
         if not isinstance(resolved, _SectionSource):
             return Projection("invalid" if resolved == "missing" else resolved)
+        move_result = _project_move(request, section, resolved, files)
+        if move_result is not None:
+            if move_result.status != "projected":
+                return move_result
+            continue
         content = section_content(section, resolved.content)
         if content is None:
             if section.operation == "update":

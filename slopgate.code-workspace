@@ -1,10 +1,10 @@
 {
 	"folders": [
 		{
-			"path": "../vibeforcer"
+			"path": "."
 		},
 		{
-			"path": "../vibeforcer/dashboard"
+			"path": "dashboard"
 		}
 	],
 	"settings": {}
