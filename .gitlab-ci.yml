@@ -184,8 +184,6 @@ windows-install-tests:
         - python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
         - slopgate install claude --dry-run
         - slopgate install codex --dry-run
-    needs:
-        - hook-install-verify
     rules:
         - if: '$CI_PIPELINE_SOURCE == "schedule"'
           when: never
