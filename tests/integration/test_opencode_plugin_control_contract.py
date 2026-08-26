@@ -77,6 +77,8 @@ else:
         print(json.dumps({"action": "allow"}))
     elif mode == "unknown-readonly":
         print(json.dumps({"action": "allow"}))
+    elif mode == "unknown-effect":
+        print(json.dumps({"action": "allow"}))
     elif mode in {"outside-unknown", "relaxed-unknown"}:
         print(json.dumps({"action": "allow"}))
     elif mode.startswith("repair-required-read"):
@@ -309,11 +311,10 @@ def test_typed_hook_return_value_is_ignored(tmp_path: Path) -> None:
     assert "hookReturn" not in observation, "typed hook must resolve without a value"
 
 
-def test_generated_plugin_denies_unknown_effect_tool(tmp_path: Path) -> None:
+def test_generated_plugin_allows_unknown_effect_tool_in_clean_state(tmp_path: Path) -> None:
     result = _run_plugin_contract(tmp_path, "tool.execute.before", "unknown-effect")
 
-    assert result.returncode != 0, "unknown custom tools must be denied by the plugin"
-    assert "unknown OpenCode tool effect" in result.stderr
+    assert result.returncode == 0, result.stderr
 
 
 def test_generated_plugin_allows_unknown_read_only_tool(tmp_path: Path) -> None:

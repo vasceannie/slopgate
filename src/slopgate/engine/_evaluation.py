@@ -75,7 +75,7 @@ def _mark_opencode_repair_required(
     quality_findings: list[RuleFinding],
 ) -> None:
     rule_ids = [finding.rule_id for finding in quality_findings]
-    paths = [target.path for target in ctx.content_targets]
+    paths = list(ctx.candidate_paths)
     call_id = str(ctx.payload.payload.get("call_id", ""))
     generation = ctx.state.repair_generation(
         rule_ids=rule_ids,
