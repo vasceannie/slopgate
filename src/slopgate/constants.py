@@ -175,6 +175,7 @@ LINT_SCOPE_STAGED = "staged"
 INSTALL_SCOPE_USER = "user"
 INSTALL_SCOPE_PROJECT = "project"
 INSTALL_SCOPE_BOTH = "both"
+DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@main"
 UNKNOWN_VALUE = "unknown"
 STATS_TOP_RULE_LIMIT = 20
 

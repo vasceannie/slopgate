@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, NamedTuple, TypeAlias, cast
 
 from slopgate._types import object_dict, string_value
 from slopgate.constants import REPLACE
@@ -17,6 +17,15 @@ from ..constants import (
     HASHLINE_REF_PATTERN,
 )
 from .hash import line_hash
+
+HashlineFailure: TypeAlias = Literal["stale_hash_anchor"]
+
+
+class HashlineEditResult(NamedTuple):
+    """Projected content and precise failure reason."""
+
+    content: str | None
+    failure: HashlineFailure | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,25 +118,27 @@ def _prepare_edits(value: object) -> list[_HashlineEdit] | None:
     return edits
 
 
-def _line_number(anchor: str, lines: list[str]) -> int | None:
+def _line_number(
+    anchor: str, lines: list[str]
+) -> tuple[int | None, HashlineFailure | None]:
     logger.debug("Hashline line reference validation requested", anchor=anchor)
     parsed = _parse_anchor(anchor)
     if parsed is None:
-        return None
+        return None, None
     line, expected_hash = parsed
     if not 1 <= line <= len(lines):
-        return None
+        return None, "stale_hash_anchor"
     actual = lines[line - 1]
     compatible = expected_hash in {
         line_hash(line, actual),
         line_hash(line, actual, legacy=True),
     }
-    return line if compatible else None
+    return (line, None) if compatible else (None, "stale_hash_anchor")
 
 
 def _resolve_edits(
     edits: list[_HashlineEdit], lines: list[str]
-) -> list[_ResolvedEdit] | None:
+) -> tuple[list[_ResolvedEdit] | None, HashlineFailure | None]:
     logger.debug("Hashline edit resolution requested", edit_count=len(edits))
     resolved: list[_ResolvedEdit] = []
     precedence = {REPLACE: 0, "append": 1, "prepend": 2}
@@ -135,14 +146,16 @@ def _resolve_edits(
         if edit.position is None:
             resolved.append(_ResolvedEdit(edit, 0, 0, 0))
             continue
-        start = _line_number(edit.position, lines)
+        start, failure = _line_number(edit.position, lines)
         if start is None:
-            return None
+            return None, failure
         end = start
         if edit.operation == REPLACE and edit.end is not None:
-            end = _line_number(edit.end, lines) or 0
+            end, failure = _line_number(edit.end, lines)
+            if end is None:
+                return None, failure
             if end < start:
-                return None
+                return None, None
         sort_line = end if edit.operation == REPLACE else start
         resolved.append(_ResolvedEdit(edit, start, end, sort_line))
     resolved.sort(
@@ -152,8 +165,8 @@ def _resolve_edits(
         (item.start, item.end) for item in resolved if item.edit.operation == REPLACE
     )
     if any(current[0] <= previous[1] for previous, current in zip(ranges, ranges[1:])):
-        return None
-    return resolved
+        return None, None
+    return resolved, None
 
 
 def _new_lines(lines: tuple[str, ...]) -> list[str]:
@@ -262,19 +275,25 @@ def _restore_content(lines: list[str], line_ending: str, had_bom: bool) -> str:
     return f"\ufeff{content}" if had_bom else content
 
 
-def apply_hashline_edits(content: str, raw_edits: object) -> str | None:
-    """Apply OMO hashline edits, returning ``None`` when validation fails."""
+def project_hashline_edits(content: str, raw_edits: object) -> HashlineEditResult:
+    """Project OMO hashline edits with a precise validation failure reason."""
     logger.debug("Hashline edit projection requested", content_length=len(content))
     edits = _prepare_edits(raw_edits)
     if edits is None:
-        return None
+        return HashlineEditResult(None, None)
     lines, line_ending, had_bom, canonical = _canonicalize(content)
-    resolved = _resolve_edits(edits, lines)
+    resolved, failure = _resolve_edits(edits, lines)
     if resolved is None:
-        return None
+        return HashlineEditResult(None, failure)
     for edit in resolved:
         _apply_edit(lines, edit)
     projected = "\n".join(lines)
     if projected == canonical:
-        return content
-    return _restore_content(lines, line_ending, had_bom)
+        return HashlineEditResult(content, None)
+    return HashlineEditResult(_restore_content(lines, line_ending, had_bom), None)
+
+
+def apply_hashline_edits(content: str, raw_edits: object) -> str | None:
+    """Apply OMO hashline edits, returning ``None`` when validation fails."""
+    logger.debug("Public hashline edit application requested")
+    return project_hashline_edits(content, raw_edits).content

@@ -110,6 +110,7 @@ def _print_scoped_lint(
 ) -> int:
     from slopgate.cli.lint.report import (
         BaselineInputs,
+        CollectorReportOptions,
         LintFiles,
         LintHeader,
         print_collector_results,
@@ -138,9 +139,7 @@ def _print_scoped_lint(
     return print_collector_results(
         scoped,
         BaselineInputs(stored=load_baseline(), accepted={}),
-        gate=LINT_SCOPE_ALL,
-        details=False,
-        sync_baseline=False,
+        CollectorReportOptions(gate=LINT_SCOPE_ALL, sync_baseline=False),
     )
 
 

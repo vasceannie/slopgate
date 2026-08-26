@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import tempfile
 
-DEFAULT_DAEMON_SOCKET_NAME = "slopgate-hookd.sock"
+from slopgate._version import __version__
+
+DEFAULT_DAEMON_SOCKET_NAME = f"slopgate-hookd-{__version__}.sock"
 LINUX_RUNTIME_ROOT = Path("/run/user")
 
 
@@ -43,5 +45,5 @@ def _linux_runtime_socket_path() -> Path | None:
 def _user_scoped_socket_name() -> str:
     getuid = getattr(os, "getuid", None)
     if callable(getuid):
-        return f"slopgate-hookd-{getuid()}.sock"
+        return f"slopgate-hookd-{__version__}-{getuid()}.sock"
     return DEFAULT_DAEMON_SOCKET_NAME

@@ -99,6 +99,7 @@ class OpenCodeAdapter(PlatformAdapter):
             tool_name = "Write"
         if tool_name:
             normalized_tool_id = normalize_opencode_tool_id(tool_name)
+            canonical["opencode_raw_tool_name"] = tool_name.strip()
             canonical["opencode_native_tool_name"] = normalized_tool_id
             canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(
                 normalized_tool_id, normalized_tool_id

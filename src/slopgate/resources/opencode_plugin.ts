@@ -176,16 +176,25 @@ const DECLARED_TOOL_IDS_BY_COMPACT = new Map<string, string>(
   ]),
 )
 
-function normalizeToolId(toolName: string): string {
-  const normalized = toolName.trim()
+function nativeToolId(toolName: string): string {
+  return toolName.trim()
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase()
+}
+
+function normalizeToolId(toolName: string): string {
+  const normalized = nativeToolId(toolName)
   if (READ_ONLY_TOOLS.has(normalized) || KNOWN_EFFECT_TOOLS.has(normalized)) {
     return normalized
   }
   const compact = normalized.replace(/_/g, "")
   return DECLARED_TOOL_IDS_BY_COMPACT.get(compact) ?? normalized
+}
+
+function nativeMutationToolId(toolName: string): string | null {
+  const normalized = nativeToolId(toolName)
+  return REPAIR_MUTATION_TOOLS.has(normalized) ? normalized : null
 }
 
 type ExecutionOutcome = "returned" | "failed" | "blocked" | "cancelled" | "unknown"
@@ -415,9 +424,24 @@ function enforcementModeFor(start: string): EnforcementMode {
   }
 }
 
+function enforcerFailureResult(
+  payload: Record<string, unknown>,
+  managedRepo: boolean,
+  repairStatusUnavailable: boolean,
+  reason: string,
+): EnforcerResult | null {
+  if (!managedRepo) return null
+  const toolName = typeof payload.tool_name === "string" ? payload.tool_name : ""
+  const toolInput = objectValue(payload, "tool_input") ?? {}
+  if (isReadOnlyTool(toolName)) return null
+  if (repairStatusUnavailable && isAllowedWhenRepairStateUnavailable(toolName, toolInput)) return null
+  return { action: "block", reason }
+}
+
 async function callEnforcer(
   payload: Record<string, unknown>,
   managedRepo: boolean,
+  repairStatusUnavailable: boolean = false,
 ): Promise<EnforcerResult | null> {
   try {
     const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
@@ -450,13 +474,12 @@ async function callEnforcer(
 
     if (exitCode !== 0) {
       console.error(`[slopgate] exit ${exitCode}: ${stderr}`)
-      if (managedRepo) {
-        return {
-          action: "block",
-          reason: "slopgate degraded mode: enforcer subprocess failed in managed repo.",
-        }
-      }
-      return null
+      return enforcerFailureResult(
+        payload,
+        managedRepo,
+        repairStatusUnavailable,
+        "slopgate degraded mode: enforcer subprocess failed in managed repo.",
+      )
     }
 
     const trimmed = output.trim()
@@ -468,13 +491,12 @@ async function callEnforcer(
   } catch (err) {
     // Catch subprocess failures, JSON parse errors, Bun API changes, etc.
     console.error(`[slopgate] callEnforcer failed: ${err}`)
-    if (managedRepo) {
-      return {
-        action: "block",
-        reason: "slopgate degraded mode: enforcer call failed in managed repo.",
-      }
-    }
-    return null
+    return enforcerFailureResult(
+      payload,
+      managedRepo,
+      repairStatusUnavailable,
+      "slopgate degraded mode: enforcer call failed in managed repo.",
+    )
   }
 }
 
@@ -594,8 +616,12 @@ async function repairGateState(cwd: string): Promise<RepairGateState | null> {
   }
 }
 
+function isReadOnlyTool(toolName: string): boolean {
+  return READ_ONLY_TOOLS.has(nativeToolId(toolName))
+}
+
 function isExplicitRepairCommand(toolName: string, args: Record<string, unknown>): boolean {
-  const normalized = normalizeToolId(toolName)
+  const normalized = nativeToolId(toolName)
   if (normalized === VERIFY_TOOL) return true
   if (normalized !== "bash") return false
   const command = firstString(args, "command", "cmd", "script")
@@ -613,10 +639,20 @@ function isAllowedWhileRepairRequired(
   toolName: string,
   args: Record<string, unknown>,
 ): boolean {
-  const lowered = normalizeToolId(toolName)
   return (
-    READ_ONLY_TOOLS.has(lowered)
-    || REPAIR_MUTATION_TOOLS.has(lowered)
+    isReadOnlyTool(toolName)
+    || nativeMutationToolId(toolName) !== null
+    || isExplicitRepairCommand(toolName, args)
+  )
+}
+
+function isAllowedWhenRepairStateUnavailable(
+  toolName: string,
+  args: Record<string, unknown>,
+): boolean {
+  return (
+    isReadOnlyTool(toolName)
+    || nativeMutationToolId(toolName) === "apply_patch"
     || isExplicitRepairCommand(toolName, args)
   )
 }
@@ -734,12 +770,11 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
       const mode = enforcementModeFor(scopedDirectory)
       const strictRepo = mode === "repo_strict"
       const pending = strictRepo ? await repairGateState(scopedDirectory) : null
-      if (
-        strictRepo
-        && pending === null
-        && toolName.toLowerCase() !== "apply_patch"
-      ) {
-        throw new Error("[slopgate] repair gate state is unavailable in a managed repo.")
+      const repairStatusUnavailable = strictRepo && pending === null
+      if (repairStatusUnavailable) {
+        if (!isAllowedWhenRepairStateUnavailable(toolName, outputArgs)) {
+          throw new Error("[slopgate] repair gate state is unavailable in a managed repo.")
+        }
       }
       if (
         strictRepo
@@ -776,6 +811,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
       const result = await callEnforcer(
         payload,
         mode !== "outside_repo",
+        repairStatusUnavailable,
       )
       if (!result) return
 

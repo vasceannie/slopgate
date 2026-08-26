@@ -17,7 +17,7 @@ from slopgate.constants import DENY, METADATA_CONTENT, METADATA_PATH, PRE_TOOL_U
 from slopgate.models import RuleFinding, Severity
 from slopgate.opencode_tool_capabilities import (
     OpenCodeToolCapability,
-    normalize_opencode_tool_id,
+    native_opencode_mutation_tool_id,
     opencode_tool_capability,
 )
 from slopgate.util import logger
@@ -31,7 +31,7 @@ from .models import (
     Snapshot,
     SnapshotStatus,
 )
-from .hashline import apply_hashline_edits
+from .hashline import project_hashline_edits
 from .patch import parse_patch, patch_text, section_content
 from .snapshot import read_snapshot
 
@@ -79,8 +79,10 @@ def _project_write(request: ProjectionRequest) -> Projection:
         return Projection("invalid")
     _path, relative = target
     digest = _snapshot_digest(request.root, relative)
-    if digest == "invalid" or digest == "stale":
-        return Projection(digest)
+    if digest == "invalid":
+        return Projection("invalid")
+    if digest == "stale":
+        return Projection("stale")
     return Projection(
         "projected",
         (ProjectedFile(relative, content, "write", digest),),
@@ -97,11 +99,12 @@ def _project_edit(request: ProjectionRequest) -> Projection:
     if not isinstance(snapshot, Snapshot):
         return Projection("invalid" if snapshot == "missing" else snapshot)
     if "edits" in request.tool_input:
-        content = apply_hashline_edits(
+        hashline_result = project_hashline_edits(
             snapshot.content, request.tool_input.get("edits")
         )
-        if content is None:
-            return Projection("invalid")
+        if hashline_result.content is None:
+            return Projection("invalid", reason=hashline_result.failure)
+        content = hashline_result.content
     else:
         old = string_value(request.tool_input.get("oldString"))
         new = string_value(request.tool_input.get("newString"))
@@ -220,6 +223,25 @@ _UNRESOLVED_PROJECTION_MESSAGES = {
 }
 
 
+def _defers_to_native_mutation_validation(
+    tool_name: str,
+    tool_input: ObjectMapping,
+    status: str,
+    reason: str | None,
+) -> bool:
+    logger.debug("OpenCode native mutation deferral evaluated", tool=tool_name)
+    native_mutation_tool = native_opencode_mutation_tool_id(tool_name)
+    return (
+        status == "protocol_mismatch"
+        and native_mutation_tool is not None
+    ) or (
+        status == "invalid"
+        and reason == "stale_hash_anchor"
+        and native_mutation_tool == "edit"
+        and "edits" in tool_input
+    )
+
+
 def unresolved_opencode_projection_finding(
     tool_name: str,
     tool_input: ObjectMapping,
@@ -233,14 +255,14 @@ def unresolved_opencode_projection_finding(
         return None
     projection = object_dict(tool_input.get(PROJECTION_KEY))
     status = string_value(projection.get("status")) or ""
-    if status == "projected":
-        return None
-    if status == "unsupported":
+    reason = string_value(projection.get("reason"))
+    if status in {"projected", "unsupported"} or _defers_to_native_mutation_validation(
+        tool_name, tool_input, status, reason
+    ):
         return None
     capability = opencode_tool_capability(tool_name)
     if capability is OpenCodeToolCapability.READ_ONLY:
         return None
-    reason = string_value(projection.get("reason"))
     target_path = string_value(projection.get(METADATA_PATH))
     message = _UNRESOLVED_PROJECTION_MESSAGES.get(
         status,
@@ -268,11 +290,12 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
     logger.debug("OpenCode tool projection requested", tool=request.tool_name)
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
         return Projection("protocol_mismatch").to_dict()
+    native_tool_id = native_opencode_mutation_tool_id(request.tool_name)
     projector = {
         "write": _project_write,
         "edit": _project_edit,
         "apply_patch": _project_patch,
-    }.get(normalize_opencode_tool_id(request.tool_name))
+    }.get(native_tool_id) if native_tool_id is not None else None
     result = projector(request) if projector is not None else Projection("unsupported")
     return result.to_dict()
 
@@ -295,7 +318,7 @@ def normalize_projected_tool_input(request: ProjectionRequest) -> ObjectDict:
             edit[METADATA_CONTENT] = item.get(METADATA_CONTENT, "")
         projected_edits.append(edit)
     enriched_input["edits"] = projected_edits
-    if normalize_opencode_tool_id(request.tool_name) == "apply_patch":
+    if native_opencode_mutation_tool_id(request.tool_name) == "apply_patch":
         original_patch_text = patch_text(enriched_input) or ""
         enriched_input.pop("patchText", None)
         enriched_input.pop("patch_text", None)

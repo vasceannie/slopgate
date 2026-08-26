@@ -108,6 +108,14 @@ def _record_opencode_repair_required(
     _clear_opencode_repair_required(ctx)
 
 
+def _opencode_tool_name_for_policy(ctx: HookContext) -> str:
+    raw_tool_name = ctx.payload.payload.get("opencode_raw_tool_name")
+    if isinstance(raw_tool_name, str):
+        return raw_tool_name
+    native_tool_name = ctx.payload.payload.get("opencode_native_tool_name")
+    return native_tool_name if isinstance(native_tool_name, str) else ctx.tool_name
+
+
 def _opencode_repair_required_finding(
     ctx: HookContext,
     platform: str,
@@ -120,13 +128,9 @@ def _opencode_repair_required_finding(
         or ctx.event_name != "PreToolUse"
     ):
         return None
-    native_tool_name = ctx.payload.payload.get("opencode_native_tool_name")
-    repair_tool_name = (
-        native_tool_name if isinstance(native_tool_name, str) else ctx.tool_name
-    )
     required = ctx.state.get_repair_required()
     if required is None or opencode_tool_allowed_during_repair(
-        repair_tool_name, ctx.tool_input
+        _opencode_tool_name_for_policy(ctx), ctx.tool_input
     ):
         return None
     generation = required.get("generation")
@@ -155,11 +159,12 @@ def _inject_opencode_gate_findings(
     repair_required = _opencode_repair_required_finding(ctx, platform, mode)
     if repair_required is not None:
         findings.append(repair_required)
-    unresolved = unresolved_opencode_projection_finding(
-        ctx.tool_name, ctx.tool_input, ctx.event_name
-    )
-    if unresolved is not None:
-        findings.append(unresolved)
+    if ctx.payload.payload.get("opencode_hook_event") == "tool.execute.before":
+        unresolved = unresolved_opencode_projection_finding(
+            _opencode_tool_name_for_policy(ctx), ctx.tool_input, ctx.event_name
+        )
+        if unresolved is not None:
+            findings.append(unresolved)
 
 
 def _evaluate_payload_inner(

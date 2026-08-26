@@ -102,6 +102,11 @@ def test_exact_file_repair_tools_remain_allowed(tool_name: str) -> None:
     assert opencode_tool_allowed_during_repair(tool_name, {})
 
 
+@pytest.mark.parametrize("tool_name", ("w_r_i_t_e", "apply__patch"))
+def test_repair_allowlist_rejects_separator_collisions(tool_name: str) -> None:
+    assert not opencode_tool_allowed_during_repair(tool_name, {})
+
+
 @given(
     tool_name=strategies.sampled_from(
         ("read", "apply_patch", "slopgate_verify_repair")

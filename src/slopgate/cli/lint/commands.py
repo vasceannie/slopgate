@@ -7,6 +7,7 @@ from typing import cast
 from slopgate.cli.lint.git_base_debt import scan_git_base_debt
 from slopgate.cli.lint.report import (
     BASELINE_DISABLED_MESSAGE,
+    CollectorReportOptions,
     LintGateMode,
     BaselineInputs,
     LintFiles,
@@ -79,7 +80,9 @@ def _lint_scan(
         accepted=git_base_debt.rules if git_base_debt is not None else {},
     )
     return print_collector_results(
-        collectors, baseline_inputs, gate=gate, details=details
+        collectors,
+        baseline_inputs,
+        CollectorReportOptions(gate=gate, details=details),
     )
 
 
@@ -153,7 +156,9 @@ def lint_test_integrity(root: Path, *, details: bool = False) -> int:
     print_lint_header(LintHeader(__version__, "test-integrity", files, gate="new"))
     collectors = run_test_integrity_collectors(files.src_files, files.test_files)
     return print_collector_results(
-        collectors, load_baseline(), gate="new", details=details
+        collectors,
+        load_baseline(),
+        CollectorReportOptions(details=details),
     )
 
 

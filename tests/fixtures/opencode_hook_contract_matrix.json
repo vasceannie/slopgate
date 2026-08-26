@@ -172,7 +172,7 @@
       "evidence_tier": "local-observed",
       "status": "verified",
       "public_contract": false,
-      "test_path": "tests/test_repair_cli.py",
+      "test_path": "tests/repair_cli/test_commands.py",
       "test_name": "test_repair_verify_accepts_arbitrary_generation_tokens"
     },
     {

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given, strategies
 
 from slopgate.bundle_prompt_sync import (
     MANAGED_BLOCK_ID,
@@ -18,7 +18,7 @@ from slopgate.bundle_prompt_sync import (
 )
 from slopgate.cli.parsers import build_parser
 from slopgate.cli.commands_bundle import cmd_bundle_sync_prompts
-from slopgate.cli.parsers_bundle import add_bundle_parsers
+from slopgate.cli.parsers.bundle import add_bundle_parsers
 from slopgate.constants import (
     PLATFORM_CLAUDE,
     PLATFORM_CODEX,
@@ -30,8 +30,10 @@ START_TOKEN = f"slopgate:managed:start id={MANAGED_BLOCK_ID}"
 ROUTING_SOURCE = (
     "slopgate.resources.bundle/shared/prompt-fragments/slopgate-skill-routing.md"
 )
-SAFE_TEXT = st.text(
-    alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\r"),
+SAFE_TEXT = strategies.text(
+    alphabet=strategies.characters(
+        blacklist_categories=("Cs",), blacklist_characters="\r"
+    ),
     max_size=200,
 ).filter(
     lambda value: (
