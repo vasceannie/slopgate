@@ -180,7 +180,7 @@ hook-uninstall-verify:
         - hook-install-verify
 
 # ===================================================================
-# WINDOWS-INSTALL (extended) — unit tests on Windows runner (manual gate)
+# WINDOWS-INSTALL (extended) — unit tests on Windows runner
 # ===================================================================
 windows-install-tests:
     stage: windows-install
@@ -195,4 +195,4 @@ windows-install-tests:
     rules:
         - if: '$CI_PIPELINE_SOURCE == "schedule"'
           when: never
-        - when: manual
+        - if: '$CI_MERGE_REQUEST_ID'
