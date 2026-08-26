@@ -189,7 +189,7 @@ windows-install-tests:
     <<: *windows-uv-setup
     script:
         - uv run slopgate version
-        - uv run python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
+        - uv run python -m pytest tests/test_windows_shell_command.py tests/test_suite_autoupdate_scheduler.py -v --tb=short -q
         - uv run slopgate install claude --dry-run
         - uv run slopgate install codex --dry-run
     rules:
