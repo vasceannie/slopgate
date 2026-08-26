@@ -35,7 +35,7 @@
 
 /// <reference types="node" />
 
-import { spawn, type ChildProcess } from "node:child_process"
+import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
@@ -166,6 +166,40 @@ const READ_ONLY_TOOLS = new Set(["__SLOPGATE_READ_ONLY_TOOL_IDS__"])
 const KNOWN_EFFECT_TOOLS = new Set(["__SLOPGATE_EFFECTFUL_TOOL_IDS__"])
 const REPAIR_MUTATION_TOOLS = new Set(["apply_patch", "edit", "write"])
 const REPAIR_LINT_FLAGS = new Set(["--details", "--verbose"])
+const READ_ONLY_BASH_COMMANDS = new Set([
+  "cat",
+  "cd",
+  "echo",
+  "file",
+  "find",
+  "grep",
+  "head",
+  "jq",
+  "ls",
+  "nl",
+  "pwd",
+  "readlink",
+  "realpath",
+  "rg",
+  "sed",
+  "stat",
+  "tail",
+  "wc",
+  "which",
+])
+const READ_ONLY_GIT_SUBCOMMANDS = new Set([
+  "branch",
+  "check-ignore",
+  "describe",
+  "diff",
+  "log",
+  "ls-files",
+  "remote",
+  "rev-parse",
+  "show",
+  "status",
+])
+const SHELL_MUTATION_MARKERS = /(?:&&|\|\||[;|<>]|\$\([^)]*\)|`[^`]*`)/
 const VERIFY_TOOL = "slopgate_verify_repair"
 const DEFAULT_REPAIR_TIMEOUT_MS = 60_000
 const verifyFlights = new Map<string, Promise<RepairCommandResult>>()
@@ -635,12 +669,24 @@ function isExplicitRepairCommand(toolName: string, args: Record<string, unknown>
   )
 }
 
+function isReadOnlyBashCommand(args: Record<string, unknown>): boolean {
+  const command = firstString(args, "command", "cmd", "script")
+  if (!command || SHELL_MUTATION_MARKERS.test(command)) return false
+  const tokens = command.split(/\s+/)
+  const executable = tokens[0]?.split("/").pop() || ""
+  if (READ_ONLY_BASH_COMMANDS.has(executable)) return true
+  if (executable !== "git") return false
+  const subcommand = tokens.slice(1).find((token) => !token.startsWith("-"))
+  return READ_ONLY_GIT_SUBCOMMANDS.has(subcommand || "")
+}
+
 function isAllowedWhileRepairRequired(
   toolName: string,
   args: Record<string, unknown>,
 ): boolean {
   return (
     isReadOnlyTool(toolName)
+    || (nativeToolId(toolName) === "bash" && isReadOnlyBashCommand(args))
     || nativeMutationToolId(toolName) !== null
     || isExplicitRepairCommand(toolName, args)
   )

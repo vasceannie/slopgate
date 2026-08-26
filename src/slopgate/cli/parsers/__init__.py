@@ -25,7 +25,7 @@ from slopgate.cli.commands import (
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.repair import add_repair_parsers
-from slopgate.constants import DEFAULT_UPDATE_SOURCE, METADATA_PATH
+from slopgate.constants import DEFAULT_UPDATE_SOURCE, METADATA_PATH, VERSION_SUBCOMMAND
 
 from .config import (
     add_command_parser,
@@ -74,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     from slopgate.search.cli import build_search_parser
 
     _ = build_search_parser(sub)
-    version = sub.add_parser("version", help="Print version")
+    version = sub.add_parser(VERSION_SUBCOMMAND, help="Print version")
     version.set_defaults(func=cmd_version)
     add_repair_parsers(sub)
     return parser

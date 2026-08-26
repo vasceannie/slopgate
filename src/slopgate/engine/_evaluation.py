@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from time import monotonic
 
 from slopgate._types import ObjectDict, ObjectMapping
@@ -70,12 +71,16 @@ def _clear_opencode_repair_required(ctx: HookContext) -> None:
         ctx.state.clear_repair_required(generation)
 
 
+def _existing_repair_paths(paths: list[str]) -> list[str]:
+    return [path for path in paths if Path(path).is_file()]
+
+
 def _mark_opencode_repair_required(
     ctx: HookContext,
     quality_findings: list[RuleFinding],
 ) -> None:
     rule_ids = [finding.rule_id for finding in quality_findings]
-    paths = list(ctx.candidate_paths)
+    paths = _existing_repair_paths(ctx.candidate_paths)
     call_id = str(ctx.payload.payload.get("call_id", ""))
     generation = ctx.state.repair_generation(
         rule_ids=rule_ids,

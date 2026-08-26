@@ -7,7 +7,7 @@
 		},
 		"pyrefly": {
 			"command": ["pyrefly", "lsp"],
-			"disabled": true,
+			"disabled": false,
 			"extensions": [".py", ".pyi"]
 		},
 		"pyright": {
@@ -37,7 +37,7 @@
 		},
 		"ty": {
 			"command": ["ty", "server"],
-			"disabled": false,
+			"disabled": true,
 			"extensions": [".py", ".pyi"]
 		}
 	}

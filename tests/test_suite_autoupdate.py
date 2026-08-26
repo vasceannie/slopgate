@@ -113,7 +113,7 @@ def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> N
         "update",
         cmd_update_suite,
         True,
-        "git+https://github.com/vasceannie/slopgate.git@main",
+        "git+https://github.com/vasceannie/slopgate.git@master",
         False,
     )
 
@@ -252,7 +252,7 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
 
 
 @SKIP_LINUX_ONLY
-def test_default_scheduler_plan_tracks_canonical_main_branch(
+def test_default_scheduler_plan_tracks_canonical_master_branch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -261,8 +261,8 @@ def test_default_scheduler_plan_tracks_canonical_main_branch(
         slopgate.installer._suite, "find_binary", lambda: "/home/trav/.local/bin/slopgate"
     )
     plan = slopgate.installer._suite.build_scheduler_plan()
-    assert "git+https://github.com/vasceannie/slopgate.git@main" in plan.content
-    assert "git+https://github.com/vasceannie/slopgate.git@master" not in plan.content
+    assert "git+https://github.com/vasceannie/slopgate.git@master" in plan.content
+    assert "git+https://github.com/vasceannie/slopgate.git@main" not in plan.content
 
 
 @SKIP_LINUX_ONLY

@@ -1,10 +1,10 @@
 {
 	"lsp": {
 		"basedpyright": { "disabled": true },
-		"pyrefly": { "disabled": true },
+		"pyrefly": { "priority": 100 },
 		"pyright": { "disabled": true },
 		"sourcery": { "disabled": true },
-		"ty": { "priority": 100 },
+		"ty": { "disabled": true },
 		"biome": { "priority": 100 },
 		"typescript": { "priority": 50 }
 	}

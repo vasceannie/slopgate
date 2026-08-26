@@ -1,16 +1,16 @@
 # Remote proxy-server use case
 
 This note records the Slopgate changes retained while moving the working branch to
-`main` and synchronizing with the upstream source.
+`master` and synchronizing with the upstream source.
 
 ## Synchronization state
 
-- Local branch: `main`
+- Local branch: `master`
 - Upstream source remote: `github`
 - Mirror/deployment remote: `origin`
 - Current synchronized commit: `1f8f9ad` (`v2.0.0`)
-- The remotes currently publish `master`; the local `main` branch tracks
-  `origin/master` until the remotes are renamed server-side.
+- The remotes currently publish `master`; the local `master` branch tracks
+  `origin/master`.
 - The latest fetch showed no commits to merge from `github/master`.
 
 ## Alterations retained for the proxy use case

@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from slopgate.adapters import get_adapter
+from slopgate.context import build_context
 from slopgate.engine import evaluate_payload
+from slopgate.engine._evaluation import _existing_repair_paths
 from slopgate.util.payloads import (
     find_command_has_mutation,
     is_mutating_tool_use,
@@ -256,6 +258,21 @@ def test_opencode_file_edited_reaches_post_edit_quality(
 
     assert "QUALITY-POST-001" in finding_ids(result), (
         "file.edited must route through post-edit quality"
+    )
+
+
+def test_opencode_repair_state_records_only_existing_candidate_files(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "app.py"
+    _ = source.write_text("print('ok')\n")
+
+    assert _existing_repair_paths(
+        [str(source), str(repo / "NOT"), str(repo / "Simulate")]
+    ) == [str(source)], (
+        "repair state must retain only existing candidate files"
     )
 
 

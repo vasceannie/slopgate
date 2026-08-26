@@ -157,10 +157,9 @@ class HookDaemonServer:
         executor: ThreadPoolExecutor,
         admitted: AdmittedConnection,
     ) -> Future[None] | None:
+        future: Future[None] | None = None
         try:
-            future = executor.submit(
-                self._handle_owned_request, admitted.connection, admitted.request
-            )
+            future = executor.submit(self._handle_owned_request, admitted)
         except RuntimeError as exc:
             _release_admission(admitted.repo_lane, admitted.worker_slots)
             self._send_response(
@@ -168,31 +167,25 @@ class HookDaemonServer:
                 _accepted_response(DaemonResponse(ok=False, error=str(exc))),
             )
             admitted.connection.close()
-            return None
-        future.add_done_callback(
-            partial(
-                _finish_worker,
-                self.socket_path,
-                admitted.repo_lane,
-                admitted.worker_slots,
-            )
-        )
+        else:
+            future.add_done_callback(partial(_log_worker_failure, self.socket_path))
         return future
 
-    def _handle_owned_request(
-        self, connection: socket.socket, request: DaemonRequest
-    ) -> None:
-        with connection:
+    def _handle_owned_request(self, admitted: AdmittedConnection) -> None:
+        with admitted.connection:
             try:
-                response = self._scheduler.evaluate(request)
-            except REQUEST_FAILURE_EXCEPTIONS as exc:
-                logger.warning(
-                    "hook daemon request failed",
-                    socket_path=str(self.socket_path),
-                    error=exc.__class__.__name__,
-                )
-                response = DaemonResponse(ok=False, error=str(exc))
-            self._send_response(connection, _accepted_response(response))
+                try:
+                    response = self._scheduler.evaluate(admitted.request)
+                except REQUEST_FAILURE_EXCEPTIONS as exc:
+                    logger.warning(
+                        "hook daemon request failed",
+                        socket_path=str(self.socket_path),
+                        error=exc.__class__.__name__,
+                    )
+                    response = DaemonResponse(ok=False, error=str(exc))
+            finally:
+                _release_admission(admitted.repo_lane, admitted.worker_slots)
+            self._send_response(admitted.connection, _accepted_response(response))
 
     def _handle_connection(self, connection: socket.socket) -> None:
         try:
@@ -287,18 +280,6 @@ def _read_request(socket_path: Path, connection: socket.socket) -> DaemonRequest
     return request
 
 
-def _finish_worker(
-    socket_path: Path,
-    repo_lane: threading.Lock,
-    worker_slots: threading.BoundedSemaphore,
-    future: Future[None],
-) -> None:
-    try:
-        _log_worker_failure(socket_path, future)
-    finally:
-        _release_admission(repo_lane, worker_slots)
-
-
 def _release_admission(
     repo_lane: threading.Lock, worker_slots: threading.BoundedSemaphore
 ) -> None:
@@ -311,10 +292,10 @@ def _log_worker_failure(socket_path: Path, future: Future[None]) -> None:
         exc = future.exception()
     except CancelledError:
         logger.warning("hook daemon worker cancelled", socket_path=str(socket_path))
-        return
-    if exc is not None:
-        logger.warning(
-            "hook daemon worker failed",
-            socket_path=str(socket_path),
-            error=exc.__class__.__name__,
-        )
+    else:
+        if exc is not None:
+            logger.warning(
+                "hook daemon worker failed",
+                socket_path=str(socket_path),
+                error=exc.__class__.__name__,
+            )

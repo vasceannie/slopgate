@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 import re
+import shlex
 from typing import Final
 
 from slopgate._types import ObjectMapping
+from slopgate.config import GIT_BIN
 from slopgate.constants import BASH_TOOL_LOWER, METADATA_COMMAND, METADATA_SLOPGATE
+from slopgate.util.payloads import is_safe_read_shell_command
 
 
 _CAMEL_CASE_BOUNDARY: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
@@ -187,6 +191,23 @@ REPAIR_MUTATION_TOOL_IDS: Final[frozenset[str]] = frozenset(
 )
 REPAIR_LINT_FLAGS: Final[frozenset[str]] = frozenset({"--details", "--verbose"})
 VERIFY_TOOL_ID: Final = "slopgate_verify_repair"
+_READ_ONLY_BASH_COMMANDS: Final[frozenset[str]] = frozenset(
+    {"pwd", "readlink", "realpath", "which"}
+)
+_READ_ONLY_GIT_SUBCOMMANDS: Final[frozenset[str]] = frozenset(
+    {
+        "branch",
+        "check-ignore",
+        "describe",
+        "diff",
+        "log",
+        "ls-files",
+        "remote",
+        "rev-parse",
+        "show",
+        "status",
+    }
+)
 
 
 def native_opencode_mutation_tool_id(tool_name: str) -> str | None:
@@ -232,6 +253,32 @@ def opencode_tool_is_explicit_repair_command(
     )
 
 
+def _is_read_only_bash_command(tool_input: ObjectMapping) -> bool:
+    command = next(
+        (
+            value.strip()
+            for key in (METADATA_COMMAND, "cmd", "script")
+            if isinstance((value := tool_input.get(key)), str) and value.strip()
+        ),
+        "",
+    )
+    if is_safe_read_shell_command(command):
+        return True
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if not tokens or any(token in {";", "&&", "||", "|", ">", ">>"} for token in tokens):
+        return False
+    executable = Path(tokens[0]).name.lower()
+    if executable in _READ_ONLY_BASH_COMMANDS:
+        return True
+    if executable != GIT_BIN:
+        return False
+    subcommand = next((token.lower() for token in tokens[1:] if not token.startswith("-")), "")
+    return subcommand in _READ_ONLY_GIT_SUBCOMMANDS
+
+
 def opencode_tool_allowed_during_repair(
     tool_name: str,
     tool_input: ObjectMapping,
@@ -241,6 +288,7 @@ def opencode_tool_allowed_during_repair(
     return (
         normalized in READ_ONLY_TOOL_IDS
         or native_opencode_mutation_tool_id(tool_name) is not None
+        or (normalized == BASH_TOOL_LOWER and _is_read_only_bash_command(tool_input))
         or opencode_tool_is_explicit_repair_command(tool_name, tool_input)
     )
 

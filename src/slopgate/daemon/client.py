@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import socket
+import time
 
 from slopgate.daemon.protocol import (
     DaemonRequest,
@@ -17,6 +18,8 @@ from slopgate.daemon.protocol import (
 from slopgate.util import logger
 
 DEFAULT_DAEMON_TIMEOUT_SECONDS = 30.0
+DAEMON_STARTUP_RETRY_SECONDS = 0.25
+DAEMON_STARTUP_RETRY_INTERVAL_SECONDS = 0.01
 DAEMON_ACCEPTED_FAILURE_ERROR = "daemon request accepted but response unavailable"
 DAEMON_ACCEPTED_FAILURE_EXIT_CODE = 1
 
@@ -37,7 +40,7 @@ def send_daemon_request(
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(timeout)
-            client.connect(str(socket_path))
+            _connect_daemon_client(client, socket_path)
             client.sendall(encode_request(request))
             request_sent = True
             return decode_response(
@@ -62,6 +65,18 @@ def send_daemon_request(
             error=exc.__class__.__name__,
         )
         return DaemonResponse(ok=False, error=str(exc))
+
+
+def _connect_daemon_client(client: socket.socket, socket_path: Path) -> None:
+    deadline = time.monotonic() + DAEMON_STARTUP_RETRY_SECONDS
+    while True:
+        try:
+            client.connect(str(socket_path))
+            return
+        except ConnectionRefusedError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(DAEMON_STARTUP_RETRY_INTERVAL_SECONDS)
 
 
 def _accepted_failure_response(exc: BaseException) -> DaemonResponse:

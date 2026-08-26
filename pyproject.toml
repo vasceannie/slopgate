@@ -85,6 +85,7 @@ extra-paths = ["dashboard/scripts"]
 dev = [
     "basedpyright>=1.39.0",
     "hypothesis>=6.155.1",
+    "pyrefly>=1.2.0",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.13",

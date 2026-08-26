@@ -102,6 +102,33 @@ def test_exact_file_repair_tools_remain_allowed(tool_name: str) -> None:
     assert opencode_tool_allowed_during_repair(tool_name, {})
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        "pwd",
+        "readlink src/slopgate",
+        "realpath src/slopgate/opencode_tool_capabilities.py",
+        "git status --short",
+        "git diff -- src/slopgate/opencode_tool_capabilities.py",
+        "git show HEAD:README.md",
+    ),
+)
+def test_read_only_bash_inspection_remains_allowed(command: str) -> None:
+    assert opencode_tool_allowed_during_repair("bash", {"command": command})
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "pwd && touch bypassed",
+        "git status && git commit -am bypassed",
+        "git show HEAD:README.md > copied",
+    ),
+)
+def test_compound_or_redirected_bash_remains_blocked(command: str) -> None:
+    assert not opencode_tool_allowed_during_repair("bash", {"command": command})
+
+
 @pytest.mark.parametrize("tool_name", ("w_r_i_t_e", "apply__patch"))
 def test_repair_allowlist_rejects_separator_collisions(tool_name: str) -> None:
     assert not opencode_tool_allowed_during_repair(tool_name, {})

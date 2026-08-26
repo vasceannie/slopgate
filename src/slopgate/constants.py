@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Final
+
 
 # Canonical hook protocol and decision strings.
 PRE_TOOL_USE = "PreToolUse"
@@ -24,6 +26,7 @@ METADATA_SLOPGATE = "slopgate"
 DECISION_KEY = "decision"
 PLATFORM_KEY = "platform"
 RULE_ID_KEY = "rule_id"
+VERSION_SUBCOMMAND: Final = "version"
 BASH_TOOL_LOWER = "bash"
 REPLACE = "replace"
 SESSION_ID = "session_id"
@@ -175,7 +178,7 @@ LINT_SCOPE_STAGED = "staged"
 INSTALL_SCOPE_USER = "user"
 INSTALL_SCOPE_PROJECT = "project"
 INSTALL_SCOPE_BOTH = "both"
-DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@main"
+DEFAULT_UPDATE_SOURCE = "git+https://github.com/vasceannie/slopgate.git@master"
 UNKNOWN_VALUE = "unknown"
 STATS_TOP_RULE_LIMIT = 20
 
