@@ -21,6 +21,17 @@ variables:
         - uv tool install --force "${CI_PROJECT_DIR}"
         - slopgate --version
 
+.windows-uv-setup: &windows-uv-setup
+    before_script:
+        - $env:UV_UNMANAGED_INSTALL = "${env:CI_PROJECT_DIR}\.ci\uv"
+        - $env:UV_NO_MODIFY_PATH = "1"
+        - New-Item -ItemType Directory -Force -Path $env:UV_UNMANAGED_INSTALL | Out-Null
+        - Invoke-RestMethod "https://astral.sh/uv/${env:UV_VERSION}/install.ps1" | Invoke-Expression
+        - $env:Path = "$env:UV_UNMANAGED_INSTALL;$env:Path"
+        - uv --version
+        - Set-Location "${env:CI_PROJECT_DIR}"
+        - uv sync --frozen
+
 stages:
     - test
     - lint
@@ -106,16 +117,15 @@ windows-install:
     stage: windows-install
     tags:
         - windows
+    <<: *windows-uv-setup
     script:
-        - pip install --upgrade pip
-        - pip install --editable "${env:CI_PROJECT_DIR}"
-        - slopgate version
-        - slopgate config path
-        - slopgate config show | Select-Object -First 30
-        - slopgate install claude --dry-run
-        - slopgate install codex --dry-run
-        - slopgate install opencode --dry-run
-        - slopgate uninstall all --dry-run
+        - uv run slopgate version
+        - uv run slopgate config path
+        - uv run slopgate config show | Select-Object -First 30
+        - uv run slopgate install claude --dry-run
+        - uv run slopgate install codex --dry-run
+        - uv run slopgate install opencode --dry-run
+        - uv run slopgate uninstall all --dry-run
     needs: []
     rules:
         - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -176,14 +186,12 @@ windows-install-tests:
     stage: windows-install
     tags:
         - windows
-    before_script:
-        - pip install --upgrade pip
-        - pip install --editable "${CI_PROJECT_DIR}"
+    <<: *windows-uv-setup
     script:
-        - slopgate version
-        - python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
-        - slopgate install claude --dry-run
-        - slopgate install codex --dry-run
+        - uv run slopgate version
+        - uv run python -m pytest tests/test_windows_shell_command.py tests/test_scheduler_xml.py -v --tb=short -q
+        - uv run slopgate install claude --dry-run
+        - uv run slopgate install codex --dry-run
     rules:
         - if: '$CI_PIPELINE_SOURCE == "schedule"'
           when: never
