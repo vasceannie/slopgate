@@ -456,7 +456,7 @@
         "**/*.pyi"
       ],
       "patterns": [
-        "except[^:]*:.*?(logger\\.|logging\\.).*?return\\s+(\\{\\}|\\[\\]|set\\(\\)|\\\"\\\"|'' |0|False)\\s*$"
+        "(?-s:^(?P<indent>[ \\t]*)except[^\\n:]*:[^\\n]*(?:\\n(?:[ \\t]*(?=\\n|$)|(?P=indent)[ \\t]+[^\\n]*))*?\\n(?P=indent)[ \\t]+[^\\n]*(?:logger\\.|logging\\.)[^\\n]*(?:\\n(?:[ \\t]*(?=\\n|$)|(?P=indent)[ \\t]+[^\\n]*))*?\\n(?P=indent)[ \\t]+return\\s+(\\{\\}|\\[\\]|set\\(\\)|\\\"\\\"|'' |0|False)\\s*$)"
       ],
       "action": "deny",
       "message": "Exception handlers that log and return empty defaults ([], {{}}, \"\", 0) are blocked. Re-raise with context or use a sentinel callers can check.\n\nInstead of:\n    try:\n        items = load_items(path)\n    except Exception:\n        logger.error(\"load failed\")\n        return []  # caller proceeds with empty data, silently wrong\n\nUse:\n    try:\n        items = load_items(path)\n    except FileNotFoundError:\n        return []  # empty is correct when file doesn't exist\n    except (json.JSONDecodeError, PermissionError) as exc:\n        raise LoadError(f\"corrupt or inaccessible: {path}\") from exc",
