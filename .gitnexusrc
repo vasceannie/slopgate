@@ -1,7 +1,7 @@
 {
   "defaultBranch": "main",
   "skipContextFiles": true,
-  "skipSkills": false,
+  "skipSkills": true,
   "embeddings": true,
   "pdg": true,
   "embeddingDevice": "cpu",

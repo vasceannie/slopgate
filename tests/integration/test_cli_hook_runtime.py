@@ -190,7 +190,7 @@ def test_cmd_daemon_uses_default_socket(
     )
 
     assert exit_code == 0, "Daemon command should run with the default socket"
-    assert _DaemonServerStub.socket_path == tmp_path / ("slopgate-hookd.sock"), (
+    assert _DaemonServerStub.socket_path == tmp_path / slopgate.daemon.paths.DEFAULT_DAEMON_SOCKET_NAME, (
         "Daemon command should use XDG runtime socket by default"
     )
     assert _DaemonServerStub.serial == EXPECTED_SERIAL_ENABLED, (
@@ -242,6 +242,7 @@ def test_cmd_handle_uses_default_socket_when_present(
 ) -> None:
     monkeypatch.delenv("SLOPGATE_DAEMON_SOCKET", raising=False)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "slopgate-hookd.sock").touch()
     default_daemon_socket_path().touch()
 
     _exit_code, daemon_client = _run_handle_with_daemon(
@@ -251,7 +252,7 @@ def test_cmd_handle_uses_default_socket_when_present(
         use_env_socket=False,
     )
 
-    assert daemon_client.socket_path == tmp_path / ("slopgate-hookd.sock"), (
+    assert daemon_client.socket_path == tmp_path / slopgate.daemon.paths.DEFAULT_DAEMON_SOCKET_NAME, (
         "Handle should use the standard daemon socket when it exists"
     )
 

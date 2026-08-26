@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from slopgate import __version__
 from slopgate.installer.hook_proxy import (
     HOOK_PROXY_MARKER,
     NODE_DAEMON_CLIENT_SCRIPT,
@@ -129,6 +130,20 @@ def test_posix_hook_command_uses_daemon_proxy_with_python_fallback() -> None:
         "--platform",
         "codex",
     ], "Proxy should preserve the original fallback argv"
+
+
+def test_posix_hook_command_uses_versioned_temp_socket_fallback() -> None:
+    command = slopgate.installer._shared.hook_command(
+        "/opt/slopgate/bin/slopgate", "handle", "--platform", "codex", windows=False
+    )
+    proxy_script = shlex.split(command)[2]
+
+    assert f"slopgate-hookd-{__version__}-${{uid}}.sock" in proxy_script, (
+        "Proxy temp fallback should match the daemon's versioned user-scoped socket"
+    )
+    assert 'slopgate-hookd-${uid}.sock' not in proxy_script, (
+        "Proxy should not discover legacy unversioned daemon sockets"
+    )
 
 
 def test_node_daemon_client_preserves_empty_stdin_noop() -> None:

@@ -51,7 +51,7 @@ export function RuleIterationModal({ isOpen, onClose, initialProjectName = "", p
   // Get target repo details
   const targetProject = projects.find((p) => p.projectName === selectedProject) || {
     projectName: "slopgate",
-    repoRoot: "/home/trav/.openclaw/workspace-hooker/slopgate",
+    repoRoot: "/home/trav/repos/slopgate",
   };
 
   // Reset form state on open

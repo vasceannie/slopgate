@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from slopgate.constants import DEFAULT_UPDATE_SOURCE
 from slopgate.installer.suite.autoupdate import (
     DEFAULT_UPDATE_INTERVAL_MINUTES,
-    DEFAULT_UPDATE_SOURCE,
     build_scheduler_plan,
     install_autoupdate,
     uninstall_autoupdate,

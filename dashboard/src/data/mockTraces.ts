@@ -185,7 +185,7 @@ export function generateMockData() {
     const enforcementMode = isSlopgateRepo ? (rand() < 0.8 ? "repo_strict" : "repo_relaxed") : "outside_repo";
     const resolvedRepoRoot = isSlopgateRepo
       ? rand() < 0.6
-        ? "/home/trav/.openclaw/workspace-hooker/slopgate"
+        ? "/home/trav/repos/slopgate"
         : "/home/trav/projects/website"
       : rand() < 0.5
         ? "/home/trav/scratchpad"

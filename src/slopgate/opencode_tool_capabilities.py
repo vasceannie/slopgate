@@ -189,6 +189,13 @@ REPAIR_LINT_FLAGS: Final[frozenset[str]] = frozenset({"--details", "--verbose"})
 VERIFY_TOOL_ID: Final = "slopgate_verify_repair"
 
 
+def native_opencode_mutation_tool_id(tool_name: str) -> str | None:
+    """Return the native mutation ID without compact separator fallback."""
+    with_acronym_boundaries = _ACRONYM_BOUNDARY.sub("_", tool_name.strip())
+    normalized = _CAMEL_CASE_BOUNDARY.sub("_", with_acronym_boundaries).lower()
+    return normalized if normalized in REPAIR_MUTATION_TOOL_IDS else None
+
+
 def opencode_tool_capability(tool_name: str) -> OpenCodeToolCapability | None:
     """Return the trusted capability for a normalized tool identifier."""
     normalized = normalize_opencode_tool_id(tool_name)
@@ -233,7 +240,7 @@ def opencode_tool_allowed_during_repair(
     normalized = normalize_opencode_tool_id(tool_name)
     return (
         normalized in READ_ONLY_TOOL_IDS
-        or normalized in REPAIR_MUTATION_TOOL_IDS
+        or native_opencode_mutation_tool_id(tool_name) is not None
         or opencode_tool_is_explicit_repair_command(tool_name, tool_input)
     )
 
@@ -245,6 +252,7 @@ __all__ = [
     "REPAIR_LINT_FLAGS",
     "REPAIR_MUTATION_TOOL_IDS",
     "VERIFY_TOOL_ID",
+    "native_opencode_mutation_tool_id",
     "normalize_opencode_tool_id",
     "opencode_tool_allowed_during_repair",
     "opencode_tool_capability",

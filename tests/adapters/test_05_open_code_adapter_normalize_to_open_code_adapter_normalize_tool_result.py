@@ -84,6 +84,7 @@ class TestOpenCodeAdapterNormalize:
         assert canonical["opencode_native_tool_name"] == "lsp_diagnostics", (
             "native capability checks should receive the normalized tool ID"
         )
+        assert canonical["opencode_raw_tool_name"] == "LspDiagnostics"
 
     def test_normalize_session_idle_maps_to_stop(self) -> None:
         """session.idle → Stop."""

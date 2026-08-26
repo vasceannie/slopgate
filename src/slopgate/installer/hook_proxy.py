@@ -65,6 +65,7 @@ def _posix_daemon_proxy_script(platform: str) -> str:
     node_script = shlex.quote(NODE_DAEMON_CLIENT_SCRIPT)
     platform_value = shlex.quote(platform)
     socket_name = shlex.quote(DEFAULT_DAEMON_SOCKET_NAME)
+    socket_stem = shlex.quote(DEFAULT_DAEMON_SOCKET_NAME.removesuffix(".sock"))
     return "\n".join(
         [
             HOOK_PROXY_MARKER,
@@ -78,7 +79,7 @@ def _posix_daemon_proxy_script(platform: str) -> str:
             f'    sock="${{XDG_RUNTIME_DIR}}/{socket_name}"',
             "  else",
             '    uid="$(id -u 2>/dev/null || printf user)"',
-            '    sock="${TMPDIR:-/tmp}/slopgate-hookd-${uid}.sock"',
+            f'    sock="${{TMPDIR:-/tmp}}/{socket_stem}-${{uid}}.sock"',
             "  fi",
             "fi",
             'if [ -S "$sock" ] && command -v node >/dev/null 2>&1; then',

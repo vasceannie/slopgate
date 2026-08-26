@@ -103,10 +103,17 @@ def test_native_install_parser_supports_pi() -> None:
 
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
     args = build_parser().parse_args(["update", "--dry-run"])
-    assert (args.command, args.func, args.dry_run, hasattr(args, "platform")) == (
+    assert (
+        args.command,
+        args.func,
+        args.dry_run,
+        args.source,
+        hasattr(args, "platform"),
+    ) == (
         "update",
         cmd_update_suite,
         True,
+        "git+https://github.com/vasceannie/slopgate.git@main",
         False,
     )
 
@@ -242,6 +249,20 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
         (line for line in plan.content.splitlines() if line.startswith("ExecStart="))
     )
     assert "-m" in exec_start and "slopgate" in exec_start and "update" in exec_start
+
+
+@SKIP_LINUX_ONLY
+def test_default_scheduler_plan_tracks_canonical_main_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        slopgate.installer._suite, "find_binary", lambda: "/home/trav/.local/bin/slopgate"
+    )
+    plan = slopgate.installer._suite.build_scheduler_plan()
+    assert "git+https://github.com/vasceannie/slopgate.git@main" in plan.content
+    assert "git+https://github.com/vasceannie/slopgate.git@master" not in plan.content
 
 
 @SKIP_LINUX_ONLY

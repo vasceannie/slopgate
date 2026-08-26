@@ -11,10 +11,6 @@ from slopgate.cli.commands import (
     INSTALL_TARGETS,
     VALID_PLATFORMS,
     cmd_check,
-    cmd_config_allow_skill_directories,
-    cmd_config_init,
-    cmd_config_path,
-    cmd_config_show,
     cmd_daemon,
     cmd_enroll,
     cmd_handle,
@@ -29,6 +25,12 @@ from slopgate.cli.commands import (
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.repair import add_repair_parsers
+from slopgate.constants import DEFAULT_UPDATE_SOURCE, METADATA_PATH
+
+from .config import (
+    add_command_parser,
+    add_config_parsers,
+)
 
 _INSTALL_SCOPE_HELP = (
     "Hook install target: user config dir, project dir (./.claude, ./.codex, "
@@ -37,7 +39,7 @@ _INSTALL_SCOPE_HELP = (
 
 
 def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("path", nargs="?", default=".")
+    _ = parser.add_argument(METADATA_PATH, nargs="?", default=".")
 
 
 def add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
@@ -64,8 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = cast(SubparserRegistry, parser.add_subparsers(dest="command"))
     _add_core_parsers(sub)
-    _add_config_parsers(sub)
-    from slopgate.cli.parsers_lint import add_lint_parsers
+    add_config_parsers(sub)
+    from .lint import add_lint_parsers
 
     add_lint_parsers(sub)
 
@@ -78,18 +80,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_command_parser(
-    sub: SubparserRegistry,
-    name: str,
-    *,
-    help_text: str,
-    func: object,
-) -> argparse.ArgumentParser:
-    parser = sub.add_parser(name, help=help_text)
-    parser.set_defaults(func=func)
-    return parser
-
-
 def _add_path_command_parser(
     sub: SubparserRegistry,
     name: str,
@@ -97,7 +87,7 @@ def _add_path_command_parser(
     help_text: str,
     func: object,
 ) -> argparse.ArgumentParser:
-    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    parser = add_command_parser(sub, name, help_text=help_text, func=func)
     add_optional_path_argument(parser)
     return parser
 
@@ -109,7 +99,7 @@ def _add_platform_install_parser(
     help_text: str,
     func: object,
 ) -> None:
-    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    parser = add_command_parser(sub, name, help_text=help_text, func=func)
     choices = INSTALL_TARGETS if name in {"install", "uninstall"} else VALID_PLATFORMS
     _ = parser.add_argument("platform", choices=choices)
     add_dry_run_argument(parser)
@@ -144,7 +134,7 @@ def _add_suite_update_arguments(
         add_dry_run_argument(parser)
     _ = parser.add_argument(
         "--source",
-        default="git+https://github.com/vasceannie/slopgate.git@master",
+        default=DEFAULT_UPDATE_SOURCE,
         help="Package source used by auto-update clients",
     )
     _ = parser.add_argument(
@@ -167,7 +157,7 @@ def _add_suite_command_parser(
     help_text: str,
     func: object,
 ) -> argparse.ArgumentParser:
-    parser = _add_command_parser(sub, name, help_text=help_text, func=func)
+    parser = add_command_parser(sub, name, help_text=help_text, func=func)
     _add_suite_update_arguments(parser)
     add_install_scope_arguments(parser, help_text=_INSTALL_SCOPE_HELP)
     return parser
@@ -225,7 +215,7 @@ def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
         "replay": cmd_replay,
     }
     registration = HookRuntimeParserRegistration(
-        add_command_parser=_add_command_parser,
+        add_command_parser=add_command_parser,
         add_platform_argument=add_platform_argument,
         help_by_name=help_by_name,
         func_by_name=func_by_name,
@@ -264,7 +254,7 @@ def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
 def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
     from slopgate.cli.changed_tests_parser import add_changed_test_parser
 
-    stats = _add_command_parser(
+    stats = add_command_parser(
         sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
     )
     _ = stats.add_argument("--log")
@@ -312,39 +302,10 @@ def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
 
 
 def _add_core_parsers(sub: SubparserRegistry) -> None:
-    from slopgate.cli.parsers_bundle import add_bundle_parsers
+    from .bundle import add_bundle_parsers
 
     _add_hook_runtime_parsers(sub)
     _add_repo_enrollment_parsers(sub)
     _add_platform_install_parsers(sub)
     _add_maintenance_parsers(sub)
     add_bundle_parsers(sub)
-
-
-def _add_config_parsers(sub: SubparserRegistry) -> None:
-    config_parser = sub.add_parser("config", help="Configuration management")
-    config_sub = cast(
-        SubparserRegistry, config_parser.add_subparsers(dest="config_command")
-    )
-
-    _add_command_parser(
-        config_sub,
-        "show",
-        help_text="Show effective configuration",
-        func=cmd_config_show,
-    )
-    init = _add_command_parser(
-        config_sub,
-        "init",
-        help_text="Create config from defaults",
-        func=cmd_config_init,
-    )
-    _ = init.add_argument("--force", action="store_true")
-    _add_command_parser(
-        config_sub, "allow-skill-directories",
-        help_text="Allow .claude/skills/ while preserving other protected paths",
-        func=cmd_config_allow_skill_directories,
-    )
-    _add_command_parser(
-        config_sub, "path", help_text="Print config file path", func=cmd_config_path
-    )

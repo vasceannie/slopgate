@@ -14,29 +14,22 @@ from slopgate.resources import resource_path
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
-_DEFAULT_TOOL_ARGS: dict[str, object] = {
-    "filePath": "sample.py",
-    "content": "print('ok')\n",
-}
+_DEFAULT_TOOL_ARGS: dict[str, object] = {"filePath": "sample.py", "content": "print('ok')\n"}
 _TOOL_ARGS_BY_MODE: dict[str, dict[str, object]] = {
     "repair-required-command-safe": {"command": "slopgate lint check --details"},
-    "repair-required-command-compound": {
-        "command": "slopgate lint check && touch bypassed"
-    },
-    "repair-required-wrapper-interactive": {
-        "tmux_command": "send-keys -t dev 'touch sample.py' Enter"
-    },
+    "repair-required-command-compound": {"command": "slopgate lint check && touch bypassed"},
+    "repair-required-wrapper-interactive": {"tmux_command": "send-keys -t dev 'touch sample.py' Enter"},
     "repair-required-wrapper-skill-mcp": {
-        "mcp_name": "fs",
-        "tool_name": "write_file",
-        "arguments": {"path": "sample.py", "content": "x"},
+        "mcp_name": "fs", "tool_name": "write_file", "arguments": {"path": "sample.py", "content": "x"}
     },
-    "repair-required-wrapper-task": {
-        "category": "quick",
-        "prompt": "edit sample.py",
-    },
+    "repair-required-wrapper-task": {"category": "quick", "prompt": "edit sample.py"},
 }
 _TOOL_NAME_BY_MODE = {
+    "repair-unavailable-read": "read",
+    "repair-unavailable-read-block": "read",
+    "repair-unavailable-read-collision": "r_e_a_d",
+    "repair-unavailable-apply-patch": "apply_patch",
+    "clean-enforcer-unavailable-apply-patch": "apply_patch",
     "repair-required": "custom_mutator",
     "unknown-effect": "custom_mutator",
     "unknown-readonly": "gitnexus_context",
@@ -64,7 +57,7 @@ import sys
 
 mode = os.environ.get("CONTRACT_RESPONSE_MODE", "block")
 if sys.argv[1:3] == ["repair", "status"]:
-    if mode == "repair-unavailable":
+    if mode.startswith("repair-unavailable"):
         print("repair state unavailable", file=sys.stderr)
         raise SystemExit(2)
     status = "REPAIR_REQUIRED" if mode.startswith("repair-required") else "CLEAN"
@@ -75,7 +68,10 @@ else:
         print(json.dumps({"action": "allow", "updated_args": {"content": "mutated"}}))
     elif mode.startswith("repair-required-command"):
         print(json.dumps({"action": "allow"}))
-    elif mode == "unknown-readonly":
+    elif mode in {"unknown-readonly", "repair-unavailable-read", "repair-unavailable-apply-patch",
+                  "clean-enforcer-unavailable-apply-patch"}:
+        raise SystemExit(2)
+    elif mode == "unknown-effect":
         print(json.dumps({"action": "allow"}))
     elif mode in {"outside-unknown", "relaxed-unknown"}:
         print(json.dumps({"action": "allow"}))
@@ -213,12 +209,6 @@ def test_pending_repair_blocks_unknown_effect_tool(tmp_path: Path) -> None:
     assert "repair required for generation generation-1" in result.stderr
 
 
-def test_pending_repair_allows_read_only_tool(tmp_path: Path) -> None:
-    result = _run_plugin_contract(tmp_path, "tool.execute.before", "repair-required-read")
-
-    assert result.returncode == 0, result.stderr
-
-
 @pytest.mark.parametrize(
     "response_mode",
     [
@@ -281,17 +271,31 @@ def test_pending_repair_rejects_compound_lint_check_command(tmp_path: Path) -> N
     )
 
 
-def test_managed_repo_blocks_when_repair_state_is_unavailable(tmp_path: Path) -> None:
-    result = _run_plugin_contract(
-        tmp_path,
-        "tool.execute.before",
-        "repair-unavailable",
-    )
+@pytest.mark.parametrize(
+    ("response_mode", "expected_error"),
+    [("repair-unavailable", "repair gate state"), ("repair-unavailable-read-collision", "repair gate state"),
+     ("repair-unavailable-read-block", "contract block")],
+)
+def test_managed_repo_enforces_when_repair_state_is_unavailable(
+    tmp_path: Path, response_mode: str, expected_error: str,
+) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", response_mode)
 
     assert result.returncode != 0, "managed repositories must fail closed on unreadable state"
-    assert "repair gate state is unavailable" in result.stderr, (
-        "the plugin should explain why execution was denied"
-    )
+    assert expected_error in result.stderr, "the plugin should explain why execution was denied"
+
+
+@pytest.mark.parametrize(
+    ("response_mode", "expected_returncode"),
+    [("repair-unavailable-read", 0), ("repair-unavailable-apply-patch", 0),
+     ("clean-enforcer-unavailable-apply-patch", 1)],
+)
+def test_managed_repo_scopes_enforcer_failure_recovery(
+    tmp_path: Path, response_mode: str, expected_returncode: int,
+) -> None:
+    result = _run_plugin_contract(tmp_path, "tool.execute.before", response_mode)
+
+    assert result.returncode == expected_returncode, result.stderr
 
 
 def test_typed_before_hook_mutates_output_args_in_place(tmp_path: Path) -> None:
@@ -309,11 +313,10 @@ def test_typed_hook_return_value_is_ignored(tmp_path: Path) -> None:
     assert "hookReturn" not in observation, "typed hook must resolve without a value"
 
 
-def test_generated_plugin_denies_unknown_effect_tool(tmp_path: Path) -> None:
+def test_generated_plugin_allows_unknown_effect_tool_in_clean_state(tmp_path: Path) -> None:
     result = _run_plugin_contract(tmp_path, "tool.execute.before", "unknown-effect")
 
-    assert result.returncode != 0, "unknown custom tools must be denied by the plugin"
-    assert "unknown OpenCode tool effect" in result.stderr
+    assert result.returncode == 0, result.stderr
 
 
 def test_generated_plugin_allows_unknown_read_only_tool(tmp_path: Path) -> None:

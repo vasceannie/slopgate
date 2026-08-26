@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from hypothesis import given, strategies
 
 from slopgate.constants import PLATFORM_CLAUDE, PLATFORM_CURSOR, PLATFORM_OPENCODE
 from slopgate.hook_platform import HOOK_SOURCE_OPENCODE_PLUGIN, resolve_hook_platform
@@ -50,4 +51,24 @@ def test_resolve_hook_platform(
     assert resolved == expected, (
         f"resolve_hook_platform({requested_platform!r}, {payload!r}) "
         f"should return {expected!r}"
+    )
+
+
+@given(
+    requested_platform=strategies.text().filter(
+        lambda value: value.strip().lower() != PLATFORM_CLAUDE
+    ),
+    hook_source=strategies.text(),
+)
+def test_resolve_hook_platform_preserves_non_claude_requests(
+    requested_platform: str,
+    hook_source: str,
+) -> None:
+    resolved = resolve_hook_platform(
+        requested_platform,
+        {"hook_source": hook_source},
+    )
+
+    assert resolved == requested_platform, (
+        "non-Claude platform requests must retain their original identity"
     )

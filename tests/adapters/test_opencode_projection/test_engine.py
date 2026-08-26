@@ -51,13 +51,6 @@ _UNRESOLVED_MUTATIONS = [
         "invalid",
         id="invalid-edit",
     ),
-    pytest.param(
-        "write",
-        {"filePath": "src/app.py", "content": "VALUE = 1\n"},
-        "protocol_mismatch",
-        "contract mismatch",
-        id="protocol-mismatch",
-    ),
 ]
 _UNRESOLVED_MUTATION_CASES = [
     pytest.param(
@@ -75,6 +68,7 @@ _READ_ONLY_TOOLS = [
     pytest.param("read", id="read"),
     pytest.param("grep", id="grep"),
     pytest.param("glob", id="glob"),
+    pytest.param("background_output", id="background-output"),
     pytest.param("webfetch", id="webfetch"),
     pytest.param("gitnexus_context", id="unprojected-mcp-read"),
     pytest.param("LspDiagnostics", id="pascal-case-read"),

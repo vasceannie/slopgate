@@ -12,7 +12,7 @@ config, Codex/OpenCode install paths) lives in the main **slopgate** tree on `ma
 Do not develop against `windows-powershell-compat`. Use:
 
 ```bash
-cd ~/.openclaw/workspace-hooker/slopgate
+cd /home/trav/repos/slopgate
 uv tool install .
 slopgate install claude   # or install all
 slopgate test

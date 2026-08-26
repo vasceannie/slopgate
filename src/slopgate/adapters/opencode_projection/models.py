@@ -16,7 +16,7 @@ PROJECTION_KEY: Final = "_slopgate_projection"
 ProjectionStatus: TypeAlias = Literal[
     "projected", "invalid", "stale", "unsupported", "protocol_mismatch"
 ]
-ProjectionReason: TypeAlias = Literal["update_hunk_mismatch"]
+ProjectionReason: TypeAlias = Literal["stale_hash_anchor", "update_hunk_mismatch"]
 SnapshotStatus: TypeAlias = Literal["invalid", "missing", "stale"]
 PatchOperation: TypeAlias = Literal["add", "update", "delete"]
 
@@ -78,3 +78,4 @@ class PatchSection:
     operation: PatchOperation
     path: str
     lines: tuple[str, ...]
+    move_to: str | None = None

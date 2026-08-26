@@ -17,6 +17,35 @@ _HEADERS: tuple[tuple[str, PatchOperation], ...] = (
 _UpdateChunk = tuple[tuple[str, ...], tuple[str, ...]]
 
 
+def _consume_patch_line(
+    line: str,
+    active: tuple[PatchOperation, str, str | None] | None,
+    body: list[str],
+    sections: list[PatchSection],
+) -> tuple[tuple[PatchOperation, str, str | None] | None, bool] | None:
+    logger.debug("OpenCode patch line consumed", has_active_section=active is not None)
+    if line.startswith("*** Move to:"):
+        destination = line.removeprefix("*** Move to:").strip()
+        if active is None or active[0] != "update" or body:
+            return None
+        if not destination or active[2] is not None:
+            return None
+        return (active[0], active[1], destination), False
+    header: tuple[PatchOperation, str] | None = None
+    for prefix, kind in _HEADERS:
+        if line.startswith(prefix):
+            header = (kind, line.removeprefix(prefix).strip())
+            break
+    if header is None:
+        if active is None:
+            return None
+        body.append(line)
+        return active, False
+    if active is not None:
+        sections.append(PatchSection(active[0], active[1], tuple(body), active[2]))
+    return (header[0], header[1], None), True
+
+
 def parse_patch(text: str) -> tuple[PatchSection, ...] | None:
     """Parse the documented OpenCode patch envelope into file sections."""
     logger.debug("OpenCode patch parsed", text_length=len(text))
@@ -29,26 +58,18 @@ def parse_patch(text: str) -> tuple[PatchSection, ...] | None:
     if not valid_envelope:
         return None
     sections: list[PatchSection] = []
-    active: tuple[PatchOperation, str] | None = None
+    active: tuple[PatchOperation, str, str | None] | None = None
     body: list[str] = []
     for line in lines[1:-1]:
-        header: tuple[PatchOperation, str] | None = None
-        for prefix, kind in _HEADERS:
-            if line.startswith(prefix):
-                header = (kind, line.removeprefix(prefix).strip())
-                break
-        if header is None:
-            if active is None:
-                return None
-            body.append(line)
-            continue
-        if active is not None:
-            sections.append(PatchSection(*active, tuple(body)))
-        active = header
-        body = []
+        consumed = _consume_patch_line(line, active, body, sections)
+        if consumed is None:
+            return None
+        active, reset_body = consumed
+        if reset_body:
+            body = []
     if active is None:
         return None
-    sections.append(PatchSection(*active, tuple(body)))
+    sections.append(PatchSection(active[0], active[1], tuple(body), active[2]))
     return tuple(sections)
 
 
@@ -112,6 +133,8 @@ def apply_update(source: str, lines: tuple[str, ...]) -> str | None:
 def section_content(section: PatchSection, source: str) -> str | None:
     """Render one parsed patch section against its source content."""
     logger.debug("OpenCode patch content requested", operation=section.operation)
+    if section.operation == "update" and section.move_to and not section.lines:
+        return source
     renderers: dict[PatchOperation, Callable[[], str | None]] = {
         "add": lambda: (
             "\n".join(line[1:] for line in section.lines) + "\n"

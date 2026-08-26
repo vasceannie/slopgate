@@ -72,6 +72,13 @@ class BaselineInputs:
         return _merge_rule_ids(self.stored, self.accepted)
 
 
+@dataclass(frozen=True, slots=True)
+class CollectorReportOptions:
+    gate: LintGateMode = "new"
+    details: bool = False
+    sync_baseline: bool = True
+
+
 def _coerce_baseline_inputs(
     baseline: dict[str, set[str]] | BaselineInputs,
 ) -> BaselineInputs:
@@ -297,11 +304,9 @@ def _sync_baseline_after_lint(context: _BaselineLintSyncContext) -> None:
 def print_collector_results(
     collectors: list[tuple[str, list[Violation]]],
     baseline: dict[str, set[str]] | BaselineInputs,
-    *,
-    gate: LintGateMode = "new",
-    details: bool,
-    sync_baseline: bool = True,
+    options: CollectorReportOptions | None = None,
 ) -> int:
+    report_options = options or CollectorReportOptions()
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     baseline_inputs = _coerce_baseline_inputs(baseline)
     totals = LintRunTotals(0, 0, 0)
@@ -313,8 +318,8 @@ def print_collector_results(
                 rule_name=rule_name,
                 violations=violations,
                 baseline=baseline_inputs.effective,
-                gate=gate,
-                details=details,
+                gate=report_options.gate,
+                details=report_options.details,
             )
         )
         totals = LintRunTotals(
@@ -322,15 +327,15 @@ def print_collector_results(
             totals.new + rule_new,
             totals.fixed + rule_fixed,
         )
-    exit_code = print_lint_summary(totals, color, gate=gate)
-    if sync_baseline:
+    exit_code = print_lint_summary(totals, color, gate=report_options.gate)
+    if report_options.sync_baseline:
         _sync_baseline_after_lint(
             _BaselineLintSyncContext(
                 collectors=collectors,
                 baseline=baseline_inputs.stored,
                 accepted_baseline=baseline_inputs.accepted,
                 totals=totals,
-                gate=gate,
+                gate=report_options.gate,
                 color=color,
             )
         )
