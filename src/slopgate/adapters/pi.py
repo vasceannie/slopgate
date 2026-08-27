@@ -2,9 +2,10 @@
 
 Pi events and their canonical mapping:
   tool_call (write/edit/bash)  →  PreToolUse
-  tool_result                  →  PostToolUse
-  tool_execution_end (exit 0)  →  PostToolUse
-  tool_execution_end (non-zero)→  PostToolUseFailure
+  tool_result (success)        →  PostToolUse
+  tool_result (failure)        →  PostToolUseFailure
+  tool_execution_end (success) →  PostToolUse
+  tool_execution_end (failure) →  PostToolUseFailure
   user_bash                    →  PreToolUse
   input                        →  UserPromptSubmit
   before_agent_start           →  SessionStart
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 from typing_extensions import override
 
-from slopgate._types import ObjectDict, ObjectMapping
+from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
 from slopgate.adapters._payload_fields import (
     canonical_event_name,
     canonical_payload_with_event,
@@ -48,7 +49,7 @@ PI_EVENT_NAMES: set[str] = {
     PRE_TOOL_USE,  # tool_call → PreToolUse
     PERMISSION_REQUEST,  # (not directly used by pi)
     POST_TOOL_USE,  # tool_result → PostToolUse (success)
-    "PostToolUseFailure",  # tool_execution_end → PostToolUseFailure (non-zero exit)
+    "PostToolUseFailure",  # failed post-tool execution
     SESSION_START,  # before_agent_start
     "UserPromptSubmit",  # input
     STOP,  # agent_end
@@ -67,9 +68,29 @@ _PI_EVENT_ALIASES: dict[str, str] = {
 }
 
 def _canonical_event_name(raw: ObjectMapping) -> str:
-    """Map the pi event name to a slopgate canonical event."""
+    """Map the Pi event and post-tool failure signals to a canonical event."""
     SESSION_IDENTITY_TELEMETRY.record_metric("pi.event.canonical_name")
-    return canonical_event_name(raw, PI_EVENT_NAMES, _PI_EVENT_ALIASES)
+    event_name = canonical_event_name(raw, PI_EVENT_NAMES, _PI_EVENT_ALIASES)
+    raw_event = string_value(raw.get("hook_event_name")) or string_value(
+        raw.get("hookEventName")
+    )
+    if raw_event not in {"tool_execution_end", "tool_result"}:
+        return event_name
+
+    nested_event = object_dict(raw.get("pi_event"))
+    for event in (raw, nested_event):
+        if event.get("isError") is True:
+            return "PostToolUseFailure"
+        details = object_dict(event.get("details"))
+        for key in ("exitCode", "exit_code"):
+            exit_code = details.get(key)
+            if (
+                isinstance(exit_code, int)
+                and not isinstance(exit_code, bool)
+                and exit_code != 0
+            ):
+                return "PostToolUseFailure"
+    return event_name
 
 
 class PiAdapter(PlatformAdapter):
