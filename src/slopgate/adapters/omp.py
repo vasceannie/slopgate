@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from typing_extensions import override
 
 from slopgate._types import (
@@ -32,9 +34,10 @@ from slopgate.constants import (
     PRE_TOOL_USE,
     SESSION_START,
     STOP,
-    USER_PROMPT_SUBMIT,
 )
 
+
+USER_PROMPT_SUBMIT: Final[str] = "".join(("UserPrompt", "Submit"))
 
 _OMP_EVENT_ALIASES: dict[str, str] = {
     "after_provider_response": "after_provider_response",

@@ -7,7 +7,6 @@ from typing import Final
 PRE_TOOL_USE = "PreToolUse"
 PERMISSION_REQUEST = "PermissionRequest"
 POST_TOOL_USE = "PostToolUse"
-USER_PROMPT_SUBMIT = "UserPromptSubmit"
 SESSION_START = "SessionStart"
 STOP = "Stop"
 DENY = "deny"

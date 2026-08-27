@@ -5,13 +5,12 @@ from typing import Final
 import pytest
 
 from slopgate.adapters import ADAPTERS, get_adapter
-from slopgate.adapters.omp import OmpAdapter, _OMP_EVENT_ALIASES
+from slopgate.adapters.omp import OmpAdapter, USER_PROMPT_SUBMIT, _OMP_EVENT_ALIASES
 from slopgate.constants import (
     POST_TOOL_USE,
     PRE_TOOL_USE,
     SESSION_START,
     STOP,
-    USER_PROMPT_SUBMIT,
 )
 from slopgate.models import RuleFinding, Severity
 
