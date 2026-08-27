@@ -23,6 +23,7 @@ from slopgate.adapters.base import PlatformAdapter, RenderRequest, render_reques
 from slopgate.constants import (
     ASK,
     BLOCK,
+    DECISION_KEY,
     DENY,
     METADATA_COMMAND,
     METADATA_SLOPGATE,
@@ -31,6 +32,7 @@ from slopgate.constants import (
     PRE_TOOL_USE,
     SESSION_START,
     STOP,
+    USER_PROMPT_SUBMIT,
 )
 
 
@@ -47,7 +49,7 @@ _OMP_EVENT_ALIASES: dict[str, str] = {
     "context": "context",
     "credential_disabled": "credential_disabled",
     "goal_updated": "goal_updated",
-    "input": "UserPromptSubmit",
+    "input": USER_PROMPT_SUBMIT,
     "mcp_notification": "mcp_notification",
     "message_end": "message_end",
     "message_start": "message_start",
@@ -70,7 +72,7 @@ _OMP_EVENT_ALIASES: dict[str, str] = {
     "todo_reminder": "todo_reminder",
     "tool_approval_requested": "tool_approval_requested",
     "tool_approval_resolved": "tool_approval_resolved",
-    "tool_call": "PreToolUse",
+    "tool_call": PRE_TOOL_USE,
     "tool_execution_end": "tool_execution_end",
     "tool_execution_start": "tool_execution_start",
     "tool_execution_update": "tool_execution_update",
@@ -78,8 +80,8 @@ _OMP_EVENT_ALIASES: dict[str, str] = {
     "ttsr_triggered": "ttsr_triggered",
     "turn_end": "TurnEnd",
     "turn_start": "turn_start",
-    "user_bash": "PreToolUse",
-    "user_python": "PreToolUse",
+    "user_bash": PRE_TOOL_USE,
+    "user_python": PRE_TOOL_USE,
 }
 
 _OMP_CANONICAL_EVENTS = set(_OMP_EVENT_ALIASES.values()) | {"PostToolUseFailure"}
@@ -150,10 +152,11 @@ def _sync_user_python_code(raw: ObjectMapping, canonical: ObjectDict) -> None:
     code = string_value(raw.get("code"))
     if not code:
         return
-    canonical.setdefault(METADATA_TOOL_NAME, "Python")
     tool_input = object_dict(canonical.get("tool_input"))
-    tool_input.setdefault("code", code)
+    if "code" not in tool_input:
+        tool_input["code"] = code
     canonical["tool_input"] = tool_input
+    canonical.setdefault(METADATA_TOOL_NAME, "Python")
 
 
 def _render_pre_tool_use(
@@ -179,13 +182,12 @@ def _render_prompt_submit(
     adapter: PlatformAdapter,
     request: RenderRequest,
 ) -> ObjectDict | None:
+    blocking_findings = adapter.decision_findings(request.findings, request.decision)
     SESSION_IDENTITY_TELEMETRY.record_metric("omp.render.prompt_submit")
     if request.decision in {DENY, BLOCK, ASK}:
         return {
             "handled": True,
-            "reason": adapter.join_messages(
-                adapter.decision_findings(request.findings, request.decision)
-            ),
+            "reason": adapter.join_messages(blocking_findings),
         }
     if request.context:
         return {"context": request.context}
@@ -198,9 +200,10 @@ def _render_stop(
 ) -> ObjectDict | None:
     SESSION_IDENTITY_TELEMETRY.record_metric("omp.render.stop")
     if request.decision in {DENY, BLOCK, ASK}:
-        reason = adapter.join_messages(
-            adapter.decision_findings(request.findings, request.decision)
+        blocking_findings = adapter.decision_findings(
+            request.findings, request.decision
         )
+        reason = adapter.join_messages(blocking_findings)
         return {
             "continue": True,
             "additionalContext": request.context or reason,
@@ -218,15 +221,13 @@ def _render_post_tool(
     output: ObjectDict = {}
     if request.context:
         output["context"] = request.context
-    output["tool_result_patch"] = {
-        "details": {
-            METADATA_SLOPGATE: {
-                "decision": request.decision,
-                "context": request.context,
-                "reason": None,
-            }
-        }
+    slopgate_details: ObjectDict = {
+        DECISION_KEY: request.decision,
+        "context": request.context,
+        "reason": None,
     }
+    patch_details: ObjectDict = {METADATA_SLOPGATE: slopgate_details}
+    output["tool_result_patch"] = {"details": patch_details}
     return output
 
 
@@ -247,15 +248,13 @@ class OmpAdapter(PlatformAdapter):
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
         SESSION_IDENTITY_TELEMETRY.record_metric("omp.normalize_payload")
         canonical = canonical_payload_with_event(raw, _canonical_event_name(raw))
-
+        merge_standard_session_fields(raw, canonical)
+        _sync_tool_input(raw, canonical)
+        _sync_user_python_code(raw, canonical)
+        _sync_user_bash_command(raw, canonical)
         tool_name = _canonical_tool_name(raw)
         if tool_name:
             canonical[METADATA_TOOL_NAME] = tool_name
-
-        _sync_tool_input(raw, canonical)
-        _sync_user_bash_command(raw, canonical)
-        _sync_user_python_code(raw, canonical)
-        merge_standard_session_fields(raw, canonical)
         sync_tool_result_fields(canonical)
         return canonical
 
@@ -265,13 +264,13 @@ class OmpAdapter(PlatformAdapter):
         *args: object,
         **kwargs: object,
     ) -> ObjectDict | None:
-        SESSION_IDENTITY_TELEMETRY.record_metric("omp.render_output")
         request = render_request_from_call(args, kwargs)
+        SESSION_IDENTITY_TELEMETRY.record_metric("omp.render_output")
         if not request.findings:
             return None
         if request.event_name == PRE_TOOL_USE:
             return _render_pre_tool_use(self, request)
-        if request.event_name == "UserPromptSubmit":
+        if request.event_name == USER_PROMPT_SUBMIT:
             return _render_prompt_submit(self, request)
         if request.event_name == STOP:
             return _render_stop(self, request)

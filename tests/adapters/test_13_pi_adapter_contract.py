@@ -1,11 +1,42 @@
 from __future__ import annotations
 
+from typing import Final
+
 import pytest
 
 from slopgate._types import ObjectDict
 from slopgate.adapters.pi import PiAdapter
 from slopgate.constants import POST_TOOL_USE, PRE_TOOL_USE
 from tests.test_adapters import RuleFinding, Severity, require_rendered, support
+
+_PI_FAILURE_CASES: Final = (
+    pytest.param("tool_result", {"isError": True}, id="top-level-is-error"),
+    pytest.param(
+        "tool_execution_end",
+        {"details": {"exitCode": 2}},
+        id="top-level-exit-code",
+    ),
+    pytest.param(
+        "tool_result",
+        {"details": {"exit_code": 2}},
+        id="top-level-exit-code-alias",
+    ),
+    pytest.param(
+        "tool_result",
+        {"pi_event": {"isError": True}},
+        id="nested-is-error",
+    ),
+    pytest.param(
+        "tool_execution_end",
+        {"pi_event": {"details": {"exitCode": 2}}},
+        id="nested-exit-code",
+    ),
+    pytest.param(
+        "tool_result",
+        {"pi_event": {"details": {"exit_code": 2}}},
+        id="nested-exit-code-alias",
+    ),
+)
 
 
 def test_pi_normalizes_tool_call_payload() -> None:
@@ -72,34 +103,7 @@ def test_pi_normalizes_transcript_style_tool_arguments() -> None:
 
 @pytest.mark.parametrize(
     ("raw_event", "failure_fields"),
-    [
-        pytest.param("tool_result", {"isError": True}, id="top-level-is-error"),
-        pytest.param(
-            "tool_execution_end",
-            {"details": {"exitCode": 2}},
-            id="top-level-exit-code",
-        ),
-        pytest.param(
-            "tool_result",
-            {"details": {"exit_code": 2}},
-            id="top-level-exit-code-alias",
-        ),
-        pytest.param(
-            "tool_result",
-            {"pi_event": {"isError": True}},
-            id="nested-is-error",
-        ),
-        pytest.param(
-            "tool_execution_end",
-            {"pi_event": {"details": {"exitCode": 2}}},
-            id="nested-exit-code",
-        ),
-        pytest.param(
-            "tool_result",
-            {"pi_event": {"details": {"exit_code": 2}}},
-            id="nested-exit-code-alias",
-        ),
-    ],
+    _PI_FAILURE_CASES,
 )
 def test_pi_failed_tool_events_map_to_post_tool_use_failure(
     raw_event: str,

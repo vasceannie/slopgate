@@ -136,6 +136,16 @@ def _is_deferred(occurrence: Occurrence) -> bool:
     return occurrence == Occurrence(TYPES_PATH, "quoted_pi", '"pi"', 2)
 
 
+def _dashboard_deferral_selectors() -> set[str]:
+    document = DOC_PATH.read_text(encoding="utf-8")
+    deferral_section = document.partition("## Dashboard deferrals")[2].partition("\n## ")[0]
+    return {
+        line.split("|")[1].strip().strip("`")
+        for line in deferral_section.splitlines()
+        if line.startswith("| `")
+    }
+
+
 def test_dashboard_pi_inventory_remains_byte_token_equivalent_to_baseline() -> None:
     assert _inventory_rows(_scan("pi")) == _load_baseline(), (
         "Dashboard Pi token occurrences must remain unchanged from the Todo-5 base SHA"
@@ -157,11 +167,6 @@ def test_dashboard_omp_counterparts_match_every_mandatory_pi_occurrence() -> Non
 
 
 def test_omp_docs_list_exactly_the_two_dashboard_deferrals() -> None:
-    selectors = {
-        line.split("|")[1].strip().strip("`")
-        for line in DOC_PATH.read_text(encoding="utf-8").splitlines()
-        if line.startswith("| `")
-    }
-    assert selectors == {"HarnessPlatformStatus.id", HARNESS_STATUS_PATH}, (
+    assert _dashboard_deferral_selectors() == {"HarnessPlatformStatus.id", HARNESS_STATUS_PATH}, (
         "OMP adapter docs must list exactly the two dashboard harness-status deferrals"
     )

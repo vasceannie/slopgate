@@ -93,7 +93,10 @@ def omp_extension_has_owned_slopgate(path: Path) -> bool:
     """Recognize only installer-owned OMP extension and manifest artifacts."""
     if not path.exists() or not path.is_file():
         return False
-    content = path.read_text(encoding="utf-8", errors=REPLACE)
+    try:
+        content = path.read_text(encoding="utf-8", errors=REPLACE)
+    except OSError:
+        return False
     if path.name == _MANIFEST_NAME:
         return is_owned_omp_manifest(content)
     if path.name == "index.ts":

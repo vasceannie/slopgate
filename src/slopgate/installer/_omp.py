@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import slopgate.installer._shared
+from slopgate.constants import INSTALL_SCOPE_USER
 from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     normalize_install_scope,
@@ -36,6 +37,7 @@ from slopgate.installer._shared import (
     write_contained_text,
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
+from slopgate.resources import resource_path
 
 _EXTENSION_DIR_NAME = "omp-slopgate"
 _INDEX_NAME = "index.ts"
@@ -70,23 +72,7 @@ def omp_user_extension_path() -> Path:
 
 
 def omp_project_extension_path(project_root: Path) -> Path:
-    return (
-        project_root
-        / ".omp"
-        / "extensions"
-        / _EXTENSION_DIR_NAME
-        / _INDEX_NAME
-    )
-
-
-def _omp_template_text() -> str | None:
-    from slopgate.resources import resource_path
-
-    template = resource_path("omp_extension.ts")
-    if not template.exists():
-        print(f"OMP extension template not found at {template}")
-        return None
-    return template.read_text(encoding="utf-8")
+    return project_root / ".omp" / "extensions" / _EXTENSION_DIR_NAME / _INDEX_NAME
 
 
 def _site_is_owned_or_absent(target: Path) -> bool:
@@ -154,13 +140,17 @@ def _rollback_omp_sites(
 
 
 def install_omp(
-    dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
+    dry_run: bool = False,
+    *,
+    scope: str = INSTALL_SCOPE_USER,
+    project_root: Path | None = None,
 ) -> int:
-    template_text = _omp_template_text()
-    if template_text is None:
+    template = resource_path("omp_extension.ts")
+    if not template.exists():
+        print(f"OMP extension template not found at {template}")
         return 1
-    binary = slopgate.installer._shared.find_binary()
     root = resolve_project_root(project_root)
+    binary = slopgate.installer._shared.find_binary()
     paths = resolve_scoped_install_paths(
         scope,
         project_root,
@@ -168,10 +158,11 @@ def install_omp(
         project_path_for_root=omp_project_extension_path,
     )
     try:
+        template_text = template.read_text(encoding="utf-8")
         material = OmpInstallMaterial(
             content=render_omp_extension(template_text, binary), binary=binary
         )
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         print(str(exc))
         return 1
     completed: list[Path] = []
@@ -234,7 +225,10 @@ def _uninstall_omp_at(target: Path, *, dry_run: bool) -> int:
 
 
 def uninstall_omp(
-    dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
+    dry_run: bool = False,
+    *,
+    scope: str = INSTALL_SCOPE_USER,
+    project_root: Path | None = None,
 ) -> int:
     install_scope = normalize_install_scope(scope)
     root = resolve_project_root(project_root)

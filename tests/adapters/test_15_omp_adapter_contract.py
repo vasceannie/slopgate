@@ -1,11 +1,35 @@
 from __future__ import annotations
 
+from typing import Final
+
 import pytest
 
 from slopgate.adapters import ADAPTERS, get_adapter
 from slopgate.adapters.omp import OmpAdapter, _OMP_EVENT_ALIASES
-from slopgate.constants import POST_TOOL_USE, PRE_TOOL_USE, SESSION_START, STOP
+from slopgate.constants import (
+    POST_TOOL_USE,
+    PRE_TOOL_USE,
+    SESSION_START,
+    STOP,
+    USER_PROMPT_SUBMIT,
+)
 from slopgate.models import RuleFinding, Severity
+
+_OMP_EVENT_CASES: Final = (
+    pytest.param("tool_call", PRE_TOOL_USE, id="tool-call"),
+    pytest.param("tool_result", POST_TOOL_USE, id="tool-result"),
+    pytest.param("session_start", SESSION_START, id="session-start"),
+    pytest.param("input", USER_PROMPT_SUBMIT, id="input"),
+    pytest.param("session_stop", STOP, id="session-stop"),
+    pytest.param("turn_end", "TurnEnd", id="turn-end"),
+    pytest.param("agent_end", "agent_end", id="agent-end-telemetry"),
+    pytest.param("tool_execution_start", "tool_execution_start", id="tool-start"),
+    pytest.param("tool_execution_update", "tool_execution_update", id="tool-update"),
+    pytest.param("tool_execution_end", "tool_execution_end", id="tool-end"),
+    pytest.param("before_agent_start", "before_agent_start", id="local-injection"),
+    pytest.param("user_bash", PRE_TOOL_USE, id="user-bash"),
+    pytest.param("user_python", PRE_TOOL_USE, id="user-python"),
+)
 
 
 def test_omp_adapter_is_registered() -> None:
@@ -28,21 +52,7 @@ def test_omp_alias_inventory_matches_the_pinned_event_union() -> None:
 
 @pytest.mark.parametrize(
     ("omp_event", "canonical_event"),
-    [
-        pytest.param("tool_call", PRE_TOOL_USE, id="tool-call"),
-        pytest.param("tool_result", POST_TOOL_USE, id="tool-result"),
-        pytest.param("session_start", SESSION_START, id="session-start"),
-        pytest.param("input", "UserPromptSubmit", id="input"),
-        pytest.param("session_stop", STOP, id="session-stop"),
-        pytest.param("turn_end", "TurnEnd", id="turn-end"),
-        pytest.param("agent_end", "agent_end", id="agent-end-telemetry"),
-        pytest.param("tool_execution_start", "tool_execution_start", id="tool-start"),
-        pytest.param("tool_execution_update", "tool_execution_update", id="tool-update"),
-        pytest.param("tool_execution_end", "tool_execution_end", id="tool-end"),
-        pytest.param("before_agent_start", "before_agent_start", id="local-injection"),
-        pytest.param("user_bash", PRE_TOOL_USE, id="user-bash"),
-        pytest.param("user_python", PRE_TOOL_USE, id="user-python"),
-    ],
+    _OMP_EVENT_CASES,
 )
 def test_omp_normalizes_pinned_event_map(
     omp_event: str,
@@ -158,7 +168,7 @@ def test_omp_prompt_deny_returns_handled_reason_without_action() -> None:
         message="prompt blocked",
     )
     output = OmpAdapter().render_output(
-        "UserPromptSubmit",
+        USER_PROMPT_SUBMIT,
         [finding],
         decision="block",
         context=None,

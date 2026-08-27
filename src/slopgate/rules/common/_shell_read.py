@@ -11,6 +11,7 @@ from slopgate.constants import (
     PERMISSION_REQUEST,
     PRE_TOOL_USE,
     METADATA_PATH,
+    USER_PROMPT_SUBMIT,
 )
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
@@ -82,7 +83,7 @@ def read_context_fragment(root: Path, relative: str) -> str | None:
 class PromptContextRule(Rule):
     rule_id: str = "BUILTIN-INJECT-PROMPT"
     title: str = "Inject prompt context"
-    events: tuple[str, ...] = ("UserPromptSubmit",)
+    events: tuple[str, ...] = (USER_PROMPT_SUBMIT,)
 
     @override
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
