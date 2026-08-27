@@ -5,7 +5,8 @@
   "scripts": {
     "lock": "bun run scripts/lock-contract.ts",
     "verify:snapshot": "bun run scripts/verify-snapshot.ts",
-    "test": "bun test scripts/verify-snapshot.test.ts"
+    "test": "bun test scripts/verify-snapshot.test.ts",
+    "typecheck": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --skipLibCheck --types node --verbatimModuleSyntax staged/omp_extension.ts"
   },
   "devDependencies": {
     "@oh-my-pi/pi-coding-agent": "18.0.5",
