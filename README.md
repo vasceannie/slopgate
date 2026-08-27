@@ -32,6 +32,7 @@ slopgate install claude    # patches ~/.claude/settings.json
 slopgate install codex     # patches ~/.codex/hooks.json
 slopgate install opencode  # copies plugin to the user OpenCode plugins dir
 slopgate install pi        # copies extension to ~/.pi/agent/extensions/
+slopgate install omp       # copies extension to ~/.omp/agent/extensions/
 
 # Or use the native all-harness installer and OS auto-updater
 slopgate install all                # auto-update is on by default
@@ -112,8 +113,9 @@ make dashboard-dev                # Vite → http://localhost:18835
 | **Codex CLI** | ⚠️ GA hooks, coverage gaps | `slopgate install codex [--install-scope user\|project\|both]` |
 | **OpenCode** | ⚠️ Degraded | `slopgate install opencode [--install-scope user\|project\|both]` |
 | **Pi** | ⚠️ Partial | `slopgate install pi [--install-scope user\|project\|both]` |
+| **OMP** | ⚠️ Partial | `slopgate install omp [--install-scope user\|project\|both]` |
 
-`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode/Pi install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
+`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode/Pi/OMP install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
 
 ## Agent bundle
 
@@ -149,6 +151,7 @@ claude --plugin-dir ./bundle/claude-plugin
   At install time Slopgate snapshots `opencode --version`, the declared, locked, and installed `@opencode-ai/plugin` versions, the Slopgate version, and the resolved binary. Version skew is reported with reinstall/restart guidance, and the generated plugin emits that snapshot plus a per-load plugin instance ID, directory, and worktree through headless-safe `client.app.log`. No health or version request runs on the per-hook path. The [machine-readable regression matrix](tests/fixtures/opencode_hook_contract_matrix.json) separates documented, typed, pinned-source, locally observed, and unresolved behavior.
   Slopgate's awaited post-mutation latency target and reproducible benchmark are documented in [OpenCode mutation-hook latency](docs/opencode-mutation-latency.md). The target is Slopgate-owned and is not an upstream OpenCode timeout or SLO.
 - **Pi**: extension shim at `~/.pi/agent/extensions/pi-slopgate/index.ts` and/or `.pi/extensions/pi-slopgate/index.ts`. Native events (`tool_call`, `tool_result`, `tool_execution_end`, `user_bash`, `input`, `before_agent_start`, `turn_end`, and `agent_end`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool_call`, where Pi supports `{ block: true, reason }` and mutable `event.input` for argument patches; `user_bash` blocks are returned as synthetic failed shell results because Pi's user-bash hook is an interception surface, not the same block schema as model tool calls. The `input` event can return Pi's documented handled action for blocked prompts. Post-tool findings attach Slopgate metadata through Pi's `tool_result` patch shape, while visible Slopgate activity is sent as compact custom chat messages instead of footer/status widgets or routine stderr output. Installs migrate away the legacy standalone `slopgate.ts` shim when it is Slopgate-owned to avoid duplicate Pi extension loading.
+- **OMP**: extension shim at `$PI_CODING_AGENT_DIR/extensions/omp-slopgate/index.ts` (default `~/.omp/agent/extensions/omp-slopgate/index.ts`) and/or `.omp/extensions/omp-slopgate/index.ts` in the project. Native events (`tool_call`, `tool_result`, `user_bash`, `user_python`, `input`, `before_agent_start`, `session_stop`, `turn_end`, `agent_end`) are forwarded into Slopgate's canonical model (`tool_call`, `user_bash`, `user_python` to `PreToolUse`; `input` to `UserPromptSubmit`; `session_stop` to `Stop`; `tool_result` to `PostToolUse` or `PostToolUseFailure` via `isError`; `turn_end` to `TurnEnd`). Blocking is strongest at `tool_call` and `input` with native `{ block, reason }` and `{ handled, reason }` shapes. `session_stop` findings request an OMP continuation turn via `{ continue, additionalContext }`, capped at 8 per session, and OMP's `stop_hook_active` flag is honored to avoid continuation loops. `user_bash` and `user_python` blocks are returned as synthetic failed shell results. Tool-input rewriting is best-effort and off by default (set `SLOPGATE_OMP_INPUT_REWRITE=1`); it applies only to proven Bash inputs. Post-tool findings attach Slopgate metadata through OMP's `tool_result` patch shape. See [the OMP adapter doc](docs/adapters/omp.md) for the full event map, harness usage, and known limitations.
 
 ## Architecture
 
@@ -185,9 +188,9 @@ No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 
 ```bash
 slopgate daemon [--socket PATH] [--max-requests N] [--workers N | --serial]
-slopgate handle [--platform claude|cursor|codex|opencode|pi|unknown]
+slopgate handle [--platform claude|cursor|codex|opencode|pi|omp|unknown]
 slopgate handle-async
-slopgate replay --payload fixture.json [--platform claude|cursor|codex|opencode|pi|unknown] [--pretty]
+slopgate replay --payload fixture.json [--platform claude|cursor|codex|opencode|pi|omp|unknown] [--pretty]
 ```
 
 `slopgate handle` is the entrypoint that platform hooks invoke. `slopgate daemon` runs the optional resident Unix-socket server, and `handle-async` runs post-edit jobs when a platform supports them.
@@ -208,8 +211,8 @@ slopgate enroll [path] [--no-worktrees]
 ### Install / update / lifecycle
 
 ```bash
-slopgate install <claude|cursor|codex|opencode|pi|all> [--dry-run] [--source URL] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
-slopgate uninstall <claude|cursor|codex|opencode|pi|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
+slopgate install <claude|cursor|codex|opencode|pi|omp|all> [--dry-run] [--source URL] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
+slopgate uninstall <claude|cursor|codex|opencode|pi|omp|all> [--dry-run] [--disable-autoupdate] [--install-scope user|project|both] [--project-root PATH]
 slopgate setup [--dry-run] [--source URL] [--disable-autoupdate] [--include-missing] [--interval-minutes N] [--install-scope user|project|both] [--project-root PATH]
 slopgate update [--dry-run] [--source URL] [--include-missing] [--refresh-hooks] [--install-scope user|project|both] [--project-root PATH]
 slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
@@ -231,8 +234,8 @@ slopgate version
 ### Bundles and semantic search
 
 ```bash
-slopgate bundle sync-prompts [--dry-run] [--remove] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
-slopgate bundle uninstall-prompts [--dry-run] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
+slopgate bundle sync-prompts [--dry-run] [--remove] [--only all|claude|codex|opencode|cursor|pi|omp] [--install-scope user|project|both] [--project-root PATH]
+slopgate bundle uninstall-prompts [--dry-run] [--only all|claude|codex|opencode|cursor|pi|omp] [--install-scope user|project|both] [--project-root PATH]
 slopgate search <init|doctor|models|use|list|add|query|remove|sync|reindex|completions> ...
 isx <command-or-query>  # compatibility entry point for `slopgate search`
 ```
@@ -321,6 +324,7 @@ Availability depends on platform support:
 - **Codex CLI**: currently limited by Codex's narrower hook surface
 - **OpenCode**: mediated through plugin event translation with advisory gaps around prompt and stop control
 - **Pi**: mediated through extension event translation; strongest blocking on `tool_call`, with lifecycle and post-tool gaps where Pi only supports result patches or advisory extension behavior
+- **OMP**: mediated through OMP-native extension events; strongest blocking on `tool_call` and `input`, stop enforcement via `session_stop` continuation (capped), and best-effort bash-only input rewriting off by default
 
 ### Batch lint (38 detectors)
 
