@@ -11,6 +11,7 @@ from ._coerce import (
     bool_value,
     command_map,
     object_dict,
+    string_dict,
     string_list,
     string_value,
 )
@@ -62,6 +63,12 @@ def _regex_rule_configs(value: object) -> list[RegexRuleConfig]:
                     tool_matchers=string_list(data.get("tool_matchers")),
                     case_sensitive=bool_value(data.get("case_sensitive"), False),
                     multiline=bool_value(data.get("multiline"), True),
+                    pattern_categories=(
+                        string_list(data.get("pattern_categories")) or None
+                    ),
+                    category_messages=(
+                        string_dict(data.get("category_messages")) or None
+                    ),
                 )
             )
     return regex_rules

@@ -21,6 +21,7 @@ def compile_regex_patterns(config: RegexRuleConfig) -> list[re.Pattern[str]]:
 class RegexHit:
     path: str | None
     snippet: str | None = None
+    category: str | None = None
 
 
 @dataclass(slots=True)
@@ -51,14 +52,30 @@ class RegexRuleMatcher:
         return True
 
     def matches_text(self, value: str) -> bool:
-        return any(pattern.search(value) for pattern in self.patterns)
+        return self.first_match_index(value) is not None
+
+    def first_match_index(self, value: str) -> int | None:
+        for index, pattern in enumerate(self.patterns):
+            if pattern.search(value):
+                return index
+        return None
+
+    def category_at(self, index: int | None) -> str | None:
+        categories = self.config.pattern_categories
+        if index is None or not categories or index >= len(categories):
+            return None
+        return categories[index]
 
     def path_hit(self, path_value: str, text: str) -> RegexHit | None:
-        if not self.path_allowed(path_value):
+        match_index = self.first_match_index(text)
+        if not self.path_allowed(path_value) or match_index is None:
             return None
-        if not self.matches_text(text):
-            return None
-        return RegexHit(path=path_value)
+        return RegexHit(path=path_value, category=self.category_at(match_index))
 
     def scalar_hit(self, value: str) -> list[RegexHit]:
-        return [RegexHit(path=None)] if value and self.matches_text(value) else []
+        if not value:
+            return []
+        match_index = self.first_match_index(value)
+        if match_index is None:
+            return []
+        return [RegexHit(path=None, category=self.category_at(match_index))]

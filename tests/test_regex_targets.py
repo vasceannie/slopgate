@@ -224,13 +224,15 @@ class TestGitCommandTarget:
         result = evaluate_payload(
             bash_payload("git commit --no-verify -m 'skip hooks'")
         )
-        assert "GIT-001" in finding_ids(result)
+        assert "GIT-001" in finding_ids(result), "git --no-verify must trigger GIT-001"
         support.assert_denied_by(result, "GIT-001")
         reason = support.required_string(
             support.hook_output(result), "permissionDecisionReason"
         )
-        assert "git commit -m" in reason
-        assert "fix the hook/test failure" in reason
+        assert "git commit -m" in reason, "GIT-001 reason must show safe commit command"
+        assert "fix the hook/test failure" in reason, (
+            "GIT-001 reason must show commit message guidance"
+        )
 
 
 class TestPathTarget:
@@ -267,9 +269,15 @@ class TestPathTarget:
             part for part in [qa_finding.message, qa_finding.additional_context] if part
         )
 
-        assert "src/slopgate" in combined
-        assert "tests/quality/baselines.json" in combined
-        assert "python -m pytest -q tests/quality" in combined
+        assert "src/slopgate" in combined, (
+            "QA-PATH-003 guidance must name the source rule location"
+        )
+        assert "tests/quality/baselines.json" in combined, (
+            "QA-PATH-003 guidance must name the baseline escape hatch"
+        )
+        assert "python -m pytest -q tests/quality" in combined, (
+            "QA-PATH-003 guidance must name the quality test command"
+        )
 
     def test_fe_linter_config_denied(self) -> None:
         result = evaluate_payload(self.write_payload(".eslintrc.json"))

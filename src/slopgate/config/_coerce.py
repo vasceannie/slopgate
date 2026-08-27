@@ -41,6 +41,14 @@ def string_list(value: object) -> list[str]:
     return [str(item) for item in raw_list]
 
 
+def string_dict(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+
+    raw_dict = cast(dict[object, object], value)
+    return {str(key): str(item) for key, item in raw_dict.items()}
+
+
 def command_map(value: object) -> dict[str, list[str]]:
     if not isinstance(value, dict):
         return {}

@@ -912,6 +912,24 @@
         "PermissionRequest"
       ],
       "target": "command",
+      "pattern_categories": [
+        "set_plus_e",
+        "stderr_suppression",
+        "powershell_silent",
+        "powershell_silent",
+        "null_redirect",
+        "null_redirect",
+        "or_true",
+        "or_colon"
+      ],
+      "category_messages": {
+        "set_plus_e": "STOP. Do not retry equivalent shell syntax. Matched: `set +e` disables fail-fast. Keep `set -e` active and handle the expected failure explicitly:\n    if ! command_that_might_fail; then\n        echo \"handled expected failure\" >&2\n    fi\nPrefer Read/Edit/ApplyPatch tools for file operations; handle command failures with explicit conditionals.",
+        "stderr_suppression": "STOP. Do not retry equivalent shell syntax. Matched: stderr suppression (`2>/dev/null`). Capture and check the exit code instead:\n    if output=$(command 2>&1); then\n        echo \"$output\"\n    else\n        printf '%s\\n' \"$output\" >&2\n        exit 1\n    fi\nPrefer Read/Edit/ApplyPatch tools for file operations; handle command failures with explicit conditionals.",
+        "powershell_silent": "STOP. Do not retry equivalent suppression syntax. Matched: PowerShell silent error suppression (`-ErrorAction SilentlyContinue` / `$ErrorActionPreference`). Handle the specific failure instead:\n    try { Get-ChildItem $path -ErrorAction Stop }\n    catch { Write-Error $_; exit 1 }\nPrefer structured tools over shell file operations; do not silence the error stream.",
+        "null_redirect": "STOP. Do not retry equivalent suppression syntax. Matched: output discarded to `$null` / `Out-Null`. Let the tool result capture output, or assign and inspect it:\n    $result = Invoke-Build\n    if (-not $?) { Write-Error \"build failed\"; exit 1 }\nPrefer structured tools over shell file operations.",
+        "or_true": "STOP. Do not retry equivalent shell syntax. Matched: `|| true` swallows the failure exit code. Handle the expected failure explicitly:\n    command || { echo \"documented expected failure\" >&2; }\nor restructure with `if ! command; then ... fi`. Prefer Read/Edit/ApplyPatch tools for file operations.",
+        "or_colon": "STOP. Do not retry equivalent shell syntax. Matched: `|| :` swallows the failure exit code. Handle the expected failure explicitly:\n    command || { echo \"documented expected failure\" >&2; }\nor restructure with `if ! command; then ... fi`. Prefer Read/Edit/ApplyPatch tools for file operations."
+      },
       "patterns": [
         "\\bset\\s+\\+e\\b",
         "2>\\s*/dev/null(?!\\s*\\|)",

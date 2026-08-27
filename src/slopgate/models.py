@@ -66,6 +66,8 @@ class RegexRuleConfig:
     tool_matchers: list[str] = field(default_factory=list)
     case_sensitive: bool = False
     multiline: bool = True
+    pattern_categories: list[str] | None = None
+    category_messages: dict[str, str] | None = None
 
 
 @dataclass(slots=True)

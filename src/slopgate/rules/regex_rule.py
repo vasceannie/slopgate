@@ -50,6 +50,11 @@ class RegexRule(Rule):
         )
 
     def _render_message(self, hits: list[RegexHit]) -> str:
+        category = hits[0].category if hits else None
+        if category and self.config.category_messages:
+            category_message = self.config.category_messages.get(category)
+            if category_message:
+                return category_message
         if not self.config.message:
             return self.rule_id
         first_path = hits[0].path or ""
@@ -79,10 +84,13 @@ class RegexRule(Rule):
     def _build_finding(self, hits: list[RegexHit]) -> RuleFinding:
         is_context = self.config.action == "context"
         hit_paths = [hit.path for hit in hits if hit.path]
+        primary_category = hits[0].category if hits else None
         metadata: dict[str, object] = {
             "target": self.config.target,
             "hits": hit_paths,
         }
+        if primary_category:
+            metadata["category"] = primary_category
         if hit_paths and self.config.target in {"content", METADATA_PATH}:
             for hit_path in hit_paths:
                 display_path = quality_metadata_path(hit_path)
