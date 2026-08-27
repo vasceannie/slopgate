@@ -2,16 +2,27 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from typing import Final
 from unittest.mock import patch
 
 import pytest
 from hypothesis import given, strategies
 
 import slopgate.installer._omp
-import slopgate.installer._shared
 from slopgate.installer import install_omp, uninstall_omp
-from tests.omp_installer_support import patch_install, site_paths
+from tests.omp_installer_support import (
+    fail_manifest_write,
+    patch_install,
+    site_paths,
+)
+
+_ROLLBACK_DEPTH_CASES: Final = tuple(
+    pytest.param(depth, id=f"depth-{depth}") for depth in range(1, 6)
+)
+_UNOWNED_ARTIFACT_CASES: Final = (
+    pytest.param("index", id="unowned-index"),
+    pytest.param("manifest", id="unowned-manifest"),
+)
 
 
 @given(segment=strategies.from_regex(r"[A-Za-z0-9_-]{1,16}", fullmatch=True))
@@ -26,43 +37,22 @@ def test_omp_agent_dir_rejects_arbitrary_relative_overrides(segment: str) -> Non
         )
 
 
-@given(depth=strategies.integers(min_value=1, max_value=5))
-def test_omp_rollback_removes_arbitrary_missing_parent_chains(depth: int) -> None:
-    with TemporaryDirectory() as temporary_directory:
-        anchor = Path(temporary_directory)
-        home = anchor.joinpath(*(f"missing-{level}" for level in range(depth)))
-        original_write = slopgate.installer._omp.write_contained_text
-        writes = 0
-
-        def fail_manifest_write(
-            path: Path,
-            content: str,
-            write: slopgate.installer._shared.ContainedWrite,
-        ) -> Path:
-            nonlocal writes
-            writes += 1
-            if writes == 2:
-                raise OSError("simulated manifest write failure")
-            return original_write(path, content, write)
-
-        with (
-            patch.dict(
-                os.environ,
-                {"OMP_AGENT_DIR": "", "PI_CODING_AGENT_DIR": ""},
-            ),
-            patch.object(Path, "home", return_value=home),
-            patch.object(
-                slopgate.installer._omp,
-                "write_contained_text",
-                side_effect=fail_manifest_write,
-            ),
-        ):
-            status = install_omp(dry_run=False)
-
-        assert status == 1, "the injected manifest failure should fail installation"
-        assert not home.exists(), (
-            "rollback should remove every parent created below the nearest existing anchor"
-        )
+@pytest.mark.parametrize("depth", _ROLLBACK_DEPTH_CASES)
+def test_omp_rollback_removes_arbitrary_missing_parent_chains(
+    depth: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path.joinpath(*(f"missing-{level}" for level in range(depth)))
+    patch_install(monkeypatch, home)
+    _, manifest_path = site_paths(home / ".omp" / "agent")
+    fail_manifest_write(monkeypatch, manifest_path)
+    assert install_omp(dry_run=False) == 1, (
+        "the injected manifest failure should fail installation"
+    )
+    assert not home.exists(), (
+        "rollback should remove every parent created below the nearest existing anchor"
+    )
 
 
 def test_omp_install_preserves_an_unowned_manifest(
@@ -87,10 +77,7 @@ def test_omp_install_preserves_an_unowned_manifest(
 
 @pytest.mark.parametrize(
     "unowned_artifact",
-    [
-        pytest.param("index", id="unowned-index"),
-        pytest.param("manifest", id="unowned-manifest"),
-    ],
+    _UNOWNED_ARTIFACT_CASES,
 )
 def test_omp_uninstall_preserves_each_unowned_artifact(
     tmp_path: Path,
@@ -102,8 +89,8 @@ def test_omp_uninstall_preserves_each_unowned_artifact(
     index_path, manifest_path = site_paths(home / ".omp" / "agent")
     expected_path = index_path if unowned_artifact == "index" else manifest_path
     assert install_omp(dry_run=False) == 0, "test setup should install owned artifacts"
-    expected_path.write_text(f"unowned {unowned_artifact}", encoding="utf-8")
-    expected_text = expected_path.read_text(encoding="utf-8")
+    expected_text = f"unowned {unowned_artifact}"
+    expected_path.write_text(expected_text, encoding="utf-8")
 
     assert uninstall_omp() == 1, "uninstall should report an unowned artifact as refused"
     assert expected_path.read_text(encoding="utf-8") == expected_text, (

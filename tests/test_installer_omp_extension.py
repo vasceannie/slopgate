@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import stat
+from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 import pytest
 from hypothesis import given
@@ -12,14 +13,16 @@ import slopgate.installer
 import slopgate.installer._omp
 import slopgate.installer._shared
 from tests.omp_installer_support import (
-    MANIFEST_PAYLOAD,
+    MANIFEST_BYTES,
     TEST_BINARY,
     OwnedSiteSeed,
     fail_manifest_write,
     owned_index,
     patch_install,
+    patch_unreadable_artifact,
+    prepare_cross_site_failure,
     site_paths,
-    write_owned_site,
+    transaction_residue,
 )
 
 _PLACEHOLDER = '["__SLOPGATE_BIN__"]'
@@ -29,6 +32,10 @@ _BINARY_TEXT = strategies.text(
 _TEXT_FRAGMENT = strategies.text(alphabet=list("abcXYZ012 _-."), max_size=20)
 _MARKER_SUBSETS = strategies.frozensets(
     strategies.sampled_from(slopgate.installer._omp.OMP_OWNERSHIP_MARKERS)
+)
+_UNREADABLE_OPERATIONS: Final = (
+    pytest.param(slopgate.installer._omp.install_omp, id="install"),
+    pytest.param(slopgate.installer._omp.uninstall_omp, id="uninstall"),
 )
 
 
@@ -90,15 +97,15 @@ def test_omp_install_writes_exact_artifacts_and_manifest(
     assert index_path.read_bytes() == owned_index(TEST_BINARY), (
         "OMP install must render the packaged extension"
     )
-    assert manifest_path.read_bytes() == (
-        json.dumps(MANIFEST_PAYLOAD, indent=2) + "\n"
-    ).encode(), "OMP manifest bytes must use canonical insertion order and formatting"
+    assert manifest_path.read_bytes() == MANIFEST_BYTES, (
+        "OMP manifest bytes must use canonical insertion order and formatting"
+    )
     assert not (index_path.parent / "config.json").exists(), (
         "OMP install must not create a config artifact"
     )
 
 
-def test_omp_dry_run_lists_exact_artifacts_without_creating_directories(
+def test_omp_dry_run_lists_exact_artifacts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -120,6 +127,19 @@ def test_omp_dry_run_lists_exact_artifacts_without_creating_directories(
         f"Would write: {project_manifest}",
         f"Binary: {TEST_BINARY}",
     ], "OMP dry-run must list only the two exact artifacts per site"
+
+
+def test_omp_dry_run_does_not_create_directories(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    project_root = tmp_path / "repo"
+    project_root.mkdir()
+    patch_install(monkeypatch, home)
+    assert slopgate.installer._omp.install_omp(
+        dry_run=True, scope="both", project_root=project_root
+    ) == 0, "OMP dry-run should validate both sites"
     assert not home.exists(), "OMP dry-run must not create the absent user chain"
     assert not (project_root / ".omp").exists(), (
         "OMP dry-run must not create the project extension chain"
@@ -140,6 +160,39 @@ def test_omp_install_refuses_unowned_artifact(
     )
     assert index_path.read_bytes() == custom, "the unowned index must remain byte-identical"
     assert not manifest_path.exists(), "refusal must happen before creating the manifest"
+
+
+def test_omp_ownership_probe_treats_unreadable_artifact_as_unowned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "index.ts"
+    artifact.write_text("owned-looking content", encoding="utf-8")
+    patch_unreadable_artifact(monkeypatch, artifact)
+    assert not slopgate.installer._omp.omp_extension_has_owned_slopgate(artifact), (
+        "an unreadable artifact cannot be established as installer-owned"
+    )
+
+
+@pytest.mark.parametrize("operation", _UNREADABLE_OPERATIONS)
+def test_omp_lifecycle_reports_unreadable_artifact_as_nonzero_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    operation: Callable[[], int],
+) -> None:
+    home = tmp_path / "home"
+    patch_install(monkeypatch, home)
+    assert slopgate.installer._omp.install_omp() == 0, (
+        "test setup must create installer-owned OMP artifacts"
+    )
+    index_path, _ = site_paths(home / ".omp" / "agent")
+    patch_unreadable_artifact(monkeypatch, index_path)
+    assert operation() == 1, "unreadable artifacts must return installer status 1"
+    output = capsys.readouterr().out
+    assert "Refusing to " in output and str(index_path) in output, (
+        "unreadable artifacts must produce a user-facing refusal"
+    )
 
 
 def test_omp_same_site_failure_removes_absent_directory_chain(
@@ -170,47 +223,53 @@ def test_omp_same_site_failure_preserves_preexisting_empty_chain(
     assert slopgate.installer._omp.install_omp(scope="user") == 1, (
         "same-site manifest failure must fail the install"
     )
-    assert agent_dir.exists(), "rollback must preserve the pre-existing agent root"
-    assert index_path.parent.parent.exists(), (
-        "rollback must preserve the pre-existing extensions parent"
+    expected_directories = (agent_dir, index_path.parent.parent, index_path.parent)
+    assert all(directory.exists() for directory in expected_directories), (
+        "rollback must preserve the full pre-existing empty directory chain"
     )
-    assert index_path.parent.exists(), "rollback must preserve the pre-existing package dir"
     assert not index_path.exists(), "rollback must remove only the partial artifact"
 
 
-def test_omp_cross_site_failure_restores_bytes_modes_and_topology(
+def test_omp_cross_site_failure_restores_user_bytes_and_modes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    home = tmp_path / "home"
-    project_root = tmp_path / "repo"
-    project_root.mkdir()
-    patch_install(monkeypatch, home)
-    old_index = b"// retained prefix\n" + owned_index(str(tmp_path / "old-bin"))
-    old_manifest = json.dumps(MANIFEST_PAYLOAD, separators=(",", ":")).encode()
-    user_index, user_manifest = write_owned_site(
-        home / ".omp" / "agent", OwnedSiteSeed(old_index, old_manifest)
-    )
-    project_index, project_manifest = site_paths(project_root / ".omp")
-    fail_manifest_write(monkeypatch, project_manifest)
+    scenario = prepare_cross_site_failure(monkeypatch, tmp_path)
     assert slopgate.installer._omp.install_omp(
-        scope="both", project_root=project_root
+        scope="both", project_root=scenario.project_root
     ) == 1, "project failure must roll back the completed user install"
-    assert (user_index.read_bytes(), user_manifest.read_bytes()) == (
-        old_index,
-        old_manifest,
-    ), "cross-site rollback must restore differing owned bytes"
-    assert (
-        stat.S_IMODE(user_index.stat().st_mode),
-        stat.S_IMODE(user_manifest.stat().st_mode),
-    ) == (0o640, 0o600), "cross-site rollback must restore original modes"
-    assert not (project_root / ".omp").exists(), (
-        "cross-site rollback must restore the absent project topology"
+    restored_user = OwnedSiteSeed.from_paths(
+        scenario.user_index, scenario.user_manifest
     )
-    residue = list(tmp_path.rglob("*.slopgate-bak-*")) + list(
-        tmp_path.rglob(".slopgate-write-*.tmp")
+    assert restored_user == scenario.expected_user, (
+        "cross-site rollback must restore user bytes and modes"
     )
-    assert residue == [], "OMP rollback must leave no backup or temporary residue"
-    assert not project_index.exists(), "the failed project index must be removed"
+
+
+def test_omp_cross_site_failure_restores_absent_project_topology(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario = prepare_cross_site_failure(monkeypatch, tmp_path)
+    assert slopgate.installer._omp.install_omp(
+        scope="both", project_root=scenario.project_root
+    ) == 1, "project failure must fail the multi-site install"
+    assert not any(
+        path.exists()
+        for path in (scenario.project_root / ".omp", scenario.project_index)
+    ), "cross-site rollback must restore the absent project topology"
+
+
+def test_omp_cross_site_failure_leaves_no_transaction_residue(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario = prepare_cross_site_failure(monkeypatch, tmp_path)
+    assert slopgate.installer._omp.install_omp(
+        scope="both", project_root=scenario.project_root
+    ) == 1, "project failure must fail the multi-site install"
+    assert transaction_residue(tmp_path) == (), (
+        "OMP rollback must leave no backup or temporary residue"
+    )
 
 
 def test_omp_rollback_aggregates_status_exception_and_success(

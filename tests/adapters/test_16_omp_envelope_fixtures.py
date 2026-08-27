@@ -50,9 +50,6 @@ def _assert_normalized_envelope(
     normalized: ObjectDict,
     expectation: EnvelopeExpectation,
 ) -> None:
-    assert normalized.get("hook_event_name") == expectation.canonical_event, (
-        f"expected canonical event {expectation.canonical_event!r}, got {normalized.get('hook_event_name')!r}"
-    )
     assert normalized.get("tool_name") == expectation.tool_name, (
         f"expected canonical tool {expectation.tool_name!r}, got {normalized.get('tool_name')!r}"
     )
@@ -82,7 +79,13 @@ def test_captured_omp_envelope_normalizes_contract_fields(fixture_path: Path) ->
 
     normalized = OmpAdapter().normalize_payload(raw)
 
-    _assert_normalized_envelope(normalized, _EXPECTED_ENVELOPES[fixture_path.name])
+    expectation = _EXPECTED_ENVELOPES[fixture_path.name]
+    canonical_event = normalized["hook_event_name"]
+    assert canonical_event == expectation.canonical_event, (
+        f"expected canonical event {expectation.canonical_event!r}, "
+        f"got {canonical_event!r}"
+    )
+    _assert_normalized_envelope(normalized, expectation)
 
 
 def test_in_memory_envelope_mutation_breaks_contract_assertion() -> None:
