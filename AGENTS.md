@@ -12,6 +12,7 @@
 - Claude Code: richest hook surface, nearest full parity.
 - Codex: partial hook model; document conservatively.
 - OpenCode: plugin/event translation, not Claude-style schema.
+- OMP: extension shim like Pi; enforcement via session_stop continuation; install to .omp paths.
 
 ## Docs
 
