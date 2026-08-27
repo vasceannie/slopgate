@@ -56,6 +56,7 @@ export const PLATFORM_BADGE_STYLE: Record<Platform, string> = {
   opencode: "bg-platform-opencode/20 text-platform-opencode",
   cursor: "bg-platform-cursor/20 text-platform-cursor",
   pi: "bg-platform-pi/20 text-platform-pi",
+  omp: "bg-platform-omp/20 text-platform-omp",
   unknown: "bg-platform-unknown/20 text-platform-unknown",
 };
 

@@ -24,7 +24,7 @@ function pickN<T>(arr: T[], n: number): T[] {
   return shuffled.slice(0, n);
 }
 
-const PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor", "pi"];
+const PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor", "pi", "omp"];
 const _EVENT_NAMES: EventName[] = ["SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure", "Stop"];
 const _DECISIONS: Decision[] = ["allow", "deny", "block", "ask", "context", "warn"];
 const SEVERITIES: Severity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -226,6 +226,9 @@ export function generateMockData() {
         } else if (platform === "pi") {
           model = "pi-2";
           provider = "Inflection";
+        } else if (platform === "omp") {
+          model = "gpt-5.4";
+          provider = "OpenAI";
         } else {
           model = "gemini-3-flash-agent";
           provider = "Google";

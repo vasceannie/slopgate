@@ -10,6 +10,8 @@ from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.commands import VALID_PLATFORMS
 from slopgate.cli.commands_bundle import cmd_bundle_sync_prompts
 
+PROMPT_SYNC_EXCLUDED_PLATFORMS = frozenset({"omp"})
+
 
 def _add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--dry-run", action="store_true")
@@ -18,7 +20,14 @@ def _add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
 def _add_prompt_target_arguments(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument(
         "--only",
-        choices=("all", *VALID_PLATFORMS),
+        choices=(
+            "all",
+            *(
+                platform
+                for platform in VALID_PLATFORMS
+                if platform not in PROMPT_SYNC_EXCLUDED_PLATFORMS
+            ),
+        ),
         default="all",
         help="Prompt target to sync (default: all)",
     )

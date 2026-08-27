@@ -104,6 +104,23 @@ def test_install_scope_arguments_feed_install_parser() -> None:
     assert (parsed.install_scope, parsed.project_root) == ("project", "/tmp/repo")
 
 
+def test_bundle_sync_prompts_accepts_pi_parser_target() -> None:
+    parsed = build_parser().parse_args(["bundle", "sync-prompts", "--only", "pi"])
+    assert parsed.only == "pi", "Pi must remain accepted by prompt-sync parsing"
+
+
+def test_bundle_sync_prompts_rejects_omp_before_dispatch(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit) as raised:
+        parser.parse_args(["bundle", "sync-prompts", "--only", "omp"])
+    assert raised.value.code == 2, "OMP prompt sync must fail as an argparse choice"
+    assert "invalid choice: 'omp'" in capsys.readouterr().err, (
+        "OMP rejection must occur in argparse before prompt-sync dispatch"
+    )
+
+
 def test_test_parser_defaults_to_changed_test_workflow() -> None:
     parsed = build_parser().parse_args(["test"])
     assert (

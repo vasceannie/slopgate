@@ -1,0 +1,131 @@
+{
+  "base_sha": "8238d141c9eb3a8cd5608fc0c47184018a74f750",
+  "occurrences": [
+    {
+      "path": "dashboard/scripts/build_standalone/projection.py",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/scripts/forcedash_server/remote_scripts/harness_status.py.txt",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 8,
+      "ordinals": [1, 2, 3, 4, 5, 6, 7, 8]
+    },
+    {
+      "path": "dashboard/scripts/forcedash_server/remote_scripts/harness_status.py.txt",
+      "token_class": "quoted_Pi",
+      "matched_text": "\"Pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/scripts/forcedash_server/remote_scripts/trace_snapshot.py.txt",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/DecisionFunnel.tsx",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/DecisionFunnel.tsx",
+      "token_class": "bare_pi_key",
+      "matched_text": "pi:",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/DecisionFunnel.tsx",
+      "token_class": "platform_pi",
+      "matched_text": "platform-pi",
+      "count": 5,
+      "ordinals": [1, 2, 3, 4, 5]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/TimeWindowSelector.tsx",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/TimeWindowSelector.tsx",
+      "token_class": "quoted_Pi",
+      "matched_text": "\"Pi\"",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/components/dashboard/TimeWindowSelector.tsx",
+      "token_class": "platform_pi",
+      "matched_text": "platform-pi",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/context/traceRecordValidation.ts",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 2,
+      "ordinals": [1, 2]
+    },
+    {
+      "path": "dashboard/src/data/mockTraces.ts",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 2,
+      "ordinals": [1, 2]
+    },
+    {
+      "path": "dashboard/src/index.css",
+      "token_class": "double_dash_platform_pi",
+      "matched_text": "--platform-pi",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/lib/chartTheme.ts",
+      "token_class": "bare_pi_key",
+      "matched_text": "pi:",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/src/lib/chartTheme.ts",
+      "token_class": "platform_pi",
+      "matched_text": "platform-pi",
+      "count": 2,
+      "ordinals": [1, 2]
+    },
+    {
+      "path": "dashboard/src/types/slopgate.ts",
+      "token_class": "quoted_pi",
+      "matched_text": "\"pi\"",
+      "count": 2,
+      "ordinals": [1, 2]
+    },
+    {
+      "path": "dashboard/tailwind.config.ts",
+      "token_class": "bare_pi_key",
+      "matched_text": "pi:",
+      "count": 1,
+      "ordinals": [1]
+    },
+    {
+      "path": "dashboard/tailwind.config.ts",
+      "token_class": "double_dash_platform_pi",
+      "matched_text": "--platform-pi",
+      "count": 1,
+      "ordinals": [1]
+    }
+  ]
+}

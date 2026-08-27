@@ -101,6 +101,16 @@ def test_native_install_parser_supports_pi() -> None:
     ) == ("install", "pi", True, True)
 
 
+def test_native_install_parser_supports_omp() -> None:
+    args = build_parser().parse_args(["install", "omp", "--dry-run"])
+    assert (
+        args.command,
+        args.platform,
+        args.with_autoupdate,
+        args.dry_run,
+    ) == ("install", "omp", True, True)
+
+
 def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> None:
     args = build_parser().parse_args(["update", "--dry-run"])
     assert (
@@ -132,10 +142,12 @@ def test_discover_install_sites_respects_current_device_home(
         [(site.platform, site.present) for site in sites],
         [site.platform for site in all_sites],
         next(site.path for site in all_sites if site.platform == "pi"),
+        next(site.path for site in all_sites if site.platform == "omp"),
     ) == (
         [(PLATFORM_CLAUDE, True), ("opencode", True)],
-        [PLATFORM_CLAUDE, "codex", "opencode", "cursor", "pi"],
+        [PLATFORM_CLAUDE, "codex", "opencode", "cursor", "pi", "omp"],
         tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
+        tmp_path / ".omp" / "agent" / "extensions" / "omp-slopgate" / "index.ts",
     )
 
 
@@ -273,14 +285,10 @@ def test_scheduler_plan_rejects_newline_source_for_systemd_units(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
     monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "linux")
-    try:
+    with pytest.raises(ValueError, match="source"):
         slopgate.installer._suite.build_scheduler_plan(
             "git+https://example.invalid/vf.git@main\nExecStart=/bin/sh"
         )
-    except ValueError as exc:
-        assert "source" in str(exc)
-    else:
-        raise AssertionError("newline source should be rejected before rendering")
 
 
 @SKIP_DARWIN_ONLY
