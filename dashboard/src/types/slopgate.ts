@@ -1,4 +1,4 @@
-export type Platform = "claude" | "codex" | "opencode" | "cursor" | "pi" | "unknown";
+export type Platform = "claude" | "codex" | "opencode" | "cursor" | "pi" | "omp" | "unknown";
 export type PlatformSource = "explicit" | "defaulted" | "normalized" | "unknown";
 export type LineageRole = "parent" | "child" | "mirror" | "child_mirror" | "raw";
 export type LineageConfidence = "explicit" | "inferred" | "none";

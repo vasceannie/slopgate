@@ -1,7 +1,6 @@
 """Codex CLI installer support."""
 
 from __future__ import annotations
-import json
 import re
 import tomllib
 from pathlib import Path
@@ -77,12 +76,6 @@ def _codex_project_hooks_path(project_root: Path) -> Path:
 
 def _codex_user_root() -> Path:
     return Path.home() / ".codex"
-
-
-def _codex_contained_root(target: Path, project_root: Path) -> Path:
-    return contained_scope_root(
-        target, project_root=project_root, user_root=_codex_user_root()
-    )
 
 
 def _codex_config_path_for_hooks(hooks_path: Path) -> Path:
@@ -271,7 +264,9 @@ def install_codex(
         project_path=_codex_project_hooks_path(root),
     )
     for hooks_path in paths:
-        contained_root = _codex_contained_root(hooks_path, root)
+        contained_root = contained_scope_root(
+            hooks_path, project_root=root, user_root=_codex_user_root()
+        )
         if not _existing_codex_toml_is_valid(
             _codex_config_path_for_hooks(hooks_path), root=contained_root
         ):
@@ -279,7 +274,9 @@ def install_codex(
     completed: list[Path] = []
     last_status = 0
     for hooks_path in paths:
-        contained_root = _codex_contained_root(hooks_path, root)
+        contained_root = contained_scope_root(
+            hooks_path, project_root=root, user_root=_codex_user_root()
+        )
         status = _install_codex_at(
             hooks_path, hooks, binary, InstallAt(root=contained_root, dry_run=dry_run)
         )
@@ -292,7 +289,11 @@ def install_codex(
                             label="Codex",
                             remove_owned=remove_owned_hooks,
                             dry_run=False,
-                            root=_codex_contained_root(rollback_path, root),
+                            root=contained_scope_root(
+                                rollback_path,
+                                project_root=root,
+                                user_root=_codex_user_root(),
+                            ),
                         ),
                     )
             return status
@@ -319,7 +320,9 @@ def uninstall_codex(
                 label="Codex",
                 remove_owned=remove_owned_hooks,
                 dry_run=dry_run,
-                root=_codex_contained_root(hooks_path, root),
+                root=contained_scope_root(
+                    hooks_path, project_root=root, user_root=_codex_user_root()
+                ),
             ),
         )
         if status != 0:

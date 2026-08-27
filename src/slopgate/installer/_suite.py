@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.cli.commands import VALID_PLATFORMS
+from slopgate.installer._omp import omp_agent_dir
 from slopgate.installer._shared import find_binary, shell_command
 from slopgate.installer.suite import (
     AUTOUPDATE_MARKER,
@@ -30,10 +31,11 @@ _INSTALL_TARGETS = VALID_PLATFORMS
     OPENCODE_PLATFORM,
     CURSOR_PLATFORM,
     PI_PLATFORM,
+    OMP_PLATFORM,
 ) = _INSTALL_TARGETS
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SuiteInstallOptions:
     """Options for installing hooks across the current device's agent harnesses."""
 
@@ -46,7 +48,7 @@ class SuiteInstallOptions:
     project_root: Path | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SuiteUninstallOptions:
     """Options for removing hooks across the current device's agent harnesses."""
 
@@ -57,7 +59,7 @@ class SuiteUninstallOptions:
     project_root: Path | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SuiteUpdateOptions:
     """Options for updating Slopgate and optionally refreshing hook install sites."""
 
@@ -69,7 +71,7 @@ class SuiteUpdateOptions:
     project_root: Path | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InstallSite:
     """A platform hook install site on the current device."""
 
@@ -111,6 +113,11 @@ def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite
             PI_PLATFORM,
             home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
             (home / ".pi" / "agent").exists(),
+        ),
+        InstallSite(
+            OMP_PLATFORM,
+            omp_agent_dir() / "extensions" / "omp-slopgate" / "index.ts",
+            omp_agent_dir().exists(),
         ),
     ]
     if include_missing:

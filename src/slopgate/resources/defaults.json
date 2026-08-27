@@ -598,7 +598,7 @@
         "**/settings*.py"
       ],
       "patterns": [
-        "(?m)^(?!\\s*(#|\\w+\\s*=)).*[=<>!+\\-*/]\\s*(?<!\\.)\\b(\\d{4,}|[2-9]\\d{2,})\\b(?!\\.\\d|\\s*[\\]\\)},])"
+        "(?m)^(?!\\s*(?:#|(?-i:[A-Z][A-Z0-9_]*)(?:\\s*:[^=\\n]+)?\\s*=))[^\\n]*[=<>!+\\-*/]\\s*(?<!\\.)\\b(\\d{4,}|[2-9]\\d{2,})\\b(?!\\.\\d|\\s*[\\]\\)},])"
       ],
       "action": "deny",
       "message": "Magic numbers (large literals) are blocked outside constants/config modules. Define named constants instead.",
