@@ -1,0 +1,535 @@
+{
+  "bash_input": {
+    "field_types": {
+      "async": "boolean",
+      "command": "string",
+      "cwd": "string",
+      "env": "object",
+      "pty": "boolean",
+      "timeout": "number"
+    },
+    "optional_keys": [
+      "async",
+      "cwd",
+      "env",
+      "pty",
+      "timeout"
+    ],
+    "required_keys": [
+      "command"
+    ],
+    "source": "BashToolInput",
+    "variants": [
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "pty": "boolean"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "env": "object"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "pty": "boolean"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "cwd": "string"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "env": "object",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "env": "object",
+        "pty": "boolean"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "env": "object",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "env": "object"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "pty": "boolean"
+      },
+      {
+        "async": "boolean",
+        "command": "string",
+        "timeout": "number"
+      },
+      {
+        "async": "boolean",
+        "command": "string"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "pty": "boolean"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "env": "object",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "env": "object"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "pty": "boolean"
+      },
+      {
+        "command": "string",
+        "cwd": "string",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "cwd": "string"
+      },
+      {
+        "command": "string",
+        "env": "object",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "env": "object",
+        "pty": "boolean"
+      },
+      {
+        "command": "string",
+        "env": "object",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "env": "object"
+      },
+      {
+        "command": "string",
+        "pty": "boolean",
+        "timeout": "number"
+      },
+      {
+        "command": "string",
+        "pty": "boolean"
+      },
+      {
+        "command": "string",
+        "timeout": "number"
+      },
+      {
+        "command": "string"
+      }
+    ]
+  },
+  "events": {
+    "names": [
+      "after_provider_response",
+      "agent_end",
+      "agent_start",
+      "auto_compaction_end",
+      "auto_compaction_start",
+      "auto_retry_end",
+      "auto_retry_start",
+      "before_agent_start",
+      "before_provider_request",
+      "context",
+      "credential_disabled",
+      "goal_updated",
+      "input",
+      "mcp_notification",
+      "message_end",
+      "message_start",
+      "message_update",
+      "resources_discover",
+      "retry_fallback_applied",
+      "retry_fallback_succeeded",
+      "session.compacting",
+      "session_before_branch",
+      "session_before_compact",
+      "session_before_switch",
+      "session_before_tree",
+      "session_branch",
+      "session_compact",
+      "session_shutdown",
+      "session_start",
+      "session_stop",
+      "session_switch",
+      "session_tree",
+      "todo_reminder",
+      "tool_approval_requested",
+      "tool_approval_resolved",
+      "tool_call",
+      "tool_execution_end",
+      "tool_execution_start",
+      "tool_execution_update",
+      "tool_result",
+      "ttsr_triggered",
+      "turn_end",
+      "turn_start",
+      "user_bash",
+      "user_python"
+    ],
+    "user_bash": true,
+    "user_python": true
+  },
+  "exports": {
+    "ExtensionRunner": {
+      "subpath": "./extensibility/extensions/runner",
+      "types": "./dist/types/extensibility/extensions/runner.d.ts"
+    },
+    "ExtensionRuntime": {
+      "subpath": "./extensibility/extensions/loader",
+      "types": "./dist/types/extensibility/extensions/loader.d.ts"
+    },
+    "loadExtensionFromFactory": {
+      "subpath": "./extensibility/extensions/loader",
+      "types": "./dist/types/extensibility/extensions/loader.d.ts"
+    }
+  },
+  "listeners": {
+    "agent_end": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
+    "before_agent_start": {
+      "fields": {
+        "message": {
+          "required": false,
+          "type": "Partial<Pick<PiCodingAgent.CustomMessage<unknown>, \"customType\" | \"content\" | \"display\" | \"details\" | \"attribution\">> | string"
+        },
+        "systemPrompt": {
+          "required": false,
+          "type": "string[]"
+        }
+      },
+      "result_union": [
+        "BeforeAgentStartEventResult",
+        "void"
+      ]
+    },
+    "input": {
+      "fields": {
+        "handled": {
+          "required": false,
+          "type": "false | true"
+        },
+        "images": {
+          "required": false,
+          "type": "ImageContent[]"
+        },
+        "text": {
+          "required": false,
+          "type": "string"
+        }
+      },
+      "result_union": [
+        "InputEventResult",
+        "void"
+      ]
+    },
+    "session_start": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
+    "session_stop": {
+      "fields": {
+        "additionalContext": {
+          "required": false,
+          "type": "string"
+        },
+        "continue": {
+          "required": false,
+          "type": "false | true"
+        },
+        "decision": {
+          "required": false,
+          "type": "\"block\""
+        },
+        "reason": {
+          "required": false,
+          "type": "string"
+        }
+      },
+      "result_union": [
+        "SessionStopEventResult",
+        "void"
+      ]
+    },
+    "tool_call": {
+      "fields": {
+        "block": {
+          "required": false,
+          "type": "false | true"
+        },
+        "input": {
+          "required": false,
+          "type": "Record<string, unknown>"
+        },
+        "reason": {
+          "required": false,
+          "type": "string"
+        }
+      },
+      "result_union": [
+        "ToolCallEventResult",
+        "void"
+      ]
+    },
+    "tool_result": {
+      "fields": {
+        "content": {
+          "required": false,
+          "type": "(ImageContent | TextContent)[]"
+        },
+        "details": {
+          "required": false,
+          "type": "unknown"
+        },
+        "isError": {
+          "required": false,
+          "type": "false | true"
+        }
+      },
+      "result_union": [
+        "ToolResultEventResult",
+        "void"
+      ]
+    },
+    "turn_end": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
+    "user_bash": {
+      "fields": {
+        "result": {
+          "required": false,
+          "type": "BashResult"
+        }
+      },
+      "result_union": [
+        "UserBashEventResult",
+        "void"
+      ]
+    },
+    "user_python": {
+      "fields": {
+        "result": {
+          "required": false,
+          "type": "PythonResult"
+        }
+      },
+      "result_union": [
+        "UserPythonEventResult",
+        "void"
+      ]
+    }
+  },
+  "packages": {
+    "@oh-my-pi/pi-coding-agent": "18.0.5",
+    "@oh-my-pi/pi-tui": "18.0.5"
+  },
+  "results": {
+    "BeforeAgentStartEventResult": {
+      "fields": {
+        "message": {
+          "required": false,
+          "type": "Partial<Pick<PiCodingAgent.CustomMessage<unknown>, \"customType\" | \"content\" | \"display\" | \"details\" | \"attribution\">> | string"
+        },
+        "systemPrompt": {
+          "required": false,
+          "type": "string[]"
+        }
+      }
+    },
+    "InputEventResult": {
+      "fields": {
+        "handled": {
+          "required": false,
+          "type": "false | true"
+        },
+        "images": {
+          "required": false,
+          "type": "ImageContent[]"
+        },
+        "text": {
+          "required": false,
+          "type": "string"
+        }
+      }
+    },
+    "SessionStopEventResult": {
+      "fields": {
+        "additionalContext": {
+          "required": false,
+          "type": "string"
+        },
+        "continue": {
+          "required": false,
+          "type": "false | true"
+        },
+        "decision": {
+          "required": false,
+          "type": "\"block\""
+        },
+        "reason": {
+          "required": false,
+          "type": "string"
+        }
+      }
+    },
+    "ToolCallEventResult": {
+      "fields": {
+        "block": {
+          "required": false,
+          "type": "false | true"
+        },
+        "input": {
+          "required": false,
+          "type": "Record<string, unknown>"
+        },
+        "reason": {
+          "required": false,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "session_identity_evidence": {
+    "assertions": [
+      "same-within-session",
+      "distinct-across-sessions"
+    ],
+    "kind": "runner-test",
+    "path": "scripts/session-identity.test.ts",
+    "sha256": "f214a2472ada0584876427a25d542251a5ca389fb29517140ea66eaadf03d186"
+  },
+  "session_identity_source": "ctx.sessionManager.getSessionId()",
+  "session_stop": {
+    "agent_message_content_union": [
+      "(ImageContent | TextContent | ThinkingContent | RedactedThinkingContent | AnthropicFallbackContent | AnthropicServerToolContent | ToolCall)[]",
+      "(ImageContent | TextContent)[]",
+      "string"
+    ],
+    "event": {
+      "fields": {
+        "last_assistant_message": {
+          "required": false,
+          "type": "AssistantMessage | BashExecutionMessage | BranchSummaryMessage | CompactionSummaryMessage | CustomMessage<unknown> | DeveloperMessage | FileMentionMessage | HookMessage<unknown> | PythonExecutionMessage | ToolResultMessage<unknown> | UserMessage"
+        },
+        "messages": {
+          "required": true,
+          "type": "AgentMessage[]"
+        },
+        "session_file": {
+          "required": false,
+          "type": "string"
+        },
+        "session_id": {
+          "required": true,
+          "type": "string"
+        },
+        "signal": {
+          "required": true,
+          "type": "AbortSignal"
+        },
+        "stop_hook_active": {
+          "required": true,
+          "type": "false | true"
+        },
+        "turn_id": {
+          "required": true,
+          "type": "number"
+        },
+        "type": {
+          "required": true,
+          "type": "\"session_stop\""
+        }
+      }
+    }
+  },
+  "session_stop_response_source": "last_assistant_message"
+}
