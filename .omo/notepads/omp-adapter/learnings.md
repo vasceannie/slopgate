@@ -1,0 +1,5 @@
+- Bun 1.4.0 resolves `@oh-my-pi/pi-coding-agent@18.0.5` to the literal `@oh-my-pi/pi-tui@18.0.5`; the workspace pins both and commits Bun's text `bun.lock`.
+- The pinned `ExtensionAPI.on(...)` overloads can be resolved statically from `dist/types/extensibility/extensions/types.d.ts`; listener result fields come from the overload's `ExtensionHandler` result argument, while explicit-void listeners omit that argument.
+- Bridge conformance uses a TypeScript `Program` plus `TypeChecker` symbol lookup so inline callbacks, identifier callbacks, top-level helpers, and nested same-file helpers resolve lexically. Imported aliases, unresolved calls, spreads, computed keys, returned identifiers, and post-construction mutation fail closed.
+- `SessionStopEvent` and `SessionStopEventResult` must be extracted independently. The pinned result has `continue`, `additionalContext`, `decision`, and `reason`; `stop_hook_active` exists only on the input event.
+- Byte stability depends on sorting event names, fields, bash variants, and union text, plus pinning the TypeScript compiler used for `typeToString` output.

@@ -1,0 +1,16 @@
+{
+  "name": "slopgate-omp-contract",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lock": "bun run scripts/lock-contract.ts",
+    "verify:snapshot": "bun run scripts/verify-snapshot.ts",
+    "test": "bun test scripts/verify-snapshot.test.ts"
+  },
+  "devDependencies": {
+    "@oh-my-pi/pi-coding-agent": "18.0.5",
+    "@oh-my-pi/pi-tui": "18.0.5",
+    "@types/node": "^26.3.0",
+    "typescript": "6.0.2"
+  }
+}
