@@ -21,6 +21,10 @@ export type BashExecutionOutcome =
 	| { readonly kind: "blocked"; readonly reason: string }
 	| { readonly kind: "executed"; readonly input: BashToolInput };
 
+export type ObservedBashExecutionOutcome =
+	| { readonly kind: "blocked"; readonly reason: string }
+	| { readonly input: unknown; readonly kind: "executed"; readonly rewriteApplied: boolean };
+
 export class MockModel {
 	/** Mutable call log is the observable behavior of this test double. */
 	readonly systemPrompts: string[][] = [];
@@ -33,6 +37,7 @@ export class MockModel {
 export class MockBashTool {
 	/** Mutable execution log proves pre-execution interception and rewrite behavior. */
 	readonly executions: BashToolInput[] = [];
+	readonly observedExecutions: unknown[] = [];
 
 	constructor(private readonly effect?: BashEffect) {}
 
@@ -40,6 +45,12 @@ export class MockBashTool {
 		const executedInput = structuredClone(input);
 		this.executions.push(executedInput);
 		await this.effect?.(executedInput);
+		return executedInput;
+	}
+
+	executeObserved(input: unknown): unknown {
+		const executedInput = structuredClone(input);
+		this.observedExecutions.push(executedInput);
 		return executedInput;
 	}
 }
@@ -51,6 +62,7 @@ export type RuntimeHarness = {
 	readonly bashTool: MockBashTool;
 	readonly sentMessages: string[];
 	executeBash(input: BashToolInput, toolCallId?: string): Promise<BashExecutionOutcome>;
+	executeObservedBash(input: unknown, toolCallId?: string): Promise<ObservedBashExecutionOutcome>;
 	invokeModel(prompt: string, systemPrompt?: string[]): Promise<readonly string[]>;
 	close(): Promise<void>;
 };
@@ -93,6 +105,19 @@ function parseBashInput(value: unknown): BashToolInput | undefined {
 		...(typeof value.async === "boolean" ? { async: value.async } : {}),
 		...(typeof value.pty === "boolean" ? { pty: value.pty } : {}),
 	};
+}
+
+async function emitObservedToolCall(
+	runner: ExtensionRunner,
+	input: unknown,
+	toolCallId: string,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+	const emitToolCall: unknown = Reflect.get(runner, "emitToolCall");
+	if (typeof emitToolCall !== "function") throw new TypeError("Extension runner cannot emit tool calls");
+	const result: unknown = await Reflect.apply(emitToolCall, runner, [
+		{ type: "tool_call", toolCallId, toolName: "bash", input },
+	]);
+	return isRecord(result) ? result : undefined;
 }
 
 async function loadStagedFactory(): Promise<ExtensionFactory> {
@@ -159,6 +184,19 @@ export async function createRuntimeHarness(options: RuntimeHarnessOptions = {}):
 			if (result?.block) return { kind: "blocked", reason: result.reason ?? "Blocked by extension" };
 			const rewritten = parseBashInput(result?.input) ?? input;
 			return { kind: "executed", input: await bashTool.execute(rewritten) };
+		},
+		async executeObservedBash(input, toolCallId = "observed-bash-fixed") {
+			const result = await emitObservedToolCall(runner, input, toolCallId);
+			if (result?.["block"] === true) {
+				const reason = result["reason"];
+				return { kind: "blocked", reason: typeof reason === "string" ? reason : "Blocked by extension" };
+			}
+			const rewritten = result?.["input"];
+			return {
+				input: bashTool.executeObserved(rewritten ?? input),
+				kind: "executed",
+				rewriteApplied: rewritten !== undefined,
+			};
 		},
 		async invokeModel(prompt, systemPrompt = []) {
 			const result = await runner.emitBeforeAgentStart(prompt, undefined, systemPrompt);

@@ -141,6 +141,19 @@ describe("Todo 6 workspace contract", () => {
 		await expect(assertCaptureDirectoriesEqual(first, second)).resolves.toBeUndefined();
 	}, 60000);
 
+	test("fresh capture byte-matches every committed OMP 18.0.5 envelope", async () => {
+		// Given
+		const freshCapture = await mkdtemp(path.join(tmpdir(), "slopgate-omp-capture-fixtures-"));
+		temporaryPaths.push(freshCapture);
+		const committedFixtures = path.resolve(import.meta.dir, "../../fixtures/omp/18.0.5");
+
+		// When
+		await captureEnvelopes(freshCapture);
+
+		// Then
+		await expect(assertCaptureDirectoriesEqual(freshCapture, committedFixtures)).resolves.toBeUndefined();
+	}, 60000);
+
 	test("commits the exact envelope set without creating capture scratch state", async () => {
 		// Given
 		const fixtureRoot = path.resolve(import.meta.dir, "../../fixtures/omp");
