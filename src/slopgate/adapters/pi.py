@@ -27,6 +27,7 @@ from slopgate.adapters._payload_fields import (
 from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.adapters.omp import (
+    USER_PROMPT_SUBMIT,
     _canonical_tool_name,
     _sync_tool_input,
     _sync_user_bash_command,
@@ -51,7 +52,7 @@ PI_EVENT_NAMES: set[str] = {
     POST_TOOL_USE,  # tool_result → PostToolUse (success)
     "PostToolUseFailure",  # failed post-tool execution
     SESSION_START,  # before_agent_start
-    "UserPromptSubmit",  # input
+    USER_PROMPT_SUBMIT,  # input
     STOP,  # agent_end
     "TurnEnd",  # turn_end
 }
@@ -61,7 +62,7 @@ _PI_EVENT_ALIASES: dict[str, str] = {
     "user_bash": PRE_TOOL_USE,
     "tool_result": POST_TOOL_USE,
     "tool_execution_end": POST_TOOL_USE,
-    "input": "UserPromptSubmit",
+    "input": USER_PROMPT_SUBMIT,
     "before_agent_start": SESSION_START,
     "turn_end": "TurnEnd",
     "agent_end": STOP,
@@ -126,7 +127,7 @@ class PiAdapter(PlatformAdapter):
             return None
 
         output: ObjectDict = {}
-        can_block = render_request.event_name in {PRE_TOOL_USE, "UserPromptSubmit"}
+        can_block = render_request.event_name in {PRE_TOOL_USE, USER_PROMPT_SUBMIT}
         if can_block and render_request.decision in {DENY, BLOCK, ASK}:
             output[BLOCK] = True
             output["reason"] = self.join_messages(

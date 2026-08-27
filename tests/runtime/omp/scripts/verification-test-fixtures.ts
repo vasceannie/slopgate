@@ -20,6 +20,7 @@ export type VerifierRun = {
 type SyntheticFiles = {
   readonly adapterSource?: string;
   readonly bridgeSource?: string;
+  readonly constantsSource?: string;
 };
 
 type BridgeOverride = {
@@ -47,6 +48,11 @@ export async function createSyntheticRepo(files: SyntheticFiles): Promise<string
     const bridgeDirectory = join(repoRoot, "src", "slopgate", "resources");
     await mkdir(bridgeDirectory, { recursive: true });
     await writeFile(join(bridgeDirectory, "omp_extension.ts"), files.bridgeSource, "utf8");
+  }
+  if (files.constantsSource !== undefined) {
+    const constantsDirectory = join(repoRoot, "src", "slopgate");
+    await mkdir(constantsDirectory, { recursive: true });
+    await writeFile(join(constantsDirectory, "constants.py"), files.constantsSource, "utf8");
   }
   return repoRoot;
 }

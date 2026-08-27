@@ -24,6 +24,58 @@ test("accepts an adapter alias present in the locked event union", async () => {
   expect(result).toEqual({ exitCode: 0, stderr: "" });
 }, 30000);
 
+test("accepts an adapter alias referencing a defined same-file string constant", async () => {
+  const repoRoot = await createSyntheticRepo({
+    adapterSource: [
+      "from typing import Final",
+      'USER_PROMPT_SUBMIT: Final[str] = "UserPromptSubmit"',
+      '_OMP_EVENT_ALIASES = {"input": USER_PROMPT_SUBMIT}',
+      "",
+    ].join("\n"),
+  });
+  const result = await runVerifier(repoRoot, "adapter");
+
+  expect(result).toEqual({ exitCode: 0, stderr: "" });
+}, 30000);
+
+test("accepts an adapter alias imported from slopgate constants", async () => {
+  const repoRoot = await createSyntheticRepo({
+    adapterSource: [
+      "from slopgate.constants import PRE_TOOL_USE",
+      '_OMP_EVENT_ALIASES = {"tool_call": PRE_TOOL_USE}',
+      "",
+    ].join("\n"),
+    constantsSource: 'PRE_TOOL_USE = "PreToolUse"\n',
+  });
+  const result = await runVerifier(repoRoot, "adapter");
+
+  expect(result).toEqual({ exitCode: 0, stderr: "" });
+}, 30000);
+
+test("rejects an adapter alias referencing an undefined name", async () => {
+  const repoRoot = await createSyntheticRepo({
+    adapterSource: '_OMP_EVENT_ALIASES = {"input": MISSING_EVENT}\n',
+  });
+  const result = await runVerifier(repoRoot, "adapter");
+
+  expect(result).toEqual({
+    exitCode: 1,
+    stderr: expect.stringContaining("must resolve to a string constant"),
+  });
+}, 30000);
+
+test("rejects an adapter alias referencing a non-string constant", async () => {
+  const repoRoot = await createSyntheticRepo({
+    adapterSource: 'EVENT_CODE = 7\n_OMP_EVENT_ALIASES = {"input": EVENT_CODE}\n',
+  });
+  const result = await runVerifier(repoRoot, "adapter");
+
+  expect(result).toEqual({
+    exitCode: 1,
+    stderr: expect.stringContaining("must resolve to a string constant"),
+  });
+}, 30000);
+
 test("rejects an adapter alias absent from the locked event union", async () => {
   const repoRoot = await createSyntheticRepo({
     adapterSource: '_OMP_EVENT_ALIASES = {"not_an_omp_event": "UserPromptSubmit"}\n',

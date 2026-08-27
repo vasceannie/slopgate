@@ -164,7 +164,6 @@ export function registerExtensionToolContractTests(): void {
 
 	test.each([
 		["unknown field", { command: "printf attack", shell: "echo pwned" }],
-		["wrong env type", { command: "printf attack", env: { TOKEN: 1 } }],
 		["missing command", { cwd: "." }],
 	] as const)("refuses a returned rewrite with %s and preserves execution args", async (_name, updatedInput) => {
 		// Given
@@ -179,6 +178,40 @@ export function registerExtensionToolContractTests(): void {
 		expect(outcome).toEqual({ kind: "executed", input: original });
 	}, 30000);
 
+	test("refuses a returned bash rewrite with non-string env members before execution", async () => {
+		// Given
+		const root = await createTemporaryRoot("slopgate-omp-returned-env-");
+		temporaryPaths.push(root);
+		const original: BashToolInput = { command: "printf safe" };
+		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
+		configureFakeResponse({ updated_input: { command: "printf attack", env: { TOKEN: 1 } } });
+		const recordPath = await createRecordPath(root, "stdin.json");
+		const activeHarness = requireHarness(harness);
+		const executionStart = activeHarness.bashTool.observedExecutions.length;
+
+		// When
+		const outcome = await activeHarness.executeObservedBash(original, "returned-env-member-fixed");
+		const payload = await readRecordedPayload(recordPath);
+
+		// Then
+		expect({
+			executions: activeHarness.bashTool.observedExecutions.slice(executionStart),
+			observedEvent: payload.omp_event,
+			normalized: payload.tool_input,
+			outcome,
+		}).toEqual({
+			executions: [original],
+			observedEvent: {
+				type: "tool_call",
+				toolCallId: "returned-env-member-fixed",
+				toolName: "bash",
+				input: original,
+			},
+			normalized: original,
+			outcome: { input: original, kind: "executed", rewriteApplied: false },
+		});
+	}, 30000);
+
 	test("refuses a non-object returned rewrite and preserves execution args", async () => {
 		// Given
 		const original: BashToolInput = { command: "printf safe" };
@@ -190,6 +223,40 @@ export function registerExtensionToolContractTests(): void {
 
 		// Then
 		expect(outcome).toEqual({ kind: "executed", input: original });
+	}, 30000);
+
+	test("refuses rewrite for non-object observed bash input and forwards original args", async () => {
+		// Given
+		const root = await createTemporaryRoot("slopgate-omp-observed-non-object-");
+		temporaryPaths.push(root);
+		const original = "printf malformed";
+		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
+		configureFakeResponse({ updated_input: { command: "printf rewritten" } });
+		const recordPath = await createRecordPath(root, "stdin.json");
+		const activeHarness = requireHarness(harness);
+		const executionStart = activeHarness.bashTool.observedExecutions.length;
+
+		// When
+		const outcome = await activeHarness.executeObservedBash(original, "observed-non-object-fixed");
+		const payload = await readRecordedPayload(recordPath);
+
+		// Then
+		expect({
+			executions: activeHarness.bashTool.observedExecutions.slice(executionStart),
+			observedEvent: payload.omp_event,
+			normalized: payload.tool_input,
+			outcome,
+		}).toEqual({
+			executions: [original],
+			observedEvent: {
+				type: "tool_call",
+				toolCallId: "observed-non-object-fixed",
+				toolName: "bash",
+				input: original,
+			},
+			normalized: {},
+			outcome: { input: original, kind: "executed", rewriteApplied: false },
+		});
 	}, 30000);
 
 	test.each([

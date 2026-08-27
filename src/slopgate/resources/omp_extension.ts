@@ -261,7 +261,7 @@ function isBashField(key: string, value: unknown): boolean {
     case "timeout":
       return typeof value === "number"
     case "env":
-      return isRecord(value)
+      return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string")
     default:
       return false
   }

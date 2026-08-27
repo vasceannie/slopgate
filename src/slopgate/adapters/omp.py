@@ -37,7 +37,7 @@ from slopgate.constants import (
 )
 
 
-USER_PROMPT_SUBMIT: Final[str] = "".join(("UserPrompt", "Submit"))
+USER_PROMPT_SUBMIT: Final[str] = "UserPromptSubmit"
 
 _OMP_EVENT_ALIASES: dict[str, str] = {
     "after_provider_response": "after_provider_response",
