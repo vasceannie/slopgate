@@ -29,3 +29,9 @@
 - `SessionManager.inMemory()` mints a different native session id per runner. Deterministic raw capture therefore passes `omp-test-session` in the emitted stop event as well as through `SLOPGATE_SESSION_ID`, because the production envelope retains the native id under `omp_event`.
 - Capture determinism is proven without parsing or reconstructing envelopes: the fake enforcer writes stdin bytes directly, and two real-runner captures are compared byte-for-byte before promotion.
 - The isolated system oracle must disable installer autoupdate, clear ambient Slopgate routing variables, bind HOME/XDG/`PI_CODING_AGENT_DIR` beneath one temporary root, and verify path containment before each lifecycle command.
+
+## 2026-08-27 Todo 7 captured-envelope adapter coverage
+- All 12 promoted OMP 18.0.5 envelopes now replay through `OmpAdapter.normalize_payload`.
+  The fixture table locks canonical events, tool names, session fields, both `tool_result`
+  outcomes, and session-stop response text. A parsed-envelope-only mutation test proves the
+  assertions fail on payload drift without writing fixture files.
