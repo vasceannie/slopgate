@@ -1,6 +1,7 @@
 """Claude Code installer support."""
 
 from __future__ import annotations
+import json
 from pathlib import Path
 from typing import cast
 from slopgate.constants import (
@@ -82,6 +83,12 @@ def _claude_user_root() -> Path:
     return Path.home() / ".claude"
 
 
+def _claude_contained_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_claude_user_root()
+    )
+
+
 def _write_claude_settings(
     settings_path: Path,
     settings: dict[str, object],
@@ -140,9 +147,7 @@ def install_claude(
     completed: list[Path] = []
     last_status = 0
     for settings_path in paths:
-        contained_root = contained_scope_root(
-            settings_path, project_root=root, user_root=_claude_user_root()
-        )
+        contained_root = _claude_contained_root(settings_path, root)
         status = _install_claude_at(
             settings_path, hooks, InstallAt(root=contained_root, dry_run=dry_run)
         )
@@ -152,11 +157,7 @@ def install_claude(
                     _ = _uninstall_claude_at(
                         rollback_path,
                         dry_run=False,
-                        root=contained_scope_root(
-                            rollback_path,
-                            project_root=root,
-                            user_root=_claude_user_root(),
-                        ),
+                        root=_claude_contained_root(rollback_path, root),
                     )
             return status
         completed.append(settings_path)
@@ -211,9 +212,7 @@ def uninstall_claude(
         status = _uninstall_claude_at(
             settings_path,
             dry_run=dry_run,
-            root=contained_scope_root(
-                settings_path, project_root=root, user_root=_claude_user_root()
-            ),
+            root=_claude_contained_root(settings_path, root),
         )
         if status != 0:
             return status

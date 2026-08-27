@@ -2,10 +2,9 @@
 
 Pi events and their canonical mapping:
   tool_call (write/edit/bash)  →  PreToolUse
-  tool_result (success)        →  PostToolUse
-  tool_result (failure)        →  PostToolUseFailure
-  tool_execution_end (success) →  PostToolUse
-  tool_execution_end (failure) →  PostToolUseFailure
+  tool_result                  →  PostToolUse
+  tool_execution_end (exit 0)  →  PostToolUse
+  tool_execution_end (non-zero)→  PostToolUseFailure
   user_bash                    →  PreToolUse
   input                        →  UserPromptSubmit
   before_agent_start           →  SessionStart
@@ -17,25 +16,25 @@ from __future__ import annotations
 
 from typing_extensions import override
 
-from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate._types import (
+    ObjectDict,
+    ObjectMapping,
+    is_object_dict,
+    object_dict,
+    string_value,
+)
 from slopgate.adapters._payload_fields import (
     canonical_event_name,
     canonical_payload_with_event,
     merge_standard_session_fields,
     sync_tool_result_fields,
 )
-from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
-from slopgate.adapters.omp import (
-    USER_PROMPT_SUBMIT,
-    _canonical_tool_name,
-    _sync_tool_input,
-    _sync_user_bash_command,
-)
 from slopgate.constants import (
     ASK,
     BLOCK,
     DENY,
+    METADATA_COMMAND,
     METADATA_SLOPGATE,
     METADATA_TOOL_NAME,
     PERMISSION_REQUEST,
@@ -50,9 +49,9 @@ PI_EVENT_NAMES: set[str] = {
     PRE_TOOL_USE,  # tool_call → PreToolUse
     PERMISSION_REQUEST,  # (not directly used by pi)
     POST_TOOL_USE,  # tool_result → PostToolUse (success)
-    "PostToolUseFailure",  # failed post-tool execution
+    "PostToolUseFailure",  # tool_execution_end → PostToolUseFailure (non-zero exit)
     SESSION_START,  # before_agent_start
-    USER_PROMPT_SUBMIT,  # input
+    "UserPromptSubmit",  # input
     STOP,  # agent_end
     "TurnEnd",  # turn_end
 }
@@ -62,36 +61,75 @@ _PI_EVENT_ALIASES: dict[str, str] = {
     "user_bash": PRE_TOOL_USE,
     "tool_result": POST_TOOL_USE,
     "tool_execution_end": POST_TOOL_USE,
-    "input": USER_PROMPT_SUBMIT,
+    "input": "UserPromptSubmit",
     "before_agent_start": SESSION_START,
     "turn_end": "TurnEnd",
     "agent_end": STOP,
 }
 
-def _canonical_event_name(raw: ObjectMapping) -> str:
-    """Map the Pi event and post-tool failure signals to a canonical event."""
-    SESSION_IDENTITY_TELEMETRY.record_metric("pi.event.canonical_name")
-    event_name = canonical_event_name(raw, PI_EVENT_NAMES, _PI_EVENT_ALIASES)
-    raw_event = string_value(raw.get("hook_event_name")) or string_value(
+# Pi tool names → slopgate constant tool names
+_PI_TOOL_MAP: dict[str, str] = {
+    "write": "Write",
+    "edit": "Edit",
+    "bash": "Bash",
+    "read": "Read",
+    "grep": "Grep",
+    "glob": "Glob",
+    "webfetch": "WebFetch",
+    "websearch": "WebSearch",
+}
+
+
+def _raw_event_name(raw: ObjectMapping) -> str:
+    event = string_value(raw.get("hook_event_name")) or string_value(
         raw.get("hookEventName")
     )
-    if raw_event not in {"tool_execution_end", "tool_result"}:
-        return event_name
+    if event is None:
+        return ""
+    return event.lower().replace("-", "")
 
-    nested_event = object_dict(raw.get("pi_event"))
-    for event in (raw, nested_event):
-        if event.get("isError") is True:
-            return "PostToolUseFailure"
-        details = object_dict(event.get("details"))
-        for key in ("exitCode", "exit_code"):
-            exit_code = details.get(key)
-            if (
-                isinstance(exit_code, int)
-                and not isinstance(exit_code, bool)
-                and exit_code != 0
-            ):
-                return "PostToolUseFailure"
-    return event_name
+
+def _canonical_event_name(raw: ObjectMapping) -> str:
+    """Map the pi event name to a slopgate canonical event."""
+    return canonical_event_name(raw, PI_EVENT_NAMES, _PI_EVENT_ALIASES)
+
+
+def _canonical_tool_name(raw: ObjectMapping) -> str:
+    """Map the pi tool name to a slopgate canonical tool name."""
+    tool = (
+        string_value(raw.get(METADATA_TOOL_NAME))
+        or string_value(raw.get("toolName"))
+        or string_value(raw.get("tool"))
+        or string_value(raw.get("name"))
+    )
+    if not tool:
+        return ""
+    normalized = tool.lower().strip()
+    return _PI_TOOL_MAP.get(normalized, tool)
+
+
+def _sync_tool_input(raw: ObjectMapping, canonical: ObjectDict) -> None:
+    if is_object_dict(canonical.get("tool_input")):
+        return
+    for key in ("input", "args", "arguments"):
+        value = raw.get(key)
+        if is_object_dict(value):
+            canonical["tool_input"] = object_dict(value)
+            return
+
+
+def _sync_user_bash_command(raw: ObjectMapping, canonical: ObjectDict) -> None:
+    if _raw_event_name(raw) != "user_bash":
+        return
+    command = string_value(raw.get(METADATA_COMMAND))
+    if not command:
+        return
+    canonical.setdefault(METADATA_TOOL_NAME, "Bash")
+    tool_input = object_dict(canonical.get("tool_input"))
+    tool_input.setdefault(METADATA_COMMAND, command)
+    if raw.get("excludeFromContext") is True:
+        tool_input.setdefault("exclude_from_context", True)
+    canonical["tool_input"] = tool_input
 
 
 class PiAdapter(PlatformAdapter):
@@ -101,7 +139,6 @@ class PiAdapter(PlatformAdapter):
 
     @override
     def normalize_payload(self, raw: ObjectMapping) -> ObjectDict:
-        SESSION_IDENTITY_TELEMETRY.record_metric("pi.normalize_payload")
         canonical = canonical_payload_with_event(raw, _canonical_event_name(raw))
 
         tool_name = _canonical_tool_name(raw)
@@ -121,13 +158,12 @@ class PiAdapter(PlatformAdapter):
         **kwargs: object,
     ) -> ObjectDict | None:
         """Render findings into Pi extension return data."""
-        SESSION_IDENTITY_TELEMETRY.record_metric("pi.render_output")
         render_request = render_request_from_call(args, kwargs)
         if not render_request.findings:
             return None
 
         output: ObjectDict = {}
-        can_block = render_request.event_name in {PRE_TOOL_USE, USER_PROMPT_SUBMIT}
+        can_block = render_request.event_name in {PRE_TOOL_USE, "UserPromptSubmit"}
         if can_block and render_request.decision in {DENY, BLOCK, ASK}:
             output[BLOCK] = True
             output["reason"] = self.join_messages(

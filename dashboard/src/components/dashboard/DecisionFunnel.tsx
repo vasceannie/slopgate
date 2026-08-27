@@ -10,7 +10,7 @@ interface Props {
 
 const DECISION_LANES: Decision[] = ["context", "warn", "ask", "block", "deny", "allow"];
 const PIPELINE_STAGES: EventName[] = ["SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop"];
-const PIPELINE_PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor", "pi", "omp", "unknown"];
+const PIPELINE_PLATFORMS: Platform[] = ["claude", "codex", "opencode", "cursor", "pi", "unknown"];
 
 const PIPELINE_CELL_BASE = "rounded-sm border border-border/70 px-1.5 py-1 text-center font-mono leading-none";
 const PIPELINE_CELL_CLASSES: Record<Platform, readonly [string, string, string, string]> = {
@@ -43,12 +43,6 @@ const PIPELINE_CELL_CLASSES: Record<Platform, readonly [string, string, string, 
     "bg-platform-pi/20 text-platform-pi",
     "bg-platform-pi/40 text-foreground",
     "bg-platform-pi/60 text-foreground",
-  ],
-  omp: [
-    "bg-platform-omp/5 text-muted-foreground",
-    "bg-platform-omp/20 text-platform-omp",
-    "bg-platform-omp/40 text-foreground",
-    "bg-platform-omp/60 text-foreground",
   ],
   unknown: [
     "bg-platform-unknown/5 text-muted-foreground",
@@ -231,7 +225,7 @@ export function DecisionFunnel({ timeSeries, eventsByType, eventsByTypeAndPlatfo
         <div className="h-[calc(100%-1.25rem)] min-h-[220px] border border-border rounded-md bg-card/30 p-3">
           {pipelineRows.some((row) => row.total > 0) ? (
             <div className="grid h-full grid-rows-[auto_1fr_auto] gap-2">
-              <div className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(7,minmax(40px,1fr))] gap-1.5 text-[8px] uppercase tracking-wide text-muted-foreground">
+              <div className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(6,minmax(40px,1fr))] gap-1.5 text-[8px] uppercase tracking-wide text-muted-foreground">
                 <span>event</span>
                 <span className="text-right">total</span>
                 {PIPELINE_PLATFORMS.map((platform) => (
@@ -244,7 +238,7 @@ export function DecisionFunnel({ timeSeries, eventsByType, eventsByTypeAndPlatfo
                 {pipelineRows.map((row) => (
                   <div
                     key={row.stage}
-                    className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(7,minmax(40px,1fr))] items-center gap-1.5 text-[9px]"
+                    className="grid grid-cols-[minmax(90px,1.2fr)_48px_repeat(6,minmax(40px,1fr))] items-center gap-1.5 text-[9px]"
                   >
                     <span className="truncate text-muted-foreground">{row.label}</span>
                     <span className="text-right font-mono text-foreground">{formatCompactCount(row.total)}</span>

@@ -83,7 +83,6 @@ export default {
           opencode: "hsl(var(--platform-opencode))",
           cursor: "hsl(var(--platform-cursor))",
           pi: "hsl(var(--platform-pi))",
-          omp: "hsl(var(--platform-omp))",
         },
       },
       borderRadius: {

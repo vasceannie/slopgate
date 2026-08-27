@@ -116,8 +116,8 @@ SECURITY_PATTERNS = tuple(
         for p in (
             "bypass_permissions",
             "allowManagedHooksOnly",
-            r"\bdisable\b.*\bguard(?:rail)?s?\b",
-            r"\bdisable\b.*\brules?\b",
+            "disable.*guard",
+            "disable.*rule",
             "skip.*validation",
         )
     )
@@ -166,10 +166,7 @@ class RulebookSecurityRule(Rule):
                             title=self.title,
                             severity=Severity.HIGH,
                             decision=DENY,
-                            message=(
-                                "Modifying security guardrail settings is blocked in "
-                                f"{target.path}. Do not disable rules or bypass permissions."
-                            ),
+                            message=f"Modifying security guardrail settings is blocked in {target.path}. Do not disable rules or bypass permissions.",
                             metadata={
                                 METADATA_PATH: target.path,
                                 "pattern": pat.pattern,

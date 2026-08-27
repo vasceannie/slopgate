@@ -87,8 +87,6 @@ function normalizePlatform(value: unknown): Platform {
       return "cursor";
     case "pi":
       return "pi";
-    case "omp":
-      return "omp";
     case "unknown":
       return "unknown";
     default:

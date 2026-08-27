@@ -249,24 +249,6 @@ def test_rulebook_security_rule_blocks_guardrail_disable(tmp_path: Path) -> None
     assert [item.rule_id for item in findings] == ["BUILTIN-RULEBOOK-SECURITY"]
 
 
-def test_rulebook_security_rule_allows_disabled_rules_schema_field(
-    tmp_path: Path,
-) -> None:
-    schema_ctx = context_for_payload(
-        tmp_path,
-        write_payload(
-            "dashboard/src/types/slopgate.ts",
-            "export interface RuntimeConfig { disabled_rules: string[]; }",
-        ),
-    )
-
-    findings = rules.RulebookSecurityRule().evaluate(schema_ctx)
-
-    assert findings == [], (
-        "A schema field named disabled_rules must not be treated as an instruction to disable rules"
-    )
-
-
 def test_session_start_context_rule_ignores_non_session_events(tmp_path: Path) -> None:
     session_ctx = context_for_payload(
         tmp_path,

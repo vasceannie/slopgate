@@ -25,7 +25,6 @@ const PLATFORM_OPTIONS: { value: Platform; label: string; color: string }[] = [
   { value: "opencode", label: "OpenCode", color: "bg-platform-opencode" },
   { value: "cursor", label: "Cursor", color: "bg-platform-cursor" },
   { value: "pi", label: "Pi", color: "bg-platform-pi" },
-  { value: "omp", label: "OMP", color: "bg-platform-omp" },
   { value: "unknown", label: "Unknown", color: "bg-platform-unknown" },
 ];
 

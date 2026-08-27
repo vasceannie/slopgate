@@ -6,13 +6,13 @@ slopgate is a global CLI guardrails engine for AI coding agents. One rule set, t
 
 ```
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Claude Code  │  │  Codex CLI  │  │ OpenCode/OMP │
-│ settings.json│  │ hooks.json  │  │TS extension │
+│ Claude Code  │  │  Codex CLI  │  │  OpenCode   │
+│ settings.json│  │ hooks.json  │  │  TS plugin  │
 │  ↓           │  │  ↓          │  │  ↓          │
 │ slopgate   │  │ slopgate  │  │ slopgate  │
 │   handle     │  │   handle    │  │   handle    │
 │              │  │  --platform │  │  --platform │
-│              │  │    codex    │  │omp/opencode │
+│              │  │    codex    │  │   opencode  │
 └──────┬───────┘  └──────┬──────┘  └──────┬──────┘
        │                 │                 │
        └─────────────────┼─────────────────┘
@@ -79,8 +79,7 @@ src/slopgate/
 │   ├── base.py         Abstract PlatformAdapter
 │   ├── claude.py       Claude Code (default, identity normalization)
 │   ├── codex.py        Codex CLI
-│   ├── opencode.py     OpenCode (event name mapping, output translation)
-│   └── omp.py          OMP (Pi-family normalization, OMP-native event semantics)
+│   └── opencode.py     OpenCode (event name mapping, output translation)
 ├── rules/
 │   ├── base.py         Abstract Rule class
 │   ├── common.py       8 built-in rules (paths, git, sensitive data, etc.)

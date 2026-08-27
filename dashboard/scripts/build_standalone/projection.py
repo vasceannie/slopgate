@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, Literal, TypeAlias, TypedDict
+from typing import Literal, TypeAlias, TypedDict
 
 from .coercion import (
     coerce_dict_list,
@@ -34,14 +34,11 @@ JSONL_FILES = [
 DEFAULT_REMOTE_LOGS = "~/.config/slopgate/logs"
 DEFAULT_LOOKBACK_HOURS = 24
 TOOL_INPUT_TEXT_LIMIT = 20000
-TRACE_TEXT_LIMIT: Final = 1000
-TRACE_RECORD_LIMIT: Final = 6000
-SUBPROCESS_RECORD_LIMIT: Final = 2000
 MAX_RECORDS_PER_CATEGORY: dict[Category, int] = {
-    "events": TRACE_RECORD_LIMIT,
-    "rules": TRACE_RECORD_LIMIT,
-    "results": TRACE_RECORD_LIMIT,
-    "subprocesses": SUBPROCESS_RECORD_LIMIT,
+    "events": 6000,
+    "rules": 6000,
+    "results": 6000,
+    "subprocesses": 2000,
 }
 TRACE_META_KEYS = (
     "platform_capability",
@@ -100,7 +97,7 @@ TRACE_META_ALIASES: dict[str, tuple[str, ...]] = {
     "spawn_description": ("spawn_description", "spawnDescription"),
     "lineage_role": ("lineage_role", "lineageRole"),
 }
-KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "pi", "omp", "unknown"}
+KNOWN_PLATFORMS = {"claude", "codex", "opencode", "cursor", "pi", "unknown"}
 KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
 METADATA_VALUE_OMITTED = object()
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent
@@ -222,8 +219,8 @@ def _format_e(obj: Mapping[str, object]) -> JSONDict:
         "languages": coerce_str_list(obj.get("languages")),
         "model": obj.get("model"),
         "provider": obj.get("provider"),
-        "command": _trim_text(obj.get("command"), TRACE_TEXT_LIMIT),
-        "tool_output": _trim_text(obj.get("tool_output"), TRACE_TEXT_LIMIT),
+        "command": _trim_text(obj.get("command"), 1000),
+        "tool_output": _trim_text(obj.get("tool_output"), 1000),
         "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj, include_bare_title=True),
     }
@@ -244,8 +241,8 @@ def _format_ru(obj: Mapping[str, object]) -> JSONDict:
         "metadata": {},
         "model": obj.get("model"),
         "provider": obj.get("provider"),
-        "command": _trim_text(obj.get("command"), TRACE_TEXT_LIMIT),
-        "tool_output": _trim_text(obj.get("tool_output"), TRACE_TEXT_LIMIT),
+        "command": _trim_text(obj.get("command"), 1000),
+        "tool_output": _trim_text(obj.get("tool_output"), 1000),
         "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj),
     }
@@ -286,8 +283,8 @@ def _format_res(obj: Mapping[str, object]) -> JSONDict:
         "reason": _trim_text(obj.get("reason"), 180),
         "model": obj.get("model"),
         "provider": obj.get("provider"),
-        "command": _trim_text(obj.get("command"), TRACE_TEXT_LIMIT),
-        "tool_output": _trim_text(obj.get("tool_output"), TRACE_TEXT_LIMIT),
+        "command": _trim_text(obj.get("command"), 1000),
+        "tool_output": _trim_text(obj.get("tool_output"), 1000),
         "tool_input": _format_tool_input(obj.get("tool_input")),
         **_trace_metadata(obj),
     }

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from slopgate.adapters import get_adapter
+from slopgate.context import build_context
 from slopgate.engine import evaluate_payload
 from slopgate.engine._evaluation import _existing_repair_paths
 from slopgate.util.payloads import (
