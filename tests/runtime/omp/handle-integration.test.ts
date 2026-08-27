@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import * as path from "node:path";
 
 import { createRuntimeHarness, type RuntimeHarness } from "./scripts/runtime-harness.ts";
@@ -64,6 +64,28 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+async function runRealHandle(
+	payload: Readonly<Record<string, unknown>>,
+	environment: Readonly<Record<string, string>> = {},
+): Promise<Readonly<Record<string, unknown>>> {
+	const child = Bun.spawn([REAL_SLOPGATE, "handle", "--platform", "omp"], {
+		cwd: import.meta.dir,
+		env: { ...process.env, ...environment },
+		stdin: new Blob([JSON.stringify(payload)]),
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [exitCode, stdout, stderr] = await Promise.all([
+		child.exited,
+		new Response(child.stdout).text(),
+		new Response(child.stderr).text(),
+	]);
+	if (exitCode !== 0) throw new HandleHarnessStateError(`handle exited ${exitCode}: ${stderr}`);
+	const parsed: unknown = JSON.parse(stdout);
+	if (!isRecord(parsed)) throw new HandleHarnessStateError("handle output was not an object");
+	return parsed;
+}
+
 async function readRuleIds(root: string): Promise<readonly string[]> {
 	const rulesPath = path.join(root, "state/logs/rules.jsonl");
 	const contents = await Bun.file(rulesPath).text();
@@ -123,6 +145,46 @@ afterEach(async () => {
 });
 
 describe("staged OMP bridge with the real Slopgate CLI", () => {
+	test("real cmd_handle denies a protected Write payload", async () => {
+		// Given
+		const fixturePath = path.resolve(import.meta.dir, "../../fixtures/omp/18.0.5/tool-call-write.json");
+		const fixture: unknown = JSON.parse(await Bun.file(fixturePath).text());
+		if (!isRecord(fixture)) throw new HandleHarnessStateError("write fixture was not an object");
+		const toolInput = { path: "slopgate.toml", content: "blocked" };
+		const payload = { ...fixture, cwd: import.meta.dir, input: toolInput, tool_input: toolInput };
+
+		// When
+		const output = await runRealHandle(payload);
+
+		// Then
+		expect(output).toMatchObject({ block: true });
+		expect(output.reason).toBeString();
+	}, 30000);
+
+	test("real cmd_handle returns a synthetic allow rewrite through the OMP CLI seam", async () => {
+		// Given
+		const fixturePath = path.resolve(import.meta.dir, "../../fixtures/omp/18.0.5/tool-call-bash.json");
+		const fixture: unknown = JSON.parse(await Bun.file(fixturePath).text());
+		if (!isRecord(fixture)) throw new HandleHarnessStateError("bash fixture was not an object");
+		const pythonPath = path.join(requireTemporaryRoot(), "synthetic-engine");
+		await mkdir(pythonPath, { recursive: true });
+		await Bun.write(path.join(pythonPath, "sitecustomize.py"), `
+import slopgate.engine
+from slopgate.models import EngineResult
+
+def synthetic_evaluate(_payload, platform="unknown"):
+    return EngineResult(event_name="PreToolUse", output={"updated_input": {"command": "printf rewritten"}})
+
+slopgate.engine.evaluate_payload = synthetic_evaluate
+`);
+
+		// When
+		const output = await runRealHandle(fixture, { PYTHONPATH: pythonPath });
+
+		// Then
+		expect(output).toEqual({ updated_input: { command: "printf rewritten" } });
+	}, 30000);
+
 	test("forwards STOP-001 response bytes and schedules exactly one model continuation", async () => {
 		// Given
 		const activeHarness = requireHarness();

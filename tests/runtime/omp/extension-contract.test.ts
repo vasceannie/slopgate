@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { registerExtensionLifecycleContractTests } from "./scripts/extension-lifecycle-contract.ts";
 import { registerExtensionToolContractTests } from "./scripts/extension-tool-contract.ts";
+import { assertCaptureDirectoriesEqual, captureEnvelopes } from "./scripts/envelope-capture.ts";
 
 const EXPECTED_SCRIPTS = {
 	test: "bun test scripts/verify-snapshot.test.ts extension-contract.test.ts discovery-contract.test.ts handle-integration.test.ts",
@@ -125,6 +126,20 @@ describe("Todo 6 workspace contract", () => {
 		expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: response, stderr: "" });
 		expect(await Bun.file(recordPath).text()).toBe(stdin);
 	}, 30000);
+
+	test("produces byte-identical envelopes across two consecutive captures", async () => {
+		// Given
+		const first = await mkdtemp(path.join(tmpdir(), "slopgate-omp-capture-first-"));
+		const second = await mkdtemp(path.join(tmpdir(), "slopgate-omp-capture-second-"));
+		temporaryPaths.push(first, second);
+
+		// When
+		await captureEnvelopes(first);
+		await captureEnvelopes(second);
+
+		// Then
+		await expect(assertCaptureDirectoriesEqual(first, second)).resolves.toBeUndefined();
+	}, 60000);
 
 	test("commits the exact envelope set without creating capture scratch state", async () => {
 		// Given

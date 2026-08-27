@@ -8,7 +8,8 @@ from slopgate.resources import resource_path
 
 RUNTIME_DIR = Path(__file__).parent / "runtime" / "omp"
 TYPECHECK_COMMAND = (
-    "tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler "
+    "bun run stage && tsc --noEmit --target ES2022 --module ESNext "
+    "--moduleResolution Bundler "
     "--strict --skipLibCheck --types node --verbatimModuleSyntax staged/omp_extension.ts"
 )
 
@@ -39,7 +40,7 @@ def test_omp_extension_contains_required_bridge_contract() -> None:
         'pi.on("user_bash"',
         'pi.on("user_python"',
         "extractSessionStopResponse(event.last_assistant_message)",
-        "stop_response: stopResponse || undefined",
+        'enforce("session_stop", event, ctx, { stop_response: stopResponse })',
         '"handle", "--platform", "omp"',
         "findManagedRepoRoot",
         "__SLOPGATE_BIN__",

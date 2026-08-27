@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises";
 import { createRuntimeHarness, type RuntimeHarness } from "./runtime-harness.ts";
 import {
 	clearRuntimeEnvironment,
+	collectContinuationFlags,
 	configureFakeResponse,
 	configureRuntimeEnvironment,
 	createRecordPath,
@@ -17,7 +18,7 @@ import {
 	textMessage,
 } from "./runtime-test-support.ts";
 
-type ResetKind = "clean-stop" | "guidance" | "session-start";
+const FULL_CONTINUATION_BUDGET = [true, true, true, true, true, true, true, true] as const;
 
 class LifecycleHarnessStateError extends Error {
 	constructor() {
@@ -29,23 +30,6 @@ class LifecycleHarnessStateError extends Error {
 function requireHarness(harness: RuntimeHarness | undefined): RuntimeHarness {
 	if (harness === undefined) throw new LifecycleHarnessStateError();
 	return harness;
-}
-
-async function applyReset(harness: RuntimeHarness, kind: ResetKind): Promise<void> {
-	switch (kind) {
-		case "clean-stop":
-			configureFakeResponse({});
-			await emitStop(harness);
-			return;
-		case "guidance":
-			configureFakeResponse({ additionalContext: "GUIDANCE_RESET_TOKEN" });
-			await emitStop(harness);
-			return;
-		case "session-start":
-			configureFakeResponse({});
-			await harness.runner.emit({ type: "session_start" });
-			return;
-	}
 }
 
 export function registerExtensionLifecycleContractTests(): void {
@@ -102,11 +86,26 @@ export function registerExtensionLifecycleContractTests(): void {
 			expect(activeHarness.sentMessages.slice(before)).toEqual(["INPUT_BLOCK_TOKEN"]);
 		}, 30000);
 
-		test("caches session and turn guidance for the next model invocation", async () => {
+		test("injects cached session context locally without forwarding before_agent_start", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
+			const root = await createTemporaryRoot("slopgate-omp-before-agent-");
+			temporaryPaths.push(root);
 			configureFakeResponse({ context: "SESSION_CONTEXT_TOKEN" });
 			await activeHarness.runner.emit({ type: "session_start" });
+			const recordPath = await createRecordPath(root, "unexpected-forward.json");
+
+			// When
+			const systemPrompt = await activeHarness.invokeModel("next", ["BASE_SYSTEM_TOKEN"]);
+
+			// Then
+			expect(systemPrompt[1]).toContain("SESSION_CONTEXT_TOKEN");
+			expect(await Bun.file(recordPath).exists()).toBe(false);
+		}, 30000);
+
+		test("caches turn_end guidance for the next model invocation", async () => {
+			// Given
+			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ additionalContext: "TURN_GUIDANCE_TOKEN" });
 			await activeHarness.runner.emit({
 				type: "turn_end",
@@ -120,7 +119,6 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// Then
 			expect(systemPrompt).toHaveLength(2);
-			expect(systemPrompt[1]).toContain("SESSION_CONTEXT_TOKEN");
 			expect(systemPrompt[1]).toContain("TURN_GUIDANCE_TOKEN");
 			expect(activeHarness.model.systemPrompts.at(-1)).toEqual([...systemPrompt]);
 		}, 30000);
@@ -148,6 +146,22 @@ export function registerExtensionLifecycleContractTests(): void {
 			});
 		}, 30000);
 
+		test("treats agent_end findings as telemetry without blocking or visible enforcement", async () => {
+			const activeHarness = requireHarness(harness);
+			const root = await createTemporaryRoot("slopgate-omp-agent-end-");
+			temporaryPaths.push(root);
+			const before = activeHarness.sentMessages.length;
+			configureFakeResponse({ block: true, reason: "AGENT_END_BLOCK_TOKEN" });
+			const recordPath = await createRecordPath(root, "agent-end.json");
+			const result = await activeHarness.runner.emit({ type: "agent_end", messages: [], willContinue: false });
+			const payload = await readRecordedPayload(recordPath);
+			expect({ result, displayed: activeHarness.sentMessages.length - before, event: payload.hook_event_name }).toEqual({
+				result: undefined,
+				displayed: 0,
+				event: "agent_end",
+			});
+		}, 30000);
+
 		test.each([
 			["string", textMessage("plain stop"), "plain stop"],
 			["mixed array", mixedMessage(), "first\nsecond"],
@@ -167,7 +181,7 @@ export function registerExtensionLifecycleContractTests(): void {
 			expect(payload.stop_response).toBe(expected);
 		}, 30000);
 
-		test("caps the ninth continuation and emits one visible cap event", async () => {
+		test("cap exhaustion settles the ninth stop and restores eight fresh continuations", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
@@ -176,13 +190,17 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// When
 			const ninth = await emitStop(activeHarness, { turnId: 9 });
+			const fresh = await collectContinuationFlags(activeHarness, 8, 20);
 
 			// Then
-			expect(ninth).toBeUndefined();
-			expect(activeHarness.sentMessages).toHaveLength(before + 1);
+			expect({ ninth, displayed: activeHarness.sentMessages.length - before, fresh }).toEqual({
+				ninth: undefined,
+				displayed: 1,
+				fresh: FULL_CONTINUATION_BUDGET,
+			});
 		}, 30000);
 
-		test("resets the continuation counter on input", async () => {
+		test("input reset restores eight fresh continuations", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
@@ -190,13 +208,13 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// When
 			await activeHarness.runner.emitInput("reset", undefined, "extension");
-			const next = await emitStop(activeHarness, { turnId: 9 });
+			const fresh = await collectContinuationFlags(activeHarness, 8, 20);
 
 			// Then
-			expect(next?.continue).toBe(true);
+			expect(fresh).toEqual(FULL_CONTINUATION_BUDGET);
 		}, 30000);
 
-		test("resets the continuation counter on an active stop pass", async () => {
+		test("stop_hook_active settle restores eight fresh continuations", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
@@ -204,43 +222,63 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// When
 			const active = await emitStop(activeHarness, { active: true, turnId: 9 });
-			const next = await emitStop(activeHarness, { turnId: 10 });
+			const fresh = await collectContinuationFlags(activeHarness, 8, 20);
 
 			// Then
-			expect(active).toBeUndefined();
-			expect(next?.continue).toBe(true);
+			expect({ active, fresh }).toEqual({ active: undefined, fresh: FULL_CONTINUATION_BUDGET });
 		}, 30000);
 
-		test.each(["clean-stop", "guidance", "session-start"] as const)("resets after %s", async kind => {
+		test.each([
+			["clean stop", async (activeHarness: RuntimeHarness) => {
+				configureFakeResponse({});
+				await emitStop(activeHarness);
+			}],
+			["advisory settle", async (activeHarness: RuntimeHarness) => {
+				configureFakeResponse({ additionalContext: "GUIDANCE_RESET_TOKEN" });
+				await emitStop(activeHarness);
+			}],
+			["session start", async (activeHarness: RuntimeHarness) => {
+				configureFakeResponse({});
+				await activeHarness.runner.emit({ type: "session_start" });
+			}],
+		] as const)("restores eight fresh continuations after %s", async (_name, reset) => {
 			// Given
 			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
 			await requestContinuations(activeHarness, 8);
 
 			// When
-			await applyReset(activeHarness, kind);
+			await reset(activeHarness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
-			const next = await emitStop(activeHarness, { turnId: 10 });
+			const fresh = await collectContinuationFlags(activeHarness, 8, 20);
 
 			// Then
-			expect(next?.continue).toBe(true);
+			expect(fresh).toEqual(FULL_CONTINUATION_BUDGET);
 		}, 30000);
 
-		test("prunes only the active session counter during an A-B-A revisit", async () => {
+		test("session B start prunes session A stale cap and restores eight continuations on revisit", async () => {
 			// Given
-			const activeHarness = requireHarness(harness);
+			const sessionA = requireHarness(harness);
+			delete process.env.SLOPGATE_SESSION_ID;
+			await sessionA.runner.emit({ type: "session_start" });
+			const sessionAId = sessionA.sessionManager.getSessionId();
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
-			process.env.SLOPGATE_SESSION_ID = "session-A";
-			await requestContinuations(activeHarness, 8);
+			await requestContinuations(sessionA, 8);
 
 			// When
-			process.env.SLOPGATE_SESSION_ID = "session-B";
-			await emitStop(activeHarness, { active: true });
-			process.env.SLOPGATE_SESSION_ID = "session-A";
-			const revisit = await emitStop(activeHarness, { turnId: 9 });
+			const sessionB = await createRuntimeHarness();
+			const sessionBId = sessionB.sessionManager.getSessionId();
+			configureFakeResponse({});
+			await sessionB.runner.emit({ type: "session_start" });
+			await sessionB.close();
+			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
+			const fresh = await collectContinuationFlags(sessionA, 8, 20);
 
 			// Then
-			expect(revisit).toBeUndefined();
+			expect({ distinctSessions: sessionAId !== sessionBId, fresh }).toEqual({
+				distinctSessions: true,
+				fresh: FULL_CONTINUATION_BUDGET,
+			});
 		}, 30000);
 	});
 }

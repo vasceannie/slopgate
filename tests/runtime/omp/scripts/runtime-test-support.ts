@@ -177,9 +177,22 @@ export async function loadBashVariants(): Promise<readonly BashToolInput[]> {
 	});
 }
 
-export async function requestContinuations(harness: RuntimeHarness, count: number): Promise<void> {
+export async function collectContinuationFlags(
+	harness: RuntimeHarness,
+	count: number,
+	startTurnId = 1,
+): Promise<readonly boolean[]> {
+	const flags: boolean[] = [];
 	for (let index = 0; index < count; index += 1) {
-		const result = await emitStop(harness, { turnId: index + 1 });
-		if (result?.continue !== true) throw new ContractFixtureError(`Continuation ${index + 1} was not requested`);
+		const result = await emitStop(harness, { turnId: startTurnId + index });
+		flags.push(result?.continue === true);
 	}
+	return flags;
+
+}
+
+export async function requestContinuations(harness: RuntimeHarness, count: number): Promise<void> {
+	const flags = await collectContinuationFlags(harness, count);
+	const missingIndex = flags.findIndex(flag => !flag);
+	if (missingIndex >= 0) throw new ContractFixtureError(`Continuation ${missingIndex + 1} was not requested`);
 }
