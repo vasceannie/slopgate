@@ -5,8 +5,13 @@
   "scripts": {
     "lock": "bun run scripts/lock-contract.ts",
     "verify:snapshot": "bun run scripts/verify-snapshot.ts",
-    "test": "bun test scripts/verify-snapshot.test.ts",
-    "typecheck": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --skipLibCheck --types node --verbatimModuleSyntax staged/omp_extension.ts"
+    "test": "bun test scripts/verify-snapshot.test.ts extension-contract.test.ts discovery-contract.test.ts handle-integration.test.ts",
+    "stage": "bun run scripts/stage-template.ts",
+    "pretest": "bun run stage",
+    "typecheck": "bun run stage && tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --skipLibCheck --types node --verbatimModuleSyntax staged/omp_extension.ts",
+    "capture": "bun run stage && bun run capture-contract.ts",
+    "verify:package": "bun run scripts/verify-package.ts",
+    "verify:system": "uv run python scripts/verify-real-system.py"
   },
   "devDependencies": {
     "@oh-my-pi/pi-coding-agent": "18.0.5",

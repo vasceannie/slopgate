@@ -1,0 +1,1 @@
+{"type":"input","text":"capture input","source":"extension","hook_event_name":"input","tool_name":"","tool_call_id":"","tool_input":{},"tool_result":null,"tool_response":null,"cwd":".","session_id":"omp-test-session","transcript_path":null,"prompt":"capture input","omp_event":{"type":"input","text":"capture input","source":"extension"}}

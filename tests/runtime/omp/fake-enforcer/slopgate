@@ -1,0 +1,48 @@
+#!/usr/bin/env bun
+
+const DEFAULT_RESPONSE = "{}";
+
+class InvalidExitCodeError extends Error {
+	constructor(readonly rawExitCode: string) {
+		super(`Invalid SLOPGATE_FAKE_EXIT_CODE: ${rawExitCode}`);
+		this.name = "InvalidExitCodeError";
+	}
+}
+
+function parseExitCode(rawExitCode: string | undefined): number {
+	if (rawExitCode === undefined) return 0;
+	const exitCode = Number(rawExitCode);
+	if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
+		throw new InvalidExitCodeError(rawExitCode);
+	}
+	return exitCode;
+}
+
+const stdin = await Bun.stdin.arrayBuffer();
+const recordPath = process.env.SLOPGATE_FAKE_RECORD_PATH;
+if (recordPath !== undefined) {
+	await Bun.write(recordPath, stdin);
+}
+
+const realBinary = process.env.SLOPGATE_FAKE_REAL_BIN;
+if (realBinary !== undefined) {
+	const child = Bun.spawn([realBinary, ...process.argv.slice(2)], {
+		cwd: process.cwd(),
+		env: process.env,
+		stdin: new Blob([stdin]),
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [exitCode, stdout, stderr] = await Promise.all([
+		child.exited,
+		new Response(child.stdout).arrayBuffer(),
+		new Response(child.stderr).arrayBuffer(),
+	]);
+	process.stdout.write(new Uint8Array(stdout));
+	process.stderr.write(new Uint8Array(stderr));
+	process.exitCode = exitCode;
+} else {
+	const stdout = process.env.SLOPGATE_FAKE_STDOUT ?? process.env.SLOPGATE_FAKE_RESPONSE ?? DEFAULT_RESPONSE;
+	process.stdout.write(stdout);
+	process.exitCode = parseExitCode(process.env.SLOPGATE_FAKE_EXIT_CODE);
+}

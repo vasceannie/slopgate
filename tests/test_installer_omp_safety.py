@@ -15,14 +15,14 @@ from tests.omp_installer_support import patch_install, site_paths
 
 
 @given(segment=strategies.from_regex(r"[A-Za-z0-9_-]{1,16}", fullmatch=True))
-def test_omp_agent_dir_expands_arbitrary_home_relative_overrides(segment: str) -> None:
+def test_omp_agent_dir_rejects_arbitrary_relative_overrides(segment: str) -> None:
     home = Path("/tmp/omp-resolver-home")
     with patch.dict(
         os.environ,
-        {"HOME": str(home), "OMP_AGENT_DIR": f"~/{segment}/agent"},
+        {"HOME": str(home), "PI_CODING_AGENT_DIR": f"{segment}/agent"},
     ):
-        assert slopgate.installer._omp.omp_agent_dir() == home / segment / "agent", (
-            "OMP_AGENT_DIR should preserve arbitrary override suffixes after expanding '~'"
+        assert slopgate.installer._omp.omp_agent_dir() == home / ".omp" / "agent", (
+            "relative PI_CODING_AGENT_DIR values must not escape the home fallback"
         )
 
 
