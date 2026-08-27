@@ -2,11 +2,27 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from slopgate._types import ObjectDict, ObjectMapping, string_value
+from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.constants import SESSION_ID
 
 
+PI_FAMILY_TOOL_MAP: Final[dict[str, str]] = {
+    "write": "Write",
+    "edit": "Edit",
+    "bash": "Bash",
+    "read": "Read",
+    "grep": "Grep",
+    "glob": "Glob",
+    "webfetch": "WebFetch",
+    "websearch": "WebSearch",
+}
+
+
 def _first_raw_string(raw: ObjectMapping, *keys: str) -> str:
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.first_raw_string")
     for key in keys:
         value = string_value(raw.get(key))
         if value:
@@ -20,6 +36,7 @@ def canonical_event_name(
     aliases: dict[str, str],
 ) -> str:
     """Return a canonical hook event name from common raw event aliases."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.canonical_event_name")
     event = _first_raw_string(raw, "hook_event_name", "hookEventName")
     if not event:
         return ""
@@ -30,6 +47,7 @@ def canonical_event_name(
 
 def canonical_payload_with_event(raw: ObjectMapping, event_name: str) -> ObjectDict:
     """Copy raw payload fields and overlay the canonical hook event when present."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.canonical_payload")
     canonical = dict(raw)
     if event_name:
         canonical["hook_event_name"] = event_name
@@ -43,6 +61,7 @@ def merge_session_id(
     extra_keys: tuple[str, ...] = (),
 ) -> None:
     """Copy session id from common platform key aliases into *canonical*."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.merge_session_id")
     session_id = _first_raw_string(raw, SESSION_ID, "sessionId", *extra_keys)
     if session_id:
         canonical[SESSION_ID] = session_id
@@ -55,6 +74,7 @@ def merge_cwd(
     extra_keys: tuple[str, ...] = (),
 ) -> None:
     """Copy working-directory hints from *raw* into *canonical*."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.merge_cwd")
     cwd = _first_raw_string(raw, "cwd", "workspace_root", *extra_keys)
     if cwd:
         canonical["cwd"] = cwd
@@ -67,6 +87,7 @@ def merge_standard_session_fields(
     cwd_extra_keys: tuple[str, ...] = (),
 ) -> None:
     """Populate session id and cwd on *canonical* from common adapter payload keys."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.merge_standard_session")
     merge_session_id(raw, canonical)
     merge_cwd(raw, canonical, extra_keys=cwd_extra_keys)
 
@@ -75,6 +96,7 @@ def sync_tool_result_fields(
     canonical: ObjectDict, raw: ObjectMapping | None = None
 ) -> None:
     """Align tool_result and tool_response keys on a canonical payload."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.sync_tool_result")
     if raw is not None:
         tool_output = raw.get("tool_output")
         if tool_output is not None:

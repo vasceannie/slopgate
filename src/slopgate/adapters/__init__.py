@@ -17,14 +17,17 @@ __all__ = [
     "ClaudeAdapter",
     "CodexAdapter",
     "CursorAdapter",
+    "OmpAdapter",
     "OpenCodeAdapter",
     "PiAdapter",
 ]
 
+from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.adapters.base import PlatformAdapter
 from slopgate.adapters.claude import ClaudeAdapter
 from slopgate.adapters.codex import CodexAdapter
 from slopgate.adapters.cursor import CursorAdapter
+from slopgate.adapters.omp import OmpAdapter
 from slopgate.adapters.opencode import OpenCodeAdapter
 from slopgate.adapters.pi import PiAdapter
 
@@ -32,6 +35,7 @@ ADAPTERS: dict[str, type[PlatformAdapter]] = {
     "claude": ClaudeAdapter,
     "codex": CodexAdapter,
     "cursor": CursorAdapter,
+    "omp": OmpAdapter,
     "opencode": OpenCodeAdapter,
     "pi": PiAdapter,
 }
@@ -41,6 +45,7 @@ _ADAPTER_CACHE: dict[str, PlatformAdapter] = {}
 
 def get_adapter(platform: str) -> PlatformAdapter:
     """Return the singleton adapter instance for the given platform name."""
+    SESSION_IDENTITY_TELEMETRY.record_metric("adapter.registry.lookup")
     cached = _ADAPTER_CACHE.get(platform)
     if cached is not None:
         return cached
