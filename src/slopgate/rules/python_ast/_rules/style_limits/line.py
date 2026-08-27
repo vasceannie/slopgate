@@ -31,8 +31,12 @@ class PythonLongLineRule(Rule):
     events = (PRE_TOOL_USE, PERMISSION_REQUEST, POST_TOOL_USE)
 
     @staticmethod
-    def _string_literal_lines(source: str) -> set[int]:
-        """Return physical lines occupied by string literals/docstrings."""
+    def _string_literal_lines(source: str) -> set[int] | None:
+        """Return physical lines occupied by string literals/docstrings.
+
+        Returns None when tokenization fails midway; the collected line set
+        is incomplete and line classification would be unreliable.
+        """
         lines: set[int] = set()
         try:
             tokens = tokenize.generate_tokens(io.StringIO(source).readline)
@@ -42,13 +46,22 @@ class PythonLongLineRule(Rule):
                 start_line = token.start[0]
                 end_line = token.end[0]
                 lines.update(range(start_line, end_line + 1))
-        except tokenize.TokenError:
-            return lines
+        except (tokenize.TokenError, SyntaxError):
+            # IndentationError and friends can escape token generation; the
+            # collected set is incomplete, so callers must suppress findings.
+            return None
         return lines
 
-    def _find_worst_line(self, source: str, max_length: int) -> tuple[int, int]:
-        """Scan source and return (lineno, length) of the longest offending line."""
+    def _find_worst_line(
+        self, source: str, max_length: int
+    ) -> tuple[int, int] | None:
+        """Scan source and return (lineno, length) of the longest offending line.
+
+        Returns None when tokenization failed and the analysis could not complete.
+        """
         string_lines = self._string_literal_lines(source)
+        if string_lines is None:
+            return None
         worst_lineno = 0
         worst_length = 0
         for lineno, raw_line in enumerate(source.splitlines(), start=1):
@@ -73,7 +86,12 @@ class PythonLongLineRule(Rule):
         max_length = ctx.config.python_max_line_length
         if len(source) > ctx.config.python_ast_max_parse_chars:
             return []
-        worst_lineno, worst_length = self._find_worst_line(source, max_length)
+        worst = self._find_worst_line(source, max_length)
+        if worst is None:
+            # Tokenization failed (e.g. indentation error): string-literal
+            # classification is incomplete, so report no style finding.
+            return []
+        worst_lineno, worst_length = worst
         if worst_length <= max_length:
             return []
         return [

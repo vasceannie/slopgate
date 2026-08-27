@@ -24,6 +24,10 @@ _config_coerce = importlib.import_module("slopgate.config._coerce")
 _test_smells = importlib.import_module("slopgate.lint._detectors.test_smells")
 _rules_base = importlib.import_module("slopgate.rules.base")
 _python_ast_rules = importlib.import_module("slopgate.rules.python_ast._rules")
+_python_ast_source_parse = importlib.import_module(
+    "slopgate.rules.python_ast._rules.source_parse"
+)
+_parse_failure_type = _python_ast_source_parse.ParseFailure
 
 render_output = _render.render_output
 discover_fixtures = _fixtures.discover_fixtures
@@ -76,9 +80,9 @@ def test_find_parametrize_examples_is_callable_property(_: None) -> None:
 def test_filter_owned_hook_commands_returns_none_for_non_mapping_property(
     _: None,
 ) -> None:
-    assert filter_owned_hook_commands("not-a-dict") is None
-    assert filter_owned_hook_commands(42) is None
-    assert filter_owned_hook_commands(None) is None
+    assert filter_owned_hook_commands("not-a-dict") is None, "str input must yield None"
+    assert filter_owned_hook_commands(42) is None, "int input must yield None"
+    assert filter_owned_hook_commands(None) is None, "None input must yield None"
 
 
 @given(strategies.just(None))
@@ -170,9 +174,14 @@ def test_parse_strict_returns_none_or_module_property(source: str) -> None:
 
 
 @given(strategies.text(alphabet="abcdefghijklmnopqrstuvwxyz\n", max_size=80))
-def test_parse_health_failure_returns_none_or_string_property(source: str) -> None:
+def test_parse_health_failure_returns_none_or_failure_property(source: str) -> None:
     result = parse_health_failure(source, max_chars=1000, suppress_fragments=True)
-    assert result is None or isinstance(result, str)
+    assert result is None or isinstance(result, _parse_failure_type), (
+        f"must be None or ParseFailure: {result!r}"
+    )
+    assert result is None or result.kind in {"parse_error", "oversized"}, (
+        f"unexpected failure kind: {result!r}"
+    )
 
 
 @given(strategies.text(alphabet="abcdefghijklmnopqrstuvwxyz\n", max_size=80))

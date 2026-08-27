@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from slopgate.context import HookContext
 from slopgate.util.path_filters import is_authored_python_path
 from .source_parse import (
+    ParseFailure,
     is_full_module_candidate,
     line_count,
     parse_health_failure,
@@ -48,19 +49,30 @@ class PythonAstHealthRule(Rule):
             f"then run `python3 -m py_compile {quoted_path}`."
         )
 
-    def finding(self, ctx: HookContext, path_value: str, kind: str) -> RuleFinding:
-        recovery = self._recovery_text(path_value, kind)
+    def finding(
+        self, ctx: HookContext, path_value: str, failure: ParseFailure
+    ) -> RuleFinding:
+        recovery = self._recovery_text(path_value, failure.kind)
+        metadata: dict[str, object] = {
+            METADATA_PATH: path_value,
+            "kind": failure.kind,
+        }
+        if failure.exception_type is not None:
+            metadata["exception_type"] = failure.exception_type
+            metadata["parser_message"] = failure.message
+            metadata["line"] = failure.line
+            metadata["offset"] = failure.offset
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
             message=(
-                f"Python AST analysis could not run for `{path_value}` ({kind}). "
-                f"{recovery}"
+                f"Python AST analysis could not run for `{path_value}` "
+                f"({failure.kind}). {recovery}"
             ),
             additional_context=recovery,
-            metadata={METADATA_PATH: path_value, "kind": kind},
+            metadata=metadata,
         )
 
     def _pre_content_failure(self, ctx: HookContext, ct: object) -> RuleFinding | None:
@@ -74,12 +86,14 @@ class PythonAstHealthRule(Rule):
             ctx.config.python_ast_max_parse_chars,
             suppress_fragments=True,
         )
+        if failure is None:
+            return None
         if (
-            failure == "oversized"
+            failure.kind == "oversized"
             and line_count(getattr(ct, "content")) > LINT_MAX_MODULE_LINES_SOFT
         ):
             return None
-        return self.finding(ctx, path, failure) if failure is not None else None
+        return self.finding(ctx, path, failure)
 
     def _post_path_failure(
         self, ctx: HookContext, path_value: str
@@ -92,15 +106,20 @@ class PythonAstHealthRule(Rule):
         except FileNotFoundError:
             if ctx.event_name == POST_TOOL_USE and is_bash_tool(ctx.tool_name):
                 return None
-            return self.finding(ctx, path_value, "read_error")
+            return self.finding(ctx, path_value, ParseFailure(kind="read_error"))
         except OSError:
-            return self.finding(ctx, path_value, "read_error")
+            return self.finding(ctx, path_value, ParseFailure(kind="read_error"))
         failure = parse_health_failure(
             source, ctx.config.python_ast_max_parse_chars, suppress_fragments=False
         )
-        if failure == "oversized" and line_count(source) > LINT_MAX_MODULE_LINES_SOFT:
+        if failure is None:
             return None
-        return self.finding(ctx, path_value, failure) if failure is not None else None
+        if (
+            failure.kind == "oversized"
+            and line_count(source) > LINT_MAX_MODULE_LINES_SOFT
+        ):
+            return None
+        return self.finding(ctx, path_value, failure)
 
     def _evaluate_pre(self, ctx: HookContext) -> list[RuleFinding]:
         findings = [self._pre_content_failure(ctx, ct) for ct in ctx.content_targets]

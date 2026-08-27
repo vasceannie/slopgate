@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,21 @@ from .._helpers import parse_module
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
+
+
+@dataclass(frozen=True, slots=True)
+class ParseFailure:
+    """Structured Python parse-health failure.
+
+    Carries non-source parser provenance so findings can explain why AST
+    analysis could not run without storing any source text.
+    """
+
+    kind: str
+    exception_type: str | None = None
+    message: str | None = None
+    line: int | None = None
+    offset: int | None = None
 
 
 def parse_strict(source: str, max_chars: int) -> ast.Module | None:
@@ -47,18 +63,24 @@ def parse_health_failure(
     max_chars: int,
     *,
     suppress_fragments: bool,
-) -> str | None:
-    """Return the health failure kind, or None when source is parseable/fragmental."""
+) -> ParseFailure | None:
+    """Return the structured health failure, or None when parseable/fragmental."""
     if len(source) > max_chars:
-        return "oversized"
+        return ParseFailure(kind="oversized")
     try:
         ast.parse(source)
     except RecursionError:
-        return "parse_error"
+        return ParseFailure(kind="parse_error", exception_type="RecursionError")
     except SyntaxError as exc:
         if suppress_fragments and looks_like_indented_fragment(source, exc):
             return None
-        return "parse_error"
+        return ParseFailure(
+            kind="parse_error",
+            exception_type=type(exc).__name__,
+            message=exc.msg,
+            line=exc.lineno,
+            offset=exc.offset,
+        )
     return None
 
 
