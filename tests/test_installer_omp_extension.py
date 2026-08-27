@@ -55,19 +55,26 @@ def test_omp_index_ownership_requires_all_markers_property(
     ), "OMP index ownership must require every canonical marker"
 
 
-def test_omp_agent_dir_uses_omp_override_or_home_fallback(
+def test_omp_agent_dir_uses_absolute_pi_coding_agent_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     home = tmp_path / "home"
-    configured = tmp_path / "profiles" / ".." / "active"
+    configured = tmp_path / "profiles" / "active"
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setenv("OMP_AGENT_DIR", str(configured))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(configured))
     assert slopgate.installer._omp.omp_agent_dir() == configured, (
-        "a non-empty OMP_AGENT_DIR must be returned without path normalization"
+        "an absolute PI_CODING_AGENT_DIR must select the active OMP agent directory"
     )
-    monkeypatch.setenv("OMP_AGENT_DIR", "")
+
+
+def test_omp_agent_dir_rejects_relative_pi_coding_agent_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", "relative/agent")
     assert slopgate.installer._omp.omp_agent_dir() == home / ".omp" / "agent", (
-        "an empty OMP_AGENT_DIR must fall back to ~/.omp/agent"
+        "a relative PI_CODING_AGENT_DIR must fall back to ~/.omp/agent"
     )
 
 

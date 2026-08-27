@@ -22,3 +22,10 @@
 - OMP user discovery is independent of Pi: a non-empty `OMP_AGENT_DIR` is `expanduser()`-expanded without normalization, otherwise the root is `~/.omp/agent`.
 - Dashboard parity is mechanically checked against the BASE_SHA Pi-token inventory; only `HarnessPlatformStatus.id` and the entire remote `harness_status.py.txt` remain deferred.
 - PY-QUALITY-010 must be line-scoped despite the rule compiler's `DOTALL`; its assignment exemption uses an inline case-sensitive uppercase identifier group so constants remain allowed while local magic-number assignments still trigger.
+
+## 2026-08-27 Todo 6 pinned runtime harness
+- OMP 18.0.5 public discovery reports provider `native`; when the same `omp-slopgate` package exists at user and project levels, the project item wins and discovery returns exactly one extension.
+- The active user extension root follows OMP's absolute-only `PI_CODING_AGENT_DIR` contract; relative values fall back to `~/.omp/agent`. This supersedes the earlier `OMP_AGENT_DIR` note above.
+- `SessionManager.inMemory()` mints a different native session id per runner. Deterministic raw capture therefore passes `omp-test-session` in the emitted stop event as well as through `SLOPGATE_SESSION_ID`, because the production envelope retains the native id under `omp_event`.
+- Capture determinism is proven without parsing or reconstructing envelopes: the fake enforcer writes stdin bytes directly, and two real-runner captures are compared byte-for-byte before promotion.
+- The isolated system oracle must disable installer autoupdate, clear ambient Slopgate routing variables, bind HOME/XDG/`PI_CODING_AGENT_DIR` beneath one temporary root, and verify path containment before each lifecycle command.

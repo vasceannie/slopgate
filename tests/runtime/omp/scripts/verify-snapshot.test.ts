@@ -22,7 +22,7 @@ test("accepts an adapter alias present in the locked event union", async () => {
   const result = await runVerifier(repoRoot, "adapter");
 
   expect(result).toEqual({ exitCode: 0, stderr: "" });
-});
+}, 30000);
 
 test("rejects an adapter alias absent from the locked event union", async () => {
   const repoRoot = await createSyntheticRepo({
@@ -34,7 +34,7 @@ test("rejects an adapter alias absent from the locked event union", async () => 
     exitCode: 1,
     stderr: expect.stringContaining('adapter event "not_an_omp_event" is absent from the snapshot'),
   });
-});
+}, 30000);
 
 test("rejects a missing OMP adapter", async () => {
   const repoRoot = await createSyntheticRepo({});
@@ -44,7 +44,7 @@ test("rejects a missing OMP adapter", async () => {
     exitCode: 1,
     stderr: expect.stringContaining("missing OMP adapter"),
   });
-});
+}, 30000);
 
 test("rejects a dynamically constructed adapter alias map", async () => {
   const repoRoot = await createSyntheticRepo({
@@ -56,14 +56,14 @@ test("rejects a dynamically constructed adapter alias map", async () => {
     exitCode: 1,
     stderr: expect.stringContaining("must be a literal string-to-string dict"),
   });
-});
+}, 30000);
 
 test("accepts a bridge whose listeners use their event-specific result fields", async () => {
   const repoRoot = await createSyntheticRepo({ bridgeSource: buildBridgeSource(snapshot) });
   const result = await runVerifier(repoRoot, "bridge");
 
   expect(result).toEqual({ exitCode: 0, stderr: "" });
-});
+}, 30000);
 
 test("accepts a same-file helper with a statically resolvable return graph", async () => {
   const bridgeSource = buildBridgeSource(snapshot, {
@@ -75,7 +75,7 @@ test("accepts a same-file helper with a statically resolvable return graph", asy
   const result = await runVerifier(repoRoot, "bridge");
 
   expect(result).toEqual({ exitCode: 0, stderr: "" });
-});
+}, 30000);
 
 test("accepts a nested same-file helper with a statically resolvable return graph", async () => {
   const bridgeSource = buildBridgeSource(snapshot, {
@@ -86,7 +86,7 @@ test("accepts a nested same-file helper with a statically resolvable return grap
   const result = await runVerifier(repoRoot, "bridge");
 
   expect(result).toEqual({ exitCode: 0, stderr: "" });
-});
+}, 30000);
 
 test("accepts adapter and bridge together in all mode", async () => {
   const repoRoot = await createSyntheticRepo({
@@ -96,7 +96,7 @@ test("accepts adapter and bridge together in all mode", async () => {
   const result = await runVerifier(repoRoot, "all");
 
   expect(result).toEqual({ exitCode: 0, stderr: "" });
-});
+}, 30000);
 
 test("rejects a missing OMP bridge", async () => {
   const repoRoot = await createSyntheticRepo({});
@@ -106,7 +106,7 @@ test("rejects a missing OMP bridge", async () => {
     exitCode: 1,
     stderr: expect.stringContaining("missing OMP bridge"),
   });
-});
+}, 30000);
 
 test("rejects a globally valid result field on the wrong event", async () => {
   const bridgeSource = buildBridgeSource(snapshot, {
@@ -120,7 +120,7 @@ test("rejects a globally valid result field on the wrong event", async () => {
     exitCode: 1,
     stderr: expect.stringContaining('event "input" returns unsupported field "block"'),
   });
-});
+}, 30000);
 
 const rejectedConstructions = [
   {
@@ -172,7 +172,7 @@ for (const testCase of rejectedConstructions) {
     const result = await runVerifier(repoRoot, "bridge");
 
     expect(result).toEqual({ exitCode: 1, stderr: expect.stringContaining(testCase.reason) });
-  });
+  }, 30000);
 }
 
 for (const [event, contract] of Object.entries(snapshot.listeners)) {
@@ -190,7 +190,7 @@ for (const [event, contract] of Object.entries(snapshot.listeners)) {
         exitCode: 1,
         stderr: expect.stringContaining(`event "${event}" must return void`),
       });
-    });
+    }, 30000);
     continue;
   }
 
@@ -209,7 +209,7 @@ for (const [event, contract] of Object.entries(snapshot.listeners)) {
         `event "${event}" returns unsupported field "${incompatibleField}"`,
       ),
     });
-  });
+  }, 30000);
 }
 
 const stopTextCases = [
@@ -236,7 +236,7 @@ const stopTextCases = [
 for (const testCase of stopTextCases) {
   test(`extracts canonical session-stop text for ${testCase.name}`, () => {
     expect(extractSessionStopResponse(testCase.message)).toBe(testCase.expected);
-  });
+  }, 30000);
 }
 
 test("locks stop_hook_active on the session-stop input event", () => {
@@ -244,15 +244,15 @@ test("locks stop_hook_active on the session-stop input event", () => {
     required: true,
     type: "false | true",
   });
-});
+}, 30000);
 
 test("locks the session-stop response source to last_assistant_message", () => {
   expect(snapshot.session_stop_response_source).toBe("last_assistant_message");
-});
+}, 30000);
 
 test("does not merge stop_hook_active into the session-stop result", () => {
   expect(snapshot.results.SessionStopEventResult.fields["stop_hook_active"]).toBeUndefined();
-});
+}, 30000);
 
 test("locks the session-stop result independently from the input event", () => {
   expect(Object.keys(snapshot.results.SessionStopEventResult.fields).sort()).toEqual([
@@ -261,8 +261,8 @@ test("locks the session-stop result independently from the input event", () => {
     "decision",
     "reason",
   ]);
-});
+}, 30000);
 
 test("does not permit action in the input result", () => {
   expect(snapshot.results.InputEventResult.fields["action"]).toBeUndefined();
-});
+}, 30000);

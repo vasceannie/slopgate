@@ -6,7 +6,7 @@
 
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve as resolvePath } from "node:path"
 import process from "node:process"
 
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
@@ -94,7 +94,7 @@ function parseEnforcerResult(value: unknown): EnforcerResult | null {
 }
 
 function findManagedRepoRoot(start: string): string | null {
-  let current = start
+  let current = resolvePath(start)
   while (true) {
     if (existsSync(join(current, "slopgate.toml"))) return current
     const parent = dirname(current)
@@ -354,7 +354,7 @@ export default function slopgateOmpExtension(pi: ExtensionAPI): void {
   pi.on("session_stop", async (event, ctx) => {
     const sessionId = currentSessionId(ctx)
     const stopResponse = extractSessionStopResponse(event.last_assistant_message)
-    const result = await enforce("session_stop", event, ctx, { stop_response: stopResponse || undefined })
+    const result = await enforce("session_stop", event, ctx, { stop_response: stopResponse })
     if (event.stop_hook_active) {
       resetStopContinuationCount(sessionId)
       advisory(pi, ctx, result)

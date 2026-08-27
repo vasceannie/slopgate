@@ -59,9 +59,9 @@ render_omp_extension = InvocationTemplateRenderer(
 
 def omp_agent_dir() -> Path:
     """Resolve OMP's active user agent directory and containment root."""
-    configured = os.environ.get("OMP_AGENT_DIR")
-    if configured:
-        return Path(configured).expanduser()
+    configured = os.environ.get("PI_CODING_AGENT_DIR")
+    if configured and Path(configured).is_absolute():
+        return Path(configured)
     return Path.home() / ".omp" / "agent"
 
 
