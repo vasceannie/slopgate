@@ -70,26 +70,32 @@ async function executeUserSurface(
 	return { kind: "executed" };
 }
 
+async function executeWriteSurface(harness: RuntimeHarness, sentinel: string): Promise<UserSurfaceOutcome> {
+	const interception = await harness.runner.emitToolCall({
+		type: "tool_call",
+		toolCallId: "write-tool-call-fixed",
+		toolName: "write",
+		input: { path: sentinel, content: "write sentinel" },
+	});
+	if (interception?.block) return { kind: "blocked", output: interception.reason ?? "Blocked by extension" };
+	await appendFile(sentinel, "write\n", "utf8");
+	return { kind: "executed" };
+}
+
 export function registerExtensionToolContractTests(): void {
 	describe("staged OMP tool contract", () => {
 		const temporaryPaths: string[] = [];
 		let harness: RuntimeHarness | undefined;
-		let sentinelPath: string | undefined;
 
 		beforeAll(async () => {
 			configureRuntimeEnvironment();
-			harness = await createRuntimeHarness({
-				bashEffect: async () => {
-					if (sentinelPath !== undefined) await appendFile(sentinelPath, "executed\n", "utf8");
-				},
-			});
+			harness = await createRuntimeHarness();
 		});
 
 		beforeEach(async () => {
 			configureFakeResponse({});
 			process.env.SLOPGATE_SESSION_ID = FIXED_SESSION_ID;
 			delete process.env.SLOPGATE_OMP_INPUT_REWRITE;
-			sentinelPath = undefined;
 			await requireHarness(harness).runner.emit({ type: "session_start" });
 		});
 
@@ -124,15 +130,22 @@ export function registerExtensionToolContractTests(): void {
 			expect(path.resolve(activeHarness.runner.cwd)).toBe(WORKSPACE_ROOT);
 		}, 30000);
 
-		test.each(BASH_VARIANTS)("preserves %s input when rewrite is disabled", async (_name, input) => {
+		test.each(BASH_VARIANTS)("records normalized input equal to executed args for %s with rewrite default off", async (name, input) => {
 			// Given
+			const root = await createTemporaryRoot(`slopgate-omp-bash-${name}-`);
+			temporaryPaths.push(root);
 			configureFakeResponse({ updated_input: { command: "printf rewritten" } });
+			const recordPath = await createRecordPath(root, "stdin.json");
 
 			// When
 			const outcome = await requireHarness(harness).executeBash(input);
+			const payload = await readRecordedPayload(recordPath);
 
 			// Then
-			expect(outcome).toEqual({ kind: "executed", input });
+			expect({ normalized: payload.tool_input, outcome }).toEqual({
+				normalized: input,
+				outcome: { kind: "executed", input },
+			});
 		}, 30000);
 
 		test("applies a proven bash rewrite when the feature flag is enabled", async () => {
@@ -153,7 +166,7 @@ export function registerExtensionToolContractTests(): void {
 		["unknown field", { command: "printf attack", shell: "echo pwned" }],
 		["wrong env type", { command: "printf attack", env: { TOKEN: 1 } }],
 		["missing command", { cwd: "." }],
-	] as const)("rejects the %s rewrite echo attack", async (_name, updatedInput) => {
+	] as const)("refuses a returned rewrite with %s and preserves execution args", async (_name, updatedInput) => {
 		// Given
 		const original: BashToolInput = { command: "printf safe" };
 		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
@@ -166,36 +179,77 @@ export function registerExtensionToolContractTests(): void {
 		expect(outcome).toEqual({ kind: "executed", input: original });
 	}, 30000);
 
-		test("blocks before the mock tool can create its sentinel", async () => {
+	test("refuses a non-object returned rewrite and preserves execution args", async () => {
+		// Given
+		const original: BashToolInput = { command: "printf safe" };
+		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
+		configureFakeResponse({ updated_input: "printf attack" });
+
+		// When
+		const outcome = await requireHarness(harness).executeBash(original);
+
+		// Then
+		expect(outcome).toEqual({ kind: "executed", input: original });
+	}, 30000);
+
+	test.each([
+		["wrong command type", { command: 7 }],
+		["extra key", { command: "printf safe", derived: true }],
+		["missing command", { cwd: "." }],
+		["wrong optional field type", { command: "printf safe", timeout: "30" }],
+	] as const)("refuses rewrite when observed bash input has %s", async (_name, input) => {
+		const toolName: string = "bash";
+		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
+		configureFakeResponse({ updated_input: { command: "printf rewritten" } });
+		const result = await requireHarness(harness).runner.emitToolCall({
+			type: "tool_call",
+			toolCallId: "malformed-bash-fixed",
+			toolName,
+			input,
+		});
+		expect(result).toBeUndefined();
+	}, 30000);
+
+	test("refuses an edit echo attack even when rewrite is enabled", async () => {
+		const normalizedEdit = { path: "target.txt", content: "safe", derived: "gate-only" };
+		process.env.SLOPGATE_OMP_INPUT_REWRITE = "1";
+		configureFakeResponse({ updated_input: normalizedEdit });
+		const result = await requireHarness(harness).runner.emitToolCall({
+			type: "tool_call",
+			toolCallId: "edit-echo-fixed",
+			toolName: "edit",
+			input: normalizedEdit,
+		});
+		expect(result).toBeUndefined();
+	}, 30000);
+
+		test("blocks the Write tool before its sentinel is created", async () => {
 			// Given
 			const root = await createTemporaryRoot("slopgate-omp-blocked-");
 			temporaryPaths.push(root);
-			sentinelPath = path.join(root, "sentinel.log");
+			const sentinel = path.join(root, "sentinel.log");
 			configureFakeResponse({ block: true, reason: "fixture denial" });
 
 			// When
-			const outcome = await requireHarness(harness).executeBash({ command: "printf sentinel" });
+			const outcome = await executeWriteSurface(requireHarness(harness), sentinel);
 
 			// Then
-			expect(outcome).toEqual({ kind: "blocked", reason: "fixture denial" });
-			expect(await Bun.file(sentinelPath).exists()).toBe(false);
+			expect(outcome).toEqual({ kind: "blocked", output: "fixture denial" });
+			expect(await Bun.file(sentinel).exists()).toBe(false);
 		}, 30000);
 
-		test("executes the mock tool exactly once when allowed", async () => {
+		test("executes the allowed Write tool exactly once", async () => {
 			// Given
 			const root = await createTemporaryRoot("slopgate-omp-allowed-");
 			temporaryPaths.push(root);
-			sentinelPath = path.join(root, "sentinel.log");
-			const activeHarness = requireHarness(harness);
-			const before = activeHarness.bashTool.executions.length;
+			const sentinel = path.join(root, "sentinel.log");
 
 			// When
-			const outcome = await activeHarness.executeBash({ command: "printf sentinel" });
+			const outcome = await executeWriteSurface(requireHarness(harness), sentinel);
 
 			// Then
-			expect(outcome.kind).toBe("executed");
-			expect(activeHarness.bashTool.executions).toHaveLength(before + 1);
-			expect(await Bun.file(sentinelPath).text()).toBe("executed\n");
+			expect(outcome).toEqual({ kind: "executed" });
+			expect(await Bun.file(sentinel).text()).toBe("write\n");
 		}, 30000);
 
 		test.each(["bash", "python"] as const)("blocks %s before its host sentinel executes", async surface => {
