@@ -179,7 +179,7 @@ def _locate_chunk(
         insertion_index = (
             len(original) - 1 if original and original[-1] == "" else len(original)
         )
-        return insertion_index, (), new, line_index
+        return insertion_index, (), new, insertion_index
     pattern = old
     new_slice = new
     start = _seek_line_match(original, pattern, line_index)

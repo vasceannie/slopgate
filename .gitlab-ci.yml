@@ -18,6 +18,8 @@ opencode-review:
         name: registry.gitlab.com/nagyv/gitlab-opencode:1.3.17
         entrypoint: [""]
     timeout: 30m
+    variables:
+        GIT_DEPTH: "0"
     before_script:
         - test -n "${OPENCODE_AUTH_JSON:-}"
         - git fetch origin "refs/merge-requests/${OPENCODE_MR_IID}/head"

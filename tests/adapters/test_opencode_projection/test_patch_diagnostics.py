@@ -164,3 +164,15 @@ def test_patch_stops_collection_at_end_of_file_marker() -> None:
     assert content == "A\nX\nB\n", (
         "the end-of-file marker must terminate chunk collection before the tail lines"
     )
+
+
+def test_apply_update_rejects_hunk_before_eof_addition() -> None:
+    result = apply_update(
+        "A\nB\nC\n",
+        ("@@", "+X", "@@", "-B", "+B1", "+B2"),
+    )
+
+    assert result is None, (
+        "an EOF addition must advance the cursor so a later hunk cannot match earlier "
+        "content and corrupt the stored insertion index"
+    )
