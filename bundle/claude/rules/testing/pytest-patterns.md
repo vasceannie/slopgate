@@ -63,8 +63,8 @@ addopts = "-ra -q --strict-markers"
 filterwarnings = ["error"]
 ```
 
-## Hook repairs
+## Hook repair guidance
 
-- `PY-TEST-003`: replace loops-with-asserts with `@pytest.mark.parametrize` + `ids=[...]`.
+- `PY-TEST-003`: prefer `@pytest.mark.parametrize` with readable `ids=[...]` for loop cases; if explicit assertions remain, split behaviors and message any 3+ adjacent assertions so `PY-TEST-001` stays clear.
 - `PY-TEST-004`: shared fixtures → narrowest `conftest.py`.
-- 3+ adjacent bare asserts → add messages or split by behavior.
+- `PY-TEST-001`: add descriptive messages to 3+ adjacent assertions or split the behaviors into focused tests.

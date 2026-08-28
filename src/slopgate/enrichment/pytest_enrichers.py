@@ -124,21 +124,27 @@ def _build_test_loop_context_parts(
 ) -> list[str]:
     parts: list[str] = []
     if fixtures:
-        parts.append("AVAILABLE FIXTURES:")
-        for fixture in fixtures:
-            note = " (parametrized)" if fixture["has_params"] else ""
-            parts.append(f"  • {fixture['name']}{note}  — from {fixture['conftest']}")
+        parts.extend(
+            [
+                "AVAILABLE FIXTURES:",
+                *(
+                    f"  • {fixture['name']}"
+                    f"{' (parametrized)' if fixture['has_params'] else ''}"
+                    f"  — from {fixture['conftest']}"
+                    for fixture in fixtures
+                ),
+            ]
+        )
     if examples:
-        parts.append("\nEXISTING PARAMETRIZE PATTERNS IN THIS DIRECTORY:")
-        for example in examples:
-            parts.append(f"  # {example['file']}:\n{example['snippet']}")
-    parts.append(
-        "\nCOMPLIANT ALTERNATIVES:\n"
-        + "1. pytest parameterization for simple data-driven cases\n"
-        + "2. indirect parameterization when a fixture should receive the data\n"
-        + "3. subtests when each case needs its own report boundary\n"
-        + "4. parametrized fixtures defined in conftest.py"
-    )
+        parts.extend(
+            [
+                "\nEXISTING PARAMETRIZE PATTERNS IN THIS DIRECTORY:",
+                *(
+                    f"  # {example['file']}:\n{example['snippet']}"
+                    for example in examples
+                ),
+            ]
+        )
     return parts
 
 

@@ -28,8 +28,13 @@ def _context(root: Path) -> HookContext:
     return cast(HookContext, ctx)
 
 
-def finding(path: str, rule_id: str) -> RuleFinding:
-    return RuleFinding(
+def _enriched_finding(
+    root: Path,
+    path: str,
+    rule_id: str,
+    enricher: Callable[[RuleFinding, HookContext], None],
+) -> RuleFinding:
+    finding = RuleFinding(
         rule_id=rule_id,
         title="test finding",
         severity=Severity.HIGH,
@@ -37,17 +42,8 @@ def finding(path: str, rule_id: str) -> RuleFinding:
         message="base denial",
         metadata={"hits": [path]},
     )
-
-
-def _enriched_finding(
-    root: Path,
-    path: str,
-    rule_id: str,
-    enricher: Callable[[RuleFinding, HookContext], None],
-) -> RuleFinding:
-    base_finding = finding(path, rule_id)
-    enricher(base_finding, _context(root))
-    return base_finding
+    enricher(finding, _context(root))
+    return finding
 
 
 def _tests_dir(root: Path) -> Path:
@@ -76,10 +72,6 @@ def _prepare_time_project(root: Path) -> None:
     write_text(tests_dir / "test_api.py", "def test_api():\n    pass\n")
 
 
-def _prepare_test_file(root: Path, filename: str) -> None:
-    write_text(_tests_dir(root) / filename, "def test_placeholder():\n    pass\n")
-
-
 def test_enrich_test_loop_adds_fixture_parametrize_and_context(tmp_path: Path) -> None:
     _prepare_loop_project(tmp_path)
     finding = _enriched_finding(
@@ -91,13 +83,15 @@ def test_enrich_test_loop_adds_fixture_parametrize_and_context(tmp_path: Path) -
 
     message = finding.message or ""
     context = finding.additional_context or ""
-    missing = {
-        "message:`db_session`": "`db_session`" not in message,
-        "message:test_existing.py": "test_existing.py" not in message,
-        "context:COMPLIANT ALTERNATIVES": "COMPLIANT ALTERNATIVES" not in context,
-        "context:data_case": "data_case (parametrized)" not in context,
+    evidence = {
+        "message:`db_session`": "`db_session`" in message,
+        "message:test_existing.py": "test_existing.py" in message,
+        "context:no generic block": "COMPLIANT ALTERNATIVES" not in context,
+        "context:data_case": "data_case (parametrized)" in context,
     }
-    assert not {label for label, absent in missing.items() if absent}
+    assert evidence == {label: True for label in evidence}, (
+        f"Expected bounded local enrichment, got: {evidence}"
+    )
 
 
 def test_enrich_assertion_roulette_adds_fixture_names_and_split_tip(
@@ -111,9 +105,15 @@ def test_enrich_assertion_roulette_adds_fixture_names_and_split_tip(
         enrich_assertion_roulette,
     )
 
-    assert finding.message is not None
-    assert "`user_factory`" in finding.message
-    assert "splitting into focused test functions" in finding.message
+    message = finding.message or ""
+    evidence = {
+        "has_message": bool(message),
+        "has_fixture": "`user_factory`" in message,
+        "has_split_tip": "splitting into focused test functions" in message,
+    }
+    assert evidence == {label: True for label in evidence}, (
+        f"Unexpected assertion-roulette enrichment: {message}"
+    )
 
 
 def test_enrich_test_smells_mentions_fixtures_and_time_utilities(
@@ -139,7 +139,9 @@ def test_enrich_test_smells_mentions_fixtures_and_time_utilities(
 def test_enrich_fixture_outside_conftest_suggests_nearest_registry(
     tmp_path: Path,
 ) -> None:
-    _prepare_test_file(tmp_path, "test_db.py")
+    write_text(
+        _tests_dir(tmp_path) / "test_db.py", "def test_placeholder():\n    pass\n"
+    )
     finding = _enriched_finding(
         tmp_path,
         "tests/test_db.py",
@@ -147,6 +149,12 @@ def test_enrich_fixture_outside_conftest_suggests_nearest_registry(
         enrich_fixture_outside_conftest,
     )
 
-    assert finding.message is not None
-    assert "No conftest.py exists yet in tests/" in finding.message
-    assert "Create one as a thin fixture registry" in finding.message
+    message = finding.message or ""
+    evidence = {
+        "has_message": bool(message),
+        "has_registry_path": "No conftest.py exists yet in tests/" in message,
+        "has_registry_tip": "Create one as a thin fixture registry" in message,
+    }
+    assert evidence == {label: True for label in evidence}, (
+        f"Unexpected fixture-placement enrichment: {message}"
+    )

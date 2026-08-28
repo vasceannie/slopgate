@@ -11,6 +11,7 @@ from hypothesis import HealthCheck, given, settings, strategies
 import slopgate.adapters.opencode_projection.hashline
 from slopgate.adapters.opencode_projection.hashline import (
     apply_hashline_edits,
+    line_hash,
     project_hashline_edits,
 )
 from slopgate.adapters.opencode_projection.hashline.edits import HashlineEditResult
@@ -61,6 +62,57 @@ def test_omo_hashline_helpers_preserve_known_anchor_contract() -> None:
     assert marker == "PS", "the OMO xxHash32 marker must remain compatible"
     assert projected == "class Header:\n", (
         "the public hashline helper must project a trusted replacement"
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        (100, "alpha", "alpha", "100#JN|alpha", "JN"),
+        (100, "}", "}", "100#MN|}", "MN"),
+        (101, "}", "}", "101#YK|}", "YK"),
+        (102, "  alpha  ", "  alpha  ", "102#NZ|  alpha  ", "JN"),
+        (103, "alpha\r", "alpha", "103#JN|alpha\r", "JN"),
+        (104, "  al pha  ", "  al pha  ", "104#YB|  al pha  ", "JN"),
+    ),
+)
+def test_omo_read_boundary_replay_matches_hashline_validation(
+    case: tuple[int, str, str, str, str],
+) -> None:
+    line_number, content, canonical_content, native, legacy_hash = case
+    current_hash = line_hash(line_number, content)
+    source = "\n".join(["filler"] * (line_number - 1) + [canonical_content])
+    expected_content = source.replace(content.replace("\r", ""), "  updated")
+    current_result = project_hashline_edits(
+        source,
+        [{"op": "replace", "pos": f"{line_number}#{current_hash}", "lines": ["  updated"]}],
+    )
+    legacy_result = project_hashline_edits(
+        source,
+        [{"op": "replace", "pos": f"{line_number}#{legacy_hash}", "lines": ["  updated"]}],
+    )
+    assert (
+        "1.18.25",
+        100,
+        5,
+        "5.0.0-beta.21",
+        "a17b91cdc210a24a86accf51c41e57b99e8aced7",
+        f"{line_number}: {content}",
+        native,
+        "accepted" if current_result.failure is None else current_result.failure,
+        current_result.content,
+        legacy_result.content,
+    ) == (
+        "1.18.25",
+        100,
+        5,
+        "5.0.0-beta.21",
+        "a17b91cdc210a24a86accf51c41e57b99e8aced7",
+        f"{line_number}: {content}",
+        f"{line_number}#{current_hash}|{content}",
+        "accepted",
+        expected_content,
+        expected_content,
     )
 
 

@@ -2,15 +2,22 @@ from __future__ import annotations
 
 from tests.test_ast_rules import (
     BUNDLE_ROOT,
+    EngineResult,
     Path,
     TemporaryDirectory,
     assert_denied_by,
     assert_not_denied,
-    permission_reason,
+    object_dict,
     evaluate_payload,
     string_value,
     unittest,
 )
+
+
+def _additional_context(result: EngineResult) -> str:
+    assert result.output is not None, "expected output for recovery context"
+    spec = object_dict(result.output).get("hookSpecificOutput")
+    return string_value(object_dict(spec).get("additionalContext")) or ""
 
 
 class TestAstHealthRule(unittest.TestCase):
@@ -41,10 +48,14 @@ class TestAstHealthRule(unittest.TestCase):
         }
         result = evaluate_payload(payload)
         assert_denied_by(result, "PY-AST-001")
-        reason = permission_reason(result)
+        context = _additional_context(result)
 
-        assert "python3 -m py_compile src/main.py" in reason
-        assert "test -e src/main.py" not in reason
+        assert "python3 -m py_compile src/main.py" in context, (
+            "parse recovery command must be rendered in additional context"
+        )
+        assert "test -e src/main.py" not in context, (
+            "parse recovery must not use the read-error command"
+        )
 
     def test_parse_failure_reason_shell_quotes_path(self) -> None:
         payload = {
@@ -58,9 +69,11 @@ class TestAstHealthRule(unittest.TestCase):
         }
         result = evaluate_payload(payload)
         assert_denied_by(result, "PY-AST-001")
-        reason = permission_reason(result)
+        context = _additional_context(result)
 
-        assert "python3 -m py_compile 'src/broken file.py'" in reason
+        assert "python3 -m py_compile 'src/broken file.py'" in context, (
+            "parse recovery must shell-quote paths in additional context"
+        )
 
     def test_read_error_reason_checks_path_before_compile(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -82,9 +95,13 @@ class TestAstHealthRule(unittest.TestCase):
         rule_ids = {finding.rule_id for finding in result.findings}
         assert "PY-AST-001" in rule_ids
         assert result.output is not None
-        reason = string_value(result.output.get("reason")) or ""
-        assert "test -e missing.py" in reason
-        assert "re-read the moved/renamed file" in reason
+        context = _additional_context(result)
+        assert "test -e missing.py" in context, (
+            "read recovery command must be rendered in additional context"
+        )
+        assert "re-read the moved/renamed file" in context, (
+            "read recovery guidance must be rendered in additional context"
+        )
 
     def test_read_error_reason_shell_quotes_path(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -104,8 +121,10 @@ class TestAstHealthRule(unittest.TestCase):
             result = evaluate_payload(payload)
 
         assert result.output is not None
-        reason = string_value(result.output.get("reason")) or ""
-        assert "test -e 'missing file.py'" in reason
+        context = _additional_context(result)
+        assert "test -e 'missing file.py'" in context, (
+            "read recovery must shell-quote paths in additional context"
+        )
 
     def test_edit_fragment_does_not_trigger_parse_failure(self) -> None:
         payload = {

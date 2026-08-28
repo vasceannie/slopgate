@@ -17,3 +17,14 @@
 {"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T04:24:08.374630+00:00", "tool_name": ""}
 {"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T04:24:58.129045+00:00", "tool_name": ""}
 {"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T04:27:31.701147+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T10:04:21.865982+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T10:04:56.567148+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T10:06:04.883462+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T10:06:45.874753+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T10:07:31.968827+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T11:22:06.084130+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T11:43:48.109804+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T11:46:56.241720+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T12:05:10.507046+00:00", "tool_name": ""}
+{"elapsed_ms": 0.003, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T12:05:52.089385+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T12:10:43.455983+00:00", "tool_name": ""}

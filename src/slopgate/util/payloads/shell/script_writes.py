@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from ._shell_paths import SCRIPT_PATH_TEXT, append_unique_shell_path
+from .paths import SCRIPT_PATH_TEXT, append_unique_shell_path
 
 
 _SCRIPT_QUOTED_PATH_TEXT = rf"['\"]({SCRIPT_PATH_TEXT})['\"]"

@@ -1,0 +1,5 @@
+import pytest
+
+@pytest.mark.parametrize('item', [1], ids=['one'])
+def test_item(item):
+    assert item == 1

@@ -138,6 +138,16 @@ def _line_number(
     return (line, None) if compatible else (None, "stale_hash_anchor")
 
 
+def _has_overlapping_ranges(resolved: list[_ResolvedEdit]) -> bool:
+    logger.debug("Hashline range overlap check requested", edit_count=len(resolved))
+    ranges = sorted(
+        (item.start, item.end)
+        for item in resolved
+        if item.edit.operation == REPLACE and item.edit.end is not None
+    )
+    return any(current[0] <= previous[1] for previous, current in zip(ranges, ranges[1:]))
+
+
 def _resolve_edits(
     edits: list[_HashlineEdit], lines: list[str]
 ) -> tuple[list[_ResolvedEdit] | None, HashlineFailure | None]:
@@ -163,10 +173,7 @@ def _resolve_edits(
     resolved.sort(
         key=lambda item: (-item.sort_line, precedence.get(item.edit.operation, 3))
     )
-    ranges = sorted(
-        (item.start, item.end) for item in resolved if item.edit.operation == REPLACE
-    )
-    if any(current[0] <= previous[1] for previous, current in zip(ranges, ranges[1:])):
+    if _has_overlapping_ranges(resolved):
         return None, None
     return resolved, None
 

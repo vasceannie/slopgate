@@ -61,8 +61,9 @@ RULE_HINTS: dict[str, str] = {
         "re-export facade, then move cohesive implementation into named modules."
     ),
     "PY-TEST-003": (
-        "Next step: convert loops-with-asserts into pytest parametrization "
-        "with readable ids."
+        "Next step: prefer pytest parametrization with readable ids for loop cases. "
+        "If explicit assertions remain, split behaviors and add messages so 3+ "
+        "adjacent bare asserts do not trigger PY-TEST-001."
     ),
     "PY-TEST-004": "Next step: move shared fixtures into the narrowest useful conftest.py.",
     "PY-TYPE-002": (

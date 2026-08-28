@@ -112,9 +112,9 @@ Use this recovery order: **read denial → load matching rule/digest → re-read
 
 ### Tests
 
-- `PY-TEST-001`: three or more bare asserts need descriptive failure messages or split tests.
+- `PY-TEST-001`: three or more adjacent bare asserts need descriptive failure messages or split tests.
 - `PY-TEST-002`: avoid `time.sleep()`, try/except assertions, skip-without-reason, unittest-style asserts, and weak truthiness checks.
-- `PY-TEST-003`: loops with asserts must become `@pytest.mark.parametrize` or separate tests.
+- `PY-TEST-003`: prefer `@pytest.mark.parametrize` with readable ids for loop cases; if explicit assertions remain, split behaviors and message any 3+ adjacent assertions.
 - `PY-TEST-005`: async tests need the project's async pytest marker/fixture pattern (commonly `@pytest.mark.asyncio`) so they do not silently skip.
 - Fixture placement rules: shared fixtures belong in the narrowest `conftest.py`; support modules are fine when surfaced through conftest. Never import from another test module.
 - Test integrity rule: assert behavior through the real seam. Mock only external boundaries; do not mock the parser/projector/handler you are trying to verify.

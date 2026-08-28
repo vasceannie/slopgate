@@ -104,9 +104,13 @@ class TestFindParametrizeExamples:
         write_text(test_file, "# target")
 
         examples = find_parametrize_examples(test_file, tmp_path)
-        assert len(examples) >= 1
-        assert "parametrize" in examples[0]["snippet"]
-        assert examples[0]["file"] == "test_math.py"
+        assert len(examples) >= 1, "a parametrized sibling should be discovered"
+        assert "parametrize" in examples[0]["snippet"], (
+            "the discovered sibling should contain a parametrization"
+        )
+        assert examples[0]["file"] == "test_math.py", (
+            "the discovered example should identify its sibling file"
+        )
 
     def test_skips_self(self, tmp_path: Path) -> None:
         tests_dir = tmp_path / "tests"
@@ -210,8 +214,11 @@ class TestPYTEST003Enrichment:
         context = support.output_string(
             support.hook_output(result), "additionalContext"
         )
-        assert "AVAILABLE FIXTURES" in context or "COMPLIANT ALTERNATIVES" in context, (
-            f"Expected enrichment in additionalContext: {context}"
+        assert "AVAILABLE FIXTURES" in context, (
+            f"Expected fixture evidence in additionalContext: {context}"
+        )
+        assert "COMPLIANT ALTERNATIVES" not in context, (
+            "generic alternative guidance must not be emitted"
         )
 
     def test_still_denies_without_fixtures(self, tmp_project: Path) -> None:
@@ -229,6 +236,15 @@ class TestPYTEST003Enrichment:
         support.assert_denied_by(result, "PY-TEST-003")
         assert "PY-TEST-003" in support.finding_ids(result), (
             "loop-assert writes should still report the test-loop rule without fixture enrichment"
+        )
+        context = support.output_string(
+            support.hook_output(result), "additionalContext"
+        )
+        assert "COMPLIANT ALTERNATIVES" not in context, (
+            "no-local-evidence enrichment must not use generic alternatives"
+        )
+        assert len(context) <= 1332, (
+            f"no-local-evidence context exceeds the 1332-character budget: {len(context)}"
         )
 
     def test_loop_assert_regex_does_not_backtrack_on_large_patch(

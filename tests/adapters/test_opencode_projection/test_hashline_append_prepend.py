@@ -199,3 +199,136 @@ def test_omo_hashline_single_line_append_echo_is_rejected(tmp_path: Path) -> Non
     assert projection.get("reason") == "empty_insertion", (
         "echo-stripped insertions must retain a diagnostic reason"
     )
+
+
+def test_position_only_replacements_at_same_location_are_not_overlapping(
+    tmp_path: Path,
+) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB\nC")
+    anchor = line_hash(2, "B")
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {"op": "replace", "pos": f"2#{anchor}", "lines": ["B1"]},
+                {"op": "replace", "pos": f"2#{anchor}", "lines": ["B2"]},
+            ],
+        },
+    )
+
+    projected = object_dict(object_list(projection.get("files"))[0])
+    assert projected["content"] == "A\nB2\nC"
+
+
+def test_mixed_hashline_operations_use_original_snapshot_and_native_precedence(
+    tmp_path: Path,
+) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB\nC\nD")
+    anchor = f"2#{line_hash(2, 'B')}"
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {"op": "append", "pos": anchor, "lines": ["after"]},
+                {"op": "prepend", "pos": anchor, "lines": ["before"]},
+                {"op": "replace", "pos": anchor, "lines": ["B2"]},
+            ],
+        },
+    )
+
+    projected = object_dict(object_list(projection.get("files"))[0])
+    assert projected["content"] == "A\nbefore\nB2\nafter\nC\nD"
+
+
+def test_disjoint_hashline_replacements_apply_as_one_batch(tmp_path: Path) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB\nC\nD")
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {"op": "replace", "pos": f"1#{line_hash(1, 'A')}", "lines": ["A1"]},
+                {"op": "replace", "pos": f"4#{line_hash(4, 'D')}", "lines": ["D1"]},
+            ],
+        },
+    )
+
+    projected = object_dict(object_list(projection.get("files"))[0])
+    assert projected["content"] == "A1\nB\nC\nD1"
+
+
+def test_overlapping_hashline_ranges_are_rejected_atomically(tmp_path: Path) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB\nC\nD")
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {
+                    "op": "replace",
+                    "pos": f"1#{line_hash(1, 'A')}",
+                    "end": f"2#{line_hash(2, 'B')}",
+                    "lines": ["AB"],
+                },
+                {
+                    "op": "replace",
+                    "pos": f"2#{line_hash(2, 'B')}",
+                    "end": f"3#{line_hash(3, 'C')}",
+                    "lines": ["BC"],
+                },
+            ],
+        },
+    )
+
+    assert projection["status"] == "invalid"
+    assert projection.get("files") == []
+
+
+def test_duplicate_hashline_insertions_are_applied_once(tmp_path: Path) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB")
+    edit = {"op": "append", "pos": f"1#{line_hash(1, 'A')}", "lines": ["after"]}
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {"filePath": "src/app.py", "edits": [edit, edit]},
+    )
+
+    projected = object_dict(object_list(projection.get("files"))[0])
+    assert projected["content"] == "A\nafter\nB"
+
+
+@pytest.mark.parametrize("operation", ["append", "prepend"])
+def test_hashline_end_anchor_is_an_alias_for_pos(
+    tmp_path: Path, operation: str
+) -> None:
+    write_source(tmp_path, "src/app.py", "A\nB\nC")
+
+    projection = projection_for(
+        tmp_path,
+        "edit",
+        {
+            "filePath": "src/app.py",
+            "edits": [
+                {
+                    "op": operation,
+                    "end": f"2#{line_hash(2, 'B')}",
+                    "lines": ["X"],
+                }
+            ],
+        },
+    )
+
+    projected = object_dict(object_list(projection.get("files"))[0])
+    expected = "A\nX\nB\nC" if operation == "prepend" else "A\nB\nX\nC"
+    assert projected["content"] == expected

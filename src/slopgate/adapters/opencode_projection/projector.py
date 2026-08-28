@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from slopgate._types import (
     ObjectDict,
@@ -31,10 +30,9 @@ from .models import (
     Projection,
     ProjectionRequest,
     Snapshot,
-    SnapshotStatus,
     UNRESOLVED_PROJECTION_MESSAGES,
 )
-from .hashline import project_hashline_edits
+from .edit import _project_edit, _request_target, _snapshot_digest, _target
 from .patch import invalid_patch_projection, parse_patch, patch_text, section_content
 from .snapshot import read_snapshot
 
@@ -44,35 +42,6 @@ class _SectionSource:
     relative: str
     content: str
     sha256: str | None
-
-
-def _target(root: Path, value: str) -> tuple[Path, str] | Projection:
-    logger.debug("OpenCode projection target requested", root=root, value=value)
-    if not value.strip():
-        return Projection("invalid")
-    root = root.resolve()
-    candidate = Path(value)
-    raw_path = candidate if candidate.is_absolute() else root / candidate
-    path = Path(os.path.abspath(raw_path))
-    if not path.is_relative_to(root):
-        return Projection("invalid", reason="target_outside_root")
-    return path, path.relative_to(root).as_posix()
-
-
-def _request_target(request: ProjectionRequest) -> tuple[Path, str] | Projection:
-    logger.debug("OpenCode request target requested", tool=request.tool_name)
-    raw_path = string_value(request.tool_input.get("filePath")) or ""
-    return _target(request.root, raw_path)
-
-
-def _snapshot_digest(root: Path, relative: str) -> str | None | SnapshotStatus:
-    logger.debug("OpenCode snapshot requested", root=root, relative=relative)
-    snapshot = read_snapshot(root, relative)
-    if isinstance(snapshot, Snapshot):
-        return snapshot.sha256
-    if snapshot == "missing":
-        return None
-    return snapshot
 
 
 def _project_write(request: ProjectionRequest) -> Projection:
@@ -92,58 +61,6 @@ def _project_write(request: ProjectionRequest) -> Projection:
     return Projection(
         "projected",
         (ProjectedFile(relative, content, "write", digest),),
-    )
-
-
-def _project_missing_hashline_edit(request: ProjectionRequest, relative: str) -> Projection:
-    logger.debug("OpenCode missing hashline edit projection requested", path=relative)
-    raw_edits: object = request.tool_input.get("edits")
-    if not isinstance(raw_edits, list):
-        return Projection("invalid")
-    edits = object_list(cast(list[object], raw_edits))
-    if not edits:
-        return Projection("invalid")
-    hashline_result = project_hashline_edits("", edits)
-    content = hashline_result.content
-    if content is None or not content:
-        return Projection("invalid", reason=hashline_result.failure)
-    return Projection(
-        "projected",
-        (ProjectedFile(relative, content, "add", None),),
-    )
-
-
-def _project_edit(request: ProjectionRequest) -> Projection:
-    logger.debug("OpenCode edit projection requested", tool=request.tool_name)
-    target = _request_target(request)
-    if isinstance(target, Projection):
-        return target
-    _path, relative = target
-    snapshot = read_snapshot(request.root, relative)
-    if not isinstance(snapshot, Snapshot):
-        if snapshot != "missing":
-            return Projection(snapshot)
-        return _project_missing_hashline_edit(request, relative)
-    if "edits" in request.tool_input:
-        hashline_result = project_hashline_edits(
-            snapshot.content, request.tool_input.get("edits")
-        )
-        if hashline_result.content is None:
-            return Projection("invalid", reason=hashline_result.failure)
-        content = hashline_result.content
-    else:
-        old = string_value(request.tool_input.get("oldString"))
-        new = string_value(request.tool_input.get("newString"))
-        if not old or new is None:
-            return Projection("invalid")
-        count = snapshot.content.count(old)
-        replace_all = request.tool_input.get("replaceAll") is True
-        if count == 0 or (not replace_all and count != 1):
-            return Projection("invalid")
-        content = snapshot.content.replace(old, new, -1 if replace_all else 1)
-    return Projection(
-        "projected",
-        (ProjectedFile(relative, content, "edit", snapshot.sha256),),
     )
 
 

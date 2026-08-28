@@ -4,6 +4,7 @@ from __future__ import annotations
 import shlex
 from typing import TYPE_CHECKING
 from typing_extensions import override
+from slopgate._types import is_object_dict
 from slopgate.constants import (
     LINT_MAX_MODULE_LINES_SOFT,
     PERMISSION_REQUEST,
@@ -50,27 +51,42 @@ class PythonAstHealthRule(Rule):
         )
 
     def finding(
-        self, ctx: HookContext, path_value: str, failure: ParseFailure
+        self,
+        ctx: HookContext,
+        path_value: str,
+        failure: ParseFailure,
+        *,
+        provenance: str = "on_disk",
     ) -> RuleFinding:
         recovery = self._recovery_text(path_value, failure.kind)
         metadata: dict[str, object] = {
             METADATA_PATH: path_value,
             "kind": failure.kind,
+            "provenance": provenance,
         }
+        diagnostic = f"Python AST analysis could not run for `{path_value}` ({failure.kind})"
         if failure.exception_type is not None:
             metadata["exception_type"] = failure.exception_type
             metadata["parser_message"] = failure.message
             metadata["line"] = failure.line
             metadata["offset"] = failure.offset
+            detail = failure.exception_type
+            if failure.message:
+                detail += f": {failure.message}"
+            location: list[str] = []
+            if failure.line is not None:
+                location.append(f"line {failure.line}")
+            if failure.offset is not None:
+                location.append(f"offset {failure.offset}")
+            if location:
+                detail += f" ({', '.join(location)})"
+            diagnostic += f"; {detail}"
         return RuleFinding(
             rule_id=self.rule_id,
             title=self.title,
             severity=Severity.HIGH,
             decision=decision_for_context(ctx),
-            message=(
-                f"Python AST analysis could not run for `{path_value}` "
-                f"({failure.kind}). {recovery}"
-            ),
+            message=f"{diagnostic}.",
             additional_context=recovery,
             metadata=metadata,
         )
@@ -93,7 +109,13 @@ class PythonAstHealthRule(Rule):
             and line_count(getattr(ct, "content")) > LINT_MAX_MODULE_LINES_SOFT
         ):
             return None
-        return self.finding(ctx, path, failure)
+        projection = ctx.tool_input.get("_slopgate_projection")
+        provenance = (
+            "projected_content"
+            if is_object_dict(projection) and projection.get("status") == "projected"
+            else "tool_input_content"
+        )
+        return self.finding(ctx, path, failure, provenance=provenance)
 
     def _post_path_failure(
         self, ctx: HookContext, path_value: str

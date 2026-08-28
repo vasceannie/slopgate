@@ -101,8 +101,8 @@ addopts = "-ra -q --strict-markers"
 filterwarnings = ["error"]    # treat warnings as errors
 ```
 
-## Hook-Anchored Pytest Repairs
+## Hook-Anchored Pytest Repair Guidance
 
-- `PY-TEST-003`: replace loops containing asserts with `@pytest.mark.parametrize`; include `ids=[...]` for readable failures.
+- `PY-TEST-003`: prefer `@pytest.mark.parametrize` with readable `ids=[...]` for loop cases; if explicit assertions remain, split behaviors and message any 3+ adjacent assertions so `PY-TEST-001` stays clear.
 - `PY-TEST-004`: shared fixtures belong in the narrowest useful `conftest.py`, not individual test modules.
-- If 3+ bare asserts are adjacent, add descriptive messages or split the test by behavior.
+- `PY-TEST-001`: add descriptive messages to 3+ adjacent assertions or split the behaviors into focused tests.

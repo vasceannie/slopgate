@@ -1,63 +1,64 @@
 
 # Test Smells to Avoid
 
-Enforcer hooks block these at edit time. Write clean tests from the start.
+Enforcer hooks block these patterns at edit time. Keep each test focused and
+make failures identify the behavior that broke.
 
 ## Assertion Roulette (PY-TEST-001)
 
-Multiple assertions in one test without messages — when it fails, which one broke?
+Three or more consecutive bare `assert` statements are blocked. Add a
+descriptive message to each assertion or split unrelated behaviors into
+focused tests:
 
 ```python
-# Bad — assertion roulette
-def test_user():
-    assert user.name == "Alice"
-    assert user.age == 30
-    assert user.active is True
-
-# Good — one concept per test, or use messages
-def test_user_name():
-    assert user.name == "Alice"
-
-def test_user_is_active():
-    assert user.active is True
+def test_user_fields():
+    assert user.name == "Alice", "the user name should be Alice"
+    assert user.age == 30, "the user age should be 30"
+    assert user.active is True, "the user should be active"
 ```
 
-## Conditional Assertions (PY-TEST-002/003)
+## General Test Smells (PY-TEST-002)
 
-Logic in tests hides which path was actually tested:
+The hook blocks `time.sleep()`, broad `try/except` blocks, skip markers without
+reasons, and unittest-style assertion methods. Use deterministic waits,
+`pytest.raises(...)`, a stated skip reason, and plain assertions with messages.
+
+## Loop Assertions (PY-TEST-003)
+
+The hook blocks `for` or `while` bodies that contain assertions. For a finite
+named set of cases, use parametrization with readable IDs:
 
 ```python
-# Bad — conditional assertion
-def test_response(response):
-    if response.status == 200:
-        assert response.data is not None
-    else:
-        assert response.error is not None
-
-# Good — separate tests for each case
-def test_success_response_has_data(success_response):
-    assert success_response.data is not None
-
-def test_error_response_has_error(error_response):
-    assert error_response.error is not None
+@pytest.mark.parametrize(
+    "item",
+    [pytest.param(item, id=item.name) for item in items],
+)
+def test_item_is_valid(item):
+    assert item.valid, f"{item.name} should be valid"
 ```
 
-## Loops With Assertions
+Use Hypothesis for broad invariants such as round trips, idempotence, bounds,
+stable ordering, malformed-input handling, or no-crash behavior.
+
+## Fixtures Outside conftest.py (PY-TEST-004)
+
+Define shared pytest fixtures in the nearest `conftest.py`; keep heavy fixture
+implementation in the area's support module when needed. Tests request the
+fixture by name rather than importing it:
 
 ```python
-# Bad — loop hides which iteration failed
-for item in items:
-    assert item.valid
-
-# Good — parametrize
-@pytest.mark.parametrize("item", items, ids=lambda i: i.name)
-def test_item_valid(item):
-    assert item.valid
+# tests/engine/conftest.py
+@pytest.fixture
+def client():
+    return TestClient(app)
 ```
 
-## Sleep in Tests (PY-TEST-002)
+## Conditional Assertions (batch lint: conditional-assertion)
 
-`time.sleep()` makes tests slow and flaky. Use `unittest.mock.patch` to mock time, or `asyncio` test utilities for async code.
+The batch lint detector reports assertions nested under runtime branches.
+Split each branch into a focused test so every case has a deterministic
+assertion path. This is distinct from the hook's `PY-TEST-003`, which targets
+assertions directly inside loops.
 
 ## Assertion-Free Tests
 

@@ -10,11 +10,11 @@ Hooks block these at edit time.
 
 Multiple assertions, no messages → which broke? One concept per test, or add messages.
 
-## Conditional assertions (PY-TEST-002/003)
+## Conditional assertions
 
 Logic in tests hides which path ran. Split into separate tests, one per case.
 
-## Loops with assertions
+## Loops with assertions (PY-TEST-003)
 
 ```python
 # Bad

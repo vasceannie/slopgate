@@ -94,6 +94,11 @@ def multi_edit_content_targets(
         if not item_dict:
             continue
         path_item = extract_path_from_mapping(item_dict) or fallback_path
+        if item_dict.get("operation") == "delete" and path_item:
+            targets.append(
+                ContentTarget(path=path_item, content="", source="multi_edit_delete")
+            )
+            continue
         content_item = extract_content_from_mapping(item_dict) or _content_from_lines(
             item_dict.get("lines")
         )

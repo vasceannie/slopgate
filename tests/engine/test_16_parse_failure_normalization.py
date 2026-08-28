@@ -19,7 +19,11 @@ from slopgate.engine._runner import EvalAccumulator, _run_rule
 from slopgate.models import EngineResult, RuleFinding
 from slopgate.rules.base import Rule
 from tests.test_ast_rules import BUNDLE_ROOT
-from tests.adapters.test_opencode_projection.support import enroll_repo, raw_payload
+from tests.adapters.test_opencode_projection.support import (
+    enroll_repo,
+    evaluate_stale_edit,
+    raw_payload,
+)
 from tests.test_enrichment_public_api import context_for_source
 
 BROKEN_INDENT_SOURCE = (
@@ -49,6 +53,29 @@ def _assert_no_parser_leak(result: EngineResult) -> None:
     assert all(
         "PY-CODE-010" not in error for error in result.errors
     ), f"parser exceptions must not leak as PY-CODE-010 runtime errors: {result.errors!r}"
+
+
+def _assert_projected_parse_diagnostic(finding: RuleFinding) -> None:
+    assert finding.metadata["provenance"] == "projected_content", (
+        f"projected mutation must identify projected content: {finding.metadata!r}"
+    )
+    message = finding.message
+    assert message is not None, "parse findings must provide a diagnostic message"
+    assert "IndentationError" in message, (
+        f"finding message must render parser type: {message!r}"
+    )
+    assert "unindent does not match" in message, (
+        f"finding message must render parser message: {message!r}"
+    )
+    assert "line 3" in message, (
+        f"finding message must render parser line: {message!r}"
+    )
+    assert "offset" in message, (
+        f"finding message must render parser offset: {message!r}"
+    )
+    recovery = finding.additional_context
+    assert recovery is not None, "parse findings must provide recovery guidance"
+    assert recovery not in message, "recovery guidance must not be duplicated"
 
 
 def test_write_indentation_failure_emits_structured_py_ast_finding() -> None:
@@ -106,7 +133,22 @@ def test_projected_opencode_mutation_normalizes_indentation_failure(
     assert finding.metadata["exception_type"] == "IndentationError", (
         f"projected mutation must preserve parser provenance: {finding.metadata!r}"
     )
+    _assert_projected_parse_diagnostic(finding)
     _assert_no_parser_leak(result)
+
+
+def test_stale_native_edit_does_not_become_projected_parse_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result, projection, _outside = evaluate_stale_edit(tmp_path, monkeypatch)
+
+    assert projection["status"] == "stale", (
+        f"fixture must exercise native stale-edit parity: {projection!r}"
+    )
+    assert not _py_ast_findings(result), (
+        "native hashline parity failures must not be reported as projected AST failures"
+    )
 
 
 def test_posttooluse_disk_file_indentation_failure_normalizes(tmp_path: Path) -> None:

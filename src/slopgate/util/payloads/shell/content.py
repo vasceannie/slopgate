@@ -6,7 +6,7 @@ from pathlib import Path
 
 from slopgate.models import ContentTarget
 
-from ._shell import shell_tokens
+from .._shell import shell_tokens
 
 _HEREDOC_NAME_TEXT = r"(?P<marker>[A-Za-z_][A-Za-z0-9_]*)"
 _HEREDOC_QUOTED_NAME_TEXT = rf"<<\s*['\"]?{_HEREDOC_NAME_TEXT}['\"]?"
@@ -32,10 +32,6 @@ _PYTHON_HEREDOC_RE = re.compile(
 )
 _WRITE_REDIRECT_TOKENS = frozenset({">", ">>", "1>", "1>>", "&>"})
 _PYTHON_EXECUTABLE_NAMES = frozenset({"python", "python3"})
-
-
-def _clean_path(value: str) -> str:
-    return value.strip("\"'`")
 
 
 def _literal_string(node: ast.AST) -> str:
@@ -124,7 +120,7 @@ def _heredoc_content_targets(command: str) -> list[ContentTarget]:
         for match in pattern.finditer(command):
             targets.append(
                 ContentTarget(
-                    path=_clean_path(match.group("path")),
+                    path=match.group("path").strip("\"'`"),
                     content=match.group("body"),
                     source="shell_heredoc",
                 )
@@ -140,7 +136,7 @@ def _echo_redirect_targets(command: str) -> list[ContentTarget]:
     for index, token in enumerate(tokens):
         if token not in _WRITE_REDIRECT_TOKENS or index + 1 >= len(tokens):
             continue
-        path_value = _clean_path(tokens[index + 1])
+        path_value = tokens[index + 1].strip("\"'`")
         content = " ".join(tokens[1:index])
         if path_value and content:
             targets.append(

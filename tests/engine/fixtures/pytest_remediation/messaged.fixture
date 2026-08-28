@@ -1,0 +1,4 @@
+def test_values():
+    assert alpha, 'alpha should pass'
+    assert beta, 'beta should pass'
+    assert gamma, 'gamma should pass'
