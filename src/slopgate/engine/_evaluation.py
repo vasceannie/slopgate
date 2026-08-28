@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from time import monotonic
 
-from slopgate._types import ObjectDict, ObjectMapping
+from slopgate._types import ObjectDict, ObjectMapping, object_list
 from slopgate.constants import (
     PLATFORM_OPENCODE,
     PLATFORM_CLAUDE,
@@ -121,6 +121,41 @@ def _opencode_tool_name_for_policy(ctx: HookContext) -> str:
     return native_tool_name if isinstance(native_tool_name, str) else ctx.tool_name
 
 
+def _repair_state_strings(value: object) -> list[str]:
+    return [item for item in object_list(value) if isinstance(item, str) and item]
+
+
+def _first_causal_label(rule_ids: list[str], paths: list[str]) -> str:
+    rule = rule_ids[0] if rule_ids else None
+    path = paths[0] if paths else None
+    if rule and path:
+        return f"{rule} in {path}"
+    if rule:
+        return f"rule {rule}"
+    if path:
+        return f"file {path}"
+    return "the repair status output"
+
+
+def _opencode_repair_recovery_message(
+    generation_label: str,
+    causal_label: str,
+) -> str:
+    return (
+        "STOP: do not retry this blocked mutation; equivalent retries remain blocked "
+        f"until generation {generation_label} clears. Recovery protocol: "
+        f"(1) read the first causal finding: {causal_label}; "
+        "(2) inspect affected files with declared read-only tools; "
+        "(3) make one focused repair with an allowed mutation tool "
+        "(write, edit, apply_patch); "
+        "(4) run slopgate_verify_repair; it resolves the pending generation from repair "
+        "state and clears it only after clean verification. Allowed during repair: "
+        "declared read-only tools, write/edit/apply_patch, slopgate_verify_repair, exact "
+        "slopgate lint check; Bash, patch, diagnostic, and wrapper-tool retries "
+        "remain blocked."
+    )
+
+
 def _opencode_repair_required_finding(
     ctx: HookContext,
     platform: str,
@@ -140,16 +175,22 @@ def _opencode_repair_required_finding(
         return None
     generation = required.get("generation")
     generation_label = generation if isinstance(generation, str) else UNKNOWN_VALUE
+    rule_ids = _repair_state_strings(required.get("rule_ids"))
+    paths = _repair_state_strings(required.get("paths"))
     return RuleFinding(
         rule_id="OC-REPAIR-001",
         title="OpenCode repair required",
         severity=Severity.CRITICAL,
         decision=DENY,
-        message=(
-            f"Repair required for generation {generation_label}; use declared read-only "
-            "tools, write/edit/apply_patch, the repair verifier, or exact lint check."
+        message=_opencode_repair_recovery_message(
+            generation_label,
+            _first_causal_label(rule_ids, paths),
         ),
-        metadata={"generation": generation_label},
+        metadata={
+            "generation": generation_label,
+            "rule_ids": rule_ids,
+            "paths": paths,
+        },
     )
 
 

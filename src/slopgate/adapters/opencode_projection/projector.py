@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from slopgate._types import (
     ObjectDict,
@@ -89,6 +90,26 @@ def _project_write(request: ProjectionRequest) -> Projection:
     )
 
 
+def _project_missing_hashline_edit(
+    request: ProjectionRequest, relative: str
+) -> Projection:
+    logger.debug("OpenCode missing hashline edit projection requested", path=relative)
+    raw_edits: object = request.tool_input.get("edits")
+    if not isinstance(raw_edits, list):
+        return Projection("invalid")
+    edits = object_list(cast(list[object], raw_edits))
+    if not edits:
+        return Projection("invalid")
+    hashline_result = project_hashline_edits("", edits)
+    content = hashline_result.content
+    if content is None or not content:
+        return Projection("invalid", reason=hashline_result.failure)
+    return Projection(
+        "projected",
+        (ProjectedFile(relative, content, "add", None),),
+    )
+
+
 def _project_edit(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode edit projection requested", tool=request.tool_name)
     target = _request_target(request)
@@ -97,7 +118,9 @@ def _project_edit(request: ProjectionRequest) -> Projection:
     _path, relative = target
     snapshot = read_snapshot(request.root, relative)
     if not isinstance(snapshot, Snapshot):
-        return Projection("invalid" if snapshot == "missing" else snapshot)
+        if snapshot != "missing":
+            return Projection(snapshot)
+        return _project_missing_hashline_edit(request, relative)
     if "edits" in request.tool_input:
         hashline_result = project_hashline_edits(
             snapshot.content, request.tool_input.get("edits")
@@ -231,10 +254,7 @@ def _defers_to_native_mutation_validation(
 ) -> bool:
     logger.debug("OpenCode native mutation deferral evaluated", tool=tool_name)
     native_mutation_tool = native_opencode_mutation_tool_id(tool_name)
-    return (
-        status == "protocol_mismatch"
-        and native_mutation_tool is not None
-    ) or (
+    return (status == "protocol_mismatch" and native_mutation_tool is not None) or (
         status == "invalid"
         and reason == "stale_hash_anchor"
         and native_mutation_tool == "edit"
@@ -291,11 +311,15 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
         return Projection("protocol_mismatch").to_dict()
     native_tool_id = native_opencode_mutation_tool_id(request.tool_name)
-    projector = {
-        "write": _project_write,
-        "edit": _project_edit,
-        "apply_patch": _project_patch,
-    }.get(native_tool_id) if native_tool_id is not None else None
+    projector = (
+        {
+            "write": _project_write,
+            "edit": _project_edit,
+            "apply_patch": _project_patch,
+        }.get(native_tool_id)
+        if native_tool_id is not None
+        else None
+    )
     result = projector(request) if projector is not None else Projection("unsupported")
     return result.to_dict()
 

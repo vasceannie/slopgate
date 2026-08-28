@@ -152,6 +152,8 @@ interface RepairGateState {
   status: string
   generation?: string
   reason?: string
+  rule_ids?: unknown
+  paths?: unknown
 }
 
 type RepairCommandStatus = "ok" | "timeout" | "failed" | "cancelled"
@@ -650,6 +652,41 @@ async function repairGateState(cwd: string): Promise<RepairGateState | null> {
   }
 }
 
+function repairStateStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (item): item is string => typeof item === "string" && item !== "",
+  )
+}
+
+function firstCausalLabel(ruleIds: string[], paths: string[]): string {
+  const rule = ruleIds[0]
+  const path = paths[0]
+  if (rule && path) return `${rule} in ${path}`
+  if (rule) return `rule ${rule}`
+  if (path) return `file ${path}`
+  return "the repair status output"
+}
+
+function repairRecoveryProtocol(
+  generation: string,
+  ruleIds: string[],
+  paths: string[],
+): string {
+  return (
+    `STOP: do not retry this blocked mutation; equivalent retries remain blocked `
+    + `until generation ${generation} clears. Recovery protocol: `
+    + `(1) read the first causal finding: ${firstCausalLabel(ruleIds, paths)}; `
+    + "(2) inspect affected files with declared read-only tools; "
+    + "(3) make one focused repair with an allowed mutation tool "
+    + "(write, edit, apply_patch); "
+    + "(4) run slopgate_verify_repair; it resolves the pending generation from repair state "
+    + "and clears it only after clean verification. Allowed during repair: declared read-only "
+    + "tools, write/edit/apply_patch, slopgate_verify_repair, exact slopgate lint check; "
+    + "Bash, patch, diagnostic, and wrapper-tool retries remain blocked."
+  )
+}
+
 function isReadOnlyTool(toolName: string): boolean {
   return READ_ONLY_TOOLS.has(nativeToolId(toolName))
 }
@@ -829,8 +866,11 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
         && !isAllowedWhileRepairRequired(toolName, outputArgs)
       ) {
         throw new Error(
-          `[slopgate] repair required for generation ${pending.generation || "unknown"}; `
-          + "use read-only tools, repair, or clean verification first.",
+          `[slopgate] ${repairRecoveryProtocol(
+            pending.generation || "unknown",
+            repairStateStrings(pending.rule_ids),
+            repairStateStrings(pending.paths),
+          )}`,
         )
       }
       const knownEffectTool = isKnownEffectTool(toolName, outputArgs)

@@ -1,0 +1,15 @@
+{
+  "package": "oh-my-openagent@5.0.0-beta.21",
+  "source_revision": "a17b91cdc210a24a86accf51c41e57b99e8aced7",
+  "implementation": "@oh-my-opencode/hashline-core",
+  "operations": ["append", "prepend"],
+  "contract": {
+    "anchored_append": "after-anchor-line",
+    "anchored_prepend": "before-anchor-line",
+    "unanchored_append": "end-of-file",
+    "unanchored_prepend": "beginning-of-file",
+    "blank_anchor": "unanchored",
+    "separator_policy": "lines-only",
+    "missing_file": "unanchored-insertions-only"
+  }
+}

@@ -18,7 +18,7 @@ from ..constants import (
 )
 from .hash import line_hash
 
-HashlineFailure: TypeAlias = Literal["stale_hash_anchor"]
+HashlineFailure: TypeAlias = Literal["empty_insertion", "stale_hash_anchor"]
 
 
 class HashlineEditResult(NamedTuple):
@@ -88,6 +88,8 @@ def _parse_edit(value: object) -> _HashlineEdit | None:
     raw = object_dict(value)
     operation = string_value(raw.get("op"))
     if operation not in {REPLACE, "append", "prepend"}:
+        return None
+    if "lines" not in raw:
         return None
     lines = _normalize_lines(raw.get("lines"))
     if lines is None:
@@ -185,6 +187,8 @@ def _strip_insert_echo(anchor: str, lines: list[str], *, before: bool) -> list[s
     logger.debug("Hashline insert echo check requested", before=before)
     if not lines:
         return lines
+    if before and len(lines) <= 1:
+        return lines
     candidate = lines[-1] if before else lines[0]
     compact_candidate = re.sub(r"\s+", "", candidate)
     compact_anchor = re.sub(r"\s+", "", anchor)
@@ -219,7 +223,7 @@ def _restore_indent(original: list[str], replacement: list[str]) -> list[str]:
     return [_restore_pair(original[0], replacement[0]), *replacement[1:]]
 
 
-def _apply_edit(lines: list[str], resolved: _ResolvedEdit) -> None:
+def _apply_edit(lines: list[str], resolved: _ResolvedEdit) -> bool:
     logger.debug(
         "Hashline edit application requested", operation=resolved.edit.operation
     )
@@ -227,27 +231,27 @@ def _apply_edit(lines: list[str], resolved: _ResolvedEdit) -> None:
     if edit.operation == REPLACE:
         original = lines[resolved.start - 1 : resolved.end]
         replacement = _new_lines(edit.lines)
-        if len(replacement) > len(original) and original:
-            if replacement[0] == original[0]:
-                replacement = replacement[1:]
-            if replacement and replacement[-1] == original[-1]:
-                replacement = replacement[:-1]
         lines[resolved.start - 1 : resolved.end] = _restore_indent(
             original, replacement
         )
-        return
+        return True
     replacement = _new_lines(edit.lines)
     if edit.position is not None:
         anchor = lines[resolved.start - 1]
         replacement = _strip_insert_echo(
             anchor, replacement, before=edit.operation == "prepend"
         )
+        if not replacement:
+            return False
         insertion = (
             resolved.start - 1 if edit.operation == "prepend" else resolved.start
         )
     else:
         insertion = 0 if edit.operation == "prepend" else len(lines)
+    if not replacement:
+        return False
     lines[insertion:insertion] = replacement
+    return True
 
 
 def _canonicalize(content: str) -> tuple[list[str], str, bool, str]:
@@ -257,8 +261,7 @@ def _canonicalize(content: str) -> tuple[list[str], str, bool, str]:
     had_bom = content.startswith("\ufeff")
     without_bom = content[1:] if had_bom else content
     crlf_index = without_bom.find("\r\n")
-    lf_index = without_bom.find("\n")
-    if lf_index == -1 or (crlf_index != -1 and crlf_index < lf_index):
+    if crlf_index != -1:
         line_ending = "\r\n"
     else:
         line_ending = "\n"
@@ -286,7 +289,8 @@ def project_hashline_edits(content: str, raw_edits: object) -> HashlineEditResul
     if resolved is None:
         return HashlineEditResult(None, failure)
     for edit in resolved:
-        _apply_edit(lines, edit)
+        if not _apply_edit(lines, edit):
+            return HashlineEditResult(None, "empty_insertion")
     projected = "\n".join(lines)
     if projected == canonical:
         return HashlineEditResult(content, None)

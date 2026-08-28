@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from slopgate._types import ObjectDict, object_dict, object_list
 from slopgate.engine import evaluate_payload
 from .support import (
     enroll_repo,
@@ -83,6 +84,26 @@ _PROTOCOL_SKEW_NATIVE_MUTATIONS = [
 ]
 
 
+def _range_replacement_input() -> ObjectDict:
+    return {
+        "filePath": "src/app.py",
+        "edits": [
+            {
+                "op": "replace",
+                "pos": "1#XB",
+                "end": "4#ZT",
+                "lines": [
+                    "from sample import (",
+                    "    added,",
+                    "    first,",
+                    "    second,",
+                    ")",
+                ],
+            }
+        ],
+    }
+
+
 def test_stale_hashline_anchor_defers_validation_to_native_tool(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -109,6 +130,39 @@ def test_stale_hashline_anchor_defers_validation_to_native_tool(
     assert all(
         finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
     ), "native Edit must own stale hashline validation instead of Slopgate blocking first"
+
+
+def test_hashline_range_replacement_preserves_unchanged_boundary_lines(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = enroll_repo(tmp_path, monkeypatch)
+    source = "from sample import (\n    first,\n    second,\n)\n"
+    write_source(repo, "src/app.py", source)
+    tool_input = _range_replacement_input()
+
+    projection = projection_for(repo, "edit", tool_input)
+    projected = object_dict(object_list(projection.get("files"))[0])
+
+    assert projected["content"] == (
+        "from sample import (\n    added,\n    first,\n    second,\n)\n"
+    ), "full-range replacement must retain unchanged syntax boundaries"
+
+
+def test_hashline_range_replacement_avoids_false_ast_denial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = enroll_repo(tmp_path, monkeypatch)
+    write_source(repo, "src/app.py", "from sample import (\n    first,\n    second,\n)\n")
+    tool_input = _range_replacement_input()
+
+    result = evaluate_payload(raw_payload(repo, "edit", tool_input), platform="opencode")
+
+    ast_findings = [finding for finding in result.findings if finding.rule_id == "PY-AST-001"]
+    assert ast_findings == [], (
+        "valid projected Python must not be falsely denied as a parse error"
+    )
 
 
 @pytest.mark.parametrize(("tool_name", "tool_input"), _PROTOCOL_SKEW_NATIVE_MUTATIONS)
