@@ -29,3 +29,4 @@
 {"elapsed_ms": 0.003, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T12:05:52.089385+00:00", "tool_name": ""}
 {"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T12:10:43.455983+00:00", "tool_name": ""}
 {"elapsed_ms": 0.008, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T15:42:48.593500+00:00", "tool_name": ""}
+{"elapsed_ms": 0.002, "error": "ValueError('boom')", "event_name": "", "platform": "claude", "rule_id": "TEST-EXPLODE-001", "session_id": "", "timestamp": "2026-08-28T17:26:29.053367+00:00", "tool_name": ""}

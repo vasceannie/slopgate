@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Callable
 
 from slopgate._types import ObjectMapping, string_value
@@ -21,7 +22,9 @@ def invalid_patch_projection(operation: PatchOperation, relative: str) -> Projec
     """Return the invalid projection for an unapplicable patch section."""
     logger.debug("OpenCode patch section rejected", operation=operation, path=relative)
     if operation == "update":
-        return Projection("invalid", reason="update_hunk_mismatch", target_path=relative)
+        return Projection(
+            "invalid", reason="update_hunk_mismatch", target_path=relative
+        )
     return Projection("invalid")
 
 
@@ -105,35 +108,52 @@ def _parse_update_chunks(lines: tuple[str, ...]) -> tuple[_UpdateChunk, ...]:
     return tuple(chunks)
 
 
-def _unique_line_match(source: list[str], expected: tuple[str, ...]) -> int | None:
+def _seek_line_match(
+    source: list[str], expected: tuple[str, ...], start: int
+) -> int | None:
+    """Find the first forward line-block match using native opencode comparators."""
     logger.debug(
         "OpenCode update match requested",
         source_lines=len(source),
         expected_lines=len(expected),
+        start_line=start,
     )
     width = len(expected)
-    matches = [
-        index
-        for index in range(len(source) - width + 1)
-        if tuple(source[index : index + width]) == expected
-    ]
-    return matches[0] if len(matches) == 1 else None
+    comparators: tuple[Callable[[str, str], bool], ...] = (
+        lambda a, b: a == b,
+        lambda a, b: a.rstrip() == b.rstrip(),
+        lambda a, b: a.strip() == b.strip(),
+        lambda a, b: (
+            unicodedata.normalize("NFKC", a.strip())
+            == unicodedata.normalize("NFKC", b.strip())
+        ),
+    )
+    for comparator in comparators:
+        for index in range(start, len(source) - width + 1):
+            if all(
+                comparator(source[index + offset], expected[offset])
+                for offset in range(width)
+            ):
+                return index
+    return None
 
 
 def apply_update(source: str, lines: tuple[str, ...]) -> str | None:
-    """Apply exact, uniquely matching update hunks to in-memory content."""
+    """Apply update hunks using native opencode forward-match semantics."""
     logger.debug("OpenCode exact update requested", line_count=len(lines))
     chunks = _parse_update_chunks(lines)
     if not chunks:
         return None
     trailing_newline = source.endswith("\n")
     result = source.splitlines()
+    line_index = 0
     for old, new in chunks:
-        start = _unique_line_match(result, old)
+        start = _seek_line_match(result, old, line_index)
         if start is None:
             return None
         width = len(old)
         result[start : start + width] = new
+        line_index = start + width
     rendered = "\n".join(result)
     return f"{rendered}\n" if trailing_newline else rendered
 

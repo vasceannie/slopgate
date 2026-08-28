@@ -12,6 +12,46 @@ variables:
     SLOPGATE_TEST_HOME: /tmp/slopgate-ci-home
     CI_SCRIPTS: .gitlab-ci/scripts
 
+opencode-review:
+    stage: ai-review
+    image:
+        name: registry.gitlab.com/nagyv/gitlab-opencode:1.3.17
+        entrypoint: [""]
+    timeout: 30m
+    before_script:
+        - test -n "${OPENCODE_AUTH_JSON:-}"
+        - git fetch origin "refs/merge-requests/${OPENCODE_MR_IID}/head"
+        - export OPENCODE_MR_HEAD="$(git rev-parse FETCH_HEAD)"
+        - export OPENCODE_DIFF_BASE="$(git merge-base "${CI_COMMIT_SHA}" "${OPENCODE_MR_HEAD}")"
+        - export OPENCODE_CONFIG_DIR="${CI_PROJECT_DIR}/.gitlab/opencode"
+        - mkdir -p ~/.local/share/opencode
+        - ln -sf "${OPENCODE_AUTH_JSON}" ~/.local/share/opencode/auth.json
+    script:
+        - >-
+          opencode run --format json
+          "Perform a read-only review of GitLab merge request !${OPENCODE_MR_IID}
+          in ${CI_PROJECT_PATH}. Review the complete diff from ${OPENCODE_DIFF_BASE}
+          through ${OPENCODE_MR_HEAD}, inspect every changed file, and use repository
+          instructions and tests as context. Report actionable correctness, security,
+          integration, and regression findings with file and line references. Explicitly
+          list any file you could not review. Do not modify files, commit, push, merge,
+          approve, post comments, access secrets, or inspect paths outside the checkout.
+          The final response is a pipeline artifact for a human reviewer."
+          > opencode-review.jsonl
+        - /app/scripts/process_opencode_output.sh opencode-review.jsonl > opencode-review.out
+        - cat opencode-review.out
+    rules:
+        - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $OPENCODE_MR_IID =~ /^[0-9]+$/'
+          when: on_success
+          allow_failure: true
+        - when: never
+    artifacts:
+        when: always
+        paths:
+            - opencode-review.jsonl
+            - opencode-review.out
+        expire_in: 30 days
+
 .common-setup: &common-setup
     before_script:
         - apt-get update -qq && apt-get install -y -qq curl git > /dev/null 2>&1
@@ -35,6 +75,7 @@ variables:
 stages:
     - test
     - lint
+    - ai-review
     - install-verify
     - hook-install-verify
     - hook-uninstall-verify
