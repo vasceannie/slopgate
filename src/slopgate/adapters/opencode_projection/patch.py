@@ -14,14 +14,41 @@ _HEADERS: tuple[tuple[str, PatchOperation], ...] = (
     ("*** Update File: ", "update"),
     ("*** Delete File: ", "delete"),
 )
-_UpdateChunk = tuple[tuple[str, ...], tuple[str, ...]]
+_UpdateChunk = tuple[tuple[str, ...], tuple[str, ...], str | None]
+_UNICODE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("\u2018", "'"),
+    ("\u2019", "'"),
+    ("\u201a", "'"),
+    ("\u201b", "'"),
+    ("\u201c", '"'),
+    ("\u201d", '"'),
+    ("\u201e", '"'),
+    ("\u201f", '"'),
+    ("\u2010", "-"),
+    ("\u2011", "-"),
+    ("\u2012", "-"),
+    ("\u2013", "-"),
+    ("\u2014", "-"),
+    ("\u2015", "-"),
+    ("\u2026", "..."),
+    ("\u00a0", " "),
+)
+
+
+def _normalize_unicode(line: str) -> str:
+    """Normalize Unicode punctuation to ASCII like native opencode."""
+    for char, replacement in _UNICODE_REPLACEMENTS:
+        line = line.replace(char, replacement)
+    return line
 
 
 def invalid_patch_projection(operation: PatchOperation, relative: str) -> Projection:
     """Return the invalid projection for an unapplicable patch section."""
     logger.debug("OpenCode patch section rejected", operation=operation, path=relative)
     if operation == "update":
-        return Projection("invalid", reason="update_hunk_mismatch", target_path=relative)
+        return Projection(
+            "invalid", reason="update_hunk_mismatch", target_path=relative
+        )
     return Projection("invalid")
 
 
@@ -86,54 +113,105 @@ def _parse_update_chunks(lines: tuple[str, ...]) -> tuple[_UpdateChunk, ...]:
     chunks: list[_UpdateChunk] = []
     old_lines: list[str] = []
     new_lines: list[str] = []
+    anchor: str | None = None
+    open_chunk = False
     for line in lines:
         if line.startswith("@@"):
-            if old_lines:
-                chunks.append((tuple(old_lines), tuple(new_lines)))
+            if open_chunk:
+                chunks.append((tuple(old_lines), tuple(new_lines), anchor))
                 old_lines, new_lines = [], []
+            open_chunk = True
+            anchor = line[2:].strip() or None
             continue
+        if line == "*** End of File":
+            break
         if line.startswith("+"):
             new_lines.append(line[1:])
         elif line.startswith("-"):
             old_lines.append(line[1:])
-        else:
-            context = line[1:] if line.startswith(" ") else line
-            old_lines.append(context)
-            new_lines.append(context)
-    if old_lines:
-        chunks.append((tuple(old_lines), tuple(new_lines)))
+        elif line.startswith(" "):
+            content = line[1:]
+            old_lines.append(content)
+            new_lines.append(content)
+    if open_chunk:
+        chunks.append((tuple(old_lines), tuple(new_lines), anchor))
     return tuple(chunks)
 
 
-def _unique_line_match(source: list[str], expected: tuple[str, ...]) -> int | None:
+def _seek_line_match(
+    source: list[str], expected: tuple[str, ...], start: int
+) -> int | None:
+    """Find the first forward line-block match using native opencode comparators."""
     logger.debug(
         "OpenCode update match requested",
         source_lines=len(source),
         expected_lines=len(expected),
+        start_line=start,
     )
     width = len(expected)
-    matches = [
-        index
-        for index in range(len(source) - width + 1)
-        if tuple(source[index : index + width]) == expected
-    ]
-    return matches[0] if len(matches) == 1 else None
+    comparators: tuple[Callable[[str, str], bool], ...] = (
+        lambda a, b: a == b,
+        lambda a, b: a.rstrip() == b.rstrip(),
+        lambda a, b: a.strip() == b.strip(),
+        lambda a, b: _normalize_unicode(a.strip()) == _normalize_unicode(b.strip()),
+    )
+    for comparator in comparators:
+        for index in range(start, len(source) - width + 1):
+            if all(
+                comparator(source[index + offset], expected[offset])
+                for offset in range(width)
+            ):
+                return index
+    return None
+
+
+def _locate_chunk(
+    original: list[str], chunk: _UpdateChunk, line_index: int
+) -> tuple[int, tuple[str, ...], tuple[str, ...], int] | None:
+    """Locate one chunk, returning (start, old, new, next_index)."""
+    old, new, anchor = chunk
+    if anchor is not None:
+        context_index = _seek_line_match(original, (anchor,), line_index)
+        if context_index is None:
+            return None
+        line_index = context_index + 1
+    if not old:
+        insertion_index = (
+            len(original) - 1 if original and original[-1] == "" else len(original)
+        )
+        return insertion_index, (), new, insertion_index
+    pattern = old
+    new_slice = new
+    start = _seek_line_match(original, pattern, line_index)
+    if start is None and pattern[-1] == "":
+        pattern = pattern[:-1]
+        if new_slice and new_slice[-1] == "":
+            new_slice = new_slice[:-1]
+        start = _seek_line_match(original, pattern, line_index)
+    if start is None:
+        return None
+    return start, pattern, new_slice, start + len(pattern)
 
 
 def apply_update(source: str, lines: tuple[str, ...]) -> str | None:
-    """Apply exact, uniquely matching update hunks to in-memory content."""
-    logger.debug("OpenCode exact update requested", line_count=len(lines))
+    """Apply update hunks using native opencode forward-match semantics."""
+    logger.debug("OpenCode forward update requested", line_count=len(lines))
     chunks = _parse_update_chunks(lines)
     if not chunks:
         return None
     trailing_newline = source.endswith("\n")
-    result = source.splitlines()
-    for old, new in chunks:
-        start = _unique_line_match(result, old)
-        if start is None:
+    original = source.splitlines()
+    replacements: list[tuple[int, tuple[str, ...], tuple[str, ...]]] = []
+    line_index = 0
+    for chunk in chunks:
+        located = _locate_chunk(original, chunk, line_index)
+        if located is None:
             return None
-        width = len(old)
-        result[start : start + width] = new
+        start, old, new, line_index = located
+        replacements.append((start, old, new))
+    result = list(original)
+    for start, old, new in reversed(replacements):
+        result[start : start + len(old)] = new
     rendered = "\n".join(result)
     return f"{rendered}\n" if trailing_newline else rendered
 
