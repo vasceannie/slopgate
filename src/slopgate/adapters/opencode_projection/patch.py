@@ -7,7 +7,7 @@ from collections.abc import Callable
 from slopgate._types import ObjectMapping, string_value
 from slopgate.util import logger
 
-from .models import PatchOperation, PatchSection
+from .models import PatchOperation, PatchSection, Projection
 
 _HEADERS: tuple[tuple[str, PatchOperation], ...] = (
     ("*** Add File: ", "add"),
@@ -15,6 +15,14 @@ _HEADERS: tuple[tuple[str, PatchOperation], ...] = (
     ("*** Delete File: ", "delete"),
 )
 _UpdateChunk = tuple[tuple[str, ...], tuple[str, ...]]
+
+
+def invalid_patch_projection(operation: PatchOperation, relative: str) -> Projection:
+    """Return the invalid projection for an unapplicable patch section."""
+    logger.debug("OpenCode patch section rejected", operation=operation, path=relative)
+    if operation == "update":
+        return Projection("invalid", reason="update_hunk_mismatch", target_path=relative)
+    return Projection("invalid")
 
 
 def _consume_patch_line(

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from slopgate._types import (
     ObjectDict,
@@ -15,6 +15,7 @@ from slopgate._types import (
     string_value,
 )
 from slopgate.constants import DENY, METADATA_CONTENT, METADATA_PATH, PRE_TOOL_USE
+from slopgate.config import resolve_repo_root
 from slopgate.models import RuleFinding, Severity
 from slopgate.opencode_tool_capabilities import (
     OpenCodeToolCapability,
@@ -31,32 +32,34 @@ from .models import (
     ProjectionRequest,
     Snapshot,
     SnapshotStatus,
+    UNRESOLVED_PROJECTION_MESSAGES,
 )
 from .hashline import project_hashline_edits
-from .patch import parse_patch, patch_text, section_content
+from .patch import invalid_patch_projection, parse_patch, patch_text, section_content
 from .snapshot import read_snapshot
 
 
 @dataclass(frozen=True, slots=True)
 class _SectionSource:
+    relative: str
     content: str
     sha256: str | None
 
 
-def _target(root: Path, value: str) -> tuple[Path, str] | None:
+def _target(root: Path, value: str) -> tuple[Path, str] | Projection:
     logger.debug("OpenCode projection target requested", root=root, value=value)
     if not value.strip():
-        return None
+        return Projection("invalid")
     root = root.resolve()
     candidate = Path(value)
     raw_path = candidate if candidate.is_absolute() else root / candidate
     path = Path(os.path.abspath(raw_path))
     if not path.is_relative_to(root):
-        return None
+        return Projection("invalid", reason="target_outside_root")
     return path, path.relative_to(root).as_posix()
 
 
-def _request_target(request: ProjectionRequest) -> tuple[Path, str] | None:
+def _request_target(request: ProjectionRequest) -> tuple[Path, str] | Projection:
     logger.debug("OpenCode request target requested", tool=request.tool_name)
     raw_path = string_value(request.tool_input.get("filePath")) or ""
     return _target(request.root, raw_path)
@@ -76,7 +79,9 @@ def _project_write(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode write projection requested", tool=request.tool_name)
     target = _request_target(request)
     content = string_value(request.tool_input.get(METADATA_CONTENT))
-    if target is None or content is None:
+    if isinstance(target, Projection):
+        return target
+    if content is None:
         return Projection("invalid")
     _path, relative = target
     digest = _snapshot_digest(request.root, relative)
@@ -90,9 +95,7 @@ def _project_write(request: ProjectionRequest) -> Projection:
     )
 
 
-def _project_missing_hashline_edit(
-    request: ProjectionRequest, relative: str
-) -> Projection:
+def _project_missing_hashline_edit(request: ProjectionRequest, relative: str) -> Projection:
     logger.debug("OpenCode missing hashline edit projection requested", path=relative)
     raw_edits: object = request.tool_input.get("edits")
     if not isinstance(raw_edits, list):
@@ -113,8 +116,8 @@ def _project_missing_hashline_edit(
 def _project_edit(request: ProjectionRequest) -> Projection:
     logger.debug("OpenCode edit projection requested", tool=request.tool_name)
     target = _request_target(request)
-    if target is None:
-        return Projection("invalid")
+    if isinstance(target, Projection):
+        return target
     _path, relative = target
     snapshot = read_snapshot(request.root, relative)
     if not isinstance(snapshot, Snapshot):
@@ -145,21 +148,20 @@ def _project_edit(request: ProjectionRequest) -> Projection:
 
 
 def _section_source(
-    root: Path,
-    section: PatchSection,
-) -> _SectionSource | SnapshotStatus:
+    root: Path, section: PatchSection
+) -> _SectionSource | Literal["invalid", "stale"] | Projection:
     logger.debug("OpenCode patch source requested", operation=section.operation)
     target = _target(root, section.path)
-    if target is None:
-        return "invalid"
+    if isinstance(target, Projection):
+        return target
     _path, relative = target
     snapshot = read_snapshot(root, relative)
     if isinstance(snapshot, Snapshot):
         if section.operation == "add":
             return "invalid"
-        return _SectionSource(snapshot.content, snapshot.sha256)
+        return _SectionSource(relative, snapshot.content, snapshot.sha256)
     if snapshot == "missing":
-        return _SectionSource("", None) if section.operation == "add" else "invalid"
+        return _SectionSource(relative, "", None) if section.operation == "add" else "invalid"
     return snapshot
 
 
@@ -172,28 +174,52 @@ def _project_move(
     logger.debug("OpenCode move projection requested", path=section.path)
     if section.move_to is None:
         return None
-    target = _target(request.root, section.path)
-    if target is None:
-        return Projection("invalid")
-    _source_path, relative = target
+    relative = resolved.relative
     content = section_content(section, resolved.content)
     if content is None:
-        return Projection(
-            "invalid", reason="update_hunk_mismatch", target_path=relative
-        )
+        return invalid_patch_projection(section.operation, relative)
     destination = _target(request.root, section.move_to)
-    if destination is None:
-        return Projection("invalid")
+    if isinstance(destination, Projection):
+        return destination
     _destination_path, destination_relative = destination
     if destination_relative == relative or destination_relative in files:
         return Projection("invalid")
     if _snapshot_digest(request.root, destination_relative) is not None:
         return Projection("invalid")
-    files[relative] = ProjectedFile(relative, "", "delete", resolved.sha256)
+    files[relative] = ProjectedFile(
+        relative, "", "delete", resolved.sha256
+    )
     files[destination_relative] = ProjectedFile(
         destination_relative, content, "add", None
     )
     return Projection("projected")
+
+
+def _project_patch_section(
+    request: ProjectionRequest,
+    section: PatchSection,
+    files: dict[str, ProjectedFile],
+) -> Projection | None:
+    logger.debug("OpenCode patch section projection requested", path=section.path)
+    target = _target(request.root, section.path)
+    if isinstance(target, Projection):
+        return target
+    _path, relative = target
+    if relative in files:
+        return Projection("invalid")
+    resolved = _section_source(request.root, section)
+    if isinstance(resolved, Projection):
+        return resolved
+    if not isinstance(resolved, _SectionSource):
+        return Projection(resolved)
+    move_result = _project_move(request, section, resolved, files)
+    if move_result is not None:
+        return move_result if move_result.status != "projected" else None
+    content = section_content(section, resolved.content)
+    if content is None:
+        return invalid_patch_projection(section.operation, relative)
+    files[relative] = ProjectedFile(relative, content, section.operation, resolved.sha256)
+    return None
 
 
 def _project_patch(request: ProjectionRequest) -> Projection:
@@ -204,46 +230,10 @@ def _project_patch(request: ProjectionRequest) -> Projection:
         return Projection("invalid")
     files: dict[str, ProjectedFile] = {}
     for section in sections:
-        target = _target(request.root, section.path)
-        if target is None:
-            return Projection("invalid")
-        _path, relative = target
-        if relative in files:
-            return Projection("invalid")
-        resolved = _section_source(request.root, section)
-        if not isinstance(resolved, _SectionSource):
-            return Projection("invalid" if resolved == "missing" else resolved)
-        move_result = _project_move(request, section, resolved, files)
-        if move_result is not None:
-            if move_result.status != "projected":
-                return move_result
-            continue
-        content = section_content(section, resolved.content)
-        if content is None:
-            if section.operation == "update":
-                return Projection(
-                    "invalid",
-                    reason="update_hunk_mismatch",
-                    target_path=relative,
-                )
-            return Projection("invalid")
-        files[relative] = ProjectedFile(
-            relative,
-            content,
-            section.operation,
-            resolved.sha256,
-        )
+        result = _project_patch_section(request, section, files)
+        if result is not None:
+            return result
     return Projection("projected", tuple(files.values()))
-
-
-_UNRESOLVED_PROJECTION_MESSAGES = {
-    "invalid": "OpenCode mutation projection is invalid; refusing execution.",
-    "stale": "OpenCode mutation projection is stale; refusing execution.",
-    "protocol_mismatch": (
-        "OpenCode tool contract mismatch; refusing unresolved mutation."
-    ),
-    "unsupported": "Unknown OpenCode tool effect; denying by default.",
-}
 
 
 def _defers_to_native_mutation_validation(
@@ -284,10 +274,13 @@ def unresolved_opencode_projection_finding(
     if capability is OpenCodeToolCapability.READ_ONLY:
         return None
     target_path = string_value(projection.get(METADATA_PATH))
-    message = _UNRESOLVED_PROJECTION_MESSAGES.get(
-        status,
-        "Unresolved OpenCode mutation projection; refusing execution.",
-    )
+    if reason == "target_outside_root":
+        message = "OpenCode target is outside the managed repository; refusing execution."
+    else:
+        message = UNRESOLVED_PROJECTION_MESSAGES.get(
+            status,
+            "Unresolved OpenCode mutation projection; refusing execution.",
+        )
     if target_path is not None:
         message = f"{message} Target: {target_path}."
     metadata: ObjectDict = {"projection_status": status or "missing"}
@@ -310,6 +303,7 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
     logger.debug("OpenCode tool projection requested", tool=request.tool_name)
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
         return Projection("protocol_mismatch").to_dict()
+    request = replace(request, root=resolve_repo_root(request.root) or request.root.resolve())
     native_tool_id = native_opencode_mutation_tool_id(request.tool_name)
     projector = (
         {
@@ -320,7 +314,11 @@ def project_opencode_tool_input(request: ProjectionRequest) -> ObjectDict:
         if native_tool_id is not None
         else None
     )
-    result = projector(request) if projector is not None else Projection("unsupported")
+    result = (
+        projector(request)
+        if projector is not None
+        else Projection("unsupported")
+    )
     return result.to_dict()
 
 

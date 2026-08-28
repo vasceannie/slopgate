@@ -16,9 +16,17 @@ PROJECTION_KEY: Final = "_slopgate_projection"
 ProjectionStatus: TypeAlias = Literal[
     "projected", "invalid", "stale", "unsupported", "protocol_mismatch"
 ]
-ProjectionReason: TypeAlias = Literal["stale_hash_anchor", "update_hunk_mismatch"]
+ProjectionReason: TypeAlias = Literal[
+    "empty_insertion", "stale_hash_anchor", "target_outside_root", "update_hunk_mismatch"
+]
 SnapshotStatus: TypeAlias = Literal["invalid", "missing", "stale"]
 PatchOperation: TypeAlias = Literal["add", "update", "delete"]
+UNRESOLVED_PROJECTION_MESSAGES: Final[dict[str, str]] = {
+    "invalid": "OpenCode mutation projection is invalid; refusing execution.",
+    "stale": "OpenCode mutation projection is stale; refusing execution.",
+    "protocol_mismatch": "OpenCode tool contract mismatch; refusing unresolved mutation.",
+    "unsupported": "Unknown OpenCode tool effect; denying by default.",
+}
 
 
 @dataclass(frozen=True, slots=True)

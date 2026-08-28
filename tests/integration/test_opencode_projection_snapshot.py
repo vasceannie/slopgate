@@ -21,6 +21,7 @@ from slopgate.adapters.opencode_projection.models import (
     Snapshot,
 )
 from slopgate.adapters.opencode_projection.patch import (
+    invalid_patch_projection,
     parse_patch,
     patch_text,
     section_content,
@@ -146,6 +147,14 @@ def test_apply_patch_helpers_integrate_alias_and_hunk_application() -> None:
     assert section_content(sections[0], "VALUE = 1\n") == "VALUE = 2\n", (
         "the parsed update section should apply the hunk"
     )
+
+
+def test_invalid_patch_projection_integrates_update_hunk_diagnostic() -> None:
+    projection = invalid_patch_projection("update", "app.py")
+
+    assert projection.status == "invalid", "mismatched updates must be invalid"
+    assert projection.reason == "update_hunk_mismatch", "update mismatch reason is required"
+    assert projection.target_path == "app.py", "the repository-relative target is preserved"
 
 
 def test_apply_patch_projection_integrates_camel_alias(tmp_path: Path) -> None:
