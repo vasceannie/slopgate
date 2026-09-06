@@ -117,6 +117,7 @@ interface BunSpawnResult {
   stdout: BunResponseBody
   stderr: BunResponseBody
   exited: Promise<number>
+  kill(signal?: string): void
 }
 
 interface BunRuntime {
@@ -204,6 +205,8 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
 const SHELL_MUTATION_MARKERS = /(?:&&|\|\||[;|<>]|\$\([^)]*\)|`[^`]*`)/
 const VERIFY_TOOL = "slopgate_verify_repair"
 const DEFAULT_REPAIR_TIMEOUT_MS = 60_000
+const DEFAULT_ENFORCER_TIMEOUT_MS = 10_000
+const ENFORCER_KILL_GRACE_MS = 1_000
 const verifyFlights = new Map<string, Promise<RepairCommandResult>>()
 const DECLARED_TOOL_IDS_BY_COMPACT = new Map<string, string>(
   [...READ_ONLY_TOOLS, ...KNOWN_EFFECT_TOOLS].map((toolId) => [
@@ -479,61 +482,110 @@ async function callEnforcer(
   managedRepo: boolean,
   repairStatusUnavailable: boolean = false,
 ): Promise<EnforcerResult | null> {
-  try {
-    const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
-    const subprocessStartedAtMs = Date.now()
-    const proc = Bun.spawn(
-      [...SLOPGATE_ARGV, "handle", "--platform", "opencode"],
-      {
-        env: Bun.env,
-        cwd: payloadCwd,
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    )
+  const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined
+  const rawTimeout = Bun.env.SLOPGATE_ENFORCER_TIMEOUT_MS
+  const parsedTimeout = rawTimeout === undefined ? DEFAULT_ENFORCER_TIMEOUT_MS : Number(rawTimeout)
+  const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0
+    ? parsedTimeout
+    : DEFAULT_ENFORCER_TIMEOUT_MS
+  const subprocessStartedAtMs = Date.now()
 
-    // Bun.spawn with stdin:"pipe" returns a FileSink, not a WritableStream.
-    // FileSink API: .write(data), .flush(), .end()
-    proc.stdin.write(JSON.stringify({
-      ...payload,
-      slopgate_subprocess_started_at_ms: subprocessStartedAtMs,
-    }))
-    proc.stdin.flush()
-    proc.stdin.end()
-
-    // Read stdout and stderr as text
-    const output = await new Response(proc.stdout).text()
-    const stderr = await new Response(proc.stderr).text()
-
-    const exitCode = await proc.exited
-
-    if (exitCode !== 0) {
-      console.error(`[slopgate] exit ${exitCode}: ${stderr}`)
-      return enforcerFailureResult(
+  return new Promise((resolve) => {
+    let child: ChildProcess | undefined
+    let settled = false
+    let stdout = ""
+    let stderr = ""
+    let timer: ReturnType<typeof setTimeout>
+    const finish = (result: EnforcerResult | null): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(result)
+    }
+    timer = setTimeout(() => {
+      if (settled) return
+      if (child) {
+        child.stdin?.destroy()
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        killProcessGroup(child)
+      }
+      console.error(`[slopgate] enforcer subprocess timed out after ${timeoutMs}ms`)
+      finish(enforcerFailureResult(
         payload,
         managedRepo,
         repairStatusUnavailable,
-        "slopgate degraded mode: enforcer subprocess failed in managed repo.",
+        "slopgate degraded mode: enforcer subprocess timed out in managed repo.",
+      ))
+    }, timeoutMs)
+    try {
+      child = spawn(
+        SLOPGATE_ARGV[0],
+        [...SLOPGATE_ARGV.slice(1), "handle", "--platform", "opencode"],
+        {
+          cwd: payloadCwd,
+          env: process.env,
+          detached: process.platform !== "win32",
+          stdio: ["pipe", "pipe", "pipe"],
+        },
       )
+      child.stdout?.on("data", (chunk: Buffer | string) => {
+        stdout += chunk.toString()
+      })
+      child.stderr?.on("data", (chunk: Buffer | string) => {
+        stderr += chunk.toString()
+      })
+      child.on("error", (err: Error) => {
+        console.error(`[slopgate] callEnforcer failed: ${err}`)
+        finish(enforcerFailureResult(
+          payload,
+          managedRepo,
+          repairStatusUnavailable,
+          "slopgate degraded mode: enforcer call failed in managed repo.",
+        ))
+      })
+      child.on("close", (exitCode: number | null) => {
+        if (exitCode !== 0) {
+          console.error(`[slopgate] exit ${exitCode ?? 1}: ${stderr}`)
+          finish(enforcerFailureResult(
+            payload,
+            managedRepo,
+            repairStatusUnavailable,
+            "slopgate degraded mode: enforcer subprocess failed in managed repo.",
+          ))
+          return
+        }
+        const trimmed = stdout.trim()
+        if (!trimmed) {
+          finish(null)
+          return
+        }
+        try {
+          finish(JSON.parse(trimmed) as EnforcerResult)
+        } catch (err) {
+          console.error(`[slopgate] callEnforcer failed: ${err}`)
+          finish(enforcerFailureResult(
+            payload,
+            managedRepo,
+            repairStatusUnavailable,
+            "slopgate degraded mode: enforcer call failed in managed repo.",
+          ))
+        }
+      })
+      child.stdin?.end(JSON.stringify({
+        ...payload,
+        slopgate_subprocess_started_at_ms: subprocessStartedAtMs,
+      }))
+    } catch (err) {
+      console.error(`[slopgate] callEnforcer failed: ${err}`)
+      finish(enforcerFailureResult(
+        payload,
+        managedRepo,
+        repairStatusUnavailable,
+        "slopgate degraded mode: enforcer call failed in managed repo.",
+      ))
     }
-
-    const trimmed = output.trim()
-    // slopgate exits 0 with no stdout when no rule rendered an OpenCode action.
-    // That is a clean allow/no-op, not a degraded enforcer response.
-    if (!trimmed) return null
-
-    return JSON.parse(trimmed) as EnforcerResult
-  } catch (err) {
-    // Catch subprocess failures, JSON parse errors, Bun API changes, etc.
-    console.error(`[slopgate] callEnforcer failed: ${err}`)
-    return enforcerFailureResult(
-      payload,
-      managedRepo,
-      repairStatusUnavailable,
-      "slopgate degraded mode: enforcer call failed in managed repo.",
-    )
-  }
+  })
 }
 
 function repairTimeoutMs(): number {
@@ -547,6 +599,7 @@ function killProcessGroup(child: ChildProcess): void {
   if (pid == null) return
   if (process.platform === "win32") {
     spawn("taskkill", ["/PID", String(pid), "/T", "/F"])
+    child.kill("SIGKILL")
     return
   }
   try {
