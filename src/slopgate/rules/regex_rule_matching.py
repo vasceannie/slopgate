@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from slopgate.models import RegexRuleConfig
+from slopgate.constants import METADATA_CONTENT, METADATA_PATH, METADATA_TARGET
+from slopgate.models import RegexRuleConfig, RuleFinding, Severity
+from slopgate.rules.base import Rule
+from slopgate.util.metadata_paths import quality_metadata_path
 from slopgate.util.payloads import any_path_matches
 
 
@@ -79,3 +82,61 @@ class RegexRuleMatcher:
         if match_index is None:
             return []
         return [RegexHit(path=None, category=self.category_at(match_index))]
+
+
+class RegexConfiguredRule(Rule):
+    """Base for rules driven by a :class:`RegexRuleConfig` identity."""
+
+    config: RegexRuleConfig
+
+    def __init__(self, config: RegexRuleConfig, enabled: bool = True) -> None:
+        super().__init__(enabled=enabled)
+        self.config = config
+        self.rule_id = config.rule_id
+        self.title = config.title
+        self.events = tuple(config.events)
+
+
+def render_regex_message(
+    config: RegexRuleConfig, rule_id: str, hits: list[RegexHit]
+) -> str:
+    """Render a regex rule message for the first matching hit."""
+    category = hits[0].category if hits else None
+    if category and config.category_messages:
+        category_message = config.category_messages.get(category)
+        if category_message:
+            return category_message
+    if not config.message:
+        return rule_id
+    first_path = hits[0].path or ""
+    all_paths = ", ".join(sorted({hit.path for hit in hits if hit.path}))
+    return config.message.format(
+        path=first_path, matched_paths=all_paths, rule_id=rule_id
+    )
+
+
+def build_regex_finding(
+    config: RegexRuleConfig, rule_id: str, title: str, hits: list[RegexHit]
+) -> RuleFinding:
+    """Build a regex rule finding from the collected hits."""
+    is_context = config.action == "context"
+    hit_paths = [hit.path for hit in hits if hit.path]
+    primary_category = hits[0].category if hits else None
+    metadata: dict[str, object] = {METADATA_TARGET: config.target, "hits": hit_paths}
+    if primary_category:
+        metadata["category"] = primary_category
+    if hit_paths and config.target in {METADATA_CONTENT, METADATA_PATH}:
+        for hit_path in hit_paths:
+            display_path = quality_metadata_path(hit_path)
+            if display_path:
+                metadata[METADATA_PATH] = display_path
+                break
+    return RuleFinding(
+        rule_id=rule_id,
+        title=title,
+        severity=Severity.from_value(config.severity),
+        decision=None if is_context else config.action,
+        message=None if is_context else render_regex_message(config, rule_id, hits),
+        additional_context=config.additional_context,
+        metadata=metadata,
+    )

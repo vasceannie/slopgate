@@ -20,6 +20,7 @@ __all__ = [
     "SearchReminderRule",
     "SensitiveDataRule",
     "SystemProtectionRule",
+    "DefaultSwallowRule",
     "RegexRule",
     "LangGraphDeprecatedAPIRule",
     "LangGraphStateMutationRule",
@@ -48,7 +49,7 @@ from slopgate.constants import (
     PRE_TOOL_USE,
     SESSION_ID,
 )
-from slopgate.models import RuleFinding, Severity
+from slopgate.models import RegexRuleConfig, RuleFinding, Severity
 from slopgate.rules.base import Rule
 from slopgate.util.payloads import is_edit_like_tool
 from slopgate.rules.common import (
@@ -63,6 +64,10 @@ from slopgate.rules.common import (
     SystemProtectionRule,
 )
 from slopgate.rules.regex_rule import RegexRule
+from slopgate.rules.default_swallow_rule import (
+    DEFAULT_SWALLOW_RULE_ID,
+    DefaultSwallowRule,
+)
 from slopgate.rules.langgraph import (
     LangGraphDeprecatedAPIRule,
     LangGraphStateMutationRule,
@@ -226,6 +231,16 @@ def build_always_on_rules(ctx: HookContext) -> list[Rule]:
     return rules
 
 
+SPECIALIZED_CONTENT_RULES: dict[str, type[RegexRule] | type[DefaultSwallowRule]] = {
+    DEFAULT_SWALLOW_RULE_ID: DefaultSwallowRule,
+}
+
+
+def _build_content_rule(regex_rule: RegexRuleConfig, enabled_default: bool) -> Rule:
+    rule_type = SPECIALIZED_CONTENT_RULES.get(regex_rule.rule_id, RegexRule)
+    return rule_type(config=regex_rule, enabled=enabled_default)
+
+
 def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
     rules: list[Rule] = [
         PromptContextRule(),
@@ -251,9 +266,9 @@ def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
     ]
     rules.extend(_build_python_ast_rules(ctx))
     rules.extend(
-        RegexRule(
-            config=regex_rule,
-            enabled=ctx.config.enabled_rules.get(regex_rule.rule_id, True),
+        _build_content_rule(
+            regex_rule,
+            ctx.config.enabled_rules.get(regex_rule.rule_id, True),
         )
         for regex_rule in ctx.config.regex_rules
     )
