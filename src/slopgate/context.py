@@ -17,9 +17,7 @@ class _CoreContextProperties:
 
     @property
     def event_name(self) -> str:
-        event_name = self.payload.event_name
-        logger.debug("hook context event name accessed", event_name=event_name)
-        return event_name
+        return self.payload.event_name
 
     @property
     def tool_name(self) -> str:
@@ -121,7 +119,9 @@ def build_context(payload_dict: ObjectMapping) -> HookContext:
     state_scope = (
         raw_scope.strip()
         if isinstance(raw_scope, str) and raw_scope.strip()
-        else str(repo_root) if repo_root is not None else None
+        else str(repo_root)
+        if repo_root is not None
+        else None
     )
     state = HookStateStore(config.trace_dir, scope=state_scope)
     return HookContext(payload=payload, config=config, trace=trace, state=state)
