@@ -241,13 +241,41 @@ function isProtectedPath(value: string): boolean {
     || PROTECTED_SEGMENTS.some((segment) => normalized.includes(segment))
 }
 
-function toolPath(input: unknown): string | undefined {
-  if (!isRecord(input)) return undefined
+function directMutationPaths(input: unknown): string[] {
+  if (!isRecord(input)) return []
+  const paths: string[] = []
   for (const key of ["path", "file", "filePath", "file_path"]) {
     const value = input[key]
-    if (typeof value === "string") return value
+    if (typeof value === "string") paths.push(value)
   }
-  return undefined
+  if (Array.isArray(input.paths)) {
+    for (const value of input.paths) {
+      if (typeof value === "string") paths.push(value)
+    }
+  }
+  return paths
+}
+
+function applyPatchEnvelopePaths(envelope: string): string[] {
+  return [...envelope.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+)$/gm)]
+    .map((match) => match[1]?.trim())
+    .filter((value): value is string => Boolean(value))
+}
+
+// Mirrors the native hashline header grammar (@oh-my-pi/pi-coding-agent edit/index.ts
+// extractApprovalPaths): current-format headers start a line as `[path]` or `[path#tag]`.
+function hashlineEnvelopePaths(envelope: string): string[] {
+  return [...envelope.matchAll(/^\[([^#\r\n]+)(?:#[0-9a-fA-F]{4})?\]/gm)]
+    .map((match) => match[1]?.trim())
+    .filter((value): value is string => Boolean(value))
+}
+
+function mutationTargetPaths(toolName: string, input: unknown): string[] {
+  const paths = directMutationPaths(input)
+  if (toolName !== "edit" && toolName !== "apply_patch") return paths
+  const envelope = isRecord(input) ? stringValue(input, "input") : undefined
+  if (envelope === undefined) return paths
+  return [...paths, ...applyPatchEnvelopePaths(envelope), ...hashlineEnvelopePaths(envelope)]
 }
 
 function isBashField(key: string, value: unknown): boolean {
@@ -327,9 +355,12 @@ export default function slopgateOmpExtension(pi: ExtensionAPI): void {
   })
 
   pi.on("tool_call", async (event, ctx) => {
-    const path = toolPath(event.input)
-    if (path && isProtectedPath(path) && findManagedRepoRoot(ctx.cwd)) {
-      return { block: true, reason: `Cannot modify Slopgate infrastructure: ${path}` }
+    const toolName = event.toolName
+    const targetPaths = mutationTargetPaths(toolName, event.input)
+    const isMutation = toolName === "write" || toolName === "edit" || toolName === "apply_patch"
+    if (isMutation && targetPaths.some((targetPath) => isProtectedPath(targetPath)) && findManagedRepoRoot(ctx.cwd)) {
+      const protectedPath = targetPaths.find((targetPath) => isProtectedPath(targetPath))
+      return { block: true, reason: `Cannot modify Slopgate infrastructure: ${protectedPath}` }
     }
     const result = await enforce("tool_call", event, ctx)
     if (result?.block) return { block: true, reason: result.reason || "Blocked by slopgate" }

@@ -290,6 +290,104 @@ export function registerExtensionToolContractTests(): void {
 		expect(result).toBeUndefined();
 	}, 30000);
 
+		test("blocks protected edit envelopes under native edit dispatch", async () => {
+			// Given
+			const activeHarness = requireHarness(harness)
+			const patchText = [
+				"*** Begin Patch",
+				"*** Update File: slopgate.toml",
+				"@@",
+				"-enabled = true",
+				"+enabled = false",
+				"*** Update File: safe.txt",
+				"@@",
+				"-safe",
+				"+safer",
+				"*** End Patch",
+			].join("\n")
+
+			// When
+			const result = await activeHarness.runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "apply-patch-protected-fixed",
+				toolName: "edit",
+				input: { input: patchText },
+			})
+
+			// Then
+			expect(result).toEqual({
+				block: true,
+				reason: "Cannot modify Slopgate infrastructure: slopgate.toml",
+			})
+		}, 30000)
+
+		test("blocks protected apply_patch wire-alias envelopes", async () => {
+			const result = await requireHarness(harness).runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "apply-patch-alias-protected-fixed",
+				toolName: "apply_patch",
+				input: { input: "*** Update File: slopgate.toml\n@@\n-enabled = true\n+enabled = false" },
+			})
+			expect(result).toEqual({
+				block: true,
+				reason: "Cannot modify Slopgate infrastructure: slopgate.toml",
+			})
+		}, 30000)
+
+		test("blocks protected single-file hashline edits before execution", async () => {
+			const result = await requireHarness(harness).runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "hashline-single-protected-fixed",
+				toolName: "edit",
+				input: { input: "[slopgate.toml#a1b2]\n+enabled = false" },
+			})
+			expect(result).toEqual({
+				block: true,
+				reason: "Cannot modify Slopgate infrastructure: slopgate.toml",
+			})
+		}, 30000)
+
+		test("blocks protected targets in multi-file hashline edits", async () => {
+			const envelope = ["[safe.md#aaaa]", "+docs", "", "[slopgate.toml#fffe]", "+enabled = false"].join("\n")
+			const result = await requireHarness(harness).runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "hashline-multi-protected-fixed",
+				toolName: "edit",
+				input: { input: envelope },
+			})
+			expect(result).toEqual({
+				block: true,
+				reason: "Cannot modify Slopgate infrastructure: slopgate.toml",
+			})
+		}, 30000)
+
+		test("blocks protected targets from native derived path fields", async () => {
+			const result = await requireHarness(harness).runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "hashline-derived-paths-fixed",
+				toolName: "edit",
+				input: {
+					input: "¶slopgate.toml#a1b2\n+enabled = false",
+					path: "slopgate.toml",
+					paths: ["slopgate.toml"],
+				},
+			})
+			expect(result).toEqual({
+				block: true,
+				reason: "Cannot modify Slopgate infrastructure: slopgate.toml",
+			})
+		}, 30000)
+
+		test("does not block bracketed prose in edit bodies", async () => {
+			const result = await requireHarness(harness).runner.emitToolCall({
+				type: "tool_call",
+				toolCallId: "hashline-prose-unprotected-fixed",
+				toolName: "edit",
+				input: { input: "update notes about [slopgate.toml] header formatting" },
+			})
+			expect(result).toBeUndefined()
+		}, 30000)
+
 		test("blocks the Write tool before its sentinel is created", async () => {
 			// Given
 			const root = await createTemporaryRoot("slopgate-omp-blocked-");

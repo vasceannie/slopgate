@@ -72,7 +72,7 @@ def test_pi_extension_supports_documented_input_transform_result() -> None:
     assert contains_markers(
         pi_extension_template(),
         [
-            'action?: "continue" | "handled" | "transform"',
+            "interface PiInputTransformResult",
             'return { action: "handled" }',
             'action: "transform", text',
             "inputTransformFromUpdatedInput(result?.updated_input)",
@@ -103,7 +103,7 @@ def test_pi_extension_maps_user_bash_commands_to_bash_tool_input() -> None:
     assert contains_markers(
         pi_extension_template(),
         [
-            '| "user_bash"',
+            'enforce("user_bash", event, ctx)',
             'pi.on("user_bash"',
             'typeof event.command === "string"',
             'tool_name: event.toolName || (typeof event.command === "string" ? "bash" : "")',
@@ -146,7 +146,7 @@ def test_pi_extension_surfaces_context_status_without_hiding_context() -> None:
         extension,
         [
             'const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"',
-            "type PiMessageContent = string | PiContentPart[]",
+            "content: string",
             "customType: SLOPGATE_EVENT_MESSAGE_TYPE",
             'content: chatMessageContent("context", "before_agent_start", result)',
             "display: true",
@@ -188,15 +188,15 @@ def test_pi_extension_imports_node_and_tui_without_suppressions_or_require() -> 
             'from "node:fs"',
             'from "node:path"',
             'from "node:process"',
-            "interface PiExtensionAPI",
+            'import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent"',
             "async (event, ctx)",
         ],
-        "extension uses typed ESM imports and local Pi API declarations",
+        "extension uses typed ESM imports and the native Pi API surface",
     )
     assert excludes_markers(
         extension,
         [
-            "@earendil-works/pi-coding-agent",
+            "import { ExtensionAPI",
             "@ts-ignore",
             "@ts-expect-error",
             "runtimeRequire",
@@ -230,14 +230,14 @@ def test_pi_extension_surfaces_slopgate_activity_as_chat_messages() -> None:
     assert contains_markers(
         extension,
         [
-            "sendMessage<T = unknown>(",
-            "content: PiMessageContent",
+            "pi.sendMessage(",
+            "content: chatMessageContent(state, eventName, result)",
             "registerMessageRenderer(",
             "function renderSlopgateMessage(",
-            "bg(name: string, text: string): string",
+            "): Component {",
             'const box = new Box(1, 1, (text: string) => theme.bg("customMessageBg", text))',
             'const title: string = `${theme.bold(theme.fg(color, "Slopgate"))}',
-            'const summary: string = stringDetail(message.details, "summary") || "Slopgate context captured."',
+            'const summary: string = stringDetail(details, "summary") || "Slopgate context captured."',
             "const lines: string[] = [title]",
             'box.addChild(new Text(lines.join("\\n"), 0, 0))',
             "return box",
@@ -267,7 +267,7 @@ def test_pi_extension_uses_command_for_full_context_details() -> None:
     assert contains_markers(
         extension,
         [
-            'stringDetail(message.details, "summary")',
+            'stringDetail(details, "summary")',
             "summary: chatMessageContent(state, eventName, result)",
             "registerCommand(",
             'pi.registerCommand("slopgate-context"',
@@ -289,14 +289,16 @@ def test_pi_extension_context_advisory_uses_compact_component_state() -> None:
     assert contains_markers(
         extension,
         [
-            'if (!result?.reason) {',
+            "if (!result?.reason) {",
             'sendSlopgateChatMessage(pi, result, eventName, "warning")',
         ],
         "advisory only sends chat for guidance (reason), not context-only",
     )
     assert excludes_markers(
         extension,
-        ['const state = result.reason ? "warning" : "context"',
-         'eventName, "context")'],
+        [
+            'const state = result.reason ? "warning" : "context"',
+            'eventName, "context")',
+        ],
         "advisory no longer sends context-only chat messages",
     )

@@ -234,8 +234,8 @@ slopgate version
 ### Bundles and semantic search
 
 ```bash
-slopgate bundle sync-prompts [--dry-run] [--remove] [--only all|claude|codex|opencode|cursor|pi|omp] [--install-scope user|project|both] [--project-root PATH]
-slopgate bundle uninstall-prompts [--dry-run] [--only all|claude|codex|opencode|cursor|pi|omp] [--install-scope user|project|both] [--project-root PATH]
+slopgate bundle sync-prompts [--dry-run] [--remove] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
+slopgate bundle uninstall-prompts [--dry-run] [--only all|claude|codex|opencode|cursor|pi] [--install-scope user|project|both] [--project-root PATH]
 slopgate search <init|doctor|models|use|list|add|query|remove|sync|reindex|completions> ...
 isx <command-or-query>  # compatibility entry point for `slopgate search`
 ```

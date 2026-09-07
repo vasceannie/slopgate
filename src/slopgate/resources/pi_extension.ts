@@ -17,11 +17,12 @@ import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 import runtimeProcessValue from "node:process"
 import { Box, Text } from "@earendil-works/pi-tui"
+import type { Component } from "@earendil-works/pi-tui"
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent"
 
 const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
 const SLOPGATE_ARGV = runtimeProcess.env.SLOPGATE_BIN ? [runtimeProcess.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
-const SESSION_ID = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"
 const SLOPGATE_SYSTEM_PROMPT_HEADER = "Slopgate hook context for this turn:"
 const SLOPGATE_GUARD_MESSAGE = "Violations flagged by slopgate must be fixed, not disabled, bypassed, or argued as preexisting. Do not modify or delete slopgate configuration files, extension files, or rule definitions. Fix the flagged issue directly."
@@ -60,25 +61,6 @@ function isSlopgatePath(target: string): boolean {
 }
 let lastSlopgateContext = ""
 let lastStopGuidance = ""
-
-interface PiContentPart {
-  text?: string
-  type?: string
-  [key: string]: unknown
-}
-
-type PiMessageContent = string | PiContentPart[]
-
-type PiEventName =
-  | "agent_end"
-  | "before_agent_start"
-  | "input"
-  | "session_start"
-  | "tool_call"
-  | "tool_execution_end"
-  | "tool_result"
-  | "turn_end"
-  | "user_bash"
 
 interface PiEnforcerResult {
   block?: boolean
@@ -120,27 +102,14 @@ interface PiContextLike {
   hasUI?: boolean
   cwd?: string
   ui?: PiUiLike
-}
-
-interface PiCommandContextLike extends PiContextLike {
-  ui?: PiUiLike
+  sessionManager: {
+    getSessionId(): string
+  }
 }
 
 interface PiToolResultPatch {
   details?: Record<string, unknown>
   isError?: boolean
-}
-
-interface PiHookResult {
-  action?: "continue" | "handled" | "transform"
-  block?: boolean
-  details?: unknown
-  isError?: boolean
-  message?: Record<string, unknown>
-  reason?: string
-  result?: unknown
-  systemPrompt?: string
-  text?: string
 }
 
 interface PiInputTransformResult {
@@ -151,67 +120,14 @@ interface PiInputTransformResult {
 interface PiBeforeAgentStartResult {
   message?: {
     customType: string
-    content: PiMessageContent
+    content: string
     display: boolean
     details?: Record<string, unknown>
   }
   systemPrompt?: string
 }
 
-type PiEventHandler = (
-  event: PiEventLike,
-  ctx: PiContextLike,
-) => Promise<PiHookResult | void> | PiHookResult | void
-
-type PiCommandHandler = (
-  args: string,
-  ctx: PiCommandContextLike,
-) => Promise<void>
-
-interface PiMessageRenderOptions {
-  expanded: boolean
-}
-
-interface PiExtensionAPI {
-  on(eventName: PiEventName, handler: PiEventHandler): void
-  registerCommand(
-    name: string,
-    options: {
-      description: string
-      handler: PiCommandHandler
-    },
-  ): void
-  registerMessageRenderer(
-    customType: string,
-    renderer: (
-      message: {
-        customType: string
-        content: PiMessageContent
-        details?: Record<string, unknown>
-      },
-      options: PiMessageRenderOptions,
-      theme: {
-        bg(name: string, text: string): string
-        fg(name: string, text: string): string
-        bold(text: string): string
-      },
-    ) => unknown,
-  ): void
-  sendMessage<T = unknown>(
-    message: {
-      customType: string
-      content: PiMessageContent
-      display: boolean
-      details?: T
-    },
-    options?: {
-      triggerTurn?: boolean
-      deliverAs?: "steer" | "followUp" | "nextTurn"
-    },
-  ): void
-}
-
-type PiMessageRenderer = Parameters<PiExtensionAPI["registerMessageRenderer"]>[1]
+type PiMessageRenderer = Parameters<ExtensionAPI["registerMessageRenderer"]>[1]
 
 function findManagedRepoRoot(start: string): string | null {
   let current = start
@@ -429,14 +345,17 @@ function renderSlopgateMessage(
   message: Parameters<PiMessageRenderer>[0],
   options: Parameters<PiMessageRenderer>[1],
   theme: Parameters<PiMessageRenderer>[2],
-): unknown {
-  const state: string = stringDetail(message.details, "state")
-  const eventName: string = stringDetail(message.details, "event")
-  const reason: string = stringDetail(message.details, "reason")
-  const summary: string = stringDetail(message.details, "summary") || "Slopgate context captured."
+): Component {
+  const details = message.details && typeof message.details === "object" && !Array.isArray(message.details)
+    ? (message.details as Record<string, unknown>)
+    : undefined
+  const state: string = stringDetail(details, "state")
+  const eventName: string = stringDetail(details, "event")
+  const reason: string = stringDetail(details, "reason")
+  const summary: string = stringDetail(details, "summary") || "Slopgate context captured."
 
   const label: string = state === "blocked" ? "blocked" : state === "warning" ? "warning" : "context"
-  const color: string = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
+  const color = state === "blocked" ? "error" : state === "warning" ? "warning" : "accent"
 
   // Title: Slopgate · event_name  label
   const eventPart: string = eventName ? ` ${theme.fg("dim", `· ${eventName}`)}` : ""
@@ -456,14 +375,14 @@ function renderSlopgateMessage(
   return box
 }
 
-function registerSlopgateMessageRenderer(pi: PiExtensionAPI): void {
+function registerSlopgateMessageRenderer(pi: ExtensionAPI): void {
   pi.registerMessageRenderer(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)
 }
 
-function registerSlopgateContextCommand(pi: PiExtensionAPI): void {
+function registerSlopgateContextCommand(pi: ExtensionAPI): void {
   pi.registerCommand("slopgate-context", {
     description: "Show the latest Slopgate context injected into the current session.",
-    async handler(_args: string, ctx: PiCommandContextLike): Promise<void> {
+    async handler(_args: string, ctx: ExtensionCommandContext): Promise<void> {
       if (!lastSlopgateContext) {
         ctx.ui?.notify?.("No Slopgate context has been captured yet.", "info")
         return
@@ -483,7 +402,7 @@ function clearSlopgateContext(): void {
 }
 
 function sendSlopgateChatMessage(
-  pi: PiExtensionAPI,
+  pi: ExtensionAPI,
   result: PiEnforcerResult | null,
   eventName: string,
   state: "blocked" | "context" | "warning",
@@ -502,7 +421,7 @@ function sendSlopgateChatMessage(
   )
 }
 
-function advisory(pi: PiExtensionAPI, eventName: string, result: PiEnforcerResult | null): void {
+function advisory(pi: ExtensionAPI, eventName: string, result: PiEnforcerResult | null): void {
   // Only surface guidance (reason) as a chat message.
   // Context is already in the system prompt via before_agent_start.
   if (!result?.reason) {
@@ -579,7 +498,7 @@ function enforcerPayload(
     tool_call_id: event.toolCallId || "",
     tool_input: toolInputFromEvent(event),
     cwd,
-    session_id: SESSION_ID,
+    session_id: runtimeProcess.env.SLOPGATE_SESSION_ID || ctx.sessionManager.getSessionId(),
     transcript_path: null,
     prompt: promptFromEvent(event),
     tool_result: toolResultFromEvent(event),
@@ -673,7 +592,7 @@ async function enforce(
   return callEnforcer(enforcerPayload(eventName, event, ctx), findManagedRepoRoot(cwd) !== null)
 }
 
-export default function slopgatePiExtension(pi: PiExtensionAPI) {
+export default function slopgatePiExtension(pi: ExtensionAPI) {
   registerSlopgateMessageRenderer(pi)
   registerSlopgateContextCommand(pi)
 

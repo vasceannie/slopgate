@@ -1,0 +1,16 @@
+{
+  "name": "slopgate-pi-contract",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stage": "bun run scripts/stage-template.ts",
+    "typecheck": "bun run stage && tsc --noEmit --target ES2024 --module ESNext --moduleResolution Bundler --strict --skipLibCheck --types node --verbatimModuleSyntax staged/pi_extension.ts",
+    "test": "bun test extension-contract.test.ts"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@types/node": "^22.16.5",
+    "typescript": "6.0.2"
+  }
+}

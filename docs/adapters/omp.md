@@ -83,6 +83,11 @@ cd tests/runtime/omp && bun install && bun run test
   is set. OMP's normalized event input can carry gate-only derived fields that differ from the raw
   execution parameters, so rewriting the normalized shape risks approving or executing something other
   than what was reviewed. Per-tool raw-parameter reconstruction is a follow-up.
+- **Edit protection is target-path only.** The bridge parses OMP's native edit
+  envelopes (bracket hashline headers and `apply_patch` file headers, including
+  payloads dispatched under the internal `edit` tool name) and blocks protected
+  targets before execution. Policy evaluation on the projected post-edit file
+  content — OpenCode's projection behavior — is not implemented for Pi or OMP.
 - **Black-box omp-executable smoke is deferred.** Launching a pinned real `omp` binary with a fake
   deterministic enforcer is not part of this wave; the harness proves the contract through OMP's real
   `ExtensionRunner` instead.
