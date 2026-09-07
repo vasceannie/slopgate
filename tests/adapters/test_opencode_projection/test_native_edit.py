@@ -261,7 +261,7 @@ def test_hashline_live_op_form_edit_projects_content(
 ) -> None:
     repo = enroll_repo(tmp_path, monkeypatch)
     write_source(repo, "src/app.py", _LIVE_CONTRACT_SOURCE)
-    tool_input = {
+    tool_input: dict[str, object] = {
         "filePath": "src/app.py",
         "edits": [{"op": "replace", "pos": _LINE_25_ANCHOR, "lines": _LIVE_EDIT_LINES}],
     }

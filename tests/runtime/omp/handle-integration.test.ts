@@ -108,9 +108,13 @@ function setIsolatedEnvironment(root: string, sessionId: string): void {
 	process.env.SLOPGATE_ROOT = path.join(root, "state");
 	process.env.SLOPGATE_SESSION_ID = sessionId;
 	process.env.SLOPGATE_FAKE_REAL_BIN = REAL_SLOPGATE;
+	// Bind daemon handoff to a private, never-bound socket under the per-test
+	// root: a same-version daemon from any other checkout (which owns the
+	// shared /tmp socket) must not answer handle requests meant for the
+	// in-process engine fallback.
+	process.env.SLOPGATE_DAEMON_SOCKET = path.join(root, "daemon.sock");
 	for (const key of [
 		"SLOPGATE_CONFIG",
-		"SLOPGATE_DAEMON_SOCKET",
 		"SLOPGATE_FAKE_RESPONSE",
 		"SLOPGATE_FAKE_STDOUT",
 		"SLOPGATE_FAKE_EXIT_CODE",
