@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "gortex": {
+      "command": "gortex",
+      "args": [
+        "mcp",
+        "--tools",
+        "compact"
+      ]
+    },
+    "context7": {
+      "serverUrl": "https://mcp.context7.com/mcp"
+    },
+    "aside": {
+      "command": "aside",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

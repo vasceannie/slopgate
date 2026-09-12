@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "gortex": {
+      "command": "gortex",
+      "args": [
+        "mcp",
+        "--tools",
+        "compact"
+      ]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "aside": {
+      "command": "aside",
+      "args": [
+        "mcp"
+      ]
+    },
+    "serena": {
+      "command": "oma",
+      "args": [
+        "bridge",
+        "--context",
+        "oma"
+      ],
+      "env": {
+        "SERENA_LOG_LEVEL": "info"
+      }
+    }
+  }
+}

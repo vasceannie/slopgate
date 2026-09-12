@@ -1,0 +1,68 @@
+{
+  "oma-keyword-detector": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/keyword-detector.ts\"",
+        "timeout": 5
+      }
+    ]
+  },
+  "oma-state-boundary": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/state-boundary.ts\"",
+        "timeout": 5
+      }
+    ]
+  },
+  "oma-skill-injector": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/skill-injector.ts\"",
+        "timeout": 3
+      }
+    ]
+  },
+  "oma-code-intelligence-primer": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/code-intelligence-primer.ts\"",
+        "timeout": 3
+      }
+    ]
+  },
+  "oma-refactor-guard": {
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|notebook_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/refactor-guard.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/refactor-guard.ts\"",
+        "timeout": 5
+      }
+    ]
+  },
+  "oma-persistent-mode": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "bun \"/home/trav/repos/slopgate/.agents/hooks/core/persistent-mode.ts\"",
+        "timeout": 5
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+# Migrated by oma migration 008 — model_preset single-file config
+mcp:
+  devtools_browsers:
+    - aside
+vendors:
+  - claude
+  - cursor
+  - antigravity
+  - hermes
+  - codex
+  - opencode
+  - pi
+providers:
+  web: native
+  code_intelligence: serena
+  semantic_memory: agentmemory
+model_preset: antigravity
