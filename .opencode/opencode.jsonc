@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "./plugins/oma/oma.ts"
+  ],
+  "mcp": {
+    "aside": {
+      "type": "local",
+      "command": [
+        "aside",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  }
+}

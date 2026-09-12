@@ -26,3 +26,14 @@ headroom_memory.db
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# oh-my-agent runtime (local artifacts — do not commit)
+.agents/oma-config.local.cue
+.agents/oma-config.local.yaml
+.antigravitycli/
+.agents/results/
+.agents/state/
+.agents/backup/
+docs/plans/
+.migration-backup/
+.qwen/tmp/
