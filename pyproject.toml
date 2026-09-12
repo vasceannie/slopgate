@@ -76,6 +76,9 @@ min-severity = "warn"
 strict-callable-subtyping = true
 use-ignore-files = true
 
+[tool.ruff]
+extend-exclude = [".agents"]
+
 [tool.ty.environment]
 python = ".venv"
 python-version = "3.12"
