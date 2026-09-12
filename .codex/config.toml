@@ -2,14 +2,6 @@
 hooks = true
 goals = true
 
-[mcp_servers.gortex]
-command = "gortex"
-args = [ "mcp", "--tools", "compact" ]
-
-[mcp_servers.chrome-devtools]
-command = "npx"
-args = [ "-y", "chrome-devtools-mcp@latest", "--no-usage-statistics", "--isolated" ]
-
 [mcp_servers.serena]
 command = "oma"
 args = [ "bridge", "--context", "oma" ]
@@ -17,6 +9,14 @@ startup_timeout_sec = 90
 
 [mcp_servers.serena.env]
 SERENA_LOG_LEVEL = "info"
+
+[mcp_servers.aside]
+command = "aside"
+args = [ "mcp" ]
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = [ "-y", "chrome-devtools-mcp@latest", "--no-usage-statistics", "--isolated" ]
 
 [analytics]
 enabled = false

@@ -1,11 +1,9 @@
 {
   "mcpServers": {
-    "gortex": {
-      "command": "gortex",
+    "aside": {
+      "command": "aside",
       "args": [
-        "mcp",
-        "--tools",
-        "compact"
+        "mcp"
       ]
     }
   }

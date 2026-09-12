@@ -154,7 +154,6 @@ Follow `.agents/skills/_shared/core/execution-policy.md` for authorization, clar
 - **Subagents**:
   - codex: Same-vendor native dispatch via Codex custom agents in `.codex/agents/{name}.toml`; cross-vendor fallback via `oma agent spawn`
   - cursor: `@agent-name` (defined in `.cursor/agents/`)
-  - qwen: `oma agent spawn {agent} {prompt} {sessionId}`
   - pi: pi has no native subagent API; use `oma agent spawn {agent} {prompt} {sessionId} --vendor pi` for CLI subprocess dispatch
 
 ## Per-Agent Dispatch
@@ -163,7 +162,7 @@ Resolve each agent from `.agents/oma-config.cue` or `.agents/oma-config.yaml`, o
 
 ## Code Search
 
-Gortex is the selected code-intelligence provider (experimental). Use its MCP tools for code search, navigation, impact, contracts and edits. This selection overrides Serena-specific routing in installed skills. Load deferred tools before use. Use native search/read when Gortex is unavailable or times out; do not silently enable Serena. Never run gortex install/init or track additional repositories automatically; repository tracking requires explicit user consent. Context7 remains the documentation provider. OMA workflow state and verification stay in .agents/state/.
+Serena MCP is required for code search and discovery. Load deferred tools before use. Use native search/read only when Serena is unavailable or times out, or for plain non-code content.
 
 ## Workflows
 

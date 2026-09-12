@@ -477,6 +477,13 @@ function enforcerFailureResult(
   return { action: "block", reason }
 }
 
+function parseEnforcerOutput(output: string): EnforcerResult | null {
+  const trimmed = output.trim()
+  // A clean hook exits 0 with no stdout; treat that as a successful no-op.
+  if (!trimmed) return null
+  return JSON.parse(trimmed) as EnforcerResult
+}
+
 async function callEnforcer(
   payload: Record<string, unknown>,
   managedRepo: boolean,
@@ -504,24 +511,30 @@ async function callEnforcer(
     }
     timer = setTimeout(() => {
       if (settled) return
-      if (child) {
-        child.stdin?.destroy()
-        child.stdout?.destroy()
-        child.stderr?.destroy()
-        killProcessGroup(child)
-      }
+      settled = true
       console.error(`[slopgate] enforcer subprocess timed out after ${timeoutMs}ms`)
-      finish(enforcerFailureResult(
+      const result = enforcerFailureResult(
         payload,
         managedRepo,
         repairStatusUnavailable,
         "slopgate degraded mode: enforcer subprocess timed out in managed repo.",
-      ))
+      )
+      if (child) {
+        // Reap the killed child before the host can exit on the timeout result.
+        child.once("close", () => resolve(result))
+        child.stdin?.destroy()
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        killProcessGroup(child)
+      } else {
+        resolve(result)
+      }
     }, timeoutMs)
     try {
+      const argv = [...SLOPGATE_ARGV, "handle", "--platform", "opencode"]
       child = spawn(
-        SLOPGATE_ARGV[0],
-        [...SLOPGATE_ARGV.slice(1), "handle", "--platform", "opencode"],
+        argv[0],
+        argv.slice(1),
         {
           cwd: payloadCwd,
           env: process.env,
@@ -545,6 +558,7 @@ async function callEnforcer(
         ))
       })
       child.on("close", (exitCode: number | null) => {
+        if (settled) return
         if (exitCode !== 0) {
           console.error(`[slopgate] exit ${exitCode ?? 1}: ${stderr}`)
           finish(enforcerFailureResult(
@@ -555,13 +569,8 @@ async function callEnforcer(
           ))
           return
         }
-        const trimmed = stdout.trim()
-        if (!trimmed) {
-          finish(null)
-          return
-        }
         try {
-          finish(JSON.parse(trimmed) as EnforcerResult)
+          finish(parseEnforcerOutput(stdout))
         } catch (err) {
           console.error(`[slopgate] callEnforcer failed: ${err}`)
           finish(enforcerFailureResult(

@@ -1,31 +1,24 @@
 {
   "mcpServers": {
-    "gortex": {
-      "type": "stdio",
-      "command": "gortex",
-      "args": [
-        "mcp",
-        "--tools",
-        "compact"
-      ]
-    },
     "context7": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
+    },
+    "serena": {
+      "command": "oma",
+      "args": [
+        "bridge",
+        "--context",
+        "oma"
+      ],
+      "env": {
+        "SERENA_LOG_LEVEL": "info"
+      }
     },
     "aside": {
       "command": "aside",
       "args": [
         "mcp"
-      ]
-    },
-    "chrome-devtools": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "chrome-devtools-mcp@latest",
-        "--no-usage-statistics",
-        "--isolated"
       ]
     }
   }

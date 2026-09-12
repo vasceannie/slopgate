@@ -363,7 +363,7 @@ package config
 
 	// ── 2. Model selection ──
 	// Follow the current vendor's agent/model settings; explicit agents overrides win.
-	model_preset: "auto"
+	model_preset: "codex"
 	agents: {
 		eval: {
 			model: "anthropic/claude-sonnet-4-6"

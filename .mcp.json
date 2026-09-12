@@ -1,13 +1,5 @@
 {
   "mcpServers": {
-    "gortex": {
-      "command": "gortex",
-      "args": [
-        "mcp",
-        "--tools",
-        "compact"
-      ]
-    },
     "context7": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"

@@ -4,10 +4,10 @@ mcp:
     - aside
 vendors:
   - claude
+  - codex
   - cursor
   - antigravity
   - hermes
-  - codex
   - opencode
   - pi
 providers:

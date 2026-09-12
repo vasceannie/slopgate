@@ -4,13 +4,11 @@
     "./plugins/oma/oma.ts"
   ],
   "mcp": {
-    "gortex": {
+    "aside": {
       "type": "local",
       "command": [
-        "gortex",
-        "mcp",
-        "--tools",
-        "compact"
+        "aside",
+        "mcp"
       ],
       "enabled": true
     }
