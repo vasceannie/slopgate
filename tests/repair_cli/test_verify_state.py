@@ -48,7 +48,7 @@ def test_repair_verify_generation_mismatch_skips_lint(
     marked_repair_store: HookStateStore,
 ) -> None:
     capture = ScopedLintCapture()
-    monkeypatch.setattr(repair, "_run_scoped_lint", capture)
+    monkeypatch.setattr("slopgate.cli.repair._commands._run_scoped_lint", capture)
 
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation=GENERATION_TWO)
@@ -71,7 +71,10 @@ def test_repair_verify_dirty_scoped_lint_retains_generation(
     monkeypatch: pytest.MonkeyPatch,
     marked_repair_store: HookStateStore,
 ) -> None:
-    monkeypatch.setattr(repair, "_run_scoped_lint", ScopedLintCapture(returncode=1))
+    monkeypatch.setattr(
+        "slopgate.cli.repair._commands._run_scoped_lint",
+        ScopedLintCapture(returncode=1),
+    )
 
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation=GENERATION_ONE)
@@ -103,7 +106,9 @@ def test_repair_verify_does_not_clear_replaced_generation(
         marked_repair_store.mark_repair_required(GENERATION_TWO, payload)
         return 0
 
-    monkeypatch.setattr(repair, "_run_scoped_lint", replace_generation)
+    monkeypatch.setattr(
+        "slopgate.cli.repair._commands._run_scoped_lint", replace_generation
+    )
 
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation=GENERATION_ONE)

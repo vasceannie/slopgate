@@ -62,8 +62,10 @@ def test_repair_verify_passes_only_recorded_paths_to_collectors(
     ) -> tuple[list[Path], list[Path], list[str]]:
         return [recorded], [], []
 
-    monkeypatch.setattr("slopgate.cli.repair._store", store)
-    monkeypatch.setattr("slopgate.cli.repair._resolve_repair_files", resolve)
+    monkeypatch.setattr("slopgate.cli.repair._scoping._store", store)
+    monkeypatch.setattr(
+        "slopgate.cli.repair._verification._resolve_repair_files", resolve
+    )
     monkeypatch.setattr("slopgate.lint._collectors.run_all_collectors", collector)
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation="generation-one")

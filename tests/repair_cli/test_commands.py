@@ -39,13 +39,22 @@ def test_repair_verify_accepts_arbitrary_generation_tokens(generation: str) -> N
     assert result == 0, "Clean verification should not depend on generation syntax"
 
 
-def test_repair_parser_registers_status_and_verify() -> None:
+def _parsed_repair_subcommand(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command")
     add_repair_parsers(sub)
+    return parser.parse_args(argv)
 
-    status = parser.parse_args(["repair", "status"])
-    verify = parser.parse_args(["repair", "verify", "--generation", "gen-1"])
 
-    assert callable(status.func), "Repair status should register a CLI handler"
-    assert callable(verify.func), "Repair verify should register a CLI handler"
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["repair", "status"],
+        ["repair", "verify", "--generation", "gen-1"],
+        ["repair", "clear", "--generation", "gen-1"],
+    ],
+)
+def test_repair_parser_registers_each_subcommand(argv: list[str]) -> None:
+    parsed = _parsed_repair_subcommand(argv)
+
+    assert callable(parsed.func), f"{argv[1]} should register a CLI handler"

@@ -1,59 +1,22 @@
-"""OpenCode repair-gate commands."""
+"""Path-scoped repair verification for recorded repair generations."""
 
 from __future__ import annotations
 
-import argparse
 import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
-from slopgate._argparse_types import SubparserRegistry
-from slopgate._types import ObjectDict, object_dict_list, object_list
+from slopgate._types import ObjectDict, object_list
 
-from slopgate.config import load_config
 from slopgate.constants import (
     LINT_SCOPE_ALL,
     METADATA_PATH,
     REPAIR_TARGET_ERROR,
     RULE_ID_KEY,
-    WORKTREE_KEY,
 )
-from slopgate.state import HookStateCorruptionError, HookStateStore
 
 if TYPE_CHECKING:
     from slopgate.lint._collector_groups.types import CollectorResults
-
-
-def _store(cwd: str, worktree: str | None = None) -> tuple[HookStateStore, Path]:
-    from slopgate.cli.lint.commands import discover_project_root
-
-    path_base = Path(cwd).resolve()
-    if isinstance(worktree, str) and worktree.strip():
-        worktree_path = Path(worktree)
-        if not worktree_path.is_absolute():
-            raise ValueError("repair worktree must be an absolute path")
-        root = worktree_path.resolve()
-    else:
-        root = discover_project_root(path_base)
-    if not path_base.is_relative_to(root):
-        raise ValueError("repair cwd is outside the requested worktree")
-    config = load_config(repo_root=root)
-    store = HookStateStore(config.trace_dir, scope=str(root), path_base=path_base)
-    return store, root
-
-
-def _validate_repair_worktree(required: ObjectDict | None, root: Path) -> None:
-    if required is None:
-        return
-    recorded = required.get(WORKTREE_KEY)
-    if WORKTREE_KEY not in required:
-        # Releases before worktree provenance wrote no worktree field at all. The
-        # state file name is derived from the resolved scope, so a record found
-        # here belongs to this worktree; rejecting it would leave the armed
-        # generation unreadable and therefore unclearable.
-        return
-    if not isinstance(recorded, str) or recorded != str(root):
-        raise ValueError("repair state worktree does not match requested worktree")
 
 
 def _collector_ids_for_rules(rule_ids: Sequence[str]) -> frozenset[str]:
@@ -239,67 +202,3 @@ def _run_recorded_scope(
         )
         return 1
     return _print_scoped_lint(src_files, test_files, rule_ids)
-
-
-def cmd_repair_status(args: argparse.Namespace) -> int:
-    try:
-        store, root = _store(args.cwd, getattr(args, "worktree", None))
-        state = store.get_repair_required()
-        _validate_repair_worktree(state, root)
-    except (HookStateCorruptionError, ValueError) as exc:
-        print(json.dumps({"status": "REPAIR_STATE_INVALID", "reason": str(exc)}))
-        return 2
-    print(json.dumps(state or {"status": "clean"}, sort_keys=True))
-    return 0
-
-
-def cmd_repair_verify(args: argparse.Namespace) -> int:
-    try:
-        store, root = _store(args.cwd, getattr(args, "worktree", None))
-        required = store.get_repair_required()
-        _validate_repair_worktree(required, root)
-    except (HookStateCorruptionError, ValueError) as exc:
-        print(json.dumps({"status": "REPAIR_STATE_INVALID", "reason": str(exc)}))
-        return 2
-    if required is None:
-        print(json.dumps({"status": "clean"}, sort_keys=True))
-        return 0
-    if required.get("generation") != args.generation:
-        print(json.dumps({"status": "generation_mismatch"}, sort_keys=True))
-        return 1
-    targets = object_dict_list(required.get("targets"))
-    if targets:
-        completed = _run_scoped_lint(root, targets)
-    else:
-        completed = _run_recorded_scope(
-            root,
-            _recorded_strings(required.get("paths")),
-            _recorded_strings(required.get("rule_ids")),
-            invalid=(),
-        )
-    if completed != 0:
-        return completed
-    if not store.clear_repair_required(args.generation):
-        print(json.dumps({"status": "generation_mismatch"}, sort_keys=True))
-        return 1
-    print(json.dumps({"status": "cleared", "generation": args.generation}))
-    return 0
-
-
-def _add_repair_scope_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--cwd", default=".")
-    parser.add_argument("--worktree")
-
-
-def add_repair_parsers(sub: SubparserRegistry) -> None:
-    repair = sub.add_parser("repair", help="Inspect or verify repair-required state")
-    repair_sub = repair.add_subparsers(dest="repair_command", required=True)
-    status = repair_sub.add_parser("status", help="Print current repair state")
-    _add_repair_scope_arguments(status)
-    status.set_defaults(func=cmd_repair_status)
-    verify = repair_sub.add_parser(
-        "verify", help="Run clean verification and clear a generation"
-    )
-    _add_repair_scope_arguments(verify)
-    verify.add_argument("--generation", required=True)
-    verify.set_defaults(func=cmd_repair_verify)

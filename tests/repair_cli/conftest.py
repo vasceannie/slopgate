@@ -77,7 +77,7 @@ def recorded_lint_capture(
     monkeypatch.chdir(tmp_path)
     repair_store.mark_repair_required(GENERATION_ONE, payload)
     capture = ScopedLintCapture()
-    monkeypatch.setattr(repair, "_run_scoped_lint", capture)
+    monkeypatch.setattr("slopgate.cli.repair._commands._run_scoped_lint", capture)
     expected: list[tuple[Path, tuple[ObjectDict, ...]]] = [
         (
             tmp_path.resolve(),
