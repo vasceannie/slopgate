@@ -22,6 +22,9 @@ def failure_count(item: ObjectDict) -> int:
 
 
 class StateKeyMixin:
+    _path_base: Path
+    _scope: str
+
     def _rule_path_state_key(
         self,
         session_id: str,
@@ -65,10 +68,13 @@ class StateKeyMixin:
         state[section][session_id.strip()] = int(time())
 
     def _normalize_path(self, path: str) -> str:
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = self._path_base / candidate
         try:
-            return str(Path(path).resolve(strict=False))
+            return str(candidate.resolve(strict=False))
         except OSError:
-            return str(Path(path).absolute())
+            return str(candidate.absolute())
 
 
 __all__ = [

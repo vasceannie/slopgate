@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from slopgate.cli import repair
 from slopgate.cli.lint import cmd_lint
-from slopgate.state import HookStateStore, RepairRequiredPayload
-from tests.repair_cli.constants import GENERATION_ONE
+from slopgate.state import HookStateStore, RepairRequiredPayload, RepairTarget
+from tests.repair_cli.constants import CLEAN_SOURCE, COMPLEXITY_RULE, GENERATION_ONE
 
 
 def test_repair_verify_clears_when_only_recorded_paths_are_clean(
@@ -84,31 +84,132 @@ def test_repair_verify_does_not_sync_baseline(
     )
 
 
+def _verify_missing_recorded_path(
+    repair_project: Path,
+    repair_store: HookStateStore,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, str, str | None]:
+    payload = RepairRequiredPayload(
+        session_id="session-one",
+        call_id="call-one",
+        worktree=str(repair_project.resolve()),
+        targets=[
+            RepairTarget(
+                "PY-CODE-015",
+                "src/does-not-exist.py",
+                "src/does-not-exist.py",
+                None,
+                None,
+            )
+        ],
+    )
+    repair_store.mark_repair_required(GENERATION_ONE, payload)
+    result = repair.cmd_repair_verify(
+        argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
+    )
+    remaining = repair_store.get_repair_required()
+    generation_value = None if remaining is None else remaining.get("generation")
+    generation = generation_value if isinstance(generation_value, str) else None
+    return result, capsys.readouterr().out, generation
+
+
 def test_repair_verify_retains_generation_when_recorded_path_is_missing(
     repair_project: Path,
     repair_store: HookStateStore,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    result, output, generation = _verify_missing_recorded_path(
+        repair_project, repair_store, capsys
+    )
+
+    assert result == 1, "unresolvable recorded paths must fail closed"
+    assert "do not resolve to files" in output, (
+        "missing recorded paths must explain the verification failure"
+    )
+    assert generation == GENERATION_ONE, "missing paths must keep the armed generation"
+
+
+def _arm_target_created_after_record_time(
+    repair_project: Path,
+    repair_store: HookStateStore,
+) -> None:
+    """Arm repair state for a target that was missing at record time."""
+    recorded = repair_project / "src" / "restored.py"
     payload = RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=["PY-CODE-015"],
-        paths=["src/does-not-exist.py"],
+        worktree=str(repair_project.resolve()),
+        targets=[
+            RepairTarget(
+                COMPLEXITY_RULE,
+                str(recorded),
+                "src/restored.py",
+                None,
+                "finding path is not an existing file",
+            )
+        ],
     )
     repair_store.mark_repair_required(GENERATION_ONE, payload)
+    assert not recorded.exists(), "the recorded target must start missing"
+    recorded.write_text(CLEAN_SOURCE, encoding="utf-8")
+
+
+def test_repair_verify_rechecks_target_created_after_record_time(
+    repair_project: Path,
+    repair_store: HookStateStore,
+) -> None:
+    _arm_target_created_after_record_time(repair_project, repair_store)
 
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
     )
-    remaining = repair_store.get_repair_required()
 
-    assert result == 1, "unresolvable recorded paths must fail closed"
-    assert "do not resolve to files" in capsys.readouterr().out, (
-        "missing recorded paths must explain the verification failure"
+    assert result == 0, "a recorded target that now resolves must verify and clear"
+    assert repair_store.get_repair_required() is None, (
+        "a stale record-time path error must not block clearing the generation"
     )
-    assert remaining is not None, "missing paths must retain REPAIR_REQUIRED"
-    assert remaining["generation"] == GENERATION_ONE, (
-        "missing paths must keep the armed generation"
+
+
+def _verify_pathless_recorded_target(
+    repair_project: Path,
+    repair_store: HookStateStore,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, str, str | None]:
+    payload = RepairRequiredPayload(
+        session_id="session-one",
+        call_id="call-one",
+        worktree=str(repair_project.resolve()),
+        targets=[
+            RepairTarget(
+                COMPLEXITY_RULE, None, None, None, "finding has no file target"
+            )
+        ],
+    )
+    repair_store.mark_repair_required(GENERATION_ONE, payload)
+    result = repair.cmd_repair_verify(
+        argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
+    )
+    remaining = repair_store.get_repair_required()
+    generation_value = None if remaining is None else remaining.get("generation")
+    generation = generation_value if isinstance(generation_value, str) else None
+    return result, capsys.readouterr().out, generation
+
+
+def test_repair_verify_fails_closed_for_pathless_recorded_target(
+    repair_project: Path,
+    repair_store: HookStateStore,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result, output, generation = _verify_pathless_recorded_target(
+        repair_project, repair_store, capsys
+    )
+
+    assert result == 1, "targets without a canonical path must fail closed"
+    assert "unverifiable targets" in output, (
+        "pathless targets must explain why verification cannot proceed"
+    )
+    assert generation == GENERATION_ONE, (
+        "pathless targets must retain the armed repair generation"
     )
 
 

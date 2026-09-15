@@ -58,6 +58,7 @@
   {"id":"verify-repair","tool_name":"slopgate_verify_repair","tool_input":{},"repair_required":true,"expected":"allow"},
   {"id":"lint-repair","tool_name":"bash","tool_input":{"command":"slopgate lint check --details"},"repair_required":true,"expected":"allow"},
   {"id":"compound-lint-repair","tool_name":"bash","tool_input":{"command":"slopgate lint check && touch bypassed"},"repair_required":true,"expected":"block"},
+  {"id":"repair-clear-repair","tool_name":"bash","tool_input":{"command":"slopgate repair clear --generation g"},"repair_required":true,"expected":"block"},
   {"id":"remote-repair","tool_name":"github_update_issue","tool_input":{"path":"/repos/o/r/issues/1","body":"fixed"},"repair_required":true,"expected":"block"},
   {"id":"powershell-repair","tool_name":"powershell","tool_input":{"command":"slopgate lint check"},"repair_required":true,"expected":"block"},
   {"id":"unknown-repair","tool_name":"custom_mutator","tool_input":{"destination":"src/app.py"},"repair_required":true,"expected":"block"},

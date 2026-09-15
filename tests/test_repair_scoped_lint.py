@@ -10,14 +10,25 @@ from slopgate.lint._baseline import Violation
 
 
 class _Store:
-    def __call__(self, _cwd: str) -> _Store:
-        return self
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
+
+    def __call__(self, _cwd: str, _worktree: str | None = None) -> tuple[_Store, Path]:
+        return self, self.root
 
     def get_repair_required(self) -> dict[str, object]:
         return {
             "generation": "generation-one",
-            "rule_ids": ["QUALITY-LINT-001"],
-            "paths": ["src/app.py"],
+            "worktree": str(self.root),
+            "targets": [
+                {
+                    "rule_id": "QUALITY-LINT-001",
+                    "path": str(self.root / "src" / "app.py"),
+                    "raw_path": "src/app.py",
+                    "function": None,
+                    "error": None,
+                }
+            ],
         }
 
     def clear_repair_required(self, _generation: str) -> bool:
@@ -43,7 +54,7 @@ def test_repair_verify_passes_only_recorded_paths_to_collectors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     recorded = tmp_path / "src" / "app.py"
-    store = _Store()
+    store = _Store(tmp_path)
     collector = _CollectorCapture()
 
     def resolve(
@@ -51,8 +62,10 @@ def test_repair_verify_passes_only_recorded_paths_to_collectors(
     ) -> tuple[list[Path], list[Path], list[str]]:
         return [recorded], [], []
 
-    monkeypatch.setattr("slopgate.cli.repair._store", store)
-    monkeypatch.setattr("slopgate.cli.repair._resolve_repair_files", resolve)
+    monkeypatch.setattr("slopgate.cli.repair._scoping._store", store)
+    monkeypatch.setattr(
+        "slopgate.cli.repair._verification._resolve_repair_files", resolve
+    )
     monkeypatch.setattr("slopgate.lint._collectors.run_all_collectors", collector)
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(tmp_path), generation="generation-one")

@@ -8,11 +8,11 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from slopgate._types import string_value
+from slopgate._types import ObjectDict, string_value
 from slopgate.cli import repair
 from slopgate.config import load_config
 from slopgate.lint._config import reset_config
-from slopgate.state import HookStateStore, RepairRequiredPayload
+from slopgate.state import HookStateStore, RepairRequiredPayload, RepairTarget
 from tests.repair_cli.constants import (
     CLEAN_SOURCE,
     COMPLEXITY_RULE,
@@ -22,23 +22,32 @@ from tests.repair_cli.constants import (
     REPAIR_PATH,
     SLOPGATE_TOML,
 )
-from tests.repair_cli.support import ScopedLintCapture
+from tests.repair_cli.support import ScopedLintCapture, WritableRepairStateStore
 
 
 @pytest.fixture
 def repair_store(tmp_path: Path) -> HookStateStore:
     root = tmp_path.resolve()
     config = load_config(repo_root=root)
-    return HookStateStore(config.trace_dir, scope=str(root))
+    return HookStateStore(config.trace_dir, scope=str(root), path_base=root)
 
 
 @pytest.fixture
-def repair_payload() -> RepairRequiredPayload:
+def writable_repair_store(repair_project: Path) -> WritableRepairStateStore:
+    root = repair_project.resolve()
+    config = load_config(repo_root=root)
+    return WritableRepairStateStore(config.trace_dir, scope=str(root), path_base=root)
+
+
+@pytest.fixture
+def repair_payload(tmp_path: Path) -> RepairRequiredPayload:
     return RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=["QUALITY-LINT-001"],
-        paths=[REPAIR_PATH],
+        worktree=str(tmp_path.resolve()),
+        targets=[
+            RepairTarget("QUALITY-LINT-001", REPAIR_PATH, REPAIR_PATH, None, None)
+        ],
     )
 
 
@@ -57,23 +66,30 @@ def recorded_lint_capture(
     repair_store: HookStateStore,
 ) -> tuple[
     ScopedLintCapture,
-    list[tuple[Path, tuple[str, ...], tuple[str, ...]]],
+    list[tuple[Path, tuple[ObjectDict, ...]]],
 ]:
     payload = RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=[COMPLEXITY_RULE],
-        paths=[REPAIR_PATH],
+        worktree=str(tmp_path.resolve()),
+        targets=[RepairTarget(COMPLEXITY_RULE, REPAIR_PATH, REPAIR_PATH, None, None)],
     )
     monkeypatch.chdir(tmp_path)
     repair_store.mark_repair_required(GENERATION_ONE, payload)
     capture = ScopedLintCapture()
-    monkeypatch.setattr(repair, "_run_scoped_lint", capture)
-    expected: list[tuple[Path, tuple[str, ...], tuple[str, ...]]] = [
+    monkeypatch.setattr("slopgate.cli.repair._commands._run_scoped_lint", capture)
+    expected: list[tuple[Path, tuple[ObjectDict, ...]]] = [
         (
             tmp_path.resolve(),
-            (str((tmp_path / REPAIR_PATH).resolve()),),
-            (COMPLEXITY_RULE,),
+            (
+                {
+                    "rule_id": COMPLEXITY_RULE,
+                    "path": str((tmp_path / REPAIR_PATH).resolve()),
+                    "raw_path": REPAIR_PATH,
+                    "function": None,
+                    "error": None,
+                },
+            ),
         )
     ]
     return capture, expected
@@ -133,29 +149,30 @@ def preserved_baseline(repair_project: Path) -> tuple[Path, bytes]:
 
 
 @pytest.fixture
-def targeted_debt_payload() -> RepairRequiredPayload:
+def targeted_debt_payload(tmp_path: Path) -> RepairRequiredPayload:
     return RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=["PY-CODE-018"],
-        paths=[DECOY_PATH],
+        worktree=str(tmp_path.resolve()),
+        targets=[RepairTarget("PY-CODE-018", DECOY_PATH, DECOY_PATH, None, None)],
     )
 
 
 @pytest.fixture
-def clean_path_payload() -> RepairRequiredPayload:
+def clean_path_payload(tmp_path: Path) -> RepairRequiredPayload:
     return RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=[COMPLEXITY_RULE],
-        paths=[REPAIR_PATH],
+        worktree=str(tmp_path.resolve()),
+        targets=[RepairTarget(COMPLEXITY_RULE, REPAIR_PATH, REPAIR_PATH, None, None)],
     )
 
 
 @pytest.fixture(
     params=[
-        pytest.param("absolute", id="absolute-project-escape"),
+        pytest.param("absolute", id="absolute-project-escape-with-local-collision"),
         pytest.param("../outside.py", id="relative-project-escape"),
+        pytest.param("linked.py", id="symlink-project-escape"),
     ]
 )
 def rejected_escape_verification(
@@ -167,17 +184,25 @@ def rejected_escape_verification(
     assert isinstance(case, str), "escape fixture cases must be path strings"
     outside = repair_project.parent / "outside.py"
     outside.write_text("value = 1\n", encoding="utf-8")
-    path = {"absolute": str(outside), "../outside.py": "../outside.py"}[case]
+    (repair_project / "outside.py").write_text("value = 2\n", encoding="utf-8")
+    (repair_project / "linked.py").symlink_to(outside)
+    path = {
+        "absolute": str(outside),
+        "../outside.py": "../outside.py",
+        "linked.py": "linked.py",
+    }[case]
     payload = RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=[COMPLEXITY_RULE],
-        paths=[path],
+        worktree=str(repair_project.resolve()),
+        targets=[RepairTarget(COMPLEXITY_RULE, path, path, None, None)],
     )
     repair_store.mark_repair_required(GENERATION_ONE, payload)
     result = repair.cmd_repair_verify(
         argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
     )
     remaining = repair_store.get_repair_required()
-    generation = None if remaining is None else string_value(remaining.get("generation"))
+    generation = (
+        None if remaining is None else string_value(remaining.get("generation"))
+    )
     return result, generation

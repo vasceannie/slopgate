@@ -4,6 +4,8 @@ from __future__ import annotations
 
 GENERATION_ONE = "generation-one"
 GENERATION_TWO = "generation-two"
+REPAIR_REQUIRED_STATUS = "REPAIR_REQUIRED"
+REPAIR_STATE_INVALID_STATUS = "REPAIR_STATE_INVALID"
 REPAIR_PATH = "src/app.py"
 DECOY_PATH = "src/huge.py"
 COMPLEXITY_RULE = "PY-CODE-015"

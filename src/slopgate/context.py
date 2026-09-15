@@ -107,21 +107,26 @@ class HookContext(_TargetContextProperties):
 
 def build_context(payload_dict: ObjectMapping) -> HookContext:
     payload_cwd = payload_dict.get("cwd")
-    repo_root = (
+    event_cwd = (
         Path(payload_cwd).resolve()
         if isinstance(payload_cwd, str) and payload_cwd.strip()
         else None
     )
+    raw_worktree = payload_dict.get("worktree")
+    repo_root = event_cwd
+    if isinstance(raw_worktree, str) and raw_worktree.strip():
+        worktree_path = Path(raw_worktree)
+        if not worktree_path.is_absolute():
+            if event_cwd is None:
+                raise ValueError("relative worktree requires an event cwd")
+            worktree_path = event_cwd / worktree_path
+        repo_root = worktree_path.resolve()
     config = load_config(repo_root=repo_root)
     trace = TraceWriter(config.trace_dir)
     payload = HookPayload(payload_dict, config)
-    raw_scope = payload_dict.get("worktree")
-    state_scope = (
-        raw_scope.strip()
-        if isinstance(raw_scope, str) and raw_scope.strip()
-        else str(repo_root)
-        if repo_root is not None
-        else None
+    state = HookStateStore(
+        config.trace_dir,
+        scope=str(repo_root) if repo_root is not None else None,
+        path_base=payload.cwd,
     )
-    state = HookStateStore(config.trace_dir, scope=state_scope)
     return HookContext(payload=payload, config=config, trace=trace, state=state)

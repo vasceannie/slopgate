@@ -3,13 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from time import monotonic
 
-from slopgate._types import ObjectDict, ObjectMapping, object_list
+from slopgate._types import ObjectDict, ObjectMapping, object_dict_list, object_list
 from slopgate.constants import (
-    PLATFORM_OPENCODE,
-    PLATFORM_CLAUDE,
-    UNKNOWN_VALUE,
     BLOCK,
     DENY,
+    METADATA_FUNCTION,
+    METADATA_PATH,
+    PLATFORM_CLAUDE,
+    PLATFORM_OPENCODE,
+    RULE_ID_KEY,
+    UNKNOWN_VALUE,
+    WORKTREE_KEY,
 )
 from slopgate.adapters import get_adapter
 from slopgate.adapters.opencode_projection import unresolved_opencode_projection_finding
@@ -20,7 +24,8 @@ from slopgate.lint._helpers import (
 )
 from slopgate.models import EngineResult, RuleFinding, Severity
 from slopgate.opencode_tool_capabilities import opencode_tool_allowed_during_repair
-from slopgate.state import RepairRequiredPayload
+from slopgate.state import RepairRequiredPayload, RepairTarget
+from slopgate.util.metadata_paths import effective_metadata_path
 
 from .advisories import compact_context_advisories
 from ._render import render_output
@@ -62,29 +67,61 @@ def _blocking_findings(findings: list[RuleFinding]) -> list[RuleFinding]:
     return [finding for finding in findings if finding.decision in {DENY, BLOCK}]
 
 
-def _clear_opencode_repair_required(ctx: HookContext) -> None:
-    if not ctx.mutating:
-        return
-    required = ctx.state.get_repair_required()
-    generation = required.get("generation") if required else None
-    if isinstance(generation, str) and generation:
-        ctx.state.clear_repair_required(generation)
+def _finding_string(finding: RuleFinding, key: str) -> str | None:
+    value = finding.metadata.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _existing_repair_paths(paths: list[str]) -> list[str]:
-    return [path for path in paths if Path(path).is_file()]
+def _repair_root(ctx: HookContext) -> Path:
+    return Path(ctx.state.scope) if ctx.state.scope else ctx.cwd.resolve(strict=False)
+
+
+def _repair_target(ctx: HookContext, finding: RuleFinding) -> RepairTarget:
+    raw_path = effective_metadata_path(finding.metadata)
+    function = _finding_string(finding, METADATA_FUNCTION)
+    if raw_path is None:
+        return RepairTarget(
+            finding.rule_id, None, None, function, "finding has no file target"
+        )
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        candidate = ctx.cwd / candidate
+    try:
+        resolved = candidate.resolve(strict=False)
+        root = _repair_root(ctx)
+    except OSError:
+        return RepairTarget(
+            finding.rule_id, None, raw_path, function, "finding path cannot be resolved"
+        )
+    if not resolved.is_relative_to(root):
+        return RepairTarget(
+            finding.rule_id,
+            None,
+            raw_path,
+            function,
+            "finding path is outside repository root",
+        )
+    if not resolved.is_file():
+        # Keep the in-root candidate so `slopgate repair verify` can re-resolve
+        # it once the file exists; the error only explains the record-time state.
+        return RepairTarget(
+            finding.rule_id,
+            str(resolved),
+            raw_path,
+            function,
+            "finding path is not an existing file",
+        )
+    return RepairTarget(finding.rule_id, str(resolved), raw_path, function, None)
 
 
 def _mark_opencode_repair_required(
     ctx: HookContext,
     quality_findings: list[RuleFinding],
 ) -> None:
-    rule_ids = [finding.rule_id for finding in quality_findings]
-    paths = _existing_repair_paths(ctx.candidate_paths)
+    targets = [_repair_target(ctx, finding) for finding in quality_findings]
     call_id = str(ctx.payload.payload.get("call_id", ""))
     generation = ctx.state.repair_generation(
-        rule_ids=rule_ids,
-        paths=paths,
+        targets=targets,
         event_identity=f"{ctx.session_id}\n{call_id}",
     )
     ctx.state.mark_repair_required(
@@ -92,8 +129,8 @@ def _mark_opencode_repair_required(
         RepairRequiredPayload(
             session_id=ctx.session_id,
             call_id=call_id,
-            rule_ids=rule_ids,
-            paths=paths,
+            worktree=ctx.state.scope,
+            targets=targets,
         ),
     )
 
@@ -109,8 +146,6 @@ def _record_opencode_repair_required(
     quality_findings = _blocking_findings(findings)
     if quality_findings:
         _mark_opencode_repair_required(ctx, quality_findings)
-        return
-    _clear_opencode_repair_required(ctx)
 
 
 def _opencode_tool_name_for_policy(ctx: HookContext) -> str:
@@ -125,16 +160,19 @@ def _repair_state_strings(value: object) -> list[str]:
     return [item for item in object_list(value) if isinstance(item, str) and item]
 
 
-def _first_causal_label(rule_ids: list[str], paths: list[str]) -> str:
-    rule = rule_ids[0] if rule_ids else None
-    path = paths[0] if paths else None
+def _first_causal_label(targets: list[ObjectDict]) -> str:
+    target = targets[0] if targets else {}
+    rule_value = target.get(RULE_ID_KEY)
+    path_value = target.get(METADATA_PATH)
+    rule = rule_value if isinstance(rule_value, str) and rule_value else None
+    path = path_value if isinstance(path_value, str) and path_value else None
     if rule and path:
         return f"{rule} in {path}"
     if rule:
         return f"rule {rule}"
     if path:
         return f"file {path}"
-    return "the repair status output"
+    return "invalid or legacy repair state"
 
 
 def _opencode_repair_recovery_message(
@@ -175,6 +213,9 @@ def _opencode_repair_required_finding(
         return None
     generation = required.get("generation")
     generation_label = generation if isinstance(generation, str) else UNKNOWN_VALUE
+    worktree = required.get(WORKTREE_KEY)
+    worktree_label = worktree if isinstance(worktree, str) else UNKNOWN_VALUE
+    targets = object_dict_list(required.get("targets"))
     rule_ids = _repair_state_strings(required.get("rule_ids"))
     paths = _repair_state_strings(required.get("paths"))
     return RuleFinding(
@@ -184,12 +225,14 @@ def _opencode_repair_required_finding(
         decision=DENY,
         message=_opencode_repair_recovery_message(
             generation_label,
-            _first_causal_label(rule_ids, paths),
+            _first_causal_label(targets),
         ),
         metadata={
             "generation": generation_label,
             "rule_ids": rule_ids,
             "paths": paths,
+            "targets": targets,
+            WORKTREE_KEY: worktree_label,
         },
     )
 

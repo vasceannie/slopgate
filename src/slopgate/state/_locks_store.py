@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 import hashlib
+import json
 from pathlib import Path
 from time import time
 from slopgate._types import ObjectDict, bool_value, object_list, string_value
+from slopgate.constants import (
+    METADATA_FUNCTION,
+    METADATA_PATH,
+    REPAIR_TARGET_ERROR,
+    RULE_ID_KEY,
+    WORKTREE_KEY,
+)
 from ._keys import (
     AdvisoryHitStateMixin,
     DenyHitStateMixin,
@@ -13,7 +21,7 @@ from ._keys import (
     StateKeyMixin,
 )
 from ._files import StateSnapshotMixin
-from ._models import RepairRequiredPayload, RetryLockPayload
+from ._models import RepairRequiredPayload, RepairTarget, RetryLockPayload
 
 
 _STATE_SCOPE_DIGEST_LENGTH = 16
@@ -75,18 +83,32 @@ class RetryLockStateMixin(StateKeyMixin, StateSnapshotMixin):
 
 
 class RepairPlanStateMixin(StateKeyMixin, StateSnapshotMixin):
+    def _repair_target_record(self, target: RepairTarget) -> ObjectDict:
+        return {
+            RULE_ID_KEY: target.rule_id,
+            METADATA_PATH: self._normalize_path(target.path) if target.path else None,
+            "raw_path": target.raw_path,
+            METADATA_FUNCTION: target.function,
+            REPAIR_TARGET_ERROR: target.error,
+        }
+
+    def _repair_target_records(self, targets: list[RepairTarget]) -> list[ObjectDict]:
+        records = [self._repair_target_record(target) for target in targets]
+        return sorted(records, key=lambda item: json.dumps(item, sort_keys=True))
+
     def repair_generation(
         self,
         *,
-        rule_ids: list[str],
-        paths: list[str],
+        targets: list[RepairTarget],
         event_identity: str = "",
     ) -> str:
-        normalized_paths = sorted(
-            self._normalize_path(path) for path in paths if path
-        )
-        material = "\n".join(
-            [*sorted(set(rule_ids)), *normalized_paths, event_identity.strip()]
+        material = json.dumps(
+            {
+                "event_identity": event_identity.strip(),
+                "targets": self._repair_target_records(targets),
+                WORKTREE_KEY: self._scope,
+            },
+            sort_keys=True,
         )
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -117,6 +139,9 @@ class RepairPlanStateMixin(StateKeyMixin, StateSnapshotMixin):
         generation: str,
         payload: RepairRequiredPayload,
     ) -> None:
+        if payload.worktree != self._scope:
+            raise ValueError("repair payload worktree does not match state scope")
+        targets = self._repair_target_records(payload.targets)
         with self._locked_state():
             state = self._load_state()
             state["repair_required"] = {
@@ -124,9 +149,13 @@ class RepairPlanStateMixin(StateKeyMixin, StateSnapshotMixin):
                 "generation": generation,
                 "session_id": payload.session_id,
                 "call_id": payload.call_id,
-                "rule_ids": sorted(set(payload.rule_ids)),
+                WORKTREE_KEY: self._scope,
+                "targets": targets,
+                "rule_ids": sorted({str(target[RULE_ID_KEY]) for target in targets}),
                 "paths": sorted(
-                    self._normalize_path(path) for path in payload.paths if path
+                    str(target[METADATA_PATH])
+                    for target in targets
+                    if isinstance(target.get(METADATA_PATH), str)
                 ),
                 "timestamp": int(time()),
             }
@@ -165,11 +194,41 @@ class HookStateStore(
 
     _TTL_SECONDS = 3600
 
-    def __init__(self, trace_dir: Path, *, scope: str | None = None) -> None:
+    @property
+    def scope(self) -> str:
+        return self._scope
+
+    def __init__(
+        self,
+        trace_dir: Path,
+        *,
+        scope: str | None = None,
+        path_base: str | Path | None = None,
+    ) -> None:
         raw_scope = scope.strip() if isinstance(scope, str) else ""
-        normalized_scope = str(Path(raw_scope).resolve()) if raw_scope else ""
-        if normalized_scope:
-            digest = hashlib.sha256(normalized_scope.encode("utf-8")).hexdigest()
+        scope_path = Path(raw_scope) if raw_scope else None
+        if (
+            scope_path is not None
+            and not scope_path.is_absolute()
+            and path_base is None
+        ):
+            raise ValueError("relative state scope requires an explicit path base")
+        raw_path_base = (
+            Path(path_base)
+            if path_base is not None
+            else scope_path
+            if scope_path is not None
+            else Path.cwd()
+        )
+        try:
+            self._path_base = raw_path_base.resolve(strict=False)
+        except OSError:
+            self._path_base = raw_path_base.absolute()
+        if scope_path is not None and not scope_path.is_absolute():
+            scope_path = self._path_base / scope_path
+        self._scope = str(scope_path.resolve()) if scope_path is not None else ""
+        if self._scope:
+            digest = hashlib.sha256(self._scope.encode("utf-8")).hexdigest()
             state_name = f"hook-state-{digest[:_STATE_SCOPE_DIGEST_LENGTH]}.json"
         else:
             state_name = "hook-state.json"

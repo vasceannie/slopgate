@@ -7,6 +7,7 @@ __all__ = [
     "DenyKeyPattern",
     "HookStateSnapshot",
     "RepairRequiredPayload",
+    "RepairTarget",
     "IntStateSection",
     "ObjectStateSection",
     "fcntl",
@@ -28,6 +29,7 @@ __all__ = [
 from ._models import (
     RetryLockPayload,
     RepairRequiredPayload,
+    RepairTarget,
     DenyKeyPattern,
     HookStateSnapshot,
     IntStateSection,

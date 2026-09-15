@@ -153,8 +153,8 @@ interface RepairGateState {
   status: string
   generation?: string
   reason?: string
-  rule_ids?: unknown
-  paths?: unknown
+  targets?: unknown
+  worktree?: unknown
 }
 
 type RepairCommandStatus = "ok" | "timeout" | "failed" | "cancelled"
@@ -689,13 +689,17 @@ function callRepairCommand(
 
 function verifyRepairFlight(
   cwd: string,
+  worktree: string,
   generation: string,
 ): Promise<RepairCommandResult> {
-  const key = `${cwd}::${generation}`
+  const key = `${worktree}::${cwd}::${generation}`
   const existing = verifyFlights.get(key)
   if (existing) return existing
   const pending = callRepairCommand(
-    ["repair", "verify", "--cwd", cwd, "--generation", generation],
+    [
+      "repair", "verify", "--cwd", cwd,
+      "--worktree", worktree, "--generation", generation,
+    ],
     cwd,
   ).finally(() => {
     verifyFlights.delete(key)
@@ -704,8 +708,14 @@ function verifyRepairFlight(
   return pending
 }
 
-async function repairGateState(cwd: string): Promise<RepairGateState | null> {
-  const result = await callRepairCommand(["repair", "status", "--cwd", cwd], cwd)
+async function repairGateState(
+  cwd: string,
+  worktree: string = cwd,
+): Promise<RepairGateState | null> {
+  const result = await callRepairCommand(
+    ["repair", "status", "--cwd", cwd, "--worktree", worktree],
+    cwd,
+  )
   if (result.exitCode !== 0 || !result.output.trim()) return null
   try {
     return JSON.parse(result.output) as RepairGateState
@@ -714,31 +724,31 @@ async function repairGateState(cwd: string): Promise<RepairGateState | null> {
   }
 }
 
-function repairStateStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.filter(
-    (item): item is string => typeof item === "string" && item !== "",
-  )
-}
-
-function firstCausalLabel(ruleIds: string[], paths: string[]): string {
-  const rule = ruleIds[0]
-  const path = paths[0]
+function firstCausalLabel(targets: unknown): string {
+  if (!Array.isArray(targets) || targets.length === 0) {
+    return "invalid or legacy repair state"
+  }
+  const target = targets[0]
+  if (typeof target !== "object" || target === null || Array.isArray(target)) {
+    return "invalid or legacy repair state"
+  }
+  const record = target as Record<string, unknown>
+  const rule = typeof record.rule_id === "string" ? record.rule_id : ""
+  const path = typeof record.path === "string" ? record.path : ""
   if (rule && path) return `${rule} in ${path}`
   if (rule) return `rule ${rule}`
   if (path) return `file ${path}`
-  return "the repair status output"
+  return "invalid or legacy repair state"
 }
 
 function repairRecoveryProtocol(
   generation: string,
-  ruleIds: string[],
-  paths: string[],
+  targets: unknown,
 ): string {
   return (
     `STOP: do not retry this blocked mutation; equivalent retries remain blocked `
     + `until generation ${generation} clears. Recovery protocol: `
-    + `(1) read the first causal finding: ${firstCausalLabel(ruleIds, paths)}; `
+    + `(1) read the first causal finding: ${firstCausalLabel(targets)}; `
     + "(2) inspect affected files with declared read-only tools; "
     + "(3) make one focused repair with an allowed mutation tool "
     + "(write, edit, apply_patch); "
@@ -930,8 +940,7 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
         throw new Error(
           `[slopgate] ${repairRecoveryProtocol(
             pending.generation || "unknown",
-            repairStateStrings(pending.rule_ids),
-            repairStateStrings(pending.paths),
+            pending.targets,
           )}`,
         )
       }
@@ -999,10 +1008,11 @@ export const EnforcerPlugin: Plugin = async ({ client, directory, worktree }) =>
           _extra?: { abort?: AbortSignal },
         ): Promise<string> => {
           const cwd = firstString(args, "cwd") || scopedDirectory
-          const pending = await repairGateState(cwd)
+          const pending = await repairGateState(cwd, scopedDirectory)
           if (!pending?.generation) return "No repair-required generation is pending."
           const result = await verifyRepairFlight(
             cwd,
+            scopedDirectory,
             pending.generation,
           )
           if (result.status !== "ok" || result.exitCode !== 0) {
