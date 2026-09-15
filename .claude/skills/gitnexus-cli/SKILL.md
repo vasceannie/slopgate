@@ -5,9 +5,9 @@ description: "Use when the user needs to run GitNexus CLI commands like analyze/
 
 # GitNexus CLI Commands
 
-Commands below use `./scripts/gitnexus <command>` — the tracked, repo-local wrapper pinned by `.gitnexus-version`. It executes `/home/trav/.local/bin/gitnexus` only after verifying the installed CLI matches the pinned version, so operational docs do not depend on package-runner fallbacks.
+Commands below use `./scripts/gitnexus <command>` — the tracked, repo-local wrapper delegates directly to the local GitNexus installation at `${GITNEXUS_BIN:-$HOME/.local/bin/gitnexus}`. Operational docs therefore avoid package-runner fallbacks while using the locally installed version.
 
-> **Wrapper missing or version mismatch?** Restore `scripts/gitnexus` from the repo and update `/home/trav/.local/bin/gitnexus` or `.gitnexus-version` deliberately. Do not swap in package-runner commands for routine repo operations; they bypass the pin this repository relies on.
+> **Wrapper or local binary missing?** Restore `scripts/gitnexus`, install GitNexus at `$HOME/.local/bin/gitnexus`, or set `GITNEXUS_BIN` to another local executable. Do not swap in package-runner commands for routine repository operations.
 
 ## Commands
 

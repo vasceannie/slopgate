@@ -24,7 +24,7 @@ description: "Use when the user wants to know what will break if they change som
 ```
 
 > If "Index is stale" → run `./scripts/gitnexus analyze` in terminal.
-> If `scripts/gitnexus` is missing or reports a version mismatch, restore or update the pinned wrapper path deliberately; do not replace it with package-runner fallbacks.
+> If `scripts/gitnexus` is missing or cannot find the local executable, restore the wrapper, install GitNexus at `$HOME/.local/bin/gitnexus`, or set `GITNEXUS_BIN`; do not replace it with package-runner fallbacks.
 
 ## Checklist
 
