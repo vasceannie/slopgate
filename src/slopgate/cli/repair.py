@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 from slopgate._argparse_types import SubparserRegistry
-from slopgate._types import ObjectDict, object_dict_list
+from slopgate._types import ObjectDict, object_dict_list, object_list
 
 from slopgate.config import load_config
 from slopgate.constants import (
@@ -46,7 +46,13 @@ def _validate_repair_worktree(required: ObjectDict | None, root: Path) -> None:
     if required is None:
         return
     recorded = required.get(WORKTREE_KEY)
-    if recorded != str(root):
+    if WORKTREE_KEY not in required:
+        # Releases before worktree provenance wrote no worktree field at all. The
+        # state file name is derived from the resolved scope, so a record found
+        # here belongs to this worktree; rejecting it would leave the armed
+        # generation unreadable and therefore unclearable.
+        return
+    if not isinstance(recorded, str) or recorded != str(root):
         raise ValueError("repair state worktree does not match requested worktree")
 
 
@@ -183,15 +189,29 @@ def _print_scoped_lint(
     )
 
 
+def _recorded_strings(value: object) -> list[str]:
+    return [item for item in object_list(value) if isinstance(item, str) and item]
+
+
 def _run_scoped_lint(cwd: Path, targets: Sequence[ObjectDict]) -> int:
     paths, rule_ids, invalid = _repair_scope(targets)
+    return _run_recorded_scope(cwd, paths, rule_ids, invalid=invalid)
+
+
+def _run_recorded_scope(
+    cwd: Path,
+    paths: Sequence[str],
+    rule_ids: Sequence[str],
+    *,
+    invalid: Sequence[str],
+) -> int:
     if invalid:
         print(
             json.dumps(
                 {
                     "status": "failed",
                     "reason": "repair generation has unverifiable targets",
-                    "targets": invalid,
+                    "targets": list(invalid),
                 }
             )
         )
@@ -247,7 +267,16 @@ def cmd_repair_verify(args: argparse.Namespace) -> int:
     if required.get("generation") != args.generation:
         print(json.dumps({"status": "generation_mismatch"}, sort_keys=True))
         return 1
-    completed = _run_scoped_lint(root, object_dict_list(required.get("targets")))
+    targets = object_dict_list(required.get("targets"))
+    if targets:
+        completed = _run_scoped_lint(root, targets)
+    else:
+        completed = _run_recorded_scope(
+            root,
+            _recorded_strings(required.get("paths")),
+            _recorded_strings(required.get("rule_ids")),
+            invalid=(),
+        )
     if completed != 0:
         return completed
     if not store.clear_repair_required(args.generation):

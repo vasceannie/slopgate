@@ -22,7 +22,7 @@ from tests.repair_cli.constants import (
     REPAIR_PATH,
     SLOPGATE_TOML,
 )
-from tests.repair_cli.support import ScopedLintCapture
+from tests.repair_cli.support import ScopedLintCapture, WritableRepairStateStore
 
 
 @pytest.fixture
@@ -30,6 +30,13 @@ def repair_store(tmp_path: Path) -> HookStateStore:
     root = tmp_path.resolve()
     config = load_config(repo_root=root)
     return HookStateStore(config.trace_dir, scope=str(root), path_base=root)
+
+
+@pytest.fixture
+def writable_repair_store(repair_project: Path) -> WritableRepairStateStore:
+    root = repair_project.resolve()
+    config = load_config(repo_root=root)
+    return WritableRepairStateStore(config.trace_dir, scope=str(root), path_base=root)
 
 
 @pytest.fixture
