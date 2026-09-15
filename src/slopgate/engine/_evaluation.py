@@ -102,9 +102,11 @@ def _repair_target(ctx: HookContext, finding: RuleFinding) -> RepairTarget:
             "finding path is outside repository root",
         )
     if not resolved.is_file():
+        # Keep the in-root candidate so `slopgate repair verify` can re-resolve
+        # it once the file exists; the error only explains the record-time state.
         return RepairTarget(
             finding.rule_id,
-            None,
+            str(resolved),
             raw_path,
             function,
             "finding path is not an existing file",

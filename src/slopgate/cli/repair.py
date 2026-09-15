@@ -84,19 +84,21 @@ def _repair_scope(
     invalid: list[str] = []
     for target in targets:
         rule_id = target.get(RULE_ID_KEY)
-        path = target.get(METADATA_PATH)
-        error = target.get(REPAIR_TARGET_ERROR)
         if not isinstance(rule_id, str) or not rule_id:
             invalid.append("repair target has no rule id")
             continue
         rule_ids.append(rule_id)
+        path = target.get(METADATA_PATH)
+        if isinstance(path, str) and path:
+            # Resolution is re-evaluated at verification time: a recorded error
+            # is a record-time snapshot and must not outlive the missing file.
+            paths.append(path)
+            continue
+        error = target.get(REPAIR_TARGET_ERROR)
         if isinstance(error, str) and error:
             invalid.append(f"{rule_id}: {error}")
             continue
-        if not isinstance(path, str) or not path:
-            invalid.append(f"{rule_id}: repair target has no canonical path")
-            continue
-        paths.append(path)
+        invalid.append(f"{rule_id}: repair target has no canonical path")
     return paths, rule_ids, invalid
 
 
