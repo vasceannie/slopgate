@@ -149,13 +149,13 @@ def test_failed_opencode_execution_does_not_create_repair_lock(
     )
 
 
-def test_clean_completed_opencode_mutation_clears_repair_lock() -> None:
+def test_clean_completed_opencode_mutation_preserves_repair_lock() -> None:
     context = _repair_context(execution_outcome="returned", mutating=True)
 
     _record_opencode_repair_required(cast(HookContext, context), [], PLATFORM_OPENCODE)
 
-    assert context.state.cleared == ["generation-1"], (
-        "a clean completed repair mutation should clear its pending generation"
+    assert context.state.cleared == [], (
+        "only successful explicit repair verification may clear a pending generation"
     )
 
 

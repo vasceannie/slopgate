@@ -61,9 +61,10 @@ def assert_recovery_protocol(stderr: str) -> None:
     assert "slopgate repair status --cwd" not in stderr, (
         f"blocked status command must not be advertised: {stderr}"
     )
-    assert "read the first causal finding: PY-CODE-013 in src/sample.py" in stderr, (
+    assert "read the first causal finding: PY-CODE-013 in " in stderr, (
         f"missing causal finding render: {stderr}"
     )
+    assert "src/sample.py" in stderr, f"missing canonical target suffix: {stderr}"
     assert "slopgate repair verify --cwd" not in stderr, (
         f"blocked verify command must not be advertised: {stderr}"
     )
@@ -93,10 +94,20 @@ if sys.argv[1:3] == ["repair", "status"]:
         print("repair state unavailable", file=sys.stderr)
         raise SystemExit(2)
     status = "REPAIR_REQUIRED" if mode.startswith("repair-required") else "CLEAN"
+    worktree = os.path.realpath(sys.argv[sys.argv.index("--worktree") + 1])
+    target = os.path.join(worktree, "src", "sample.py")
     state = {
         "status": status,
+        "worktree": worktree,
         "rule_ids": ["PY-CODE-013"],
-        "paths": ["src/sample.py"],
+        "paths": [target],
+        "targets": [{
+            "rule_id": "PY-CODE-013",
+            "path": target,
+            "raw_path": "src/sample.py",
+            "function": "sample",
+            "error": None,
+        }],
     }
     if mode != "repair-required-unknown-generation":
         state["generation"] = "generation-1"

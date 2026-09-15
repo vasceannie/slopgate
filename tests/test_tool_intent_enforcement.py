@@ -6,7 +6,6 @@ import pytest
 
 from slopgate.adapters import get_adapter
 from slopgate.engine import evaluate_payload
-from slopgate.engine._evaluation import _existing_repair_paths
 from slopgate.util.payloads import (
     find_command_has_mutation,
     is_mutating_tool_use,
@@ -225,9 +224,7 @@ def test_posttool_read_skips_quality_and_records_intent(tmp_path: Path) -> None:
     _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n")
     _ = (repo / "app.py").write_text("print('ok')\n")
 
-    result = evaluate_payload(
-        _posttool_payload(repo, "Read", {"file_path": "app.py"})
-    )
+    result = evaluate_payload(_posttool_payload(repo, "Read", {"file_path": "app.py"}))
 
     ids = finding_ids(result)
     assert "QUALITY-POST-001" not in ids, "read must skip post-edit quality"
@@ -257,21 +254,6 @@ def test_opencode_file_edited_reaches_post_edit_quality(
 
     assert "QUALITY-POST-001" in finding_ids(result), (
         "file.edited must route through post-edit quality"
-    )
-
-
-def test_opencode_repair_state_records_only_existing_candidate_files(
-    tmp_path: Path,
-) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    source = repo / "app.py"
-    _ = source.write_text("print('ok')\n")
-
-    assert _existing_repair_paths(
-        [str(source), str(repo / "NOT"), str(repo / "Simulate")]
-    ) == [str(source)], (
-        "repair state must retain only existing candidate files"
     )
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from slopgate.cli import repair
 from slopgate.cli.lint import cmd_lint
-from slopgate.state import HookStateStore, RepairRequiredPayload
+from slopgate.state import HookStateStore, RepairRequiredPayload, RepairTarget
 from tests.repair_cli.constants import GENERATION_ONE
 
 
@@ -84,32 +84,49 @@ def test_repair_verify_does_not_sync_baseline(
     )
 
 
+def _verify_missing_recorded_path(
+    repair_project: Path,
+    repair_store: HookStateStore,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, str, str | None]:
+    payload = RepairRequiredPayload(
+        session_id="session-one",
+        call_id="call-one",
+        worktree=str(repair_project.resolve()),
+        targets=[
+            RepairTarget(
+                "PY-CODE-015",
+                "src/does-not-exist.py",
+                "src/does-not-exist.py",
+                None,
+                None,
+            )
+        ],
+    )
+    repair_store.mark_repair_required(GENERATION_ONE, payload)
+    result = repair.cmd_repair_verify(
+        argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
+    )
+    remaining = repair_store.get_repair_required()
+    generation_value = None if remaining is None else remaining.get("generation")
+    generation = generation_value if isinstance(generation_value, str) else None
+    return result, capsys.readouterr().out, generation
+
+
 def test_repair_verify_retains_generation_when_recorded_path_is_missing(
     repair_project: Path,
     repair_store: HookStateStore,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = RepairRequiredPayload(
-        session_id="session-one",
-        call_id="call-one",
-        rule_ids=["PY-CODE-015"],
-        paths=["src/does-not-exist.py"],
+    result, output, generation = _verify_missing_recorded_path(
+        repair_project, repair_store, capsys
     )
-    repair_store.mark_repair_required(GENERATION_ONE, payload)
-
-    result = repair.cmd_repair_verify(
-        argparse.Namespace(cwd=str(repair_project), generation=GENERATION_ONE)
-    )
-    remaining = repair_store.get_repair_required()
 
     assert result == 1, "unresolvable recorded paths must fail closed"
-    assert "do not resolve to files" in capsys.readouterr().out, (
+    assert "do not resolve to files" in output, (
         "missing recorded paths must explain the verification failure"
     )
-    assert remaining is not None, "missing paths must retain REPAIR_REQUIRED"
-    assert remaining["generation"] == GENERATION_ONE, (
-        "missing paths must keep the armed generation"
-    )
+    assert generation == GENERATION_ONE, "missing paths must keep the armed generation"
 
 
 def test_repair_verify_rejects_recorded_project_escapes(

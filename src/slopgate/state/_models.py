@@ -40,11 +40,20 @@ class DenyKeyPattern:
 
 
 @dataclass(frozen=True, slots=True)
+class RepairTarget:
+    rule_id: str
+    path: str | None
+    raw_path: str | None
+    function: str | None
+    error: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class RepairRequiredPayload:
     session_id: str
     call_id: str
-    rule_ids: list[str]
-    paths: list[str]
+    worktree: str
+    targets: list[RepairTarget]
 
 
 class HookStateSnapshot(TypedDict):

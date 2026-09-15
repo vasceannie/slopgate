@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from slopgate._types import ObjectDict
+
 
 class ScopedLintCapture:
     """Capture scoped lint arguments while returning a configured status."""
 
     def __init__(self, returncode: int = 0) -> None:
         self.returncode = returncode
-        self.calls: list[tuple[Path, tuple[str, ...], tuple[str, ...]]] = []
+        self.calls: list[tuple[Path, tuple[ObjectDict, ...]]] = []
 
-    def __call__(self, cwd: Path, paths: list[str], rule_ids: list[str]) -> int:
-        self.calls.append((cwd, tuple(paths), tuple(rule_ids)))
+    def __call__(self, cwd: Path, targets: list[ObjectDict]) -> int:
+        self.calls.append((cwd, tuple(dict(target) for target in targets)))
         return self.returncode

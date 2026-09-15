@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 
 import pytest
+from slopgate._types import ObjectDict
 from slopgate.cli import repair
-from slopgate.state import HookStateStore, RepairRequiredPayload
+from slopgate.state import HookStateStore, RepairRequiredPayload, RepairTarget
 from tests.repair_cli.constants import GENERATION_ONE, GENERATION_TWO, REPAIR_PATH
 from tests.repair_cli.support import ScopedLintCapture
 
@@ -15,7 +16,7 @@ def test_repair_verify_lints_recorded_paths_and_rule_ids(
     tmp_path: Path,
     recorded_lint_capture: tuple[
         ScopedLintCapture,
-        list[tuple[Path, tuple[str, ...], tuple[str, ...]]],
+        list[tuple[Path, tuple[ObjectDict, ...]]],
     ],
 ) -> None:
     capture, expected = recorded_lint_capture
@@ -80,13 +81,13 @@ def test_repair_verify_does_not_clear_replaced_generation(
     payload = RepairRequiredPayload(
         session_id="session-one",
         call_id="call-one",
-        rule_ids=["QUALITY-LINT-001"],
-        paths=[REPAIR_PATH],
+        worktree=str(tmp_path.resolve()),
+        targets=[
+            RepairTarget("QUALITY-LINT-001", REPAIR_PATH, REPAIR_PATH, None, None)
+        ],
     )
 
-    def replace_generation(
-        _cwd: Path, _paths: list[str], _rule_ids: list[str]
-    ) -> int:
+    def replace_generation(_cwd: Path, _targets: list[ObjectDict]) -> int:
         marked_repair_store.mark_repair_required(GENERATION_TWO, payload)
         return 0
 

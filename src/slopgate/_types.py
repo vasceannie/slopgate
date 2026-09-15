@@ -32,6 +32,10 @@ def object_list(value: object) -> list[object]:
     return []
 
 
+def object_dict_list(value: object) -> list[ObjectDict]:
+    return [object_dict(raw) for raw in object_list(value)]
+
+
 def string_value(value: object) -> str | None:
     return value if isinstance(value, str) else None
 

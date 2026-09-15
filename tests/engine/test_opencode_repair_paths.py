@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from slopgate._types import ObjectDict, object_dict_list
 from slopgate.constants import BLOCK, PLATFORM_OPENCODE
 from slopgate.context import HookContext, build_context
 from slopgate.engine._evaluation import (
@@ -14,8 +15,7 @@ from slopgate.engine._evaluation import (
     _record_opencode_repair_required,
 )
 from slopgate.models import RuleFinding, Severity
-from slopgate.resources import resource_path
-from slopgate.state import RepairRequiredPayload
+from slopgate.state import RepairRequiredPayload, RepairTarget
 
 
 def _path_only_context(tmp_path: Path) -> tuple[HookContext, Path]:
@@ -39,12 +39,12 @@ def _path_only_context(tmp_path: Path) -> tuple[HookContext, Path]:
 
 def _repair_required_context(
     tmp_path: Path,
-    rule_ids: list[str],
-    paths: list[str],
+    targets: list[RepairTarget],
 ) -> HookContext:
     context = build_context(
         {
             "cwd": str(tmp_path),
+            "worktree": str(tmp_path),
             "hook_event_name": "PreToolUse",
             "tool_name": "custom_mutator",
             "tool_input": {"prompt": "retry the blocked edit"},
@@ -57,8 +57,8 @@ def _repair_required_context(
         RepairRequiredPayload(
             session_id="session-1",
             call_id="call-1",
-            rule_ids=rule_ids,
-            paths=paths,
+            worktree=context.state.scope,
+            targets=targets,
         ),
     )
     return context
@@ -88,6 +88,7 @@ def test_file_edited_repair_state_records_candidate_path_in_repair_state(
                 title="parse failure",
                 severity=Severity.CRITICAL,
                 decision=BLOCK,
+                metadata={"path": str(source_path), "function": "parse_source"},
             )
         ],
         PLATFORM_OPENCODE,
@@ -100,13 +101,121 @@ def test_file_edited_repair_state_records_candidate_path_in_repair_state(
     )
 
 
+def _record_nested_event_repair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[ObjectDict | None, Path]:
+    worktree = tmp_path / "worktree"
+    event_cwd = worktree / "packages" / "service"
+    intended = event_cwd / "app.py"
+    daemon_cwd = tmp_path / "daemon"
+    event_cwd.mkdir(parents=True)
+    daemon_cwd.mkdir()
+    intended.write_text("value = 1\n", encoding="utf-8")
+    (daemon_cwd / "app.py").write_text("value = 2\n", encoding="utf-8")
+    monkeypatch.chdir(daemon_cwd)
+    context = build_context(
+        {
+            "cwd": str(event_cwd),
+            "worktree": str(worktree),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "app.py"},
+            "execution_outcome": "returned",
+            "session_id": "session-1",
+            "call_id": "call-1",
+        }
+    )
+    finding = RuleFinding(
+        rule_id="PY-AST-001",
+        title="parse failure",
+        severity=Severity.CRITICAL,
+        decision=BLOCK,
+        metadata={"path": "app.py", "function": "parse_source"},
+    )
+    _record_opencode_repair_required(context, [finding], PLATFORM_OPENCODE)
+    return context.state.get_repair_required(), intended
+
+
+def test_repair_target_uses_nested_event_cwd_not_process_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    required, intended = _record_nested_event_repair(tmp_path, monkeypatch)
+
+    assert required is not None, "blocking findings must create repair state"
+    assert required["targets"] == [
+        {
+            "rule_id": "PY-AST-001",
+            "path": str(intended.resolve()),
+            "raw_path": "app.py",
+            "function": "parse_source",
+            "error": None,
+        }
+    ], "repair targets must resolve from the event working directory"
+
+
+def _record_unverifiable_repair(
+    tmp_path: Path, metadata: ObjectDict
+) -> ObjectDict | None:
+    context = build_context(
+        {
+            "cwd": str(tmp_path),
+            "worktree": str(tmp_path),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "execution_outcome": "returned",
+            "session_id": "session-1",
+            "call_id": "call-1",
+        }
+    )
+    finding = RuleFinding(
+        rule_id="QUALITY-POST-001",
+        title="quality failure",
+        severity=Severity.CRITICAL,
+        decision=BLOCK,
+        metadata=metadata,
+    )
+    _record_opencode_repair_required(context, [finding], PLATFORM_OPENCODE)
+    return context.state.get_repair_required()
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected_error"),
+    [
+        pytest.param({}, "finding has no file target", id="pathless"),
+        pytest.param(
+            {"path": "missing.py"},
+            "finding path is not an existing file",
+            id="missing",
+        ),
+        pytest.param(
+            {"path": "../outside.py"},
+            "finding path is outside repository root",
+            id="outside",
+        ),
+    ],
+)
+def test_unverifiable_repair_target_is_explicit_and_pending(
+    tmp_path: Path, metadata: ObjectDict, expected_error: str
+) -> None:
+    required = _record_unverifiable_repair(tmp_path, metadata)
+
+    assert required is not None, "unverifiable findings must remain pending"
+    assert required["status"] == "REPAIR_REQUIRED", (
+        "unverifiable findings must fail closed"
+    )
+    targets = object_dict_list(required.get("targets"))
+    assert targets, "unverifiable findings must retain a causal target"
+    assert targets[0]["error"] == expected_error, (
+        "repair state must explain why its causal target cannot be verified"
+    )
+
+
 def test_repair_gate_finding_demands_stop_and_names_allowed_tools(
     tmp_path: Path,
 ) -> None:
     context = _repair_required_context(
         tmp_path,
-        ["PY-CODE-013"],
-        ["src/sample.py"],
+        [RepairTarget("PY-CODE-013", "src/sample.py", "src/sample.py", None, None)],
     )
 
     finding = _opencode_repair_required_finding(context, PLATFORM_OPENCODE)
@@ -132,69 +241,84 @@ def test_repair_gate_finding_demands_stop_and_names_allowed_tools(
     assert "slopgate lint check" in message, f"missing exact lint gate: {message}"
 
 
-def test_repair_gate_finding_renders_exact_repair_cli_and_causal_state(
+def test_repair_gate_finding_renders_causal_recovery(
     tmp_path: Path,
 ) -> None:
+    target_path = str(tmp_path / "src" / "sample.py")
     context = _repair_required_context(
         tmp_path,
-        ["PY-CODE-013"],
-        [str(tmp_path / "src" / "sample.py")],
+        [RepairTarget("PY-CODE-013", target_path, target_path, "sample", None)],
     )
 
     finding = _opencode_repair_required_finding(context, PLATFORM_OPENCODE)
 
-    assert finding is not None, (
-        "blocked wrapper tools must raise the repair gate finding"
-    )
+    assert finding is not None, "blocked wrapper tools must raise the repair gate"
     assert finding.message is not None, "denial must carry a message"
     message = finding.message
     assert "slopgate repair status --cwd" not in message, (
         f"blocked status command must not be advertised: {message}"
     )
-    assert (
-        "read the first causal finding: PY-CODE-013 in "
-        + str(tmp_path / "src" / "sample.py")
-        in message
-    ), f"missing causal finding render: {message}"
+    assert f"read the first causal finding: PY-CODE-013 in {target_path}" in message, (
+        f"missing causal finding render: {message}"
+    )
     assert "slopgate repair verify --cwd" not in message, (
         f"blocked verify command must not be advertised: {message}"
     )
     assert "resolves the pending generation from repair state" in message, (
         f"registered verifier must explain generation discovery: {message}"
     )
+
+
+def test_repair_gate_finding_preserves_causal_state(tmp_path: Path) -> None:
+    target_path = str(tmp_path / "src" / "sample.py")
+    context = _repair_required_context(
+        tmp_path,
+        [RepairTarget("PY-CODE-013", target_path, target_path, "sample", None)],
+    )
+
+    finding = _opencode_repair_required_finding(context, PLATFORM_OPENCODE)
+
+    assert finding is not None, "blocked wrapper tools must raise the repair gate"
     assert finding.metadata == {
         "generation": "generation-test-1",
         "rule_ids": ["PY-CODE-013"],
-        "paths": [str(tmp_path / "src" / "sample.py")],
+        "paths": [target_path],
+        "targets": [
+            {
+                "rule_id": "PY-CODE-013",
+                "path": target_path,
+                "raw_path": target_path,
+                "function": "sample",
+                "error": None,
+            }
+        ],
+        "worktree": str(tmp_path),
     }, "causal metadata must be preserved for traces"
 
 
 def test_repair_gate_finding_without_causal_metadata_omits_details(
     tmp_path: Path,
 ) -> None:
-    context = _repair_required_context(
-        tmp_path,
-        [],
-        [],
-    )
+    context = _repair_required_context(tmp_path, [])
 
     finding = _opencode_repair_required_finding(context, PLATFORM_OPENCODE)
 
     assert finding is not None
     assert finding.message is not None, "denial must carry a message"
     message = finding.message
-    assert "read the first causal finding: the repair status output" in message, (
-        f"missing status-output fallback: {message}"
+    assert "read the first causal finding: invalid or legacy repair state" in message, (
+        f"missing invalid-state fallback: {message}"
     )
     assert finding.metadata == {
         "generation": "generation-test-1",
         "rule_ids": [],
         "paths": [],
+        "targets": [],
+        "worktree": str(tmp_path),
     }, "empty causal state must render without invented details"
 
-# Recovery-protocol drift guards are appended below.
 
-_RECOVERY_PROTOCOL_FRAGMENTS: tuple[str, ...] = (
+_RECOVERY_PROTOCOL_FRAGMENTS = (
     "STOP: do not retry this blocked mutation",
     "equivalent retries remain blocked",
     "Recovery protocol:",
@@ -211,17 +335,8 @@ _RECOVERY_PROTOCOL_FRAGMENTS: tuple[str, ...] = (
 
 
 @pytest.mark.parametrize("fragment", _RECOVERY_PROTOCOL_FRAGMENTS)
-def test_recovery_protocol_fragment_is_in_engine_message(fragment: str) -> None:
+def test_engine_repair_message_preserves_recovery_protocol(fragment: str) -> None:
     message = _opencode_repair_recovery_message(
-        "generation-1",
-        "PY-CODE-013 in src/sample.py",
+        "generation-1", "PY-CODE-013 in src/sample.py"
     )
-
     assert fragment in message, f"engine protocol drifted: missing {fragment!r}"
-
-
-@pytest.mark.parametrize("fragment", _RECOVERY_PROTOCOL_FRAGMENTS)
-def test_recovery_protocol_fragment_is_in_plugin_source(fragment: str) -> None:
-    plugin_source = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
-
-    assert fragment in plugin_source, f"plugin protocol drifted: missing {fragment!r}"

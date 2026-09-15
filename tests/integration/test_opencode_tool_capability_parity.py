@@ -17,11 +17,13 @@ from slopgate.engine import evaluate_payload
 from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.adapters.opencode_projection.models import OPENCODE_TOOL_CONTRACT_VERSION
 from slopgate.resources import resource_path
-from slopgate.state import RepairRequiredPayload
+from slopgate.state import RepairRequiredPayload, RepairTarget
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
-_CONTRACT_PATH = Path(__file__).parents[1] / "fixtures" / "opencode_tool_capability_contract.json"
+_CONTRACT_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "opencode_tool_capability_contract.json"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +48,7 @@ def capability_payload(repo: Path, case: ObjectDict) -> ObjectDict:
         "session_id": "capability-contract",
         "call_id": string_value(case.get("id")) or "contract-call",
         "opencode_tool_contract_version": (
-            string_value(case.get("contract_version"))
-            or OPENCODE_TOOL_CONTRACT_VERSION
+            string_value(case.get("contract_version")) or OPENCODE_TOOL_CONTRACT_VERSION
         ),
     }
 
@@ -61,8 +62,10 @@ def prepare_repair_state(payload: ObjectDict, repair_required: bool) -> None:
         RepairRequiredPayload(
             session_id="capability-contract",
             call_id="repair-source",
-            rule_ids=["QUALITY-LINT-001"],
-            paths=["src/app.py"],
+            worktree=context.state.scope,
+            targets=[
+                RepairTarget("QUALITY-LINT-001", "src/app.py", "src/app.py", None, None)
+            ],
         ),
     )
 
@@ -74,8 +77,7 @@ def run_generated_plugin(
 ) -> subprocess.CompletedProcess[str]:
     plugin_path = tmp_path / "slopgate-plugin.ts"
     contract_version = (
-        string_value(case.get("contract_version"))
-        or OPENCODE_TOOL_CONTRACT_VERSION
+        string_value(case.get("contract_version")) or OPENCODE_TOOL_CONTRACT_VERSION
     )
     template = resource_path("opencode_plugin.ts").read_text(encoding="utf-8")
     template = template.replace(
@@ -165,9 +167,7 @@ def _evaluate_capability_case(
             and python_result.output.get("action") == "block"
         ),
         plugin_blocked=plugin_result.returncode != 0,
-        detail=(
-            f"python={python_result.output}, plugin={plugin_result.stderr}"
-        ),
+        detail=(f"python={python_result.output}, plugin={plugin_result.stderr}"),
     )
 
 
@@ -182,6 +182,4 @@ def test_python_and_generated_plugin_share_tool_capability_decisions(
     assert (decision.python_blocked, decision.plugin_blocked) == (
         decision.expected_blocked,
         decision.expected_blocked,
-    ), (
-        f"capability disagreement for {case.get('id')}: {decision.detail}"
-    )
+    ), f"capability disagreement for {case.get('id')}: {decision.detail}"
