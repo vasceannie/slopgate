@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "[options.exclude_package_data]\n* =\n    */__pycache__/*\n    *.pyc\n    *.pyo\n    *.pyd\n",
+    "file_path": "$REPO_SLOPGATE/setup.cfg"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e17b4d2fc076",
+  "_gold": {
+    "source_case_id": "e17b4d2fc076",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-LINTER-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

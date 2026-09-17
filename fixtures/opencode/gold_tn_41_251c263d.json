@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Skill",
+  "tool_input": {
+    "name": "codegraph-cli",
+    "user_message": "Inspect changed symbols and their call paths while reviewing for bugs."
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-251c263d4f59",
+  "_gold": {
+    "source_case_id": "251c263d4f59",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

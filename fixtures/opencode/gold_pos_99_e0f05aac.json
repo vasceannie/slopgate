@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/docker-compose.yml\n@@\n-      - ./profile:/app/profile:ro\n+      - ./profile:/app/profile:rw\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e0f05aacbb10",
+  "_gold": {
+    "source_case_id": "e0f05aacbb10",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "BUILTIN-PROTECTED-PATHS"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "unsupported"
+    },
+    "command": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; git commit -m \"Resolve final-wave quality findings in OMP installer and adapter\"",
+    "timeout": 120000,
+    "workdir": "$REPO_SLOPGATE/omp-adapter"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0aa51e84a0bb",
+  "_gold": {
+    "source_case_id": "0aa51e84a0bb",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-002",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

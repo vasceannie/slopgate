@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "GitnexusContext",
+  "tool_input": {
+    "include_content": true,
+    "max_tokens": 6000,
+    "name": "unresolved_opencode_projection_finding",
+    "repo": "slopgate"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-256c7cf6e36f",
+  "_gold": {
+    "source_case_id": "256c7cf6e36f",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

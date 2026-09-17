@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Delete File: $REPO_SLOPGATE/.opencode-slopgate-qa.ts\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-da2e6c09c64b",
+  "_gold": {
+    "source_case_id": "da2e6c09c64b",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

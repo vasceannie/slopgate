@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "category": "unspecified-high",
+    "description": "Execute behavioral QA",
+    "load_skills": [
+      "slopgate-rule-hook-maintenance",
+      "tests",
+      "integration"
+    ],
+    "prompt": "CONTEXT: QA the current uncommitted OpenCode unknown-tool projection fix in $HOME/.openclaw/workspace-hooker/slopgate. It should allow benign unknown MCP/host-control tools and deny unknown filesystem mutations, including while repair is required. GOAL: Exercise the real generated plugin and Python enforcement surface across happy, boundary, malformed, naming-variant, and regression cases. STOP WHEN: The public/plugin behavior has been driven with a systematic scenario matrix and every P0/P1 case has an observed result. EVIDENCE: Return commands run, scenario table, actual outputs/exit codes, and PASS/FAIL with any defects tied to file:line. DOWNSTREAM: I will reproduce all failures and use the evidence in the final review. REQUEST: Run tests and ad hoc drivers as needed, but do not modify tracked files, do not commit, and do not delegate. Focus on actual behavior rather than source style.",
+    "run_in_background": true
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-274b18d96755",
+  "_gold": {
+    "source_case_id": "274b18d96755",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

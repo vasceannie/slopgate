@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "unsupported"
+    },
+    "command": "rtk curl -sS http://127.0.0.1:8686/openapi.json -o /tmp/opencode/job-hunter-openapi.json && rtk jq '.paths | with_entries(select(.key | test(\"agent|browser|runs\"))) | keys' /tmp/opencode/job-hunter-openapi.json",
+    "timeout": 120000,
+    "workdir": "$REPO_JOB_HUNTER"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9ff5c236c35d",
+  "_gold": {
+    "source_case_id": "9ff5c236c35d",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SENSITIVE-DATA",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

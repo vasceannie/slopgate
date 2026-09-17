@@ -62,8 +62,6 @@ _FILE_TOOLS = (TOOL_WRITE, TOOL_EDIT, TOOL_READ)
 _SEARCH_TOOLS = (TOOL_GLOB, TOOL_GREP)
 _WEB_TOOLS = (TOOL_WEB_SEARCH, TOOL_WEB_FETCH)
 _TRACE_OPTIONAL_FIELDS = (
-    "opencode_session_id",
-    "call_id",
     "session_identity_source",
     "session_title",
     "session_title_source",
@@ -133,8 +131,19 @@ def _extract_tool_output(payload: ObjectMapping) -> str | None:
     return str(tool_output)
 
 
+def _trace_join_fields(payload: ObjectMapping) -> ObjectDict:
+    """Always persist join keys so later extracts can pair events↔results."""
+    return {
+        "opencode_session_id": str(payload.get("opencode_session_id") or ""),
+        "call_id": str(payload.get("call_id") or ""),
+    }
+
+
 def _trace_optional_fields(payload: ObjectMapping) -> ObjectDict:
-    fields = {key: payload[key] for key in _TRACE_OPTIONAL_FIELDS if key in payload}
+    fields = _trace_join_fields(payload)
+    for key in _TRACE_OPTIONAL_FIELDS:
+        if key in payload:
+            fields[key] = payload[key]
     if "tool_output" in payload:
         fields["tool_output_raw"] = payload["tool_output"]
     return fields
@@ -167,7 +176,7 @@ def _payload_for_start(ctx: HookContext, metadata: EvaluationMetadata) -> Object
         "event_name": ctx.event_name,
         SESSION_ID: ctx.session_id,
         "tool_name": ctx.tool_name,
-        "candidate_paths": ctx.candidate_paths,
+        "candidate_paths": list(ctx.candidate_paths),
         "languages": sorted(ctx.languages),
         "enforcement_mode": metadata.enforcement_mode,
         "resolved_repo_root": metadata.repo_root_text,
@@ -208,7 +217,7 @@ def payload_for_done(
         "errors": result.errors,
         "output": result.output,
         "timing": timing,
-        "candidate_paths": ctx.candidate_paths,
+        "candidate_paths": list(ctx.candidate_paths),
         "languages": sorted(ctx.languages),
         "slopgate_version": slopgate_version(),
         "effective_policy_fingerprint": effective_policy_fingerprint(ctx.config),

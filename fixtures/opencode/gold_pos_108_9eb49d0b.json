@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tests/test_repair_cli.py\n@@\n def _write_repair_project(root: Path) -> None:\n@@\n     (root / \"tests\").mkdir()\n+\n+\n+def _write_baseline(root: Path, rules: dict[str, list[str]]) -> None:\n+    (root / \"baselines.json\").write_text(\n+        json.dumps(\n+            {\n+                \"schema_version\": 1,\n+                \"generated_at\": \"fixed-for-test\",\n+                \"rules\": rules,\n+            },\n+            indent=2,\n+        )\n+        + \"\\n\",\n+        encoding=\"utf-8\",\n+    )\n@@\n def _capture_scoped_lint(\n@@\n     monkeypatch.setattr(repair_mod, \"_run_scoped_lint\", _run)\n     return captured\n+\n+\n+def _path_only_context(tmp_path: Path):\n+    source_path = tmp_path / \"src\" / \"app.py\"\n+    source_path.parent.mkdir()\n+    source_path.write_text(\"value = 1\\n\", encoding=\"utf-8\")\n+    return build_context(\n+        {\n+            \"cwd\": str(tmp_path),\n+            \"hook_event_name\": \"PostToolUse\",\n+            \"tool_name\": \"Write\",\n+            \"tool_input\": {\"file_path\": str(source_path)},\n+            \"execution_outcome\": \"returned\",\n+            \"session_id\": \"session-1\",\n+            \"call_id\": \"call-1\",\n+        }\n+    ), source_path\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9eb49d0b7498",
+  "_gold": {
+    "source_case_id": "9eb49d0b7498",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-013"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tests/engine/test_16_parse_failure_normalization.py\n@@\n def test_projected_opencode_mutation_normalizes_indentation_failure(\n@@\n     finding = _single_py_ast_finding(result, \"src/app.py\")\n     assert finding.metadata[\"exception_type\"] == \"IndentationError\", (\n         f\"projected mutation must preserve parser provenance: {finding.metadata!r}\"\n     )\n+    assert finding.metadata[\"provenance\"] == \"projected_content\", (\n+        f\"projected mutation must identify projected content: {finding.metadata!r}\"\n+    )\n+    assert \"IndentationError\" in finding.message\n+    assert \"unindent does not match\" in finding.message\n+    assert \"line 3\" in finding.message\n+    assert \"offset\" in finding.message\n+    recovery = finding.additional_context\n+    assert recovery is not None\n+    assert recovery not in finding.message, \"recovery guidance must not be duplicated\"\n     _assert_no_parser_leak(result)\n+\n+\n+def test_stale_native_edit_does_not_become_projected_parse_failure(\n+    tmp_path: Path,\n+    monkeypatch: pytest.MonkeyPatch,\n+) -> None:\n+    from tests.adapters.test_opencode_projection.support import evaluate_stale_edit\n+\n+    result, projection, _outside = evaluate_stale_edit(tmp_path, monkeypatch)\n+\n+    assert projection[\"status\"] == \"stale\"\n+    assert not _py_ast_findings(result), (\n+        \"native hashline parity failures must not be reported as projected AST failures\"\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a6a4197c5417",
+  "_gold": {
+    "source_case_id": "a6a4197c5417",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-TEST-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

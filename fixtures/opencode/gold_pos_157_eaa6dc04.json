@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: public_html/resources/css/styles.css\n@@\n .checkout-contact-box p:last-child{\n     margin-bottom:0;\n }\n+\n+/* Cart design tokens and scoped shipping presentation */\n+:root {\n+    --cart-focus-ring:#2463eb;\n+}\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-eaa6dc04c9d8",
+  "_gold": {
+    "source_case_id": "eaa6dc04c9d8",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "STYLE-005"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

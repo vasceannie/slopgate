@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -rn \"TODO\\|FIXME\\|XXX\\|HACK\\|NOT IMPLEMENTED\\|not implemented\" src/slopgate/stats/improvement/ src/slopgate/engine/_fingerprints.py dashboard/src/lib/improvement.ts dashboard/src/lib/improvementScope.ts 2>&1 | head -30"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-269b3c5edae9",
+  "_gold": {
+    "source_case_id": "269b3c5edae9",
+    "platform": "claude",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

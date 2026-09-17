@@ -1,0 +1,22 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "GitnexusQuery",
+  "tool_input": {
+    "goal": "Find tracing flows and owning symbols",
+    "include_content": true,
+    "limit": 5,
+    "max_symbols": 10,
+    "repo": "job-hunter",
+    "search_query": "eval traces field execution tool verification spans langfuse",
+    "task_context": "Implement bead job-hunter-rwfh"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-8abb6cf84fcb",
+  "_gold": {
+    "source_case_id": "8abb6cf84fcb",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

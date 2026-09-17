@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git log --oneline -10 2>/dev/null; echo \"---\"; ls *.md docs 2>/dev/null | head -40",
+    "workdir": "$REPO_SLOPGATE"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-376fb4aa3143",
+  "_gold": {
+    "source_case_id": "376fb4aa3143",
+    "platform": "claude",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

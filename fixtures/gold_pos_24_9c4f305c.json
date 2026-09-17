@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "[build-system]\nrequires = [\"setuptools>=68\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"ai-slopgate\"\ndynamic = [\"version\"]\ndescription = \"Global CLI guardrails engine for AI coding agents \u2014 Claude Code, Codex, OpenCode\"\nrequires-python = \">=3.10\"\nreadme = \"README.md\"\nlicense = { text = \"MIT\" }\nauthors = [{ name = \"trav\" }]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Environment :: Console\",\n    \"Intended Audience :: Developers\",\n    \"Topic :: Software Development :: Quality Assurance\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Programming Language :: Python :: 3.14\",\n]\ndependencies = [\n    \"pyyaml>=6.0.3\",\n    \"tomli>=2.4.1\",\n    \"typing-extensions>=4.15.0\",\n]\n\n[project.scripts]\nslopgate = \"slopgate.cli:safe_main\"\nsgt = \"slopgate.cli:safe_main\"\nvfc = \"slopgate.cli:safe_main\"\nisx = \"slopgate.cli:safe_main\"\n\n[tool.setuptools.dynamic]\nversion = {attr = \"slopgate.__version__\"}\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\nlicense-files = [\"LICENSE\"]\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.setuptools.package-data]\nslopgate = [\"resources/**/*\"]\n\n[tool.setuptools.exclude-package-data]\n\"*\" = [\"**/__pycache__/**\", \"**/*.pyc\", \"**/*.pyo\", \"**/*.pyd\"]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\"src\"]\nmarkers = [\n    \"unix_only: requires Unix path or shell semantics (auto-skipped on win32 via tests.support.SKIP_UNIX_ONLY)\",\n]\n\n[tool.basedpyright]\npythonVersion = \"3.12\"\nvenvPath = \".\"\nvenv = \".venv\"\ninclude = [\"src\", \"tests\"]\nextraPaths = [\"src\", \".\", \"dashboard/scripts\"]\ntypeCheckingMode = \"strict\"\n\n[[tool.basedpyright.executionEnvironments]]\nroot = \"tests\"\nextraPaths = [\"src\", \".\", \"dashboard/scripts\"]\nreportPrivateUsage = true\n\n[tool.pyrefly]\npython-interpreter-path = \".venv/bin/python3\"\nproject-includes = [\"src\", \"tests\"]\nsearch_path = [\"src\", \".\", \"dashboard/scripts\"]\ndisable-search-path-heuristics = true\ndisable-project-excludes-heuristics = true\nmin-severity = \"warn\"\nstrict-callable-subtyping = true\nuse-ignore-files = true\n\n[tool.ty.environment]\npython = \".venv\"\npython-version = \"3.12\"\nextra-paths = [\"dashboard/scripts\"]\n\n[dependency-groups]\ndev = [\n    \"basedpyright>=1.39.0\",\n    \"hypothesis>=6.155.1\",\n    \"pytest>=9.0.3\",\n    \"pytest-xdist>=3.8.0\",\n    \"ruff>=0.15.13\",\n    \"ty>=0.0.29\",\n]\n",
+    "file_path": "$REPO_SLOPGATE/pyproject.toml"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9c4f305c3280",
+  "_gold": {
+    "source_case_id": "9c4f305c3280",
+    "platform": "claude",
+    "current_rule_ids": [
+      "BUILTIN-PROTECTED-PATHS"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Add File: $REPO_SLOPGATE/tests/test_default_swallow_regex_rule.py\n+from __future__ import annotations\n+\n+from slopgate.engine import evaluate_payload\n+from tests.support import BUNDLE_ROOT, finding_ids\n+\n+\n+def _python_write_payload(content: str) -> dict[str, object]:\n+    return {\n+        \"session_id\": \"default-swallow-regression\",\n+        \"cwd\": str(BUNDLE_ROOT),\n+        \"hook_event_name\": \"PreToolUse\",\n+        \"tool_name\": \"Write\",\n+        \"tool_input\": {\n+            \"file_path\": \"src/example.py\",\n+            \"content\": content,\n+        },\n+    }\n+\n+\n+def test_default_swallow_does_not_cross_function_boundary() -> None:\n+    source = \"\"\"\\\n+def run() -> int:\n+    try:\n+        work()\n+    except KeyboardInterrupt:\n+        return EXIT_KEYBOARD_INTERRUPT\n+\n+\n+def load_items() -> list[str]:\n+    logger.error(\"load failed\")\n+    return []\n+\"\"\"\n+\n+    result = evaluate_payload(_python_write_payload(source))\n+\n+    assert \"PY-QUALITY-005\" not in finding_ids(result)\n+\n+\n+def test_default_swallow_does_not_cross_sibling_handlers() -> None:\n+    source = \"\"\"\\\n+try:\n+    load_items()\n+except ValueError:\n+    logger.error(\"invalid data\")\n+except OSError:\n+    return []\n+\"\"\"\n+\n+    result = evaluate_payload(_python_write_payload(source))\n+\n+    assert \"PY-QUALITY-005\" not in finding_ids(result)\n+\n+\n+def test_default_swallow_detects_log_and_default_in_same_handler() -> None:\n+    source = \"\"\"\\\n+try:\n+    load_items()\n+except OSError:\n+    logger.error(\"load failed\")\n+    return []\n+\"\"\"\n+\n+    result = evaluate_payload(_python_write_payload(source))\n+\n+    assert \"PY-QUALITY-005\" in finding_ids(result)\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-6cbe8dd10666",
+  "_gold": {
+    "source_case_id": "6cbe8dd10666",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-QUALITY-005",
+      "PY-TEST-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "GitnexusDetectChanges",
+  "tool_input": {
+    "repo": "slopgate",
+    "scope": "all"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d27574158465",
+  "_gold": {
+    "source_case_id": "d27574158465",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

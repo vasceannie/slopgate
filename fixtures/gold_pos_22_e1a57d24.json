@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n \"slopgate test\\|pytest\\|test_adapters\\|test_opencode\" $REPO_SLOPGATE/.claude/rules/python/project-structure.md | head -5; echo \"---\"; find $REPO_SLOPGATE/tests -name \"*opencode*\" | grep -v \"__pycache__\" | head -20"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e1a57d241cc2",
+  "_gold": {
+    "source_case_id": "e1a57d241cc2",
+    "platform": "claude",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

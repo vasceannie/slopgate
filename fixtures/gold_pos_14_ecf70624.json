@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "find $REPO_SLOPGATE/src -type f -name \"*.py\" | xargs grep -l -i \"opencode\\|hook_proxy\\|installer\" | head -40"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ecf7062463f6",
+  "_gold": {
+    "source_case_id": "ecf7062463f6",
+    "platform": "claude",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git merge-base --is-ancestor ba7e612 HEAD && echo \"ba7e612 IN HEAD history\" || echo \"ba7e612 NOT ancestor of HEAD\"; git merge-base --is-ancestor 7ecfe58 HEAD && echo \"7ecfe58 IN HEAD history\" || echo \"7ecfe58 NOT ancestor\"; git branch -a --contains ba7e612 2>&1 | head"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-21ac76626708",
+  "_gold": {
+    "source_case_id": "21ac76626708",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

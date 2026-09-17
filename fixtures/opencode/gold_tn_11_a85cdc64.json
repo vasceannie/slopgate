@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Skill",
+  "tool_input": {
+    "name": "job-hunter-profile-and-review-boundary",
+    "user_message": "Preserve confirmation reviews and reject locale-incompatible values."
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a85cdc645604",
+  "_gold": {
+    "source_case_id": "a85cdc645604",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git branch --show-current && git log --oneline $(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null)..HEAD 2>/dev/null | head -50"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-2b6820db715c",
+  "_gold": {
+    "source_case_id": "2b6820db715c",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION",
+      "SHELL-001",
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

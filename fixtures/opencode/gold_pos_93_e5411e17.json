@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/tests/cloud/test_checkpointer_navigation_integration.py\n@@\n async def test_navigation_resume_attests_baseline_and_reconciled_live_page() -> None:\n     validations = await _navigation_resume_validations()\n \n     assert validations == (_SERVICE_VALIDATION,), (\n         \"resume must bind the persisted baseline to the reconciled live page\"\n     )\n+\n+\n+@pytest.mark.asyncio\n+async def test_graph_pause_reconciles_before_validated_navigation_resume(\n+    monkeypatch: pytest.MonkeyPatch,\n+) -> None:\n+    page = MagicMock(spec=Page)\n+    resume = RecordingOperatorResume([])\n+    reconciler = RecordingReconciler([], page_signature=\"signature-after-pause\")\n+    harness = await interactive_service_harness(\n+        InteractiveHarnessOptions(\n+            viewer_page=page,\n+            reconciler=reconciler,\n+            resume_operator=resume,\n+        )\n+    )\n+    await harness.service.create_interactive_lease(\n+        harness.lease_request, process_owner=OWNER\n+    )\n+    await harness.service.release_interactive_lease(\n+        harness.release_request, process_owner=OWNER\n+    )\n+    baseline = await harness.host.registry.get_session(harness.invocation.access)\n+    context = replace(\n+        _SERVICE_CONTEXT,\n+        generation=int(baseline.generation),\n+        page_signature=\"signature-before-pause\",\n+        takeover_available=True,\n+    )\n+    record = harness.manager.interrupt_records[RUN_ID][\"control\"]\n+    record.suggested_value = context.to_json()\n+    record.interrupt_type = \"navigation\"\n+    monkeypatch.setattr(\n+        \"cloud.services.browser_sessions.navigation_resume.navigation_step_signature\",\n+        AsyncMock(return_value=context.page_signature),\n+    )\n+\n+    await harness.service.prepare_operator_pause(RUN_ID)\n+    ready = await harness.host.registry.get_session(harness.invocation.access)\n+    grant = await harness.service.create_interactive_lease(\n+        harness.lease_request.model_copy(update={\"generation\": ready.generation}),\n+        process_owner=OWNER,\n+    )\n+    await harness.service.resume_browser_automation(\n+        harness.release_request.model_copy(\n+            update={\n+                \"checkpoint\": grant.session.checkpoint,\n+                \"generation\": grant.session.generation,\n+            }\n+        ),\n+        process_owner=OWNER,\n+    )\n+\n+    assert (baseline.state, ready.state, ready.generation) == (\n+        BrowserSessionState.CONTROLLED,\n+        BrowserSessionState.READY,\n+        baseline.generation + 1,\n+    )\n+    assert resume.validations == (\n+        [replace(_SERVICE_VALIDATION, expected_generation=int(baseline.generation))]\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e5411e17d79d",
+  "_gold": {
+    "source_case_id": "e5411e17d79d",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-008"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

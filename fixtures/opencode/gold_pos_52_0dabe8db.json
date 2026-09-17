@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "TaskCreate",
+  "tool_input": {
+    "active_form": "Mapping unknown-tool projection QA surface",
+    "description": "Inspect uncommitted changes and relevant generated-plugin/Python entry points, then define P0/P1 systematic scenarios without modifying tracked files.",
+    "subject": "Map unknown-tool projection QA surface"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0dabe8db74f2",
+  "_gold": {
+    "source_case_id": "0dabe8db74f2",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

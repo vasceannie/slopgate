@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Add File: .opencode-slopgate-qa.ts\n+import { EnforcerPlugin } from \"file://$HOME/.config/opencode/plugins/slopgate-plugin.ts\"\n+\n+const root = \"$REPO_SLOPGATE\"\n+const handlers = await EnforcerPlugin({\n+  client: { app: { log: async () => {} } },\n+  directory: root,\n+  worktree: root,\n+})\n+\n+await handlers[\"tool.execute.before\"](\n+  { tool: \"gitnexus_context\", sessionID: \"qa\", callID: \"safe\" },\n+  { args: { name: \"isKnownEffectTool\" } },\n+)\n+\n+let blocked = false\n+try {\n+  await handlers[\"tool.execute.before\"](\n+    { tool: \"mcp__docs__write\", sessionID: \"qa\", callID: \"unsafe\" },\n+    { args: { path: \"README.md\" } },\n+  )\n+} catch (error) {\n+  blocked = String(error).includes(\"unknown OpenCode tool effect\")\n+}\n+\n+if (!blocked) throw new Error(\"unprojected filesystem mutation was not blocked\")\n+console.log(\"safe MCP allowed; unprojected filesystem mutation blocked\")\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-f62ca3a83346",
+  "_gold": {
+    "source_case_id": "f62ca3a83346",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

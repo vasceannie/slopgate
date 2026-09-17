@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "test -f .env && env_names='LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_BASE_URL LANGFUSE_HOST OPENAI_API_KEY ANTHROPIC_API_KEY'; for name in $env_names; do if [ -n \"${(P)name}\" ]; then print \"$name=shell\"; elif command grep -q \"^${name}=\" .env 2>/dev/null; then print \"$name=dotenv\"; else print \"$name=missing\"; fi; done",
+    "workdir": "$REPO_JOB_HUNTER"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-5915b5690771",
+  "_gold": {
+    "source_case_id": "5915b5690771",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001",
+      "SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

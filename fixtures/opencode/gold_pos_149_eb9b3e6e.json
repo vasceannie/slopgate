@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git stash && uv run pytest \"tests/tui/controller/test_operator_override_client.py::test_inactive_viewer_edit_preserves_respond_fallback\" -x --no-header --tb=short -q 2>&1 | tail -10",
+    "timeout": 60000,
+    "workdir": "$REPO_JOB_HUNTER"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-eb9b3e6e92c5",
+  "_gold": {
+    "source_case_id": "eb9b3e6e92c5",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-003",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

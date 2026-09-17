@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/tests/cloud/browser_routes/test_browser_handoff_runtime.py\n@@\n import pytest\n+from starlette.types import Message, Receive, Scope, Send\n+\n+from test_support.browser_handoff.peer_capture import PeerCaptureMiddleware\n@@\n def test_backend_runtime_import_does_not_require_optional_eval_client() -> None:\n@@\n     assert result.returncode == 0, result.stderr\n+\n+\n+async def test_peer_capture_forwards_lifespan_before_requesting_runtime() -> None:\n+    messages: list[Message] = []\n+\n+    async def app(_scope: Scope, _receive: Receive, send: Send) -> None:\n+        await send({\"type\": \"lifespan.startup.complete\"})\n+\n+    async def receive() -> Message:\n+        return {\"type\": \"lifespan.startup\"}\n+\n+    async def send(message: Message) -> None:\n+        messages.append(message)\n+\n+    def unavailable_runtime() -> None:\n+        raise RuntimeError(\"runtime unavailable during startup\")\n+\n+    middleware = PeerCaptureMiddleware(app, unavailable_runtime)\n+    scope: Scope = {\"type\": \"lifespan\", \"asgi\": {\"version\": \"3.0\"}}\n+\n+    await middleware(scope, receive, send)\n+\n+    assert messages == [{\"type\": \"lifespan.startup.complete\"}]\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-39bc0d0b074b",
+  "_gold": {
+    "source_case_id": "39bc0d0b074b",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-013",
+      "PY-TEST-005"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

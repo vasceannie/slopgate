@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "GitnexusContext",
+  "tool_input": {
+    "include_content": true,
+    "name": "isKnownEffectTool",
+    "repo": "slopgate"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-94395c2a027c",
+  "_gold": {
+    "source_case_id": "94395c2a027c",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

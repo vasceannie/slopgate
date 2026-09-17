@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "category": "unspecified-high",
+    "description": "Mine historical context",
+    "load_skills": [
+      "git-master",
+      "gitnexus-exploring",
+      "codegraph-cli",
+      "slopgate-rule-hook-maintenance"
+    ],
+    "prompt": "CONTEXT: Investigate whether the current uncommitted OpenCode projection relaxation in $REPO_SLOPGATE conflicts with prior design intent, tests, docs, issues, or callers. Relevant commits include 5d614b4, 78eafdf, aaf601a. GOAL: Surface missed requirements or historical constraints that materially affect whether this change is safe and complete. STOP WHEN: Git history, direct cross-references, fixture contracts, related tests/docs, and accessible issue context have been searched with no unresolved material lead. EVIDENCE: Return sources searched, concrete discoveries with commit/file references, and PASS/FAIL verdict; clearly distinguish historical facts from speculation. DOWNSTREAM: I will reconcile these constraints with behavioral QA and code review. REQUEST: Read/search only; do not modify tracked files, do not commit, and do not delegate.",
+    "run_in_background": true
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9297a3050cc5",
+  "_gold": {
+    "source_case_id": "9297a3050cc5",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

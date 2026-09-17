@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Typed values for OpenCode mutation projections.\"\"\"\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom pathlib import Path\nfrom typing import Final, Literal, TypeAlias\n\nfrom slopgate._types import ObjectDict, ObjectMapping\nfrom slopgate.constants import METADATA_CONTENT, METADATA_PATH\n\nOPENCODE_TOOL_CONTRACT_VERSION: Final = \"slopgate-opencode-projection-v1\"\nPROJECTION_KEY: Final = \"_slopgate_projection\"\n\nProjectionStatus: TypeAlias = Literal[\n    \"projected\", \"invalid\", \"stale\", \"unsupported\", \"protocol_mismatch\"\n]\nSnapshotStatus: TypeAlias = Literal[\"invalid\", \"missing\", \"stale\"]\nPatchOperation: TypeAlias = Literal[\"add\", \"update\", \"delete\"]\n\n\n@dataclass(frozen=True, slots=True)\nclass ProjectionRequest:\n    tool_name: str\n    tool_input: ObjectMapping\n    root: Path\n    contract_version: str\n\n\n@dataclass(frozen=True, slots=True)\nclass Snapshot:\n    content: str\n    sha256: str\n\n\n@dataclass(frozen=True, slots=True)\nclass ProjectedFile:\n    path: str\n    content: str\n    operation: str\n    preimage_sha256: str | None\n\n    def to_dict(self) -> ObjectDict:\n        return {\n            METADATA_PATH: self.path,\n            METADATA_CONTENT: self.content,\n            \"operation\": self.operation,\n            \"preimage_sha256\": self.preimage_sha256,\n        }\n\n\n@dataclass(frozen=True, slots=True)\nclass Projection:\n    status: ProjectionStatus\n    files: tuple[ProjectedFile, ...] = ()\n\n    def to_dict(self) -> ObjectDict:\n        return {\n            \"status\": self.status,\n            \"contract_version\": OPENCODE_TOOL_CONTRACT_VERSION,\n            \"files\": [item.to_dict() for item in self.files],\n        }\n\n\n@dataclass(frozen=True, slots=True)\nclass PatchSection:\n    operation: PatchOperation\n    path: str\n    lines: tuple[str, ...]\n",
+    "file_path": "$REPO_SLOPGATE/src/slopgate/adapters/opencode_projection/models.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-895341c662ec",
+  "_gold": {
+    "source_case_id": "895341c662ec",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-LOG-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

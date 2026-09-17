@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "description": "Trace review locale bead",
+    "load_skills": [
+      "job-hunter-profile-and-review-boundary",
+      "job-hunter-widget-driver-fixture-tdd",
+      "job-hunter-context-hygiene"
+    ],
+    "prompt": "CONTEXT: Job Hunter bead job-hunter-c0ua requests preserving confirmation reviews and rejecting locale-incompatible values. This is read-only exploration; do not edit. GOAL: Identify the exact production symbols and closest existing tests that own confirmation review preservation and locale compatibility rejection. STOP WHEN: You can name the minimal change sites and explain the current failure path with direct code evidence. EVIDENCE: Return file paths, symbol names, relevant current behavior, candidate test cases, and any scoped AGENTS.md rules. DOWNSTREAM: I will run GitNexus impact on the identified symbols and implement the smallest fix. REQUEST: Explore thoroughly but avoid generated caches, legacy extension code, and unrelated planner behavior.",
+    "run_in_background": true,
+    "subagent_type": "explore"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-27dc98f42c3e",
+  "_gold": {
+    "source_case_id": "27dc98f42c3e",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

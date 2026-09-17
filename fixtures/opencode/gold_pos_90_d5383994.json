@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk curl -sS http://127.0.0.1:8686/openapi.json -o /tmp/opencode/job-hunter-openapi.json && rtk jq '.paths | with_entries(select(.key | test(\"agent|browser|runs\"))) | keys' /tmp/opencode/job-hunter-openapi.json",
+    "timeout": 120000,
+    "workdir": "$REPO_JOB_HUNTER"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d5383994c124",
+  "_gold": {
+    "source_case_id": "d5383994c124",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SENSITIVE-DATA",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

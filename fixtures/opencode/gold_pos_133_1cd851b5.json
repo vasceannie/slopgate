@@ -1,0 +1,37 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "MultiEdit",
+  "tool_input": {
+    "_slopgate_original_patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/util/payloads/_shell_paths/__init__.py\n@@\n     shell_redirection_paths,\n     shell_token_path_candidates,\n+    shell_write_redirection_paths,\n@@\n     \"shell_token_path_candidates\",\n+    \"shell_write_redirection_paths\",\n ]\n*** End Patch",
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [
+        {
+          "content": "from __future__ import annotations\n\nfrom ..shell.paths import (\n    ALLOWED_REDIRECT_TARGETS,\n    SHELL_WRITE_REDIRECT_RE,\n    append_unique_shell_path,\n    powershell_candidate_paths,\n    shell_redirection_paths,\n    shell_token_path_candidates,\n    shell_write_redirection_paths,\n)\n\n__all__ = [\n    \"ALLOWED_REDIRECT_TARGETS\",\n    \"SHELL_WRITE_REDIRECT_RE\",\n    \"append_unique_shell_path\",\n    \"powershell_candidate_paths\",\n    \"shell_redirection_paths\",\n    \"shell_token_path_candidates\",\n    \"shell_write_redirection_paths\",\n]\n",
+          "operation": "update",
+          "path": "src/slopgate/util/payloads/_shell_paths/__init__.py",
+          "preimage_sha256": "a287f6a51e7b08a4b4cad55d9ee5ba09d7a88b65e02e38cdcf027b42b96f889a"
+        }
+      ],
+      "status": "projected"
+    },
+    "edits": [
+      {
+        "content": "from __future__ import annotations\n\nfrom ..shell.paths import (\n    ALLOWED_REDIRECT_TARGETS,\n    SHELL_WRITE_REDIRECT_RE,\n    append_unique_shell_path,\n    powershell_candidate_paths,\n    shell_redirection_paths,\n    shell_token_path_candidates,\n    shell_write_redirection_paths,\n)\n\n__all__ = [\n    \"ALLOWED_REDIRECT_TARGETS\",\n    \"SHELL_WRITE_REDIRECT_RE\",\n    \"append_unique_shell_path\",\n    \"powershell_candidate_paths\",\n    \"shell_redirection_paths\",\n    \"shell_token_path_candidates\",\n    \"shell_write_redirection_paths\",\n]\n",
+        "file_path": "src/slopgate/util/payloads/_shell_paths/__init__.py"
+      }
+    ]
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-1cd851b5f802",
+  "_gold": {
+    "source_case_id": "1cd851b5f802",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-IMPORT-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

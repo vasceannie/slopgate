@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "unsupported"
+    },
+    "command": "grep -rn \"line-length\\|line_length\\|\\[tool.ruff\" pyproject.toml ruff.toml .ruff.toml 2>/dev/null | head; echo \"---\"; ls ruff.toml .ruff.toml 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-27efb732a4ef",
+  "_gold": {
+    "source_case_id": "27efb732a4ef",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-LINTER-002",
+      "SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: cloud/services/browser_sessions/navigation_resume.py\n@@\n from dataclasses import dataclass\n+from typing import TYPE_CHECKING\n+\n+from playwright.async_api import Page\n@@\n from cloud.services.checkpointer.navigation import NavigationInterruptContext\n+from src.browser_runtime.page_ops.validity import page_signature\n \n-from .identifiers import BrowserRunId, SessionGeneration\n+from .identifiers import BrowserRunId, SessionGeneration\n+from .models import BrowserSessionAccess, BrowserSessionSnapshot\n+\n+if TYPE_CHECKING:\n+    from .host import BrowserSessionHost\n@@\n def pending_navigation_takeover_checkpoint(\n@@\n     return matches[0] if len(matches) == 1 else None\n+\n+\n+async def pending_navigation_takeover_checkpoint_for_session(\n+    manager: InterruptManager,\n+    host: BrowserSessionHost,\n+    access: BrowserSessionAccess,\n+    snapshot: BrowserSessionSnapshot,\n+) -> str | None:\n+    \"\"\"Match a pending pause against the authoritative retained page.\"\"\"\n+    retained_page = await host.registry.get_page(access)\n+    signature = (\n+        await page_signature(retained_page)\n+        if isinstance(retained_page, Page)\n+        else snapshot.page_signature\n+    )\n+    return pending_navigation_takeover_checkpoint(\n+        manager,\n+        access.run_id,\n+        snapshot.generation,\n+        signature,\n+    )\n@@\n     \"pending_navigation_control_id\",\n     \"pending_navigation_takeover_checkpoint\",\n+    \"pending_navigation_takeover_checkpoint_for_session\",\n ]\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-fef448c4957c",
+  "_gold": {
+    "source_case_id": "fef448c4957c",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/tests/eval_llm/test_eval_verification_results.py\n@@\n from __future__ import annotations\n \n+from hypothesis import given, strategies as st\n+\n from automation.scripts.eval import ActionExecutionResult\n@@\n def test_eval_state_builds_field_trace_with_tool_and_verification_evidence(\n@@\n     ), \"eval traces should carry one execution tool and its verification outcome\"\n+\n+\n+@given(st.lists(st.builds(\n+    ActionExecutionResult,\n+    control_id=st.text(max_size=8),\n+    source=st.text(max_size=8),\n+    intent_id=st.text(max_size=8),\n+    fill_ok=st.booleans(),\n+    verify_ok=st.booleans(),\n+    passed=st.booleans(),\n+    reason=st.text(max_size=8),\n+), max_size=5))\n+def test_field_trace_count_matches_execution_result_count(\n+    execution_results: list[ActionExecutionResult],\n+) -> None:\n+    state = PageLoopState(\n+        all_fields=[],\n+        all_actions=[],\n+        all_execution_results=execution_results,\n+        all_review_items=[],\n+    )\n+\n+    traces = field_trace_payloads_from_state(state)\n+\n+    assert len(traces) == len(execution_results), (\n+        \"field traces must preserve one evidence row per execution result\"\n+    )\n*** Update File: $REPO_JOB_HUNTER/tests/agent_stream/test_terminal_delivery_convergence.py\n@@\n def test_cleanup_defers_while_cancellation_commit_is_pending() -> None:\n@@\n     assert event_buffer.is_active(RUN_ID)\n+\n+\n+@given(preserve_resume=strategies.booleans())\n+def test_cleanup_run_is_idempotent(preserve_resume: bool) -> None:\n+    case = CheckpointTerminalCase.create()\n+\n+    cleanup_run(case.stream_context(), preserve_resume=preserve_resume)\n+    cleanup_run(case.stream_context(), preserve_resume=not preserve_resume)\n+\n+    assert not case.event_buffer.is_active(RUN_ID), (\n+        \"repeating cleanup must leave the run inactive\"\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-52a45c6668c3",
+  "_gold": {
+    "source_case_id": "52a45c6668c3",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

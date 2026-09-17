@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tsconfig.json\n@@\n-    \"include\": [\"resources/pi_extension.ts\", \"types/pi-tui.d.ts\"]\n+    \"include\": [\n+        \"resources/opencode_plugin.ts\",\n+        \"resources/pi_extension.ts\",\n+        \"types/pi-tui.d.ts\"\n+    ]\n }\n*** Update File: $REPO_SLOPGATE/resources/opencode_plugin.ts\n@@\n-function sessionTitleFields(\n-  value: Record<string, unknown>,\n-  includeBareTitle: boolean = false,\n-): Record<string, unknown> {\n-  const keys = [\n-    \"session_title\",\n-    \"sessionTitle\",\n-    \"thread_title\",\n-    \"threadTitle\",\n-    \"conversation_title\",\n-    \"conversationTitle\",\n-    ...(includeBareTitle ? [\"title\"] : []),\n-  ]\n-  const title = firstString(value, ...keys)\n-  return title ? { session_title: title } : {}\n-}\n-\n function eventIdentityFields(\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-41533cc00fc7",
+  "_gold": {
+    "source_case_id": "41533cc00fc7",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "BUILTIN-PROTECTED-PATHS",
+      "FE-LINTER-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

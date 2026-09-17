@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "description": "Review code quality",
+    "load_skills": [
+      "slopgate-rule-hook-maintenance",
+      "codegraph-cli",
+      "type-strictness"
+    ],
+    "prompt": "CONTEXT: Conduct a rigorous code review of the current uncommitted diff in $HOME/.openclaw/workspace-hooker/slopgate, especially src/slopgate/adapters/opencode_projection/projector.py and src/slopgate/resources/opencode_plugin.ts plus direct tests. GOAL: Find correctness, consistency, type-safety, performance, maintainability, and test-coverage defects that should block merging. STOP WHEN: Every changed hunk and its immediate callers have been inspected and each suspected issue has a concrete counterexample or is dismissed. EVIDENCE: Return findings first, ordered CRITICAL/MAJOR/MINOR, with file:line, failure mechanism, and minimal remediation; then verdict/confidence. DOWNSTREAM: I will reproduce and deduplicate findings before reporting. REQUEST: Inspect current on-disk source and diff. Do not edit files and do not delegate.",
+    "run_in_background": true,
+    "subagent_type": "oracle"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a6e50b41a268",
+  "_gold": {
+    "source_case_id": "a6e50b41a268",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

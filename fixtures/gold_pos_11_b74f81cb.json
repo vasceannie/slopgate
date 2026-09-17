@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python3 -c \"print('fixture coverage check - see improvement.test.ts test assertion at line 44: expect(FIXTURE_FILES).toHaveLength(11)')\" 2>/dev/null; echo '---'; find $REPO_SLOPGATE/tests/fixtures/improvement -type f 2>/dev/null | wc -l; echo '---'; ls $REPO_SLOPGATE/tests/fixtures/improvement/"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b74f81cb2a69",
+  "_gold": {
+    "source_case_id": "b74f81cb2a69",
+    "platform": "claude",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

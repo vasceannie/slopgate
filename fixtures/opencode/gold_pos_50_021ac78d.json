@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "description": "Audit security boundary",
+    "load_skills": [
+      "slopgate-rule-hook-maintenance"
+    ],
+    "prompt": "CONTEXT: Security-review the current OpenCode tool-classification relaxation in $HOME/.openclaw/workspace-hooker/slopgate. Unknown tools now pass unless name tokens and argument keys jointly indicate filesystem mutation. GOAL: Determine whether an untrusted or merely differently-shaped tool can bypass filesystem mutation blocking or repair-required restrictions, and whether false positives create denial-of-service risks. STOP WHEN: The trust boundary has been threat-modeled against naming aliases, nested arguments, alternate path keys, case/punctuation, known-tool spoofing, and non-filesystem side effects. EVIDENCE: Return exploit or counterexample payloads for every finding, severity, exact file:line, and PASS/FAIL verdict. DOWNSTREAM: I will reproduce exploit candidates through the generated plugin and Python evaluator. REQUEST: Review only the changed security boundary and direct dependencies. Do not edit files and do not delegate.",
+    "run_in_background": true,
+    "subagent_type": "oracle"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-021ac78ddc92",
+  "_gold": {
+    "source_case_id": "021ac78ddc92",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

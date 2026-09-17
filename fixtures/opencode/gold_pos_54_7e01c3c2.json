@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "TaskCreate",
+  "tool_input": {
+    "active_form": "Exercising generated OpenCode plugin",
+    "description": "Drive the real generated plugin through happy, boundary, malformed, naming-variant, repair-required, and regression scenarios; capture outputs and exit codes.",
+    "subject": "Exercise generated OpenCode plugin"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7e01c3c2a044",
+  "_gold": {
+    "source_case_id": "7e01c3c2a044",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

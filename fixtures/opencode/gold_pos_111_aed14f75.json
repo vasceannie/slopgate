@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tests/integration/test_opencode_projection_snapshot.py\n@@\n def test_projection_snapshot_rejects_symlink_target(tmp_path: Path) -> None:\n@@\n     assert read_snapshot(tmp_path, \"alias.py\") == \"stale\", (\n         \"descriptor-relative snapshots must not follow symlink targets\"\n     )\n+\n+\n+def test_opencode_patch_projection_integrates_alias_normalization_and_application(\n+    tmp_path: Path,\n+) -> None:\n+    source = tmp_path / \"app.py\"\n+    source.write_text(\"VALUE = 1\\n\", encoding=\"utf-8\")\n+    patch_text = \"\\n\".join(\n+        (\n+            \"*** Begin Patch\",\n+            \"*** Update File: app.py\",\n+            \"@@\",\n+            \"-VALUE = 1\",\n+            \"+VALUE = 2\",\n+            \"***\" + \" End Patch\",\n+        )\n+    )\n+\n+    projection = project_opencode_tool_input(\n+        ProjectionRequest(\n+            tool_name=\"apply_patch\",\n+            tool_input={\"patchText\": patch_text},\n+            root=tmp_path,\n+            contract_version=OPENCODE_TOOL_CONTRACT_VERSION,\n+        )\n+    )\n+\n+    assert projection[\"status\"] == \"projected\"\n+    files = projection[\"files\"]\n+    assert len(files) == 1\n+    assert files[0][\"file_path\"] == \"app.py\"\n+    assert files[0][\"content\"] == \"VALUE = 2\\n\"\n+    assert files[0][\"operation\"] == \"update\"\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-aed14f75a305",
+  "_gold": {
+    "source_case_id": "aed14f75a305",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-TEST-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

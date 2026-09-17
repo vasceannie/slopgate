@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "unsupported"
+    },
+    "command": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; mkdir -p /tmp/ruffbase && git show HEAD:tests/autopilot/graph/test_submit_authorization/test_phase4_submit_nodes.py > /tmp/ruffbase/p4.py && git show HEAD:tests/planning/test_observation_planning_lifecycle.py > /tmp/ruffbase/obs.py && git show HEAD:tests/autopilot/test_config.py > /tmp/ruffbase/cfg.py && git show HEAD:tests/agent_stream/test_agent_runner_lifecycle.py > /tmp/ruffbase/life.py && git show HEAD:tests/cloud/test_browser_provider_profile.py > /tmp/ruffbase/prof.py && uv run ruff check --output-format concise /tmp/ruffbase/*.py 2>&1 | tail -20"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7d0767c71084",
+  "_gold": {
+    "source_case_id": "7d0767c71084",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

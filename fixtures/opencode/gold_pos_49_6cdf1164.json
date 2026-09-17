@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Task",
+  "tool_input": {
+    "description": "Verify goal and constraints",
+    "load_skills": [
+      "slopgate-rule-hook-maintenance",
+      "trav-gitnexus-impact-gate"
+    ],
+    "prompt": "CONTEXT: Review the current uncommitted diff in $HOME/.openclaw/workspace-hooker/slopgate. The change intends to stop OpenCode from denying benign unknown MCP/host-control tools while still denying unprojected filesystem mutations. Changed product files are README.md, src/slopgate/adapters/opencode_projection/projector.py, src/slopgate/resources/opencode_plugin.ts, with tests/fixture updates. GOAL: Determine whether the implementation completely satisfies that behavioral goal without weakening existing repair-gate or mutation protections. STOP WHEN: Every explicit and implied requirement has a PASS/PARTIAL/FAIL verdict and at least five edge cases have been traced through both plugin and Python projection paths. EVIDENCE: Return a PASS/FAIL verdict plus concrete findings ordered by severity with current file:line references and traced input/output examples. DOWNSTREAM: I will combine this with four independent review lanes and validate any claimed defect. REQUEST: Read the current on-disk files and git diff, inspect callers/contracts, and perform a goal/constraint review only. Do not edit files and do not delegate.",
+    "run_in_background": true,
+    "subagent_type": "oracle"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-6cdf11647f9c",
+  "_gold": {
+    "source_case_id": "6cdf11647f9c",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

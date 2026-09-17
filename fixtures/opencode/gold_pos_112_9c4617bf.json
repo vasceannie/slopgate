@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/cli/parsers/__init__.py\n@@\n-from .config import _add_command_parser, _add_config_parsers\n+from .config import (\n+    add_command_parser as _add_command_parser,\n+    add_config_parsers as _add_config_parsers,\n+)\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9c4617bf1207",
+  "_gold": {
+    "source_case_id": "9c4617bf1207",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

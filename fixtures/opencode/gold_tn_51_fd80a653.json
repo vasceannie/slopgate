@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "CodegraphCodegraphExplore",
+  "tool_input": {
+    "max_files": 12,
+    "project_path": "$REPO_SLOPGATE",
+    "query": "src/slopgate/adapters/opencode_projection/projector.py src/slopgate/resources/opencode_plugin.ts and their direct callers, tests, payload/event projection flow, type contracts"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-fd80a6536b38",
+  "_gold": {
+    "source_case_id": "fd80a6536b38",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

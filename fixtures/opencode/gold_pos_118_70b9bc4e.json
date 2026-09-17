@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python3 -m pytest tests/test_gitnexus_wrapper.py -xvs 2>&1 | tail -40",
+    "timeout": 30000,
+    "workdir": "$REPO_SLOPGATE"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-70b9bc4e1dae",
+  "_gold": {
+    "source_case_id": "70b9bc4e1dae",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

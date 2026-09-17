@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/tests/agent_stream/test_terminal_delivery_convergence.py\n@@\n-from hypothesis import given, strategies\n@@\n-def _buffer_after_pending_commit_cleanup(preserve_resume: bool) -> EventBuffer:\n+def _buffer_after_pending_commit_cleanup() -> EventBuffer:\n     case = CheckpointTerminalCase.create()\n     with patch.object(producer, \"cancellation_commit_pending\", return_value=True):\n-        cleanup_run(case.stream_context(), preserve_resume=preserve_resume)\n+        cleanup_run(case.stream_context())\n     return case.event_buffer\n@@\n-@given(preserve_resume=strategies.booleans())\n-def test_cleanup_defers_while_cancellation_commit_is_pending(\n-    preserve_resume: bool,\n-) -> None:\n-    event_buffer = _buffer_after_pending_commit_cleanup(preserve_resume)\n+def test_cleanup_defers_while_cancellation_commit_is_pending() -> None:\n+    event_buffer = _buffer_after_pending_commit_cleanup()\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7ee7a76d6fd8",
+  "_gold": {
+    "source_case_id": "7ee7a76d6fd8",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-013"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

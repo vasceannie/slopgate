@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git commit -m \"feat(checkout): freeze shipping before Clover reservation\" -m \"Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)\" -m \"Co-authored-by: Sisyphus <$EMAIL>\""
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b95f7684d7c0",
+  "_gold": {
+    "source_case_id": "b95f7684d7c0",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-002",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

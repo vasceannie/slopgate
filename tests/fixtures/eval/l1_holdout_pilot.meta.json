@@ -1,0 +1,22 @@
+{
+  "n": 50,
+  "source_pack": "datasets/v1/l1/eval-v1.holdout.replayable.jsonl",
+  "tier": "replayable",
+  "platforms": [
+    "claude",
+    "omp",
+    "opencode"
+  ],
+  "primary_rules": [
+    "BUILTIN-PROTECTED-PATHS",
+    "GIT-003",
+    "OC-PROJECTION-001",
+    "OC-REPAIR-001",
+    "PY-CODE-009",
+    "PY-CODE-010",
+    "PY-CODE-012",
+    "PY-CODE-018",
+    "SHELL-001"
+  ],
+  "note": "Pinned holdout is replayable-only; do not mix in label_only rows."
+}

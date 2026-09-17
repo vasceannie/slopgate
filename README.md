@@ -224,12 +224,15 @@ slopgate migrate [path] [--dry-run] [--force] [--user-only] [--repo-only]
 
 ```bash
 slopgate stats [--log results.jsonl] [--days N] [--json] [--baseline-policy HASH] [--candidate-policy HASH] [--baseline-guidance HASH] [--candidate-guidance HASH] [--cohort DIM=VALUE]
+slopgate eval --pack PATH [--limit N] [--pretty] [--verbose] [--include-label-only]
 slopgate config show
 slopgate config init [--force]
 slopgate config path
 slopgate test [--list] [--smoke | --since REF | --files PATH ...] [--runner COMMAND] [-- RUNNER_ARGS ...]
 slopgate version
 ```
+
+Offline eval packs and gold fixtures: see [docs/eval-dataset.md](docs/eval-dataset.md) (full corpus in sibling `~/repos/slopdata`).
 
 ### Bundles and semantic search
 

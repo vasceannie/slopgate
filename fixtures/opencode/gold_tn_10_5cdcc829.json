@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "1.18.19",
+      "files": [],
+      "status": "unsupported"
+    },
+    "patchText": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tests/adapters/test_opencode_projection.py\n@@\n-OPENCODE_TOOL_CONTRACT_VERSION = \"1.18.19\"\n+OPENCODE_TOOL_CONTRACT_VERSION = \"slopgate-opencode-projection-v1\"\n*** Update File: $REPO_SLOPGATE/tests/integration/test_opencode_plugin_control_contract.py\n@@\n-            {\"opencode_version\": \"1.18.19\"},\n+            {\"opencode_version\": \"1.18.21\"},\n@@\n def test_installed_plugin_forwards_tool_contract_version(tmp_path: Path) -> None:\n     result = _run_plugin_contract(tmp_path, \"tool.execute.before\")\n \n     assert result.returncode != 0\n-    assert \"version=1.18.19\" in result.stderr\n+    assert \"version=slopgate-opencode-projection-v1\" in result.stderr\n*** Update File: $REPO_SLOPGATE/tests/test_opencode_latency_benchmark.py\n@@\n from hypothesis import given, settings, strategies\n \n+from slopgate.benchmarks.opencode_latency.cli import _repo_metadata\n from slopgate.benchmarks.opencode_latency.models import (\n@@\n _PLUGIN_OUTCOME_STRATEGY = strategies.sampled_from((\"returned\", \"blocked:policy\"))\n+_PROJECTION_CONTRACT = \"slopgate-opencode-projection-v1\"\n@@\n def test_benchmark_run_preserves_observed_samples() -> None:\n@@\n     }, \"run should preserve phase trace rows\"\n \n \n+def test_benchmark_reports_stable_projection_contract() -> None:\n+    target = Path(__file__).resolve()\n+    repo = target.parents[1]\n+\n+    metadata = _repo_metadata(repo, target)\n+\n+    assert metadata[\"tool_contract_fingerprint\"] == _PROJECTION_CONTRACT, (\n+        \"OpenCode release updates must not change Slopgate's projection protocol\"\n+    )\n+\n+\n @given(\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-5cdcc829db88",
+  "_gold": {
+    "source_case_id": "5cdcc829db88",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

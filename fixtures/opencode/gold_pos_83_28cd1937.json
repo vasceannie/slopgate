@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: cloud/services/browser_sessions/navigation_resume.py\n@@\n from __future__ import annotations\n \n from dataclasses import dataclass\n+from typing import TYPE_CHECKING\n+\n+from playwright.async_api import Page\n \n from cloud.services.checkpointer import InterruptManager, InterruptRecord, get_thread_id\n from cloud.services.checkpointer.navigation import NavigationInterruptContext\n+from src.browser_runtime.page_ops.validity import page_signature\n \n from .identifiers import BrowserRunId, SessionGeneration\n+from .models import BrowserSessionAccess, BrowserSessionSnapshot\n+\n+if TYPE_CHECKING:\n+    from .host import BrowserSessionHost\n@@\n def pending_navigation_takeover_checkpoint(\n@@\n     return matches[0] if len(matches) == 1 else None\n+\n+\n+async def pending_navigation_takeover_checkpoint_for_session(\n+    manager: InterruptManager,\n+    host: BrowserSessionHost,\n+    access: BrowserSessionAccess,\n+    snapshot: BrowserSessionSnapshot,\n+) -> str | None:\n+    \"\"\"Match a pending pause against the authoritative retained page.\"\"\"\n+    retained_page = await host.registry.get_page(access)\n+    signature = snapshot.page_signature\n+    if isinstance(retained_page, Page):\n+        signature = await page_signature(retained_page)\n+    return pending_navigation_takeover_checkpoint(\n+        manager,\n+        access.run_id,\n+        snapshot.generation,\n+        signature,\n+    )\n@@\n     \"navigation_resume_validation\",\n     \"pending_navigation_control_id\",\n     \"pending_navigation_takeover_checkpoint\",\n+    \"pending_navigation_takeover_checkpoint_for_session\",\n ]\n*** Update File: cloud/services/browser_sessions/interactive/operations/lease.py\n@@\n import anyio\n-from playwright.async_api import Page\n@@\n from cloud.services.checkpointer import InterruptManager\n-from src.browser_runtime.page_ops.validity import page_signature\n from src.key_catalog import SV_RECONCILING\n@@\n-        nav_checkpoint = await self._pending_navigation_checkpoint(access, snapshot)\n+        nav_checkpoint = (\n+            await navigation_resume.pending_navigation_takeover_checkpoint_for_session(\n+                self._manager,\n+                self._host,\n+                access,\n+                snapshot,\n+            )\n+        )\n@@\n-    async def _pending_navigation_checkpoint(\n-        self,\n-        access: BrowserSessionAccess,\n-        snapshot: BrowserSessionSnapshot,\n-    ) -> str | None:\n-        retained_page = await self._host.registry.get_page(access)\n-        signature = (\n-            await page_signature(retained_page)\n-            if isinstance(retained_page, Page)\n-            else snapshot.page_signature\n-        )\n-        return navigation_resume.pending_navigation_takeover_checkpoint(\n-            self._manager,\n-            access.run_id,\n-            snapshot.generation,\n-            signature,\n-        )\n-\n     async def _begin_operator_takeover(\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-28cd19370e0c",
+  "_gold": {
+    "source_case_id": "28cd19370e0c",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

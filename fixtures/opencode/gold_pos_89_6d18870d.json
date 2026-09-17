@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/tests/agent_stream/test_navigation_interrupt.py\n@@\n from dataclasses import replace\n from http import HTTPStatus\n+from unittest.mock import AsyncMock\n \n+import anyio\n import pytest\n@@\n-async def test_registered_navigation_pause_releases_browser_ownership() -> None:\n-    case = lifecycle_case()\n+async def test_registered_navigation_pause_releases_browser_ownership(\n+    monkeypatch: pytest.MonkeyPatch,\n+) -> None:\n+    base_case = lifecycle_case()\n+    case = replace(\n+        base_case,\n+        config=replace(base_case.config, interrupt_timeout_seconds=60),\n+    )\n     control_ids = await register_graph_interrupts(\n@@\n         ],\n     )\n+    monkeypatch.setattr(\n+        lifecycle_streaming,\n+        \"stream_graph_loop\",\n+        AsyncMock(return_value=lifecycle_streaming.PauseResult(control_ids)),\n+    )\n \n-    assert lifecycle_streaming._is_operator_control_pause(\n-        case.config,\n-        \"run\",\n-        lifecycle_streaming.PauseResult(control_ids),\n-    ), \"takeover-capable navigation must release the active browser invocation\"\n+    with anyio.fail_after(0.05):\n+        with pytest.raises(lifecycle_streaming.OperatorControlPaused) as raised:\n+            await lifecycle_streaming.stream_graph_to_result(\n+                case.config, case.run_context, case.invocation, observer=None\n+            )\n+\n+    assert raised.value.pending_control_ids == control_ids, (\n+        \"takeover-capable navigation must release the active browser invocation\"\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-6d18870d73fb",
+  "_gold": {
+    "source_case_id": "6d18870d73fb",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-TEST-005"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

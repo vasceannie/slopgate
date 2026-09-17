@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Skill",
+  "tool_input": {
+    "name": "beads",
+    "user_message": "Track this thorough current-work review in the repository's Beads workflow."
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b931b41de31d",
+  "_gold": {
+    "source_case_id": "b931b41de31d",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

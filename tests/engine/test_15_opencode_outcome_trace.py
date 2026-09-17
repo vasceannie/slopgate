@@ -257,6 +257,29 @@ def test_opencode_trace_preserves_native_ids_and_raw_after_output(
     )
 
 
+def test_result_and_event_rows_always_persist_join_keys(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    repo = write_slopgate(tmp_path / "repo_join_keys")
+    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
+    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
+    payload = pretool_bash_payload(repo, "git status")
+    payload.update({"tool_name": "Write", "tool_input": {"file_path": "src/app.py", "content": "x = 1\n"}})
+    _ = evaluate_payload(payload, platform="opencode")
+
+    results_path = tmp_path / "vf-root" / "logs" / "results.jsonl"
+    events_path = tmp_path / "vf-root" / "logs" / "events.jsonl"
+    result_row = json.loads(results_path.read_text(encoding="utf-8").strip().splitlines()[-1])
+    event_row = json.loads(events_path.read_text(encoding="utf-8").strip().splitlines()[-1])
+
+    for row in (result_row, event_row):
+        assert "opencode_session_id" in row
+        assert "call_id" in row
+        assert isinstance(row["candidate_paths"], list)
+    assert result_row["candidate_paths"]
+    assert event_row["candidate_paths"] == result_row["candidate_paths"]
+
+
 def test_opencode_trace_exposes_each_owned_timing_phase(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:

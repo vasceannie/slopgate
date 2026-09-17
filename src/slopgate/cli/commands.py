@@ -99,6 +99,38 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Replay a redacted L1 JSONL pack and print an overlap summary."""
+    from slopgate.eval import evaluate_pack
+
+    pack = Path(string_arg(args, "pack")).resolve()
+    limit = _int_arg(args, "limit")
+    replayable_only = not _bool_arg(args, "include_label_only")
+    report = evaluate_pack(pack, limit=limit, replayable_only=replayable_only)
+    if not _bool_arg(args, "verbose"):
+        report = {
+            key: report[key]
+            for key in (
+                "n",
+                "exact_matches",
+                "any_overlap",
+                "primary_hits",
+                "errors",
+                "by_primary_rule",
+                "note",
+                "pack",
+                "replayable_only",
+                "skipped_label_only",
+            )
+            if key in report
+        }
+    if _bool_arg(args, "pretty"):
+        print(json.dumps(report, indent=2))
+    else:
+        print(json.dumps(report, separators=(",", ":")))
+    return 0 if int(report.get("errors") or 0) == 0 else 1
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     from slopgate.installer import SuiteInstallOptions, install_platform, install_suite
     from slopgate.installer._suite import (

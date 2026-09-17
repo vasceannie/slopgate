@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "find $REPO_SLOPGATE -name \"*.jsonl\" -o -name \"*.json\" | head -30 && echo \"---\" && ls -la $REPO_SLOPGATE/.claude/skills/ 2>/dev/null && echo \"===\" && ls -la $REPO_SLOPGATE/bundle/ 2>/dev/null && echo \"---\" && find $HOME/.openclaw/workspace-hooker -name \"*.jsonl\" -o -name \"*.json\" 2>/dev/null | grep -i \"trace\\|log\\|hook\" | head -20",
+    "timeout": 15000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ec972c79d703",
+  "_gold": {
+    "source_case_id": "ec972c79d703",
+    "platform": "claude",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001",
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

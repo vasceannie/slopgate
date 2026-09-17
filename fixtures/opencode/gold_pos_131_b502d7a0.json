@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "unsupported"
+    },
+    "command": "printf '%s\\n' 'from __future__ import annotations' 'import json, tempfile' 'from pathlib import Path' 'from slopgate.adapters.opencode_projection.projector import project_opencode_tool_input' 'from slopgate.adapters.opencode_projection.models import ProjectionRequest, OPENCODE_TOOL_CONTRACT_VERSION' '' 'def run(label, root, tool_input):' '    req = ProjectionRequest(tool_name=\"edit\", tool_input=tool_input, root=root, contract_version=OPENCODE_TOOL_CONTRACT_VERSION)' '    print(\"--- \" + label + \" ---\")' '    print(json.dumps(project_opencode_tool_input(req), indent=1)[:600])' '' 'root = Path(tempfile.mkdtemp(prefix=\"proj-check-\"))' '(root / \"src\").mkdir()' '(root / \"src\" / \"app.py\").write_text(\"VALUE = 1\\n\", encoding=\"utf-8\")' '' 'run(\"delete=true edits=[] existing\", root, {\"filePath\": \"src/app.py\", \"delete\": True, \"edits\": []})' 'run(\"delete=true edits=[] missing\", root, {\"filePath\": \"src/nope.py\", \"delete\": True, \"edits\": []})' 'run(\"rename-after-edit\", root, {\"filePath\": \"src/app.py\", \"rename\": \"src/renamed.py\", \"edits\": [{\"op\": \"append\", \"lines\": [\"VALUE = 2\"]}]})' 'run(\"delete+rename (native invalid)\", root, {\"filePath\": \"src/app.py\", \"delete\": True, \"rename\": \"src/other.py\", \"edits\": []})' 'run(\"delete+nonempty edits (native invalid)\", root, {\"filePath\": \"src/app.py\", \"delete\": True, \"edits\": [{\"op\": \"append\", \"lines\": [\"VALUE = 2\"]}]})' > /tmp/opencode/proj_check.py && echo written"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b502d7a04697",
+  "_gold": {
+    "source_case_id": "b502d7a04697",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

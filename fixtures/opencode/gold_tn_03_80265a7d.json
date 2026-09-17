@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patchText": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/src/browser_runtime/page_ops/snapshot.py\n@@\n-    const workdayPostingUnavailable = Boolean(\n-      window.workday && window.workday.postingAvailable === false\n-    );\n     const hasNotFoundCue =\n+      Boolean(window.workday && window.workday.postingAvailable === false) ||\n       haystack.includes(\"page not found\") ||\n@@\n-    } else if (controls.length === 0 && workdayPostingUnavailable) {\n-      markNonActionable(\"stale_or_missing_application\");\n-    } else if (controls.length === 0 && hasServerErrorCue) {\n+    } else if (controls.length === 0 && hasServerErrorCue) {\n*** Update File: $REPO_JOB_HUNTER/automation/scripts/eval/runner/evaluate/__init__.py\n@@\n async def evaluate_target(inp: AsyncEvaluateTargetInput) -> JsonObject:\n@@\n-    pre_activation_ctx = await time_phase(\n-        ctx,\n-        \"pre_activation_context\",\n-        snapshot_page_context(inp.page),\n-    )\n-    if await should_handle_non_actionable(inp.page, pre_activation_ctx):\n-        return await time_phase(\n-            ctx,\n-            \"non_actionable_summary\",\n-            _handle_non_actionable(inp, pre_activation_ctx, ctx),\n-        )\n+    pre_activation_summary = await _classify_before_activation(inp, ctx)\n+    if pre_activation_summary is not None:\n+        return pre_activation_summary\n@@\n     state = await time_phase(ctx, \"page_loop\", _run_page_loop(inp, ctx))\n     return await time_phase(ctx, \"finalize\", _finalize_evaluation(inp, state, ctx))\n+\n+\n+async def _classify_before_activation(\n+    inp: AsyncEvaluateTargetInput,\n+    ctx: EvalContext,\n+) -> JsonObject | None:\n+    page_context = await time_phase(\n+        ctx,\n+        \"pre_activation_context\",\n+        snapshot_page_context(inp.page),\n+    )\n+    if not await should_handle_non_actionable(inp.page, page_context):\n+        return None\n+    return await time_phase(\n+        ctx,\n+        \"non_actionable_summary\",\n+        _handle_non_actionable(inp, page_context, ctx),\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-80265a7dd0d4",
+  "_gold": {
+    "source_case_id": "80265a7dd0d4",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

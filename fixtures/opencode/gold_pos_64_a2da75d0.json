@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patchText": "*** Begin Patch\n*** Update File: src/slopgate/opencode_tool_capabilities.py\n@@\n-from slopgate.constants import BASH_TOOL_LOWER\n+from slopgate.constants import BASH_TOOL_LOWER, METADATA_COMMAND, METADATA_SLOPGATE\n@@\n-            for key in (\"command\", \"cmd\", \"script\")\n+            for key in (METADATA_COMMAND, \"cmd\", \"script\")\n@@\n-        and tokens[:3] == [\"slopgate\", \"lint\", \"check\"]\n+        and tokens[:3] == [METADATA_SLOPGATE, \"lint\", \"check\"]\n*** Update File: tests/test_opencode_tool_capabilities.py\n@@\n import pytest\n+from hypothesis import given, strategies as st\n \n-from slopgate.opencode_tool_capabilities import opencode_tool_allowed_during_repair\n+from slopgate.opencode_tool_capabilities import (\n+    OpenCodeToolCapability,\n+    opencode_tool_allowed_during_repair,\n+    opencode_tool_capability,\n+    opencode_tool_is_explicit_repair_command,\n+)\n+\n+\n+@pytest.mark.parametrize(\n+    (\"tool_name\", \"expected\"),\n+    (\n+        pytest.param(\"read\", OpenCodeToolCapability.READ_ONLY, id=\"read-only\"),\n+        pytest.param(\"bash\", OpenCodeToolCapability.EFFECTFUL, id=\"effectful\"),\n+        pytest.param(\"powershell\", None, id=\"undeclared-shell\"),\n+    ),\n+)\n+def test_opencode_tool_capability_uses_exact_declared_ids(\n+    tool_name: str, expected: OpenCodeToolCapability | None\n+) -> None:\n+    assert opencode_tool_capability(tool_name) is expected\n+\n+\n+@pytest.mark.parametrize(\n+    (\"tool_name\", \"tool_input\", \"expected\"),\n+    (\n+        pytest.param(\"slopgate_verify_repair\", {}, True, id=\"dedicated-verifier\"),\n+        pytest.param(\n+            \"bash\",\n+            {\"command\": \"slopgate lint check --details --verbose\"},\n+            True,\n+            id=\"exact-lint-check\",\n+        ),\n+        pytest.param(\n+            \"bash\",\n+            {\"command\": \"slopgate lint check && touch bypassed\"},\n+            False,\n+            id=\"compound-command\",\n+        ),\n+        pytest.param(\n+            \"powershell\",\n+            {\"command\": \"slopgate lint check\"},\n+            False,\n+            id=\"shell-alias\",\n+        ),\n+    ),\n+)\n+def test_explicit_repair_command_requires_exact_tool_and_tokens(\n+    tool_name: str, tool_input: dict[str, object], expected: bool\n+) -> None:\n+    assert opencode_tool_is_explicit_repair_command(tool_name, tool_input) is expected\n@@\n def test_namespaced_file_repair_tools_remain_allowed(tool_name: str) -> None:\n     assert opencode_tool_allowed_during_repair(tool_name, {})\n+\n+\n+@given(\n+    tool_name=st.sampled_from((\"read\", \"apply_patch\", \"slopgate_verify_repair\")),\n+    prefix=st.text(alphabet=\" \\t\", max_size=3),\n+    suffix=st.text(alphabet=\" \\t\", max_size=3),\n+)\n+def test_repair_allowlist_normalization_preserves_declared_tools(\n+    tool_name: str, prefix: str, suffix: str\n+) -> None:\n+    assert opencode_tool_allowed_during_repair(\n+        f\"{prefix}{tool_name.upper()}{suffix}\", {}\n+    )\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a2da75d0a630",
+  "_gold": {
+    "source_case_id": "a2da75d0a630",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "LspDiagnostics",
+  "tool_input": {
+    "file_path": "$REPO_SLOPGATE/src/slopgate/adapters/opencode_projection/projector.py",
+    "severity": "all"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-cf04f9a34fd6",
+  "_gold": {
+    "source_case_id": "cf04f9a34fd6",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

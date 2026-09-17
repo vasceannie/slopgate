@@ -1,0 +1,23 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "_slopgate_projection": {
+      "contract_version": "slopgate-opencode-projection-v1",
+      "files": [],
+      "status": "invalid"
+    },
+    "patchText": "*** Begin Patch\n*** Delete File: $REPO_JOB_HUNTER/test_support/browser_handoff/docker_runner.py\n*** Add File: $REPO_JOB_HUNTER/test_support/browser_handoff/docker_runner.py\n+\"\"\"CLI for the isolated Docker browser-handoff acceptance gate.\"\"\"\n+\n+from __future__ import annotations\n+\n+import argparse\n+import sys\n+from pathlib import Path\n+\n+from src.logging import get_logger\n+from test_support.browser_handoff.constants import (\n+    DEFAULT_IMAGE,\n+    DEFAULT_OUTPUT,\n+    DEFAULT_TIMEOUT_SECONDS,\n+)\n+from test_support.browser_handoff.docker_gate import GateConfig, GateError, run_gate\n+\n+logger = get_logger(__name__)\n+\n+\n+def _parser() -> argparse.ArgumentParser:\n+    parser = argparse.ArgumentParser(\n+        description=\"Run the Docker browser-handoff success and failure journeys.\"\n+    )\n+    parser.add_argument(\n+        \"--output\",\n+        type=Path,\n+        default=DEFAULT_OUTPUT,\n+        help=\"New artifact directory; existing paths are rejected.\",\n+    )\n+    parser.add_argument(\n+        \"--image\",\n+        default=DEFAULT_IMAGE,\n+        help=\"Container image used by all isolated services.\",\n+    )\n+    parser.add_argument(\n+        \"--timeout\",\n+        type=float,\n+        default=DEFAULT_TIMEOUT_SECONDS,\n+        help=\"Per-journey deadline in seconds.\",\n+    )\n+    return parser\n+\n+\n+def _parse_args(argv: list[str] | None) -> GateConfig:\n+    parser = _parser()\n+    arguments = parser.parse_args(argv)\n+    if arguments.timeout <= 0:\n+        parser.error(\"--timeout must be greater than zero\")\n+    if not arguments.image.strip():\n+        parser.error(\"--image must not be empty\")\n+    return GateConfig(\n+        output=arguments.output.resolve(),\n+        image=arguments.image,\n+        timeout_seconds=arguments.timeout,\n+    )\n+\n+\n+def main(argv: list[str] | None = None) -> int:\n+    \"\"\"Run the gate and return a shell-compatible status code.\"\"\"\n+    try:\n+        output = run_gate(_parse_args(argv))\n+    except GateError as error:\n+        logger.error(\"browser handoff gate failed\", reason=str(error))\n+        sys.stderr.write(f\"browser-handoff gate failed: {error}\\n\")\n+        return 1\n+    logger.info(\"browser handoff gate passed\", output=str(output))\n+    sys.stdout.write(f\"browser-handoff artifacts: {output}\\n\")\n+    return 0\n+\n+\n+if __name__ == \"__main__\":\n+    raise SystemExit(main())\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-32fb11119918",
+  "_gold": {
+    "source_case_id": "32fb11119918",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-TEST-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

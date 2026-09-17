@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "readlink -f /proc/1248328/exe && readlink -f /proc/1248962/exe",
+    "timeout": 120000,
+    "workdir": "$REPO_SLOPGATE"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ebac9c7464db",
+  "_gold": {
+    "source_case_id": "ebac9c7464db",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

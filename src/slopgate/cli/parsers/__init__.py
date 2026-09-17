@@ -13,6 +13,7 @@ from slopgate.cli.commands import (
     cmd_check,
     cmd_daemon,
     cmd_enroll,
+    cmd_eval,
     cmd_handle,
     cmd_handle_async,
     cmd_install,
@@ -221,6 +222,42 @@ def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
         func_by_name=func_by_name,
     )
     add_hook_runtime_parsers(sub, registration)
+    _add_eval_parser(sub)
+
+
+def _add_eval_parser(sub: SubparserRegistry) -> None:
+    eval_parser = add_command_parser(
+        sub,
+        "eval",
+        help_text="Evaluate a redacted L1 JSONL attempt-case pack",
+        func=cmd_eval,
+    )
+    _ = eval_parser.add_argument(
+        "--pack",
+        required=True,
+        help="Path to L1 eval JSONL (slopdata or tests/fixtures/eval)",
+    )
+    _ = eval_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional max cases to evaluate",
+    )
+    _ = eval_parser.add_argument(
+        "--pretty",
+        action="store_true",
+        help="Pretty-print JSON summary",
+    )
+    _ = eval_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include per-case result rows in the JSON output",
+    )
+    _ = eval_parser.add_argument(
+        "--include-label-only",
+        action="store_true",
+        help="Also evaluate label_only rows (empty input / non-PreToolUse)",
+    )
 
 
 def _add_repo_enrollment_parsers(sub: SubparserRegistry) -> None:

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd ${TMPDIR:-/tmp}/opencode-src && echo \"=== session.compacting refs ===\" && grep -rn \"session.compacting\\|experimental.session\" packages/opencode/src packages/plugin/src --include=\"*.ts\" | head -30 && echo \"=== headless refs ===\" && grep -rln \"headless\" packages/opencode/src packages/cli/src --include=\"*.ts\" | head -20"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-42a9245e3ac5",
+  "_gold": {
+    "source_case_id": "42a9245e3ac5",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

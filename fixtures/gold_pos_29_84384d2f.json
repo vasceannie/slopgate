@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "from __future__ import annotations\n\nimport shutil\nimport subprocess\nimport sys\nimport tarfile\nimport zipfile\nfrom pathlib import Path\n\nREPO_ROOT = Path(__file__).resolve().parents[1]\n_FORBIDDEN_SUFFIXES = (\".pyc\", \".pyo\", \".pyd\")\n\n\ndef _uv() -> str:\n    binary = shutil.which(\"uv\")\n    assert binary is not None, \"uv must be available to build release artifacts\"\n    return binary\n\n\ndef _artifact_names(artifact: Path) -> list[str]:\n    if artifact.suffix == \".whl\":\n        with zipfile.ZipFile(artifact) as archive:\n            return archive.namelist()\n    with tarfile.open(artifact) as archive:\n        return archive.getnames()\n\n\ndef _leaked_bytecode(names: list[str]) -> list[str]:\n    return [\n        name\n        for name in names\n        if \"__pycache__\" in Path(name).parts or name.endswith(_FORBIDDEN_SUFFIXES)\n    ]\n\n\ndef test_isolated_artifacts_are_clean_and_installable(tmp_path: Path) -> None:\n    cache_dir = REPO_ROOT / \"src\" / \"slopgate\" / \"resources\" / \"__pycache__\"\n    planted = cache_dir / \"opencode_plugin.cpython-312.pyc\"\n    cache_dir.mkdir(exist_ok=True)\n    planted.write_bytes(b\"slopgate-release-hygiene\")\n    dist_dir = tmp_path / \"dist\"\n    try:\n        build = subprocess.run(\n            [_uv(), \"build\", \"--out-dir\", str(dist_dir)],\n            cwd=REPO_ROOT,\n            check=False,\n            capture_output=True,\n            text=True,\n        )\n        assert build.returncode == 0, build.stderr\n        artifacts = sorted(dist_dir.iterdir())\n        assert any(path.suffix == \".whl\" for path in artifacts), \"wheel missing\"\n        assert any(path.name.endswith(\".tar.gz\") for path in artifacts), \"sdist missing\"\n        for artifact in artifacts:\n            leaked = _leaked_bytecode(_artifact_names(artifact))\n            assert leaked == [], f\"{artifact.name} contains bytecode: {leaked}\"\n\n        check = subprocess.run(\n            [_uv(), \"x\", \"twine\", \"check\", \"--strict\", *artifacts],\n            cwd=REPO_ROOT,\n            check=False,\n            capture_output=True,\n            text=True,\n        )\n        assert check.returncode == 0, check.stdout + check.stderr\n\n        wheels = [path for path in artifacts if path.suffix == \".whl\"]\n        venv = tmp_path / \"venv\"\n        subprocess.run([sys.executable, \"-m\", \"venv\", str(venv)], check=True)\n        bindir = venv / (\"Scripts\" if sys.platform == \"win32\" else \"bin\")\n        install = subprocess.run(\n            [str(bindir / \"pip\"), \"install\", str(wheels[0])],\n            check=False,\n            capture_output=True,\n            text=True,\n        )\n        assert install.returncode == 0, install.stderr\n        version = subprocess.run(\n            [str(bindir / \"slopgate\"), \"version\"],\n            check=False,\n            capture_output=True,\n            text=True,\n        )\n        assert version.returncode == 0, version.stderr\n        assert \"2.1.7\" in version.stdout, version.stdout\n    finally:\n        planted.unlink(missing_ok=True)\n        if cache_dir.exists() and not any(cache_dir.iterdir()):\n            cache_dir.rmdir()\n",
+    "file_path": "$REPO_SLOPGATE/tests/test_release_artifacts.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-84384d2f126a",
+  "_gold": {
+    "source_case_id": "84384d2f126a",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-008",
+      "PY-CODE-015"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

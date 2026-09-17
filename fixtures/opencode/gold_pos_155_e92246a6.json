@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: Makefile\n@@\n BASH_SCRIPTS := dev/start-dev.sh tests/docker_test_source.sh tests/run_admin_lifecycle.sh \\\n-\ttests/run_notification_harness.sh tests/run_shipping_browser_harness.sh\n+\ttests/run_notification_harness.sh tests/run_shipping_browser_harness.sh tests/shipping_cart_browser.sh\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e92246a6acb3",
+  "_gold": {
+    "source_case_id": "e92246a6acb3",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "BUILTIN-PROTECTED-PATHS"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}
