@@ -18,6 +18,7 @@ from slopgate.config._repo import GIT_BIN
 from slopgate.lint._baseline import Violation
 from slopgate.lint.project_index.cache_trust import cache_path_is_trusted
 from slopgate.util.atomic_files import write_text_atomic_locked
+from slopgate.util.platform import child_creation_flags
 
 GIT_BASE_DEBT_CACHE_VERSION = 1
 GIT_BASE_DEBT_CACHE_ROOT = ".slopgate/cache/git-base-debt"
@@ -74,6 +75,7 @@ def _run_git(root: Path, *args: str) -> str | None:
         completed = subprocess.run(
             [GIT_BIN, "-C", str(root), *args],
             check=False,
+            creationflags=child_creation_flags(),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -136,6 +138,7 @@ def _discover_git_base(root: Path) -> tuple[str, str] | None:
 def _extract_git_archive(root: Path, base_sha: str, destination: Path) -> bool:
     git_process = subprocess.Popen(
         [GIT_BIN, "-C", str(root), "archive", "--format=tar", base_sha],
+        creationflags=child_creation_flags(),
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
@@ -146,6 +149,7 @@ def _extract_git_archive(root: Path, base_sha: str, destination: Path) -> bool:
         extract = subprocess.run(
             ["tar", "-xf", "-", "-C", str(destination)],
             check=False,
+            creationflags=child_creation_flags(),
             stdin=git_process.stdout,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -260,6 +264,7 @@ def _git_worktree_clean(root: Path) -> bool:
         completed = subprocess.run(
             [GIT_BIN, "-C", str(root), "status", "--porcelain"],
             check=False,
+            creationflags=child_creation_flags(),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,

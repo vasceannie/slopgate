@@ -9,6 +9,7 @@ import pytest
 from slopgate.search import config
 from slopgate.search import runtime
 from slopgate.search.config import SearchConfig
+from slopgate.util.platform import child_creation_flags
 
 
 class ModelResponse:
@@ -210,6 +211,10 @@ def test_fetch_runtime_models_uses_runtime_environment(
     assert models == ["https://llm.example:secret"]
 
 
+def _islands_binary_path(binary: str) -> str:
+    return f"/bin/{binary}"
+
+
 def test_run_islands_executes_resolved_binary_and_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -219,15 +224,14 @@ def test_run_islands_executes_resolved_binary_and_config(
     class Completed:
         returncode = 7
 
-    def fake_run(command: list[str], env: dict[str, str]) -> Completed:
-        calls["command"] = command
-        calls["env"] = env
+    def fake_run(
+        command: list[str], env: dict[str, str], creationflags: int
+    ) -> Completed:
+        assert creationflags == child_creation_flags(), "islands must hide the console"
+        calls["command"], calls["env"] = command, env
         return Completed()
 
-    def fake_which(binary: str) -> str:
-        return f"/bin/{binary}"
-
-    monkeypatch.setattr(runtime.shutil, "which", fake_which)
+    monkeypatch.setattr(runtime.shutil, "which", _islands_binary_path)
     monkeypatch.setattr(runtime.subprocess, "run", fake_run)
     cfg = SearchConfig(binary="islands", islands_config=str(tmp_path / "islands.yml"))
 

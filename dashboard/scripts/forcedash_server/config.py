@@ -3,7 +3,10 @@
 from pathlib import Path
 import os
 
-CANVAS_DIR = Path.home() / ".openclaw/canvas/forcedash"
+DEFAULT_CANVAS_DIR = Path.home() / ".local/share/slopgate/forcedash"
+CANVAS_DIR = Path(
+    os.environ.get("SLOPGATE_CANVAS_DIR") or DEFAULT_CANVAS_DIR
+).expanduser()
 SSH_HOST = os.environ.get("SLOPGATE_SSH_HOST", "little")
 CONFIG_PATH = os.environ.get("SLOPGATE_CONFIG_PATH", "~/.config/slopgate/config.json")
 TRACE_DIR = os.environ.get("SLOPGATE_TRACE_DIR", "~/.config/slopgate/logs")

@@ -208,6 +208,11 @@ def _load_slopgate_config(ssh_host: str) -> SlopgateConfig:
     }
 
 
+def _script_json(value: object) -> str:
+    """Serialize a JSON payload for an inline script, inert to HTML parser sequences."""
+    return json.dumps(value, separators=(",", ":")).replace("<", "\\u003c")
+
+
 def _inject_data(
     index_html: Path,
     trace_data: Mapping[Category, list[JSONDict]],
@@ -215,10 +220,10 @@ def _inject_data(
 ) -> str:
     """Inject trace data (and optionally rule config) as script tags into the built index.html."""
     html = index_html.read_text(encoding="utf-8")
-    payload = json.dumps(trace_data, separators=(",", ":"))
+    payload = _script_json(trace_data)
     scripts = [f"<script>window.__SLOPGATE_DATA__={payload};</script>"]
     if slopgate_config:
-        cfg_payload = json.dumps(slopgate_config, separators=(",", ":"))
+        cfg_payload = _script_json(slopgate_config)
         scripts.append(f"<script>window.__SLOPGATE_CONFIG__={cfg_payload};</script>")
     block = "\n".join(scripts)
     if "</head>" in html:
@@ -335,9 +340,7 @@ def _write_standalone_html(
         )
 
     html = _inject_data(index_html, trace_data, slopgate_config or None)
-    print(
-        f"Injected {len(json.dumps(trace_data, separators=(',', ':')))} bytes of trace data"
-    )
+    print(f"Injected {len(_script_json(trace_data))} bytes of trace data")
 
     if args.output:
         out = Path(args.output)

@@ -10,6 +10,7 @@ from slopgate.installer.suite.autoupdate_types import (
     SchedulerPlan,
     WINDOWS_TASK_NAME,
 )
+from slopgate.util.platform import child_creation_flags
 
 
 def scheduler_file_is_owned(path: Path) -> bool:
@@ -27,6 +28,7 @@ def remove_windows_task_by_name(dry_run: bool = False) -> bool:
     query = subprocess.run(
         ["schtasks", "/Query", "/TN", WINDOWS_TASK_NAME],
         check=False,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
     )
@@ -38,6 +40,7 @@ def remove_windows_task_by_name(dry_run: bool = False) -> bool:
     delete = subprocess.run(
         ["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK_NAME],
         check=False,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
     )

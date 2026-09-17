@@ -8,6 +8,7 @@ from pathlib import Path
 
 from slopgate.cli.io import CliInputError
 from slopgate.constants import LANGUAGE_BY_SUFFIX
+from slopgate.util.platform import child_creation_flags
 
 JS_TS_LANGUAGE = "js_ts"
 JS_TS_TEST_MARKERS = (".test", ".spec")
@@ -60,7 +61,12 @@ def execute_default_js_ts_tests(
     for package_root, tests in grouped_tests:
         command = ["npm", "test", "--", *tests, *runner_args]
         try:
-            completed = subprocess.run(command, cwd=package_root, check=False)
+            completed = subprocess.run(
+                command,
+                cwd=package_root,
+                check=False,
+                creationflags=child_creation_flags(),
+            )
         except FileNotFoundError as exc:
             raise CliInputError(
                 "npm executable was not found for JS/TS changed-test selection"
@@ -87,6 +93,7 @@ def _git_submodule_roots(root: Path) -> tuple[Path, ...]:
     completed = subprocess.run(
         ["git", "submodule", "status", "--recursive"],
         cwd=root,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
         check=False,
@@ -111,6 +118,7 @@ def _prefixed_submodule_changes(
     completed = subprocess.run(
         ["git", "diff", "--name-only", "--diff-filter=AMR", diff_ref],
         cwd=submodule_root,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
         check=False,
@@ -130,6 +138,7 @@ def _parent_recorded_submodule_ref(root: Path, submodule_root: Path) -> str | No
     completed = subprocess.run(
         ["git", "ls-tree", "HEAD", relative_path],
         cwd=root,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
         check=False,
@@ -146,6 +155,7 @@ def _submodule_current_ref(submodule_root: Path) -> str | None:
     completed = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=submodule_root,
+        creationflags=child_creation_flags(),
         capture_output=True,
         text=True,
         check=False,

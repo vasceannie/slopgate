@@ -13,6 +13,22 @@ def is_windows() -> bool:
     return sys.platform == "win32" or os.name == "nt"
 
 
+# Windows process creation flag that runs a console application without
+# allocating a console window. Windows ignores it for non-console
+# applications and when combined with CREATE_NEW_CONSOLE or DETACHED_PROCESS.
+# https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+CREATE_NO_WINDOW = 0x08000000
+
+
+def child_creation_flags() -> int:
+    """Return creation flags that stop Windows allocating a console for a child.
+
+    Zero everywhere else: ``subprocess`` rejects a non-zero ``creationflags``
+    on POSIX, so callers can pass the result unconditionally.
+    """
+    return CREATE_NO_WINDOW if is_windows() else 0
+
+
 def user_config_dir(app_name: str) -> Path:
     if is_windows():
         appdata = os.getenv("APPDATA")

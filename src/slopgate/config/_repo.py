@@ -7,6 +7,7 @@ from pathlib import Path
 
 from slopgate.constants import METADATA_SLOPGATE
 from slopgate.util import warning
+from slopgate.util.platform import child_creation_flags
 
 from ._coerce import bool_value, object_dict
 from ._io import load_toml, slopgate_path, slopgate_template, write_slopgate
@@ -55,6 +56,7 @@ def git_output(
         output = subprocess.check_output(
             args,
             cwd=str(cwd) if cwd is not None else None,
+            creationflags=child_creation_flags(),
             text=True,
             timeout=timeout,
             stderr=subprocess.DEVNULL,

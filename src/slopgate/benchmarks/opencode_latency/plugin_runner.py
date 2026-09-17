@@ -16,6 +16,7 @@ from .models import (
 )
 from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.resources import resource_path
+from slopgate.util.platform import child_creation_flags
 
 
 def _runner_source(plugin: Path, config: BenchmarkConfig) -> str:
@@ -100,6 +101,7 @@ def run_plugin(config: BenchmarkConfig, identity: ObjectDict) -> BenchmarkRun:
             text=True,
             capture_output=True,
             check=False,
+            creationflags=child_creation_flags(),
         )
         if completed.returncode != 0:
             raise BenchmarkExecutionError(completed.stderr.strip())

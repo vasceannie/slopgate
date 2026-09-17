@@ -22,6 +22,7 @@ from slopgate.search.config import (
 from slopgate.search.config import (
     PREFERRED_LITELLM_MODELS,
 )
+from slopgate.util.platform import child_creation_flags
 
 
 def fetch_models(base_url: str, api_key: str | None, timeout: int = 10) -> list[str]:
@@ -225,5 +226,5 @@ def run_islands(
     env = runtime_env(cfg, extra_env=extra_env)
     config_path = str(current_islands_config_path(cfg))
     command = [binary, "--config", config_path, *args]
-    proc = subprocess.run(command, env=env)
+    proc = subprocess.run(command, env=env, creationflags=child_creation_flags())
     return proc.returncode

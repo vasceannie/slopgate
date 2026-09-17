@@ -10,6 +10,7 @@ from typing_extensions import override
 from slopgate.constants import PERMISSION_REQUEST, PRE_TOOL_USE, METADATA_PATH
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.platform import child_creation_flags
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -33,6 +34,7 @@ def git_output(
         result = subprocess.run(
             args,
             cwd=str(cwd) if cwd is not None else None,
+            creationflags=child_creation_flags(),
             capture_output=True,
             text=True,
             timeout=timeout,

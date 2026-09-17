@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Final, Literal, TypeAlias, TypedDict
@@ -105,7 +106,10 @@ KNOWN_PLATFORM_SOURCES = {"explicit", "defaulted", "normalized", "unknown"}
 METADATA_VALUE_OMITTED = object()
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent
 DIST_DIR = DASHBOARD_DIR / "dist"
-CANVAS_DEPLOY = Path.home() / ".openclaw" / "canvas" / "forcedash"
+DEFAULT_CANVAS_DEPLOY = Path.home() / ".local/share/slopgate/forcedash"
+CANVAS_DEPLOY = Path(
+    os.environ.get("SLOPGATE_CANVAS_DIR") or DEFAULT_CANVAS_DEPLOY
+).expanduser()
 
 
 def classify(obj: Mapping[str, object]) -> Category | None:

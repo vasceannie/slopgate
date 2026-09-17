@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -12,6 +13,7 @@ from hypothesis import strategies
 
 from slopgate.cli import js_ts_tests
 from slopgate.lint._config import reset_config
+from slopgate.util.platform import child_creation_flags
 
 JS_TS_STEM_TEXT = strategies.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-", min_size=1, max_size=16
@@ -57,13 +59,35 @@ def run_js_ts_executor_property_case(
         (root / test_path).write_text("test('value', () => {})\n", encoding="utf-8")
 
         def record_npm_test(
-            command: list[str], *, cwd: Path, check: bool
+            command: list[str], *, cwd: Path, check: bool, creationflags: int
         ) -> subprocess.CompletedProcess[str]:
             assert cwd == package_root, "npm should run at the owning package root"
             assert check is False, "npm execution should return exit codes"
+            assert creationflags == child_creation_flags(), (
+                "JS/TS npm runner must suppress a Windows console for the child"
+            )
             observed_command.extend(command)
             return subprocess.CompletedProcess(command, 0)
 
         with patch.object(js_ts_tests.subprocess, "run", side_effect=record_npm_test):
             result = js_ts_tests.execute_default_js_ts_tests((test_path,), root=root)
     return result, tuple(observed_command)
+
+
+def npm_test_recorder(
+    observed_command: list[str], observed_cwd: list[Path]
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """Return a ``subprocess.run`` stub recording npm argv, cwd, and child flags."""
+
+    def record(
+        command: list[str], *, cwd: Path, check: bool, creationflags: int
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False, "JS/TS npm runner should not raise on failures"
+        assert creationflags == child_creation_flags(), (
+            "JS/TS npm runner must suppress a Windows console for the child"
+        )
+        observed_command.extend(command)
+        observed_cwd.append(cwd)
+        return subprocess.CompletedProcess(command, 0)
+
+    return record

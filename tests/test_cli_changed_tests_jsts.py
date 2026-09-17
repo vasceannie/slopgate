@@ -16,6 +16,7 @@ from slopgate.cli.changed_tests import DEFAULT_TEST_RUNNER, changed_files_since
 from tests.cli_changed_tests_jsts_support import (
     JS_TS_STEM_TEXT,
     JS_TS_SUFFIX,
+    npm_test_recorder,
     prepare_js_ts_project,
     run_js_ts_executor_property_case,
 )
@@ -130,16 +131,9 @@ def test_default_runner_executes_js_ts_tests_with_nearest_package_json(
     prepare_js_ts_project(tmp_project, monkeypatch)
     observed_command: list[str] = []
     observed_cwd: list[Path] = []
-
-    def record_npm_test(
-        command: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[str]:
-        assert check is False, "JS/TS npm runner should not raise on failures"
-        observed_command.extend(command)
-        observed_cwd.append(cwd)
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(js_ts_tests.subprocess, "run", record_npm_test)
+    monkeypatch.setattr(
+        js_ts_tests.subprocess, "run", npm_test_recorder(observed_command, observed_cwd)
+    )
     request = changed_tests.TestSelectionRequest(
         since_ref=None,
         files=("apps/web/src/components/Button.tsx",),
@@ -170,22 +164,19 @@ def test_execute_default_js_ts_tests_runs_nearest_package_json(
 ) -> None:
     prepare_js_ts_project(tmp_project, monkeypatch)
     observed_command: list[str] = []
-
-    def record_npm_test(
-        command: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[str]:
-        assert cwd == tmp_project / "apps" / "web", "npm should run near package.json"
-        assert check is False, "npm command should return its exit code"
-        observed_command.extend(command)
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(js_ts_tests.subprocess, "run", record_npm_test)
+    observed_cwd: list[Path] = []
+    monkeypatch.setattr(
+        js_ts_tests.subprocess, "run", npm_test_recorder(observed_command, observed_cwd)
+    )
 
     result = js_ts_tests.execute_default_js_ts_tests(
         ("apps/web/src/components/Button.test.tsx",), root=tmp_project
     )
 
     assert result == 0, "JS/TS default executor should return npm's exit code"
+    assert observed_cwd == [tmp_project / "apps" / "web"], (
+        "npm should run near package.json"
+    )
     assert observed_command == [
         "npm",
         "test",

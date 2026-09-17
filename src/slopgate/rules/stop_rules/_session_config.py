@@ -8,6 +8,7 @@ from typing_extensions import override
 from slopgate._types import bool_value, object_dict, string_value
 from slopgate.models import RuleFinding, Severity
 from slopgate.rules.base import Rule, is_rule_enabled
+from slopgate.util.platform import child_creation_flags
 
 if TYPE_CHECKING:
     from slopgate.context import HookContext
@@ -28,6 +29,7 @@ def collect_git_context(cwd: str) -> list[str]:
             result = subprocess.run(
                 cmd,
                 cwd=cwd,
+                creationflags=child_creation_flags(),
                 capture_output=True,
                 text=True,
                 timeout=5,

@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from slopgate.util.platform import is_windows
+from slopgate.util.platform import child_creation_flags, is_windows
 
 
 @dataclass(slots=True)
@@ -41,6 +41,7 @@ def run_shell(command: str, cwd: Path, timeout: int = 120) -> CommandResult:
                 command,
             ],
             cwd=str(cwd),
+            creationflags=child_creation_flags(),
             text=True,
             capture_output=True,
             timeout=timeout,
@@ -50,6 +51,7 @@ def run_shell(command: str, cwd: Path, timeout: int = 120) -> CommandResult:
         completed = subprocess.run(
             command,
             cwd=str(cwd),
+            creationflags=child_creation_flags(),
             shell=True,
             text=True,
             capture_output=True,

@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from slopgate.search.config import IsxError
+from slopgate.util.platform import child_creation_flags
 
 
 def _host_path_from_match(pattern: str, raw: str) -> str | None:
@@ -56,6 +57,7 @@ def get_git_remote_url(cwd: Path | None = None) -> str | None:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             cwd=cwd,
+            creationflags=child_creation_flags(),
             capture_output=True,
             text=True,
             timeout=5,
@@ -73,6 +75,7 @@ def get_git_repo_root(cwd: Path | None = None) -> Path | None:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             cwd=cwd,
+            creationflags=child_creation_flags(),
             capture_output=True,
             text=True,
             timeout=5,

@@ -22,7 +22,12 @@ from slopgate.installer.suite import (
 )
 
 __all__ = ["AUTOUPDATE_MARKER"]
-from slopgate.util.platform import is_windows, user_config_dir, user_data_dir
+from slopgate.util.platform import (
+    child_creation_flags,
+    is_windows,
+    user_config_dir,
+    user_data_dir,
+)
 
 _INSTALL_TARGETS = VALID_PLATFORMS
 (
@@ -254,7 +259,12 @@ def update_suite(options: SuiteUpdateOptions) -> int:
     else:
         env = os.environ.copy()
         env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
-        completed = subprocess.run(update_command, check=False, env=env)
+        completed = subprocess.run(
+            update_command,
+            check=False,
+            env=env,
+            creationflags=child_creation_flags(),
+        )
         if completed.returncode != 0:
             return completed.returncode
     if not options.refresh_hooks:

@@ -23,6 +23,7 @@ from slopgate.adapters.opencode_projection import OPENCODE_TOOL_CONTRACT_VERSION
 from slopgate.config import GIT_BIN
 from slopgate.constants import DECISION_KEY, METADATA_SLOPGATE, RULE_ID_KEY
 from slopgate.installer._opencode import collect_opencode_install_identity
+from slopgate.util.platform import child_creation_flags
 
 
 def _arguments() -> BenchmarkConfig:
@@ -63,6 +64,7 @@ def _repo_metadata(repo: Path, target: Path) -> ObjectDict:
         [GIT_BIN, "ls-files", "-z"],
         cwd=repo,
         check=True,
+        creationflags=child_creation_flags(),
         capture_output=True,
     ).stdout.split(b"\0")
     paths = [repo / item.decode() for item in tracked if item]

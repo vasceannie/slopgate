@@ -11,7 +11,7 @@ from pathlib import Path
 from slopgate.constants import METADATA_SLOPGATE, PLATFORM_CLAUDE
 from slopgate.installer.hook_proxy import posix_daemon_proxy_command
 from slopgate.util import logger
-from slopgate.util.platform import is_windows
+from slopgate.util.platform import child_creation_flags, is_windows
 
 HOOK_TIMEOUT_SHORT = 10
 HOOK_TIMEOUT_STANDARD = HOOK_TIMEOUT_SHORT + HOOK_TIMEOUT_SHORT
@@ -32,6 +32,7 @@ def _binary_is_runnable(binary: str) -> bool:
         completed = subprocess.run(
             [binary, "--version"],
             check=False,
+            creationflags=child_creation_flags(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=_BINARY_PROBE_TIMEOUT_SECONDS,

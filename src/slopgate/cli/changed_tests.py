@@ -23,6 +23,7 @@ from slopgate.lint._detectors.test_smells import (
     module_name_from_rel,
     symbol_is_referenced,
 )
+from slopgate.util.platform import child_creation_flags
 
 DEFAULT_SINCE_REF = "HEAD"
 DEFAULT_TEST_RUNNER = ("python", "-m", "pytest", "-n", "auto", "-v", "--tb=short")
@@ -78,6 +79,7 @@ def changed_files_since(since_ref: str, *, root: Path | None = None) -> tuple[st
         completed = subprocess.run(
             ["git", "diff", "--name-only", "--diff-filter=AMR", diff_ref],
             cwd=cwd,
+            creationflags=child_creation_flags(),
             capture_output=True,
             text=True,
             check=False,
@@ -189,7 +191,12 @@ def execute_selected_tests(
             selected_tests, runner_args=runner_args, root=root
         )
     command = [*runner, *selected_tests, *runner_args]
-    completed = subprocess.run(command, cwd=root or project_root(), check=False)
+    completed = subprocess.run(
+        command,
+        cwd=root or project_root(),
+        check=False,
+        creationflags=child_creation_flags(),
+    )
     return completed.returncode
 
 
@@ -233,7 +240,10 @@ def _execute_default_selected_tests(
     python_tests = tuple(path for path in selected_tests if path not in js_ts_tests)
     if python_tests:
         completed = subprocess.run(
-            [*DEFAULT_TEST_RUNNER, *python_tests, *runner_args], cwd=cwd, check=False
+            [*DEFAULT_TEST_RUNNER, *python_tests, *runner_args],
+            cwd=cwd,
+            check=False,
+            creationflags=child_creation_flags(),
         )
         if completed.returncode != 0:
             return completed.returncode

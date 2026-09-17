@@ -9,6 +9,7 @@ from pathlib import Path
 
 from slopgate.lint._config import get_config, get_quality_scope
 from slopgate.lint._helpers.paths import project_root, src_roots, test_roots
+from slopgate.util.platform import child_creation_flags
 
 
 def _is_excluded_dir(name: str) -> bool:
@@ -37,6 +38,7 @@ def _git_diff_paths(*args: str) -> set[Path]:
             text=True,
             cwd=project_root(),
             check=False,
+            creationflags=child_creation_flags(),
         )
     except FileNotFoundError:
         return set()

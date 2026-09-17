@@ -14,7 +14,7 @@ from pathlib import Path
 from slopgate import __version__
 from slopgate._types import ObjectDict, ObjectMapping, object_dict
 from slopgate.constants import PLATFORM_OPENCODE, UNKNOWN_VALUE
-from slopgate.util.platform import user_config_dir
+from slopgate.util.platform import child_creation_flags, user_config_dir
 
 _VERSION_TOKEN = re.compile(r"v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)")
 
@@ -41,6 +41,7 @@ def opencode_runtime_version() -> str:
         result = subprocess.run(
             [executable, "--version"],
             check=False,
+            creationflags=child_creation_flags(),
             capture_output=True,
             text=True,
             timeout=5,

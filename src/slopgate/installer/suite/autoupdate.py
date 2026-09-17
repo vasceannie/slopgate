@@ -25,7 +25,7 @@ from slopgate.installer.suite.autoupdate_windows import (
 )
 from slopgate.constants import DEFAULT_UPDATE_SOURCE
 from slopgate.util import platform
-from slopgate.util.platform import is_windows, user_config_dir
+from slopgate.util.platform import child_creation_flags, is_windows, user_config_dir
 
 DEFAULT_UPDATE_INTERVAL_MINUTES = 3 * 10
 user_data_dir = platform.user_data_dir
@@ -225,7 +225,9 @@ def install_autoupdate(
         target_path.write_text(content, encoding="utf-8")
     if plan.enable_command is None:
         return 0
-    completed = subprocess.run(plan.enable_command, check=False)
+    completed = subprocess.run(
+        plan.enable_command, check=False, creationflags=child_creation_flags()
+    )
     return completed.returncode
 
 
@@ -258,7 +260,9 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
         return 0
 
     if disable_command:
-        completed = subprocess.run(disable_command, check=False)
+        completed = subprocess.run(
+            disable_command, check=False, creationflags=child_creation_flags()
+        )
         if completed.returncode != 0:
             print(
                 f"Warning: could not disable scheduler (may already be removed): "
