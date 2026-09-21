@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "from __future__ import annotations\n\nfrom .corrections import (\n    CorrectionContext,\n    apply_preexisting_corrections,\n    apply_preexisting_corrections_result,\n)\nfrom .freeform_guardrails import (\n    apply_required_freeform_guardrails,\n    apply_required_freeform_guardrails_result,\n)\nfrom .inline_review import (\n    ActionReviewAssessment,\n    InlineInterruptContext,\n    collect_inline_interrupts,\n)\nfrom .judge import JudgeLoopDeps, JudgeLoopResult, run_per_field_judge_loop\nfrom .judge.types import (\n    INTERRUPT_POLL_INTERVAL_SECONDS,\n    STATUS_QUEUE_POLL_TIMEOUT_SECONDS,\n    FreeformGuardrailResult,\n    JudgeCapabilities,\n    PreexistingCorrectionResult,\n    ProfileExtractionResult,\n)\nfrom .payload import (\n    PayloadFieldView,\n    action_control_id,\n    action_display_value,\n    as_optional_float,\n    as_optional_string,\n    build_planner_summary,\n    coerce_json_object_list,\n    emit_status_events,\n    extract_profile,\n    extract_profile_result,\n)\nfrom .postprocess import PostProcessDeps, postprocess_graph_result\n\n__all__ = [\n    \"INTERRUPT_POLL_INTERVAL_SECONDS\",\n    \"STATUS_QUEUE_POLL_TIMEOUT_SECONDS\",\n    \"ActionReviewAssessment\",\n    \"CorrectionContext\",\n    \"FreeformGuardrailResult\",\n    \"InlineInterruptContext\",\n    \"JudgeCapabilities\",\n    \"JudgeLoopDeps\",\n    \"JudgeLoopResult\",\n    \"PayloadFieldView\",\n    \"PostProcessDeps\",\n    \"PreexistingCorrectionResult\",\n    \"ProfileExtractionResult\",\n    \"action_control_id\",\n    \"action_display_value\",\n    \"apply_preexisting_corrections\",\n    \"apply_preexisting_corrections_result\",\n    \"apply_required_freeform_guardrails\",\n    \"apply_required_freeform_guardrails_result\",\n    \"as_optional_float\",\n    \"as_optional_string\",\n    \"build_planner_summary\",\n    \"coerce_json_object_list\",\n    \"collect_inline_interrupts\",\n    \"emit_status_events\",\n    \"extract_profile\",\n    \"extract_profile_result\",\n    \"postprocess_graph_result\",\n    \"run_per_field_judge_loop\",\n]\n",
+    "file_path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/__init__.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-8dd95dc6efab",
+  "_gold": {
+    "source_case_id": "8dd95dc6efab",
+    "platform": "cursor",
+    "current_rule_ids": [
+      "PY-IMPORT-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/__init__.py",
+      "sha256": "6130fa8fee25c5b719f19148a72a4428d83245ac4a310186c55128c506c5f369",
+      "text": "from __future__ import annotations\n\nfrom .corrections import (\n    CorrectionContext,\n    apply_preexisting_corrections,\n    apply_preexisting_corrections_result,\n)\nfrom .freeform_guardrails import (\n    apply_required_freeform_guardrails,\n    apply_required_freeform_guardrails_result,\n)\nfrom .inline_review import (\n    ActionReviewAssessment,\n    InlineInterruptContext,\n    collect_inline_interrupts,\n)\nfrom .judge import JudgeLoopDeps, JudgeLoopResult, run_per_field_judge_loop\nfrom .judge.types import (\n    INTERRUPT_POLL_INTERVAL_SECONDS,\n    STATUS_QUEUE_POLL_TIMEOUT_SECONDS,\n    FreeformGuardrailResult,\n    JudgeCapabilities,\n    PreexistingCorrectionResult,\n    ProfileExtractionResult,\n)\nfrom .payload import (\n    PayloadFieldView,\n    action_control_id,\n    action_display_value,\n    as_optional_float,\n    as_optional_string,\n    build_planner_summary,\n    coerce_json_object_list,\n    emit_status_events,\n    extract_profile,\n    extract_profile_result,\n)\nfrom .postprocess import PostProcessDeps, postprocess_graph_result\n\n__all__ = [\n    \"INTERRUPT_POLL_INTERVAL_SECONDS\",\n    \"STATUS_QUEUE_POLL_TIMEOUT_SECONDS\",\n    \"ActionReviewAssessment\",\n    \"CorrectionContext\",\n    \"FreeformGuardrailResult\",\n    \"InlineInterruptContext\",\n    \"JudgeCapabilities\",\n    \"JudgeLoopDeps\",\n    \"JudgeLoopResult\",\n    \"PayloadFieldView\",\n    \"PostProcessDeps\",\n    \"PreexistingCorrectionResult\",\n    \"ProfileExtractionResult\",\n    \"action_control_id\",\n    \"action_display_value\",\n    \"apply_preexisting_corrections\",\n    \"apply_preexisting_corrections_result\",\n    \"apply_required_freeform_guardrails\",\n    \"apply_required_freeform_guardrails_result\",\n    \"as_optional_float\",\n    \"as_optional_string\",\n    \"build_planner_summary\",\n    \"coerce_json_object_list\",\n    \"collect_inline_interrupts\",\n    \"emit_status_events\",\n    \"extract_profile\",\n    \"extract_profile_result\",\n    \"postprocess_graph_result\",\n    \"run_per_field_judge_loop\",\n]\n"
+    }
+  ]
+}

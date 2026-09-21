@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "from typing import Any\n\ndef identity(value: Any) -> Any:\n    return value\n",
+    "file_path": "src/manual_replay_example.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-f41e06046d66",
+  "_gold": {
+    "source_case_id": "f41e06046d66",
+    "platform": "cursor",
+    "current_rule_ids": [
+      "PY-TYPE-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/manual_replay_example.py",
+      "sha256": "8360589fb5669de2ea462e81eca6b7526c86058acaf2fd92f840f777b21ea48d",
+      "text": "from typing import Any\n\ndef identity(value: Any) -> Any:\n    return value\n"
+    }
+  ]
+}

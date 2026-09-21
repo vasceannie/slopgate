@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Reproduce: judge subgraph with llm_client=None + stale judge_result={} in state.\"\"\"\n\nimport asyncio\n\nfrom src.autopilot.config import PlannerBudgets\nfrom src.autopilot.contracts import PlannerAction\nfrom src.autopilot.graph.agents import JudgeDeps, build_judge\n\naction = PlannerAction(\n    control_id=\"f1\",\n    intent_id=\"intent.f1\",\n    widget_family=\"textbox\",\n    value=\"Ada\",\n    confidence=0.9,\n    required=True,\n    source=\"ai_inferred\",\n)\n\n\nasync def run_case(name: str, actions: list[object], judge_result_in: object) -> None:\n    deps = JudgeDeps(llm_client=None, adapter=None, budgets=PlannerBudgets())\n    graph = build_judge(deps)\n    state: dict[str, object] = {\n        \"actions\": actions,\n        \"parsed_fields\": [{\"control_id\": \"f1\"}],\n        \"judge_result\": judge_result_in,\n        \"per_field_verdicts\": {},\n        \"messages\": [],\n    }\n    result = await graph.ainvoke(state)\n    jr = result.get(\"judge_result\")\n    print(f\"[{name}] judge_result = {jr!r}\")\n    print(f\"[{name}] overall_verdict = {(jr or {}).get('overall_verdict')!r}\")\n    print(f\"[{name}] concerns = {len((jr or {}).get('concerns') or [])}\")\n    print()\n\n\nasync def main() -> None:\n    # Case 1: real run shape \u2014 stale {} from navigation reset, typed actions\n    await run_case(\"typed-actions + stale {}\", [action], {})\n    # Case 2: dict actions (post-serde) + stale {}\n    await run_case(\n        \"dict-actions + stale {}\",\n        [{\"control_id\": \"f1\", \"source\": \"ai_inferred\", \"intent_id\": \"intent.f1\"}],\n        {},\n    )\n    # Case 3: control \u2014 no stale judge_result, typed actions\n    await run_case(\"typed-actions + no stale\", [action], None)\n\n\nasyncio.run(main())\n",
+    "file_path": "/tmp/$TMP/repro_judge.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-09f2efa786ed",
+  "_gold": {
+    "source_case_id": "09f2efa786ed",
+    "platform": "claude",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tmp/$TMP/repro_judge.py",
+      "sha256": "e4a71dfdc7c4acef02a9165f9c8a245238b0102b1555d7158c39635ac1d310b3",
+      "text": "\"\"\"Reproduce: judge subgraph with llm_client=None + stale judge_result={} in state.\"\"\"\n\nimport asyncio\n\nfrom src.autopilot.config import PlannerBudgets\nfrom src.autopilot.contracts import PlannerAction\nfrom src.autopilot.graph.agents import JudgeDeps, build_judge\n\naction = PlannerAction(\n    control_id=\"f1\",\n    intent_id=\"intent.f1\",\n    widget_family=\"textbox\",\n    value=\"Ada\",\n    confidence=0.9,\n    required=True,\n    source=\"ai_inferred\",\n)\n\n\nasync def run_case(name: str, actions: list[object], judge_result_in: object) -> None:\n    deps = JudgeDeps(llm_client=None, adapter=None, budgets=PlannerBudgets())\n    graph = build_judge(deps)\n    state: dict[str, object] = {\n        \"actions\": actions,\n        \"parsed_fields\": [{\"control_id\": \"f1\"}],\n        \"judge_result\": judge_result_in,\n        \"per_field_verdicts\": {},\n        \"messages\": [],\n    }\n    result = await graph.ainvoke(state)\n    jr = result.get(\"judge_result\")\n    print(f\"[{name}] judge_result = {jr!r}\")\n    print(f\"[{name}] overall_verdict = {(jr or {}).get('overall_verdict')!r}\")\n    print(f\"[{name}] concerns = {len((jr or {}).get('concerns') or [])}\")\n    print()\n\n\nasync def main() -> None:\n    # Case 1: real run shape \u2014 stale {} from navigation reset, typed actions\n    await run_case(\"typed-actions + stale {}\", [action], {})\n    # Case 2: dict actions (post-serde) + stale {}\n    await run_case(\n        \"dict-actions + stale {}\",\n        [{\"control_id\": \"f1\", \"source\": \"ai_inferred\", \"intent_id\": \"intent.f1\"}],\n        {},\n    )\n    # Case 3: control \u2014 no stale judge_result, typed actions\n    await run_case(\"typed-actions + no stale\", [action], None)\n\n\nasyncio.run(main())\n"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python -m pytest tests/e2e/test_multipage.py::test_multi_step_fixture_extracts_bridges_and_fills_required_fields -x -q 2>&1 | tail -40",
+    "timeout": 240
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-8666411f2b3c",
+  "_gold": {
+    "source_case_id": "8666411f2b3c",
+    "platform": "omp",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

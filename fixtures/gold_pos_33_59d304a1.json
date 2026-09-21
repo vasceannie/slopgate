@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd $REPO_SLOPGATE && git stash list | head -5; echo \"---branch---\"; git branch --show-current"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-59d304a14239",
+  "_gold": {
+    "source_case_id": "59d304a14239",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GIT-003"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

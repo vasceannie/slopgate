@@ -17,11 +17,12 @@ Paired telemetry lives in **`~/repos/slopdata`**. Slopgate vendors only gold + a
 | Intent | Artifact |
 |--------|----------|
 | Change a rule / adapter safely | `fixtures/gold_*.json` + `tests/test_eval_gold_fixtures.py` |
-| Prove eval plumbing | `slopgate eval --pack tests/fixtures/eval/l1_holdout_pilot.jsonl` |
+| Prove eval plumbing | `slopgate eval --pack tests/fixtures/eval/l1_ci.jsonl` (or `l1_holdout_pilot.jsonl`) |
+| Current vs historical labels | `~/repos/slopdata/datasets/v1/overlays/l1-positives-current.jsonl` |
 | Volume research on a rule | `~/repos/slopdata/datasets/v1/by_rule/l1/<RULE>.jsonl` |
 | Deny-focused L1 (no TN flood) | `.../l1/eval-v1.positives.jsonl` |
 | Repair success exploration | `.../l2/episodes-v1.benchmark.jsonl` |
-| Post-deny agent trajectories | `.../l3/trajectories-v1.jsonl` or `by_rule/l3/<RULE>.jsonl` |
+| Post-deny agent trajectories | `.../l3/trajectories-v1.jsonl` or confirmed sidecar `.../overlays/l3-ground-truth.jsonl` |
 | Global histograms | `.../v1/reports/calibration.json` |
 
 **Never** fail CI on historical holdout label overlap. Gold = quality gate; history = research.
@@ -51,7 +52,7 @@ Paired telemetry lives in **`~/repos/slopdata`**. Slopgate vendors only gold + a
 3. Filter `tier == replayable` for anything you might replay.
 4. Replay via `slopgate.eval.evaluate_pack` or `evaluate_payload` on an **enrolled** temp repo (`slopgate.toml` present).
 5. For repair questions, use L2 benchmark states `resolved` / `still_failing` (legacy; not authoritative).
-6. For behavior-after-deny, use L3 but keep `outcome_ground_truth: false` in any write-up.
+6. For behavior-after-deny, use L3; quote `overlays/l3-ground-truth.jsonl` only for confirmed `outcome_ground_truth` rows.
 7. Promote survivors into gold fixtures; add pytest coverage.
 
 ## Implementation checklist (wiring into Slopgate)

@@ -1,0 +1,84 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "end": "125#ZZ",
+        "lines": [
+          "def test_paused_outcome_without_judge_artifact_reports_skipped() -> None:"
+        ],
+        "op": "replace",
+        "pos": "125#ZZ"
+      },
+      {
+        "end": "95#ST",
+        "lines": [
+          "def test_paused_outcome_derives_actions_and_pending_interrupts() -> None:"
+        ],
+        "op": "replace",
+        "pos": "93#ST"
+      },
+      {
+        "end": "280#VN",
+        "lines": [
+          "",
+          "",
+          "@pytest.mark.asyncio",
+          "async def test_driver_skips_duplicate_review_pause_for_announced_ids() -> None:",
+          "    \"\"\"aoub: graph-driven RUN_PAUSED must not be re-emitted on wait timeout.\"\"\"",
+          "    case = replay_bypass_case()",
+          "    case.run_context.announced_pause_control_ids.add(\"field-email\")",
+          "    timeout = InterruptWaitTimedOut(",
+          "        timeout_seconds=60.0, pending_control_ids=(\"field-email\",)",
+          "    )",
+          "",
+          "    await driver._emit_review_pause(case.config, case.run_context, timeout)",
+          "",
+          "    assert case.recorder.events == [], (",
+          "        \"a pause already announced by the graph-driven interrupt must not be \",",
+          "        \"re-emitted when the interrupt wait times out\"",
+          "    )",
+          "",
+          "",
+          "@pytest.mark.asyncio",
+          "async def test_driver_emits_review_pause_for_unannounced_ids() -> None:",
+          "    \"\"\"aoub: a timeout for never-announced controls still emits RUN_PAUSED.\"\"\"",
+          "    case = replay_bypass_case()",
+          "    timeout = InterruptWaitTimedOut(",
+          "        timeout_seconds=60.0, pending_control_ids=(\"field-phone\",)",
+          "    )",
+          "",
+          "    await driver._emit_review_pause(case.config, case.run_context, timeout)",
+          "",
+          "    assert len(case.recorder.events) == 1, (",
+          "        \"a timeout without a prior graph-driven announcement must surface the pause\"",
+          "    )",
+          "    [event] = case.recorder.events",
+          "    assert getattr(event, \"pending_control_ids\", []) == [\"field-phone\"], (",
+          "        \"the unannounced pause event must carry its pending control ids\"",
+          "    )"
+        ],
+        "op": "append",
+        "pos": "279#WV"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/tests/agent_stream/test_langfuse_integration/test_paused_run_evidence.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-2bed43084ad6",
+  "_gold": {
+    "source_case_id": "2bed43084ad6",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/agent_stream/test_langfuse_integration/test_paused_run_evidence.py",
+      "sha256": "de8c792e8aa91dc3e0f39b31bdcd4402efdbc1894b28884c5b366a0fc26f476c",
+      "text": "def test_paused_outcome_without_judge_artifact_reports_skipped() -> None:\n\ndef test_paused_outcome_derives_actions_and_pending_interrupts() -> None:\n\n\n\n@pytest.mark.asyncio\nasync def test_driver_skips_duplicate_review_pause_for_announced_ids() -> None:\n    \"\"\"aoub: graph-driven RUN_PAUSED must not be re-emitted on wait timeout.\"\"\"\n    case = replay_bypass_case()\n    case.run_context.announced_pause_control_ids.add(\"field-email\")\n    timeout = InterruptWaitTimedOut(\n        timeout_seconds=60.0, pending_control_ids=(\"field-email\",)\n    )\n\n    await driver._emit_review_pause(case.config, case.run_context, timeout)\n\n    assert case.recorder.events == [], (\n        \"a pause already announced by the graph-driven interrupt must not be \",\n        \"re-emitted when the interrupt wait times out\"\n    )\n\n\n@pytest.mark.asyncio\nasync def test_driver_emits_review_pause_for_unannounced_ids() -> None:\n    \"\"\"aoub: a timeout for never-announced controls still emits RUN_PAUSED.\"\"\"\n    case = replay_bypass_case()\n    timeout = InterruptWaitTimedOut(\n        timeout_seconds=60.0, pending_control_ids=(\"field-phone\",)\n    )\n\n    await driver._emit_review_pause(case.config, case.run_context, timeout)\n\n    assert len(case.recorder.events) == 1, (\n        \"a timeout without a prior graph-driven announcement must surface the pause\"\n    )\n    [event] = case.recorder.events\n    assert getattr(event, \"pending_control_ids\", []) == [\"field-phone\"], (\n        \"the unannounced pause event must carry its pending control ids\"\n    )"
+    }
+  ]
+}

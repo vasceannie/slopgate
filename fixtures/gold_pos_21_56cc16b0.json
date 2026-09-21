@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat >> src/slopgate/constants.py <<'EOF'\n\nFINGERPRINT_DIGEST_CACHE_SIZE = 8\nEOF\ntail -3 src/slopgate/constants.py",
+    "workdir": "$REPO_SLOPGATE"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-56cc16b0a0aa",
+  "_gold": {
+    "source_case_id": "56cc16b0a0aa",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

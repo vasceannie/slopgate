@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Accepted action construction for Class A profile mirroring.\"\"\"\n\nfrom __future__ import annotations\n\nfrom src.autopilot.contracts import PlannerAction, as_string_list\nfrom src.autopilot.contracts.keys import PK_CONTROL_ID, PK_OPTION_TEXTS\nfrom src.key_catalog import PK_REQUIRED, PK_SELECTOR_HINT, PK_WIDGET_FAMILY\nfrom src.key_catalog.planning import PK_FIELD_INSTANCE_ID\nfrom src.types.typed import JsonObject, JsonValue, as_str\n\nfrom ..acceptance import PlannerAcceptanceContext, finalize_accepted_action\nfrom ..constants import SOURCE_PROFILE_MIRRORED\n\n\ndef _class_a_action(\n    field: JsonObject,\n    intent_id: str,\n    value: JsonValue,\n    confidence: float,\n    needs_confirmation: bool,\n) -> PlannerAction | None:\n    \"\"\"Build a profile-mirrored action after shared acceptance.\"\"\"\n    control_id = as_str(field.get(PK_CONTROL_ID), \"\")\n    action = PlannerAction(\n        intent_id=intent_id,\n        value=value,\n        control_id=control_id,\n        widget_family=as_str(field.get(PK_WIDGET_FAMILY), \"\"),\n        runtime_selector_hint=as_str(field.get(PK_SELECTOR_HINT), \"\"),\n        required=bool(field.get(PK_REQUIRED) or False),\n        confidence=confidence,\n        verify=False,\n        source=SOURCE_PROFILE_MIRRORED,\n        needs_confirmation=needs_confirmation,\n    )\n    return finalize_accepted_action(\n        action,\n        PlannerAcceptanceContext(\n            value=value,\n            widget_kind=as_str(field.get(PK_WIDGET_FAMILY), \"\"),\n            option_texts=as_string_list(field.get(PK_OPTION_TEXTS, [])),\n            control_id=control_id,\n            field_instance_id=as_str(field.get(PK_FIELD_INSTANCE_ID), \"\"),\n            source_kind=\"profile_fact\",\n            source_id=intent_id,\n            evidence_verified=True,\n            needs_confirmation=needs_confirmation,\n        ),\n    )\n",
+    "path": "src/autopilot/graph/nodes/planning/class_a_bypass/action.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7ac2dfb46d2a",
+  "_gold": {
+    "source_case_id": "7ac2dfb46d2a",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-CODE-009"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/autopilot/graph/nodes/planning/class_a_bypass/action.py",
+      "sha256": "03e8b7da637381a0dc95a7877bfea595477f9064983005c3b2c2b1bc964ec80b",
+      "text": "\"\"\"Accepted action construction for Class A profile mirroring.\"\"\"\n\nfrom __future__ import annotations\n\nfrom src.autopilot.contracts import PlannerAction, as_string_list\nfrom src.autopilot.contracts.keys import PK_CONTROL_ID, PK_OPTION_TEXTS\nfrom src.key_catalog import PK_REQUIRED, PK_SELECTOR_HINT, PK_WIDGET_FAMILY\nfrom src.key_catalog.planning import PK_FIELD_INSTANCE_ID\nfrom src.types.typed import JsonObject, JsonValue, as_str\n\nfrom ..acceptance import PlannerAcceptanceContext, finalize_accepted_action\nfrom ..constants import SOURCE_PROFILE_MIRRORED\n\n\ndef _class_a_action(\n    field: JsonObject,\n    intent_id: str,\n    value: JsonValue,\n    confidence: float,\n    needs_confirmation: bool,\n) -> PlannerAction | None:\n    \"\"\"Build a profile-mirrored action after shared acceptance.\"\"\"\n    control_id = as_str(field.get(PK_CONTROL_ID), \"\")\n    action = PlannerAction(\n        intent_id=intent_id,\n        value=value,\n        control_id=control_id,\n        widget_family=as_str(field.get(PK_WIDGET_FAMILY), \"\"),\n        runtime_selector_hint=as_str(field.get(PK_SELECTOR_HINT), \"\"),\n        required=bool(field.get(PK_REQUIRED) or False),\n        confidence=confidence,\n        verify=False,\n        source=SOURCE_PROFILE_MIRRORED,\n        needs_confirmation=needs_confirmation,\n    )\n    return finalize_accepted_action(\n        action,\n        PlannerAcceptanceContext(\n            value=value,\n            widget_kind=as_str(field.get(PK_WIDGET_FAMILY), \"\"),\n            option_texts=as_string_list(field.get(PK_OPTION_TEXTS, [])),\n            control_id=control_id,\n            field_instance_id=as_str(field.get(PK_FIELD_INSTANCE_ID), \"\"),\n            source_kind=\"profile_fact\",\n            source_id=intent_id,\n            evidence_verified=True,\n            needs_confirmation=needs_confirmation,\n        ),\n    )\n"
+    }
+  ]
+}

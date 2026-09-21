@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd $REPO_JOB_HUNTER && git stash && uv run pyrefly check 2>&1 | grep -c \"^ERROR\" ; git stash pop",
+    "timeout": 120
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ff3ddff57652",
+  "_gold": {
+    "source_case_id": "ff3ddff57652",
+    "platform": "pi",
+    "current_rule_ids": [
+      "GIT-003"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

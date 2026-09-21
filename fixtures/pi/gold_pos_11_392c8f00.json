@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Typed progress-emission contracts and state carriers.\"\"\"\n\nfrom __future__ import annotations\n\nfrom collections.abc import Awaitable, Callable\nfrom dataclasses import dataclass\nfrom typing import Protocol\n\nfrom src.agui import BaseEvent, PlannerToAGUIAdapter\nfrom src.autopilot.graph.run_summary import RunCompleteStats, SummaryModelProtocol\nfrom src.types.typed import JsonObject\n\n\nclass ProgressDeps(Protocol):\n    @property\n    def adapter(self) -> PlannerToAGUIAdapter: ...\n\n    emit_event: Callable[[BaseEvent], Awaitable[None]]\n\n\nclass SummaryProgressDeps(ProgressDeps, Protocol):\n    @property\n    def summary_llm_client(self) -> SummaryModelProtocol | None: ...\n\n    @property\n    def payload(self) -> JsonObject: ...\n\n\n@dataclass(frozen=True)\nclass SnapshotState:\n    \"\"\"Inputs carried on STATE_SNAPSHOT events.\"\"\"\n\n    actions: list[JsonObject]\n    review_items: list[JsonObject]\n    filled_count: int = 0\n    # TODO: deduplicate with src/agui/params.py StateSnapshotParams\n    guardrail_error: JsonObject | None = None\n    correction_error: JsonObject | None = None\n    job_metadata_signal: JsonObject | None = None\n    job_metadata_result: JsonObject | None = None\n    compensation_signal: JsonObject | None = None\n    compensation_result: JsonObject | None = None\n    accuracy_metrics: JsonObject | None = None\n    evidence_ledger: JsonObject | None = None\n\n\n@dataclass(frozen=True)\nclass FinalSummaryState:\n    \"\"\"Inputs used to build final run-complete summaries.\"\"\"\n\n    run_stats: RunCompleteStats\n    review_items: list[JsonObject]\n    resolved_actions: list[JsonObject]\n    job_metadata_result: JsonObject | None = None\n\n\n__all__ = [\n    \"FinalSummaryState\",\n    \"ProgressDeps\",\n    \"SnapshotState\",\n    \"SummaryProgressDeps\",\n]\n",
+    "path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/progress/models.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-392c8f00e472",
+  "_gold": {
+    "source_case_id": "392c8f00e472",
+    "platform": "pi",
+    "current_rule_ids": [
+      "PY-QUALITY-007"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/progress/models.py",
+      "sha256": "de4ed47fbc02a4512bd37dd3ca7b26b33c756c45ca95a157a3898ceb09286135",
+      "text": "\"\"\"Typed progress-emission contracts and state carriers.\"\"\"\n\nfrom __future__ import annotations\n\nfrom collections.abc import Awaitable, Callable\nfrom dataclasses import dataclass\nfrom typing import Protocol\n\nfrom src.agui import BaseEvent, PlannerToAGUIAdapter\nfrom src.autopilot.graph.run_summary import RunCompleteStats, SummaryModelProtocol\nfrom src.types.typed import JsonObject\n\n\nclass ProgressDeps(Protocol):\n    @property\n    def adapter(self) -> PlannerToAGUIAdapter: ...\n\n    emit_event: Callable[[BaseEvent], Awaitable[None]]\n\n\nclass SummaryProgressDeps(ProgressDeps, Protocol):\n    @property\n    def summary_llm_client(self) -> SummaryModelProtocol | None: ...\n\n    @property\n    def payload(self) -> JsonObject: ...\n\n\n@dataclass(frozen=True)\nclass SnapshotState:\n    \"\"\"Inputs carried on STATE_SNAPSHOT events.\"\"\"\n\n    actions: list[JsonObject]\n    review_items: list[JsonObject]\n    filled_count: int = 0\n    # TODO: deduplicate with src/agui/params.py StateSnapshotParams\n    guardrail_error: JsonObject | None = None\n    correction_error: JsonObject | None = None\n    job_metadata_signal: JsonObject | None = None\n    job_metadata_result: JsonObject | None = None\n    compensation_signal: JsonObject | None = None\n    compensation_result: JsonObject | None = None\n    accuracy_metrics: JsonObject | None = None\n    evidence_ledger: JsonObject | None = None\n\n\n@dataclass(frozen=True)\nclass FinalSummaryState:\n    \"\"\"Inputs used to build final run-complete summaries.\"\"\"\n\n    run_stats: RunCompleteStats\n    review_items: list[JsonObject]\n    resolved_actions: list[JsonObject]\n    job_metadata_result: JsonObject | None = None\n\n\n__all__ = [\n    \"FinalSummaryState\",\n    \"ProgressDeps\",\n    \"SnapshotState\",\n    \"SummaryProgressDeps\",\n]\n"
+    }
+  ]
+}

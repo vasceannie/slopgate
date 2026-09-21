@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "i": "js prelude",
+    "path": "/sys/fs/cgroup/memory.events"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-adf9046b0a48",
+  "_gold": {
+    "source_case_id": "adf9046b0a48",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

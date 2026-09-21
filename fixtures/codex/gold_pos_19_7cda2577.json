@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk proxy flock -x /tmp/slopgate-audit-run_f36588675f3f/heavy-2.lock /bin/sh -c 'HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-home XDG_CONFIG_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-config XDG_CACHE_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-cache XDG_RUNTIME_DIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-runtime TMPDIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-tmp SLOPGATE_CONFIG_DIR=$REPO_SLOPGATE SLOPGATE_ROOT=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-state SLOPGATE_DAEMON_SOCKET=/tmp/slopgate-audit-run_f36588675f3f/lane-b/test-daemon.sock .venv/bin/pytest tests/adapters/test_15_omp_adapter_contract.py tests/adapters/test_16_omp_envelope_fixtures.py tests/test_omp_extension_source_contract.py tests/adapters/test_omp_native_target_identity.py'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7cda257742eb",
+  "_gold": {
+    "source_case_id": "7cda257742eb",
+    "platform": "codex",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

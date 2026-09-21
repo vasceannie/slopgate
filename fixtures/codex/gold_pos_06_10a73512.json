@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"count_sut_calls\\|has_assertion\\|is_assertion_call\\|call_assertion_name\\|detect_assertion_free_tests\\|detect_eager_tests\" src tests"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-10a73512530e",
+  "_gold": {
+    "source_case_id": "10a73512530e",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

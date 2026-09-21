@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "if [ -f Makefile ]; then head -80 Makefile; else echo \"No Makefile\"; fi"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7ac97cba8be4",
+  "_gold": {
+    "source_case_id": "7ac97cba8be4",
+    "platform": "pi",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

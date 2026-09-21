@@ -106,7 +106,14 @@ def cmd_eval(args: argparse.Namespace) -> int:
     pack = Path(string_arg(args, "pack")).resolve()
     limit = _int_arg(args, "limit")
     replayable_only = not _bool_arg(args, "include_label_only")
-    report = evaluate_pack(pack, limit=limit, replayable_only=replayable_only)
+    overlay = getattr(args, "overlay_out", None)
+    overlay_out = Path(str(overlay)).resolve() if overlay else None
+    report = evaluate_pack(
+        pack,
+        limit=limit,
+        replayable_only=replayable_only,
+        overlay_out=overlay_out,
+    )
     if not _bool_arg(args, "verbose"):
         report = {
             key: report[key]
@@ -121,6 +128,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
                 "pack",
                 "replayable_only",
                 "skipped_label_only",
+                "overlay_out",
+                "overlay_rows",
             )
             if key in report
         }

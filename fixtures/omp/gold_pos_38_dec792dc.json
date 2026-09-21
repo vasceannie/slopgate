@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "new_string": "@pytest.mark.parametrize(\n    \"value\",\n    [\n        pytest.param(_UNKNOWN_MODE, id=\"unknown-string\"),\n        pytest.param(None, id=\"missing\"),\n        pytest.param(3, id=\"wrong-type\"),\n    ],\n)\ndef test_parse_content_mode_rejects_unknown_values(value: object) -> None:\n    \"\"\"An unrecognized mode falls back to the caller's default.\"\"\"\n    assert parse_content_mode(value, SNAPSHOT_CONTENT_MODE) == SNAPSHOT_CONTENT_MODE, (\n        f\"{value!r} is not a known mode and must fall back to the default\"\n    )\n\n\n@given(value=strategies.text(max_size=32), default=strategies.sampled_from((DEFAULT_CONTENT_MODE, SNAPSHOT_CONTENT_MODE)))\ndef test_parse_content_mode_always_returns_a_known_mode(\n    value: str,\n    default: str,\n) -> None:\n    \"\"\"Parsing any text yields a declared mode, never the raw input.\"\"\"\n    parsed = parse_content_mode(value, cast(\"ContentMode\", default))\n\n    assert parsed in (DEFAULT_CONTENT_MODE, SNAPSHOT_CONTENT_MODE), (\n        f\"parsing {value!r} must yield a declared mode, got {parsed!r}\"\n    )",
+    "old_string": "@pytest.mark.parametrize(\n    \"value\",\n    [\n        pytest.param(_UNKNOWN_MODE, id=\"unknown-string\"),\n        pytest.param(None, id=\"missing\"),\n        pytest.param(3, id=\"wrong-type\"),\n    ],\n)\ndef test_parse_content_mode_rejects_unknown_values(value: object) -> None:\n    \"\"\"An unrecognized mode falls back to the caller's default.\"\"\"\n    assert parse_content_mode(value, SNAPSHOT_CONTENT_MODE) == SNAPSHOT_CONTENT_MODE, (\n        f\"{value!r} is not a known mode and must fall back to the default\"\n    )",
+    "path": "tests/agui/test_content_meta.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-dec792dce6c0",
+  "_gold": {
+    "source_case_id": "dec792dce6c0",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-CODE-010"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/agui/test_content_meta.py",
+      "sha256": "d6f7f5b8cc867ef51099870fb94a079bc748ae81982b687892ee9fe55099adfe",
+      "text": "@pytest.mark.parametrize(\n    \"value\",\n    [\n        pytest.param(_UNKNOWN_MODE, id=\"unknown-string\"),\n        pytest.param(None, id=\"missing\"),\n        pytest.param(3, id=\"wrong-type\"),\n    ],\n)\ndef test_parse_content_mode_rejects_unknown_values(value: object) -> None:\n    \"\"\"An unrecognized mode falls back to the caller's default.\"\"\"\n    assert parse_content_mode(value, SNAPSHOT_CONTENT_MODE) == SNAPSHOT_CONTENT_MODE, (\n        f\"{value!r} is not a known mode and must fall back to the default\"\n    )\n\n\n@given(value=strategies.text(max_size=32), default=strategies.sampled_from((DEFAULT_CONTENT_MODE, SNAPSHOT_CONTENT_MODE)))\ndef test_parse_content_mode_always_returns_a_known_mode(\n    value: str,\n    default: str,\n) -> None:\n    \"\"\"Parsing any text yields a declared mode, never the raw input.\"\"\"\n    parsed = parse_content_mode(value, cast(\"ContentMode\", default))\n\n    assert parsed in (DEFAULT_CONTENT_MODE, SNAPSHOT_CONTENT_MODE), (\n        f\"parsing {value!r} must yield a declared mode, got {parsed!r}\"\n    )"
+    }
+  ]
+}

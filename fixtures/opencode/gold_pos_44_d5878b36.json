@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git stash push -- tests/browser_runtime/page_ops/test_authentication_inbox.py && uv run pytest tests/browser_runtime/page_ops/test_authentication_inbox.py::test_gmail_factory_defaults_to_enabled_with_oauth_configuration -q 2>&1 | tail -3; git stash pop",
+    "timeout": 180000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d5878b365390",
+  "_gold": {
+    "source_case_id": "d5878b365390",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-003",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/tests/test_stats_improvement_metrics.py\n@@\n import json\n from pathlib import Path\n \n+from hypothesis import given, strategies as st\n+\n@@\n-def test_comparison_snapshot_metrics_use_explicit_evaluation_scope() -> None:\n-    records = _fixture_records()\n+@given(repetitions=st.integers(min_value=1, max_value=5))\n+def test_comparison_snapshot_metrics_use_explicit_evaluation_scope(\n+    repetitions: int,\n+) -> None:\n+    records = _fixture_records() * repetitions\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-04205da3e00c",
+  "_gold": {
+    "source_case_id": "04205da3e00c",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/test_stats_improvement_metrics.py",
+      "sha256": "634e12fe0194b166385873bb9f4318b63ee5d85bf65cea6f3c19655f70ac4df5",
+      "text": "from hypothesis import given, strategies as st\n\n@given(repetitions=st.integers(min_value=1, max_value=5))\ndef test_comparison_snapshot_metrics_use_explicit_evaluation_scope(\n    repetitions: int,\n) -> None:\n    records = _fixture_records() * repetitions"
+    }
+  ]
+}

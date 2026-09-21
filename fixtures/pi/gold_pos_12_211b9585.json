@@ -1,0 +1,22 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ctx_execute",
+  "tool_input": {
+    "code": "import asyncio\nfrom playwright.async_api import async_playwright\nfrom src.cli.extraction import extract_fields_from_page_or_frames\n\nURL = 'https://anthesisgroup.pinpointhq.com/en/postings/4dcf76f7-10c7-4cfd-8e86-09203acc5bb1'\nCOOKIE_TERMS = ('we use cookies', 'cookie preferences', 'basic functionalities', 'enhance your online experience')\nSEARCH_TERMS = ('current opportunities', 'search jobs')\n\nasync def main():\n    async with async_playwright() as p:\n        browser = await p.chromium.launch(headless=True)\n        page = await browser.new_page()\n        await page.goto(URL, wait_until='domcontentloaded', timeout=30000)\n        await page.wait_for_timeout(2000)\n        fields, source = await extract_fields_from_page_or_frames(page)\n        rows = []\n        for field in fields:\n            text = ' '.join(str(x or '') for x in [field.question_text, field.label_text, field.aria_label, field.placeholder, field.name_attr, field.id_attr]).lower()\n            rows.append((field.widget_kind, field.question_text, field.id_attr, any(t in text for t in COOKIE_TERMS), any(t in text for t in SEARCH_TERMS)))\n        print(f'source_url={getattr(source, \"url\", \"\")}')\n        print(f'field_count={len(fields)}')\n        print(f'cookie_noise_fields={sum(1 for r in rows if r[3])}')\n        print(f'listing_search_fields={sum(1 for r in rows if r[4])}')\n        for widget, question, field_id, is_cookie, is_search in rows[:20]:\n            print(f'field widget={widget!r} id={field_id!r} cookie={is_cookie} search={is_search} question={question!r}')\n        assert not any(r[3] for r in rows), 'cookie field leaked into extraction'\n        assert not any(r[4] for r in rows), 'listing search field leaked into extraction'\n        await browser.close()\n\nasyncio.run(main())",
+    "cwd": "$REPO_JOB_HUNTER",
+    "language": "python",
+    "timeout": 120000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-211b958581d1",
+  "_gold": {
+    "source_case_id": "211b958581d1",
+    "platform": "pi",
+    "current_rule_ids": [
+      "PY-CODE-010",
+      "PY-CODE-015"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

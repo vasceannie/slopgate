@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; git stash push -- tests/browser_runtime/page_ops/test_authentication_inbox.py && uv run pytest tests/browser_runtime/page_ops/test_authentication_inbox.py::test_gmail_factory_defaults_to_enabled_with_oauth_configuration -q 2>&1 | tail -3; git stash pop",
+    "timeout": 180000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-bd4fdb01f4b3",
+  "_gold": {
+    "source_case_id": "bd4fdb01f4b3",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-003",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

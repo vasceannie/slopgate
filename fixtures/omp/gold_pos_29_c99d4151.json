@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "set -euo pipefail\nrm -rf /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted\nmkdir -p /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted\ngit diff --binary > /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/tracked.patch\ngit ls-files --others --exclude-standard | tar -cf /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/untracked.tar -T -\ngit status --porcelain=v1 --untracked-files=all > /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/status.txt\nsha256sum /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/tracked.patch /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/untracked.tar /tmp/slopgate-audit-run_f36588675f3f/wave1-accepted/status.txt\nmd5sum baselines.json\ngit diff --check",
+    "cwd": "$HOME/repos/slopgate-Slop-Audit",
+    "timeout": 60
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-c99d4151b968",
+  "_gold": {
+    "source_case_id": "c99d4151b968",
+    "platform": "omp",
+    "current_rule_ids": [
+      "WARN-BASELINE-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

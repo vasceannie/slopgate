@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "new_string": "def _message(\n    *,\n    stage: str = \"\",\n    control_id: str = \"\",\n    content_kind: ContentKind = \"model_reasoning\",\n    content_mode: ContentMode = \"delta\",\n    text: str = \"\",\n) -> ReasoningMessage:\n    \"\"\"Return an attributed canonical message carrying test defaults.\"\"\"\n    return ReasoningMessage(\n        key=(\"\", \"m\"),\n        content_kind=content_kind,\n        content_mode=content_mode,\n        attributed=True,\n        control_id=control_id,\n        stage=stage,\n        text=text,\n    )\n\n\ndef test_display_text_strips_provider_markup_from_assembled_text() -> None:\n    \"\"\"Display sanitizing never rewrites the canonical received text.\"\"\"\n    raw = \"<think>Compare profile evidence.</think>\"\n    message = _message(text=raw)\n\n    assert (\n        strip_reasoning_markup(raw),\n        message.display_text,\n        message.text,\n    ) == (\"Compare profile evidence.\", \"Compare profile evidence.\", raw), (\n        \"the sanitizer drops provider markup while canonical state keeps it verbatim\"\n    )",
+    "old_string": "def _message(\n    *,\n    stage: str = \"\",\n    control_id: str = \"\",\n    content_kind: ContentKind = \"model_reasoning\",\n    content_mode: ContentMode = \"delta\",\n) -> ReasoningMessage:\n    \"\"\"Return an attributed canonical message carrying test defaults.\"\"\"\n    return ReasoningMessage(\n        key=(\"\", \"m\"),\n        content_kind=content_kind,\n        content_mode=content_mode,\n        attributed=True,\n        control_id=control_id,\n        stage=stage,\n    )",
+    "path": "tests/tui/projections/test_message_identity_contracts.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-aa4cf0313544",
+  "_gold": {
+    "source_case_id": "aa4cf0313544",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-CODE-009"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/tui/projections/test_message_identity_contracts.py",
+      "sha256": "8f48e4a5b7a577c334d6f3daaeb7249b1318ec0a419a3324961ed914e27c7ec7",
+      "text": "def _message(\n    *,\n    stage: str = \"\",\n    control_id: str = \"\",\n    content_kind: ContentKind = \"model_reasoning\",\n    content_mode: ContentMode = \"delta\",\n    text: str = \"\",\n) -> ReasoningMessage:\n    \"\"\"Return an attributed canonical message carrying test defaults.\"\"\"\n    return ReasoningMessage(\n        key=(\"\", \"m\"),\n        content_kind=content_kind,\n        content_mode=content_mode,\n        attributed=True,\n        control_id=control_id,\n        stage=stage,\n        text=text,\n    )\n\n\ndef test_display_text_strips_provider_markup_from_assembled_text() -> None:\n    \"\"\"Display sanitizing never rewrites the canonical received text.\"\"\"\n    raw = \"<think>Compare profile evidence.</think>\"\n    message = _message(text=raw)\n\n    assert (\n        strip_reasoning_markup(raw),\n        message.display_text,\n        message.text,\n    ) == (\"Compare profile evidence.\", \"Compare profile evidence.\", raw), (\n        \"the sanitizer drops provider markup while canonical state keeps it verbatim\"\n    )"
+    }
+  ]
+}

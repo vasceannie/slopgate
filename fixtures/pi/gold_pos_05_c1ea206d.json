@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la $REPO_JOB_HUNTER/.pi/ 2>/dev/null && echo \"---\" && ls -la $REPO_JOB_HUNTER/.pi/rules/ 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-c1ea206d07d7",
+  "_gold": {
+    "source_case_id": "c1ea206d07d7",
+    "platform": "pi",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

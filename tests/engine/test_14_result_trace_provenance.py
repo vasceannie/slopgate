@@ -78,6 +78,10 @@ def test_result_row_records_provenance_fields(
     assert row["slopgate_version"] == __version__
     assert isinstance(row["candidate_paths"], list)
     assert isinstance(row["languages"], list)
+    assert str(row.get("call_id") or "").strip(), "result rows must persist a nonempty call_id"
+    assert str(row.get("opencode_session_id") or "").strip(), (
+        "result rows must persist a nonempty session join key"
+    )
 
 
 @pytest.mark.parametrize(

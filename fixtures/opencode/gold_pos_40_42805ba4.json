@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status --short && git stash list | head -3"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-42805ba47406",
+  "_gold": {
+    "source_case_id": "42805ba47406",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-003",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cp baselines.json /tmp/slopgate-audit-run_f36588675f3f/b-baseline-before.json && env HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/home XDG_CONFIG_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-config XDG_CACHE_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-cache XDG_RUNTIME_DIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-runtime TMPDIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/tmp SLOPGATE_CONFIG_DIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/slopgate-config SLOPGATE_DAEMON_SOCKET=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-runtime/daemon.sock .venv/bin/slopgate lint check --details && cmp baselines.json /tmp/slopgate-audit-run_f36588675f3f/b-baseline-before.json && echo 'B baseline unchanged' && .venv/bin/ruff check src/slopgate/rules/python_ast/_rules/ast_health.py tests/adapters/test_omp_native_target_identity.py && .venv/bin/pyrefly check src/slopgate/rules/python_ast/_rules/ast_health.py tests/adapters/test_omp_native_target_identity.py",
+    "cwd": "$REPO_SLOPGATE/slop-audit-omp-targets",
+    "timeout": 600
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ee0779d7a737",
+  "_gold": {
+    "source_case_id": "ee0779d7a737",
+    "platform": "omp",
+    "current_rule_ids": [
+      "WARN-BASELINE-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "async": true,
+    "command": "rtk git add automation/scripts/eval/execution/_orchestrate/skips.py src/cli/_extraction_js/composites.py src/field/actionability.py src/tui/widgets/review/helpers.py tests/cli/auth/test_preferred_verification_inbox.py && rtk git commit -m \"Fix review, inbox, and hidden-control cleanup regressions\"",
+    "i": "js prelude",
+    "timeout": 600
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a4a41c60fec7",
+  "_gold": {
+    "source_case_id": "a4a41c60fec7",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

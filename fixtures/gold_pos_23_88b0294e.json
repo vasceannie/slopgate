@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd $REPO_JOB_HUNTER && sed -i 's/^$//' tests/graph/test_navigation_authentication_tenant_persistence.py 2>/dev/null; python3 - <<'EOF'\np = 'tests/graph/test_navigation_authentication_tenant_persistence.py'\ns = open(p).read()\n# collapse the triple blank between imports and the decorator to two\ns = s.replace('from src.cli.auth.credentials import persist_tenant_authenticated\\n\\n\\n\\n@pytest', 'from src.cli.auth.credentials import persist_tenant_authenticated\\n\\n\\n@pytest')\nopen(p, 'w').write(s)\nEOF\ncd $REPO_JOB_HUNTER && slopgate lint check 2>&1 | tail -6"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-88b0294e08fe",
+  "_gold": {
+    "source_case_id": "88b0294e08fe",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

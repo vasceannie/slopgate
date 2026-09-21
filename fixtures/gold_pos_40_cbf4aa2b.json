@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git stash push -m \"judge-fix-only\" -- src/autopilot/graph/agents/judge/subgraph.py && uv run pytest -q tests/agent_stream/test_trace_endpoint.py::test_paused_run_trace_endpoint_returns_archived_events tests/agent_stream/test_list_runs_endpoint.py::test_list_runs_endpoint_reports_paused_run 2>&1 | tail -3; git stash pop",
+    "timeout": 300000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-cbf4aa2b5004",
+  "_gold": {
+    "source_case_id": "cbf4aa2b5004",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GIT-003"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

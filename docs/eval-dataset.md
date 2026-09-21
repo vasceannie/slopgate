@@ -4,9 +4,10 @@ Slopgate’s offline evaluation corpus is built from paired OpenCode + Slopgate 
 
 | Asset | Path | Role |
 |-------|------|------|
-| Gold fixtures | `fixtures/gold_*.json`, `fixtures/opencode/gold_*.json` | Current-engine CI gate (~190) |
+| Gold fixtures | `fixtures/gold_*.json`, `fixtures/{opencode,codex,cursor,pi,omp}/gold_*.json` | Current-engine CI gate (212), parametrized by platform/rule |
 | Pinned holdout | `tests/fixtures/eval/l1_holdout_pilot.jsonl` | Eval smoke (historical; not a quality gate) |
-| Loader / CLI | `src/slopgate/eval/`, `slopgate eval` | Replay packs |
+| CI slice | `tests/fixtures/eval/l1_ci.jsonl` | Stratified 300-row plumbing pack |
+| Loader / CLI | `src/slopgate/eval/`, `slopgate eval --overlay-out` | Replay packs; sidecar writer |
 | Tests | `tests/test_eval_gold_fixtures.py`, `tests/test_eval_dataset_pilot.py` | — |
 
 **Full packs, per-rule dumps, L2/L3, and calibration reports** live under `~/repos/slopdata/datasets/v1/`.
@@ -26,6 +27,7 @@ uv run pytest tests/test_eval_gold_fixtures.py -q
 
 # Smoke
 uv run slopgate eval --pack tests/fixtures/eval/l1_holdout_pilot.jsonl --pretty
+uv run slopgate eval --pack tests/fixtures/eval/l1_ci.jsonl --limit 20 --pretty --overlay-out /tmp/ci-overlay.jsonl
 
 # Research pack (from slopdata)
 uv run slopgate eval --pack ~/repos/slopdata/datasets/v1/by_rule/l1/SHELL-001.jsonl --limit 100 --pretty

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk proxy cat /proc/1328634/task/1348053/stack"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d62d92eab431",
+  "_gold": {
+    "source_case_id": "d62d92eab431",
+    "platform": "codex",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

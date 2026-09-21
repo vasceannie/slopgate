@@ -1,0 +1,48 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from cloud.services.agent_runner_support.judge import types as judge_types"
+        ],
+        "op": "replace",
+        "pos": "8#XS"
+      },
+      {
+        "lines": [
+          "from cloud.services.agent_runner_support.judge.types import ("
+        ],
+        "op": "replace",
+        "pos": "9#XM"
+      },
+      {
+        "lines": [
+          "            logger=\"cloud.services.agent_runner_support.judge.types\","
+        ],
+        "op": "replace",
+        "pos": "56#TN"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/tests/agent_stream/test_agent_runner_support_logging.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9bc4ba0db37a",
+  "_gold": {
+    "source_case_id": "9bc4ba0db37a",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/agent_stream/test_agent_runner_support_logging.py",
+      "sha256": "0d9f853c2b9703151915c1ef41069e313e24be06f9af5c5920aabf01a7f848fc",
+      "text": "from cloud.services.agent_runner_support.judge import types as judge_types\n\nfrom cloud.services.agent_runner_support.judge.types import (\n\n            logger=\"cloud.services.agent_runner_support.judge.types\","
+    }
+  ]
+}

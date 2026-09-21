@@ -1,0 +1,77 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "end": "9#HN",
+        "lines": [
+          "\"\"\"Application-entry result and decision policy contracts.\"\"\"",
+          "",
+          "from __future__ import annotations",
+          "",
+          "import importlib",
+          "",
+          "import pytest",
+          "from hypothesis import given, strategies",
+          "",
+          "from src.browser_runtime.page_ops.apply.decision import constants as decision_constants"
+        ],
+        "op": "replace",
+        "pos": "1#KM"
+      },
+      {
+        "end": "135#BY",
+        "lines": [
+          "def test_application_entry_pause_reason_maps_fail_closed_evidence("
+        ],
+        "op": "replace",
+        "pos": "132#HK"
+      },
+      {
+        "end": "135#BY",
+        "lines": [
+          "def test_application_entry_llm_timeout_default_is_llm_scale(",
+          "    monkeypatch: pytest.MonkeyPatch,",
+          ") -> None:",
+          "    \"\"\"The decision LLM timeout must default to an LLM-scale budget.\"\"\"",
+          "    monkeypatch.delenv(\"JOB_HUNTER_APPLICATION_URL_LLM_TIMEOUT_S\", raising=False)",
+          "    reloaded = importlib.reload(decision_constants)",
+          "    try:",
+          "        assert reloaded.LLM_TIMEOUT_SECONDS >= 30.0, (",
+          "            \"a click-scaled default (5s) times out every live model call\"",
+          "        )",
+          "    finally:",
+          "        importlib.reload(decision_constants)",
+          "",
+          "",
+          "def test_application_entry_pause_reason_maps_fail_closed_evidence(",
+          "    evidence: tuple[str, ...],",
+          "    expected: NavigationReason,",
+          ") -> None:"
+        ],
+        "op": "replace",
+        "pos": "130#ZJ"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/tests/eval_llm/test_application_entry_policy.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-531ce444bc07",
+  "_gold": {
+    "source_case_id": "531ce444bc07",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/eval_llm/test_application_entry_policy.py",
+      "sha256": "7e811ba8818ba833a0d15c34e9e28cff03f7d43bbba82c7abe66caa33de3dfde",
+      "text": "\"\"\"Application-entry result and decision policy contracts.\"\"\"\n\nfrom __future__ import annotations\n\nimport importlib\n\nimport pytest\nfrom hypothesis import given, strategies\n\nfrom src.browser_runtime.page_ops.apply.decision import constants as decision_constants\n\ndef test_application_entry_pause_reason_maps_fail_closed_evidence(\n\ndef test_application_entry_llm_timeout_default_is_llm_scale(\n    monkeypatch: pytest.MonkeyPatch,\n) -> None:\n    \"\"\"The decision LLM timeout must default to an LLM-scale budget.\"\"\"\n    monkeypatch.delenv(\"JOB_HUNTER_APPLICATION_URL_LLM_TIMEOUT_S\", raising=False)\n    reloaded = importlib.reload(decision_constants)\n    try:\n        assert reloaded.LLM_TIMEOUT_SECONDS >= 30.0, (\n            \"a click-scaled default (5s) times out every live model call\"\n        )\n    finally:\n        importlib.reload(decision_constants)\n\n\ndef test_application_entry_pause_reason_maps_fail_closed_evidence(\n    evidence: tuple[str, ...],\n    expected: NavigationReason,\n) -> None:"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk git commit -m \"Resolve slopgate findings across planner, auth, matching, review, and tests\n\n- Split oversized authentication and login-submit/heuristics test modules\n  into focused packages; migrate readiness manifests to relocated test IDs\n- Extract shared helpers (context join, trace counts, consent extraction,\n  attachment projection) and remove obsolete wrappers\n- Require per-control operator consent: blanket approval and per-control\n  skip now re-prompt; prompt documents the parser-valid wire shape\n- Fix employment-date coherence to compare at month precision, keeping\n  invalid end dates rejected\n- Harden review parser against malformed nested decisions\n- Add caller-level integration coverage for auth executors, resume\n  boundaries, and hosted backend transport defaults\n- Normalize canonical Ruff formatting across reported files\" && rtk git log --oneline -1 && rtk git status --short | wc -l",
+    "cwd": "$REPO_JOB_HUNTER",
+    "timeout": 60
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d58370801ed9",
+  "_gold": {
+    "source_case_id": "d58370801ed9",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

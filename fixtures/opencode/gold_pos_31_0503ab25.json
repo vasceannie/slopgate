@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "docker exec autoapply-clerk-bridge grep -c 'same_origin_apply_candidate' /app/src/browser_runtime/page_ops/apply/decision/resolver.py; docker logs autoapply-clerk-bridge --since 5m 2>&1 | rg 'WatchFiles|Reloading|reload' | tail -3"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0503ab2538b1",
+  "_gold": {
+    "source_case_id": "0503ab2538b1",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

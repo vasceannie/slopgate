@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"ast.parse\\|ParsedFile\\|_parsed\" tests/test_lint* tests/*test_smell* tests/*test_integrity* 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-cde250c430f8",
+  "_gold": {
+    "source_case_id": "cde250c430f8",
+    "platform": "codex",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

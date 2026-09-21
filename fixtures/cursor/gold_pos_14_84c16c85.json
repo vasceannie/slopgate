@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la /tmp/slopgate-hookd-1000.sock; ls -la /run/user/1000/slopgate-hookd.sock 2>&1 || true",
+    "cwd": "",
+    "timeout": 30000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-84c16c854ba2",
+  "_gold": {
+    "source_case_id": "84c16c854ba2",
+    "platform": "cursor",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

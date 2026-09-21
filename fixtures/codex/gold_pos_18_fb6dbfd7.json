@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk orca orchestration send --from term_369a26c0-15d1-4764-9521-7fcb4bf51139 --dispatch-capability dcap_PdqnyRXdK3gjKGgNgHkNRV7DmKPNwGhqAjd6J6qso6A --type status --subject \"Shell discovery preflight denied\" --body \"A read-only discovery batch was denied before execution because one subcommand used forbidden 2>/dev/null shell suppression; no files changed and no retry of the same command is being made. The focused bundle suite remains 85 passed and repo-root slopgate lint --details reports no violations. I am continuing with explicit, unsuppressed bounded searches and will include the exact hint replacements in handoff.\" --task-id task_f8bc4cae1a39 --dispatch-id ctx_782b8f0c4a09"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-fb6dbfd7d985",
+  "_gold": {
+    "source_case_id": "fb6dbfd7d985",
+    "platform": "codex",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

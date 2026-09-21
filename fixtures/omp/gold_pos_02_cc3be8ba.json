@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Authentication-aware observation wrapper for active navigation.\"\"\"\n\nfrom __future__ import annotations\n\nfrom .execute import execute_pending_authentication_action\nfrom .kinds import (\n    AUTH_ACTION_KINDS,\n    AUTH_LOGIN_SUBMIT_ACTION_KIND,\n    AUTH_MFA_SUBMIT_ACTION_KIND,\n    AUTH_RETURN_TO_JOB_ACTION_KIND,\n    AUTH_SIGNUP_SUBMIT_ACTION_KIND,\n    AUTH_VERIFICATION_FOLLOW_ACTION_KIND,\n)\nfrom .observe import NavigationObserver, node_authentication_aware_navigation_observe\n\n__all__ = [\n    \"AUTH_ACTION_KINDS\",\n    \"AUTH_LOGIN_SUBMIT_ACTION_KIND\",\n    \"AUTH_MFA_SUBMIT_ACTION_KIND\",\n    \"AUTH_RETURN_TO_JOB_ACTION_KIND\",\n    \"AUTH_SIGNUP_SUBMIT_ACTION_KIND\",\n    \"AUTH_VERIFICATION_FOLLOW_ACTION_KIND\",\n    \"NavigationObserver\",\n    \"execute_pending_authentication_action\",\n    \"node_authentication_aware_navigation_observe\",\n]\n",
+    "path": "src/autopilot/graph/nodes/orchestration/application_navigation/authentication/__init__.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-cc3be8ba012f",
+  "_gold": {
+    "source_case_id": "cc3be8ba012f",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-IMPORT-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/autopilot/graph/nodes/orchestration/application_navigation/authentication/__init__.py",
+      "sha256": "f77fad078ba484b2acd148d8e655b4f376e7cb9b740ba01f37e5f44a4106891d",
+      "text": "\"\"\"Authentication-aware observation wrapper for active navigation.\"\"\"\n\nfrom __future__ import annotations\n\nfrom .execute import execute_pending_authentication_action\nfrom .kinds import (\n    AUTH_ACTION_KINDS,\n    AUTH_LOGIN_SUBMIT_ACTION_KIND,\n    AUTH_MFA_SUBMIT_ACTION_KIND,\n    AUTH_RETURN_TO_JOB_ACTION_KIND,\n    AUTH_SIGNUP_SUBMIT_ACTION_KIND,\n    AUTH_VERIFICATION_FOLLOW_ACTION_KIND,\n)\nfrom .observe import NavigationObserver, node_authentication_aware_navigation_observe\n\n__all__ = [\n    \"AUTH_ACTION_KINDS\",\n    \"AUTH_LOGIN_SUBMIT_ACTION_KIND\",\n    \"AUTH_MFA_SUBMIT_ACTION_KIND\",\n    \"AUTH_RETURN_TO_JOB_ACTION_KIND\",\n    \"AUTH_SIGNUP_SUBMIT_ACTION_KIND\",\n    \"AUTH_VERIFICATION_FOLLOW_ACTION_KIND\",\n    \"NavigationObserver\",\n    \"execute_pending_authentication_action\",\n    \"node_authentication_aware_navigation_observe\",\n]\n"
+    }
+  ]
+}

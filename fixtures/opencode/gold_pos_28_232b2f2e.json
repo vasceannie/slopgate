@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls $HOME/.local/share/uv/tools/ai-slopgate/lib/python*/site-packages/ 2>/dev/null | head; find $HOME/.local/share/uv/tools/ai-slopgate -name \"*.py\" 2>/dev/null | grep -i \"rule\\|test_integration\\|missing\" | head -10"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-232b2f2e03e8",
+  "_gold": {
+    "source_case_id": "232b2f2e03e8",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

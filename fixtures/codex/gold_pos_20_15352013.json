@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk pgrep -af 'heavy-2|pytest|trace/test'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-153520138373",
+  "_gold": {
+    "source_case_id": "153520138373",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

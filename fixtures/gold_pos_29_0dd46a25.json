@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python3 -m pytest tests/test_stats_improvement.py -v --tb=short 2>&1 | tail -30"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0dd46a252302",
+  "_gold": {
+    "source_case_id": "0dd46a252302",
+    "platform": "claude",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

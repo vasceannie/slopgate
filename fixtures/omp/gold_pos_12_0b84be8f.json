@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "if [ -x .venv/bin/slopgate ]; then echo \"venv slopgate present\"; else echo \"no .venv slopgate\"; fi; .venv/bin/python -c \"import slopgate; print(slopgate.__file__)\" 2>&1; md5sum baselines.json 2>/dev/null || echo \"no baselines.json\"",
+    "timeout": 30
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0b84be8f178e",
+  "_gold": {
+    "source_case_id": "0b84be8f178e",
+    "platform": "omp",
+    "current_rule_ids": [
+      "WARN-BASELINE-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

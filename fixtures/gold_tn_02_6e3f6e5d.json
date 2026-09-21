@@ -1,0 +1,107 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from dataclasses import fields",
+          "from functools import lru_cache",
+          "from pathlib import Path"
+        ],
+        "op": "replace",
+        "pos": "16#YH"
+      },
+      {
+        "end": "175#SR",
+        "lines": [
+          "def _source_digest(root: Path) -> str:",
+          "    root_text = str(root)",
+          "    return _tree_digest(root_text, _tree_stamp(root_text))",
+          "",
+          "",
+          "def _tree_stamp(root: str) -> tuple[tuple[str, int, int], ...]:",
+          "    base = Path(root)",
+          "    if not base.is_dir():",
+          "        return ()",
+          "    stamp: list[tuple[str, int, int]] = []",
+          "    for path in sorted(base.rglob(\"*.py\")):",
+          "        if not path.is_file():",
+          "            continue",
+          "        if any(part.startswith(\".\") for part in path.relative_to(base).parts):",
+          "            continue",
+          "        stat = path.stat()",
+          "        rel = path.relative_to(base).as_posix()",
+          "        stamp.append((rel, stat.st_size, stat.st_mtime_ns))",
+          "    return tuple(stamp)",
+          "",
+          "",
+          "@lru_cache",
+          "def _tree_digest(root: str, stamp: tuple[tuple[str, int, int], ...]) -> str:",
+          "    digest = hashlib.sha256()",
+          "    base = Path(root)",
+          "    for rel, _size, _mtime_ns in stamp:",
+          "        digest.update(rel.encode(\"utf-8\"))",
+          "        digest.update(b\"\\0\")",
+          "        try:",
+          "            content = (base / rel).read_bytes()",
+          "        except OSError:",
+          "            content = b\"\"",
+          "        digest.update(content)",
+          "        digest.update(b\"\\0\")",
+          "    return digest.hexdigest()"
+        ],
+        "op": "replace",
+        "pos": "157#PJ"
+      },
+      {
+        "end": "183#BK",
+        "lines": [
+          "def _file_digest(path: Path) -> str:",
+          "    path_text = str(path)",
+          "    stat_key = $SECRET",
+          "    if stat_key is None:",
+          "        return \"missing\"",
+          "    return _cached_file_digest(path_text, *stat_key)",
+          "",
+          "",
+          "def _file_stat_key(path: str) -> tuple[int, int] | None:",
+          "    try:",
+          "        stat = Path(path).stat()",
+          "    except OSError:",
+          "        return None",
+          "    return (stat.st_size, stat.st_mtime_ns)",
+          "",
+          "",
+          "@lru_cache",
+          "def _cached_file_digest(path: str, size: int, mtime_ns: int) -> str:",
+          "    _ = size, mtime_ns",
+          "    try:",
+          "        content = Path(path).read_bytes()",
+          "    except OSError:",
+          "        return \"missing\"",
+          "    return hashlib.sha256(content).hexdigest()"
+        ],
+        "op": "replace",
+        "pos": "178#JM"
+      }
+    ],
+    "file_path": "$REPO_SLOPGATE/src/slopgate/engine/_fingerprints.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-6e3f6e5d2d3e",
+  "_gold": {
+    "source_case_id": "6e3f6e5d2d3e",
+    "platform": "claude",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "engine/_fingerprints.py",
+      "sha256": "89ab99403d708c9fa58d59f6d9c80da3c26cf922a41a23dc199faf48d5b601be",
+      "text": "from dataclasses import fields\nfrom functools import lru_cache\nfrom pathlib import Path\n\ndef _source_digest(root: Path) -> str:\n    root_text = str(root)\n    return _tree_digest(root_text, _tree_stamp(root_text))\n\n\ndef _tree_stamp(root: str) -> tuple[tuple[str, int, int], ...]:\n    base = Path(root)\n    if not base.is_dir():\n        return ()\n    stamp: list[tuple[str, int, int]] = []\n    for path in sorted(base.rglob(\"*.py\")):\n        if not path.is_file():\n            continue\n        if any(part.startswith(\".\") for part in path.relative_to(base).parts):\n            continue\n        stat = path.stat()\n        rel = path.relative_to(base).as_posix()\n        stamp.append((rel, stat.st_size, stat.st_mtime_ns))\n    return tuple(stamp)\n\n\n@lru_cache\ndef _tree_digest(root: str, stamp: tuple[tuple[str, int, int], ...]) -> str:\n    digest = hashlib.sha256()\n    base = Path(root)\n    for rel, _size, _mtime_ns in stamp:\n        digest.update(rel.encode(\"utf-8\"))\n        digest.update(b\"\\0\")\n        try:\n            content = (base / rel).read_bytes()\n        except OSError:\n            content = b\"\"\n        digest.update(content)\n        digest.update(b\"\\0\")\n    return digest.hexdigest()\n\ndef _file_digest(path: Path) -> str:\n    path_text = str(path)\n    stat_key = $SECRET\n    if stat_key is None:\n        return \"missing\"\n    return _cached_file_digest(path_text, *stat_key)\n\n\ndef _file_stat_key(path: str) -> tuple[int, int] | None:\n    try:\n        stat = Path(path).stat()\n    except OSError:\n        return None\n    return (stat.st_size, stat.st_mtime_ns)\n\n\n@lru_cache\ndef _cached_file_digest(path: str, size: int, mtime_ns: int) -> str:\n    _ = size, mtime_ns\n    try:\n        content = Path(path).read_bytes()\n    except OSError:\n        return \"missing\"\n    return hashlib.sha256(content).hexdigest()"
+    }
+  ]
+}

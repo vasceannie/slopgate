@@ -1,0 +1,31 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: src/tui/widgets/review/helpers.py\n@@\n def review_value_lines(\n@@\n     return lines\n \n \n+def review_state_lines(\n+    item: ReviewItem,\n+    row: Callable[[str, object], str],\n+) -> list[str]:\n+    \"\"\"Return browser-authoritative and staged operator values with clear labels.\"\"\"\n+    lines: list[str] = []\n+    if item.current_value:\n+        label = \"Browser value\" if item.staged_resolution else \"Current\"\n+        lines.append(row(label, item.current_value))\n+    if item.staged_value is not None:\n+        lines.append(row(\"Staged draft\", item.staged_value))\n+    if item.staged_feedback_note:\n+        lines.append(row(\"Staged note\", item.staged_feedback_note))\n+    return lines\n+\n+\n def append_decision_queue_metadata(\n@@\n-    res_color = RESOLUTION_COLORS.get(item.resolution, COLOR_REVIEW)\n-    res_str = item.resolution or src.key_catalog.SV_PENDING\n+    visible_resolution = item.resolution or item.staged_resolution\n+    res_color = RESOLUTION_COLORS.get(visible_resolution, COLOR_REVIEW)\n+    res_str = (\n+        item.resolution\n+        or (f\"staged {item.staged_resolution}\" if item.staged_resolution else \"\")\n+        or src.key_catalog.SV_PENDING\n+    )\n@@\n def _review_item_value(item: ReviewItem) -> str:\n     \"\"\"Return the best audit value for the review table payload column.\"\"\"\n+    if item.staged_value is not None:\n+        return f\"Draft: {item.staged_value}\"\n     if item.suggested_value:\n@@\n-    decision = item.resolution or src.key_catalog.SV_PENDING\n-    decision_color = RESOLUTION_COLORS.get(item.resolution, COLOR_MUTED)\n+    decision = (\n+        item.resolution\n+        or (f\"staged {item.staged_resolution}\" if item.staged_resolution else \"\")\n+        or src.key_catalog.SV_PENDING\n+    )\n+    decision_color = RESOLUTION_COLORS.get(\n+        item.resolution or item.staged_resolution,\n+        COLOR_MUTED,\n+    )\n*** Update File: src/tui/widgets/review/widgets.py\n@@\n     review_table_row,\n+    review_state_lines,\n     review_value_lines,\n@@\n         if reason:\n             lines.append(detail_row(\"Reason\", reason, COLOR_REVIEW))\n         lines.extend(review_value_lines(item, detail_row))\n-        if item.current_value:\n-            lines.append(detail_row(\"Current\", item.current_value, COLOR_MUTED))\n+        lines.extend(review_state_lines(item, detail_row))\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-1d5d300bcc1d",
+  "_gold": {
+    "source_case_id": "1d5d300bcc1d",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-015",
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/tui/widgets/review/helpers.py",
+      "sha256": "691f2d0090753f5ca68fa27c1480713de9778e1f9aad73d32c4d9914093138b5",
+      "text": "def review_state_lines(\n    item: ReviewItem,\n    row: Callable[[str, object], str],\n) -> list[str]:\n    \"\"\"Return browser-authoritative and staged operator values with clear labels.\"\"\"\n    lines: list[str] = []\n    if item.current_value:\n        label = \"Browser value\" if item.staged_resolution else \"Current\"\n        lines.append(row(label, item.current_value))\n    if item.staged_value is not None:\n        lines.append(row(\"Staged draft\", item.staged_value))\n    if item.staged_feedback_note:\n        lines.append(row(\"Staged note\", item.staged_feedback_note))\n    return lines\n\n\n    visible_resolution = item.resolution or item.staged_resolution\n    res_color = RESOLUTION_COLORS.get(visible_resolution, COLOR_REVIEW)\n    res_str = (\n        item.resolution\n        or (f\"staged {item.staged_resolution}\" if item.staged_resolution else \"\")\n        or src.key_catalog.SV_PENDING\n    )\n    if item.staged_value is not None:\n        return f\"Draft: {item.staged_value}\"\n    decision = (\n        item.resolution\n        or (f\"staged {item.staged_resolution}\" if item.staged_resolution else \"\")\n        or src.key_catalog.SV_PENDING\n    )\n    decision_color = RESOLUTION_COLORS.get(\n        item.resolution or item.staged_resolution,\n        COLOR_MUTED,\n    )"
+    },
+    {
+      "path": "src/tui/widgets/review/widgets.py",
+      "sha256": "b65c92671e5d8fb14f104f6e5a643ed6879fb772c89a7bc47eeeea66a96703aa",
+      "text": "    review_state_lines,\n        lines.extend(review_state_lines(item, detail_row))"
+    }
+  ]
+}

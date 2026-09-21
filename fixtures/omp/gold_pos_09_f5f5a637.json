@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk bd dolt push && rtk git push && rtk git status -sb && rtk git rev-list --left-right --count origin/master...HEAD",
+    "cwd": "$REPO_JOB_HUNTER",
+    "i": "js prelude",
+    "timeout": 120
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-f5f5a6376d9a",
+  "_gold": {
+    "source_case_id": "f5f5a6376d9a",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

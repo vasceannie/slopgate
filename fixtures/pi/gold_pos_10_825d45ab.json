@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd $REPO_JOB_HUNTER && sed -i '/class SnapshotState:/a\\    # TODO: deduplicate with src\\/agui\\/params.py StateSnapshotParams' cloud/services/agent_runner_support/progress/models.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-825d45ab1ebb",
+  "_gold": {
+    "source_case_id": "825d45ab1ebb",
+    "platform": "pi",
+    "current_rule_ids": [
+      "PY-SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

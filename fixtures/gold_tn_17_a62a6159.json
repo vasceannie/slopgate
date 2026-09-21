@@ -1,0 +1,28 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/.debug-journal.md\n@@\n ## Artifacts to revert\n - [ ] `.debug-journal.md` \u2014 remove after debugging.\n - [ ] `.git/info/exclude` \u2014 remove `.debug-journal.md` entry after debugging.\n+- [ ] `tests/integration/test_cli_hook_runtime.py` \u2014 regression test; retain with final fix.\n@@\n ## Findings\n+- 2026-08-20 \u2014 `events.jsonl` records paired evaluations for the same OpenCode tool calls: native records use `platform=opencode` and `session_id=opencode-*`; compatibility records use `platform=claude` and OpenCode `session_id=ses_*`.\n+- 2026-08-20 \u2014 `oh-my-openagent` loads `~/.claude/settings.json` and adds `hook_source: \"opencode-plugin\"` to Claude-compatible hook payloads (`dist/index.js:94711`, `dist/index.js:96201`).\n+- H1 confirmed: a compatibility hook path duplicates the native Slopgate OpenCode plugin.\n+- H2 confirmed: `cmd_handle` trusts explicit `--platform claude` and ignores `hook_source`, so the compatibility invocation selects the Claude adapter.\n+- H3 confirmed: the observed Claude records are OpenCode session IDs, distinct from actual Claude Code UUID session IDs in historical traces.\n*** Update File: $REPO_SLOPGATE/tests/integration/test_cli_hook_runtime.py\n@@\n def test_report_cli_input_error_handles_invalid_handle_json(\n     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]\n ) -> None:\n@@\n     assert \"Invalid JSON on stdin\" in captured.err, (\n         \"Invalid hook JSON should emit a user-facing parse error\"\n     )\n \n \n+def test_cmd_handle_uses_opencode_adapter_for_claude_compat_payload(\n+    monkeypatch: pytest.MonkeyPatch,\n+    capsys: pytest.CaptureFixture[str],\n+    tmp_path: Path,\n+) -> None:\n+    (tmp_path / \"slopgate.toml\").write_text(\"[slopgate]\\nenabled = true\\n\")\n+    payload = {\n+        \"session_id\": \"ses_opencode_compat\",\n+        \"cwd\": str(tmp_path),\n+        \"hook_event_name\": \"PreToolUse\",\n+        \"hook_source\": \"opencode-plugin\",\n+        \"tool_name\": \"Bash\",\n+        \"tool_input\": {\"command\": \"git commit --no-verify -m test\"},\n+    }\n+    monkeypatch.delenv(\"SLOPGATE_DAEMON_SOCKET\", raising=False)\n+    monkeypatch.setenv(\"XDG_RUNTIME_DIR\", str(tmp_path))\n+    monkeypatch.setattr(sys, \"stdin\", io.StringIO(json.dumps(payload)))\n+\n+    exit_code = cmd_handle(argparse.Namespace(platform=\"claude\"))\n+\n+    rendered = json.loads(capsys.readouterr().out)\n+    assert exit_code == 0, \"OpenCode compatibility handling should return success\"\n+    assert rendered[\"action\"] == \"block\", (\n+        \"OpenCode-origin payloads should render through the OpenCode adapter\"\n+    )\n+\n+\n def test_cmd_daemon_runs_socket_server(monkeypatch: pytest.MonkeyPatch) -> None:\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a62a61592c2b",
+  "_gold": {
+    "source_case_id": "a62a61592c2b",
+    "platform": "claude",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": ".debug-journal.md",
+      "sha256": "8a5ba3d2b101baf2cb52470b564a6bd5fbf6cd4ac5fb3ba29aa02b4aefc1b402",
+      "text": "- [ ] `tests/integration/test_cli_hook_runtime.py` \u2014 regression test; retain with final fix.\n- 2026-08-20 \u2014 `events.jsonl` records paired evaluations for the same OpenCode tool calls: native records use `platform=opencode` and `session_id=opencode-*`; compatibility records use `platform=claude` and OpenCode `session_id=ses_*`.\n- 2026-08-20 \u2014 `oh-my-openagent` loads `~/.claude/settings.json` and adds `hook_source: \"opencode-plugin\"` to Claude-compatible hook payloads (`dist/index.js:94711`, `dist/index.js:96201`).\n- H1 confirmed: a compatibility hook path duplicates the native Slopgate OpenCode plugin.\n- H2 confirmed: `cmd_handle` trusts explicit `--platform claude` and ignores `hook_source`, so the compatibility invocation selects the Claude adapter.\n- H3 confirmed: the observed Claude records are OpenCode session IDs, distinct from actual Claude Code UUID session IDs in historical traces."
+    },
+    {
+      "path": "tests/integration/test_cli_hook_runtime.py",
+      "sha256": "fc95bee76e30f9a8852cf5e91a1b888c117abb74ef560eebf6e4e2b9f454af38",
+      "text": "def test_cmd_handle_uses_opencode_adapter_for_claude_compat_payload(\n    monkeypatch: pytest.MonkeyPatch,\n    capsys: pytest.CaptureFixture[str],\n    tmp_path: Path,\n) -> None:\n    (tmp_path / \"slopgate.toml\").write_text(\"[slopgate]\\nenabled = true\\n\")\n    payload = {\n        \"session_id\": \"ses_opencode_compat\",\n        \"cwd\": str(tmp_path),\n        \"hook_event_name\": \"PreToolUse\",\n        \"hook_source\": \"opencode-plugin\",\n        \"tool_name\": \"Bash\",\n        \"tool_input\": {\"command\": \"git commit --no-verify -m test\"},\n    }\n    monkeypatch.delenv(\"SLOPGATE_DAEMON_SOCKET\", raising=False)\n    monkeypatch.setenv(\"XDG_RUNTIME_DIR\", str(tmp_path))\n    monkeypatch.setattr(sys, \"stdin\", io.StringIO(json.dumps(payload)))\n\n    exit_code = cmd_handle(argparse.Namespace(platform=\"claude\"))\n\n    rendered = json.loads(capsys.readouterr().out)\n    assert exit_code == 0, \"OpenCode compatibility handling should return success\"\n    assert rendered[\"action\"] == \"block\", (\n        \"OpenCode-origin payloads should render through the OpenCode adapter\"\n    )\n\n"
+    }
+  ]
+}

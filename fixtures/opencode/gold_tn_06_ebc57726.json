@@ -1,0 +1,76 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "async def _judge_phase(",
+          "    deps: PostProcessDeps,",
+          "    actions: list[JsonObject],",
+          ") -> JudgeLoopResult:",
+          "    \"\"\"Run the per-field judge and emit its honest phase summary.\"\"\"",
+          "    await emit_phase_message(",
+          "        deps,",
+          "        phase=src.key_catalog.GRAPH_PHASE_JUDGE,",
+          "        message=\"Reviewing planned answers.\",",
+          "    )",
+          "    judge_result = await run_per_field_judge_loop(",
+          "        JudgeLoopDeps(",
+          "            adapter=deps.adapter,",
+          "            emit_event=deps.emit_event,",
+          "            llm_client=deps.llm_client,",
+          "        ),",
+          "        actions,",
+          "        deps.payload,",
+          "    )",
+          "    logger.info(",
+          "        \"postprocess: judge complete\",",
+          "        verdict=judge_result.overall_verdict,",
+          "        skipped=judge_result.skipped_reason is not None,",
+          "    )",
+          "    judge_summary = (",
+          "        f\"Judge: skipped \u2014 {judge_result.skipped_reason}\"",
+          "        if judge_result.skipped_reason is not None",
+          "        else f\"Judge: {judge_result.overall_verdict}\"",
+          "    )",
+          "    await deps.emit_event(",
+          "        deps.adapter.adapt_run_summary(",
+          "            RunSummaryParams(phase=\"judge_complete\", content=judge_summary)",
+          "        )",
+          "    )",
+          "    return judge_result",
+          "",
+          ""
+        ],
+        "op": "prepend",
+        "pos": "76#YZ"
+      },
+      {
+        "end": "112#TP",
+        "lines": [
+          "    judge_result = await _judge_phase(deps, actions)"
+        ],
+        "op": "replace",
+        "pos": "82#BQ"
+      }
+    ],
+    "filePath": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/postprocess/judge_corrections.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ebc5772619e9",
+  "_gold": {
+    "source_case_id": "ebc5772619e9",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/postprocess/judge_corrections.py",
+      "sha256": "a72c0594e7c1c1c3f3f7a7349142fc06f253f699c098ba764844db748dd4dc73",
+      "text": "async def _judge_phase(\n    deps: PostProcessDeps,\n    actions: list[JsonObject],\n) -> JudgeLoopResult:\n    \"\"\"Run the per-field judge and emit its honest phase summary.\"\"\"\n    await emit_phase_message(\n        deps,\n        phase=src.key_catalog.GRAPH_PHASE_JUDGE,\n        message=\"Reviewing planned answers.\",\n    )\n    judge_result = await run_per_field_judge_loop(\n        JudgeLoopDeps(\n            adapter=deps.adapter,\n            emit_event=deps.emit_event,\n            llm_client=deps.llm_client,\n        ),\n        actions,\n        deps.payload,\n    )\n    logger.info(\n        \"postprocess: judge complete\",\n        verdict=judge_result.overall_verdict,\n        skipped=judge_result.skipped_reason is not None,\n    )\n    judge_summary = (\n        f\"Judge: skipped \u2014 {judge_result.skipped_reason}\"\n        if judge_result.skipped_reason is not None\n        else f\"Judge: {judge_result.overall_verdict}\"\n    )\n    await deps.emit_event(\n        deps.adapter.adapt_run_summary(\n            RunSummaryParams(phase=\"judge_complete\", content=judge_summary)\n        )\n    )\n    return judge_result\n\n\n\n    judge_result = await _judge_phase(deps, actions)"
+    }
+  ]
+}

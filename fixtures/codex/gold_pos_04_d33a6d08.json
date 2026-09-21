@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"$HOME/path/to/skill\\|2>/dev/null\\|/test-extender\\|/code-hygiene-refactor\\|/hygiene-orchestrator\" bundle/shared/skills/slopgate-hygiene-orchestrator/SKILL.md"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d33a6d0845c8",
+  "_gold": {
+    "source_case_id": "d33a6d0845c8",
+    "platform": "codex",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SYSTEM-PROTECTION",
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk proxy pgrep -af \"pytest -q|pytest tests -q|slopgate lint check --details\""
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a5322476bfa6",
+  "_gold": {
+    "source_case_id": "a5322476bfa6",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

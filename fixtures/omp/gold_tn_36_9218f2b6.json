@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "new_string": "    def query_one(\n        self,\n        selector: str | type[_WidgetT],\n        expect_type: type[_WidgetT] | None = None,\n    ) -> _WidgetT: ...\n\n    def query(self, selector: str) -> Iterable[Widget]: ...\n\n    def action_go_home(self) -> None: ...\n\n    def select_field(self, control_id: str) -> None: ...\n\n    def push_selected_field(self, control_id: str) -> None: ...\n\n    def ledger_ordered_ids(self) -> tuple[str, ...]: ...\n\n    def ledger_page_slice(self, ordered: tuple[str, ...]) -> tuple[str, ...]: ...\n\n    def ledger_clamp_page(self, ordered: tuple[str, ...]) -> None: ...\n\n    def ledger_page_suffix(self) -> str: ...\n\n    def render_ledger_summary(self) -> None: ...\n\n    def push_list(self) -> None: ...\n\n    def refresh_ledger(self) -> None: ...\n\n    def set_detail_open(self, open_detail: bool) -> None: ...",
+    "old_string": "    def query_one(self, selector: str, expect_type: type[_WidgetT]) -> _WidgetT: ...\n\n    def query(self, selector: str) -> Iterable[Widget]: ...\n\n    def action_go_home(self) -> None: ...\n\n    def select_field(self, control_id: str) -> None: ...\n\n    def push_selected_field(self, control_id: str) -> None: ...\n\n    def ledger_ordered_ids(self) -> tuple[str, ...]: ...\n\n    def ledger_page_slice(self, ordered: tuple[str, ...]) -> tuple[str, ...]: ...\n\n    def refresh_ledger(self) -> None: ...",
+    "path": "src/tui/screens/trace_support/ledger/modes.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-9218f2b6d1b0",
+  "_gold": {
+    "source_case_id": "9218f2b6d1b0",
+    "platform": "omp",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/tui/screens/trace_support/ledger/modes.py",
+      "sha256": "a903a1c8b257034392ee3ae8bdf37289799c95f53d09a24b206e7f752153c953",
+      "text": "    def query_one(\n        self,\n        selector: str | type[_WidgetT],\n        expect_type: type[_WidgetT] | None = None,\n    ) -> _WidgetT: ...\n\n    def query(self, selector: str) -> Iterable[Widget]: ...\n\n    def action_go_home(self) -> None: ...\n\n    def select_field(self, control_id: str) -> None: ...\n\n    def push_selected_field(self, control_id: str) -> None: ...\n\n    def ledger_ordered_ids(self) -> tuple[str, ...]: ...\n\n    def ledger_page_slice(self, ordered: tuple[str, ...]) -> tuple[str, ...]: ...\n\n    def ledger_clamp_page(self, ordered: tuple[str, ...]) -> None: ...\n\n    def ledger_page_suffix(self) -> str: ...\n\n    def render_ledger_summary(self) -> None: ...\n\n    def push_list(self) -> None: ...\n\n    def refresh_ledger(self) -> None: ...\n\n    def set_detail_open(self, open_detail: bool) -> None: ..."
+    }
+  ]
+}

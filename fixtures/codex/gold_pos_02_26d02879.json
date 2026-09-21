@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git commit --no-verify -m skip"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-26d0287963ee",
+  "_gold": {
+    "source_case_id": "26d0287963ee",
+    "platform": "codex",
+    "current_rule_ids": [
+      "GIT-001",
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

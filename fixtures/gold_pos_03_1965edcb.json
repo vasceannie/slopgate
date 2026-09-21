@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Canonical improvement measurement for Slopgate stats.\n\nPublic API: :func:`build_improvement` assembles the nested versioned\nimprovement object, :class:`ComparisonSpec` plus :func:`build_comparison`\npower guarded baseline/candidate reports, and the scope/episode helpers are\nre-exported for tests and the dashboard parity mirror.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom slopgate._types import ObjectDict\n\nfrom .comparison import (\n    COMPARISON_DIMENSIONS,\n    ComparisonSpec,\n    apply_cohort_filters,\n    build_comparison,\n    parse_cohort_filters,\n)\nfrom .episodes import evaluate_episodes, evaluate_first_observed, parse_result_records\nfrom .metrics import IMPROVEMENT_SCHEMA_VERSION, build_improvement\nfrom .scope_model import (\n    EPISODE_TERMINAL_STATES,\n    PATHLESS_SENTINEL,\n    ResultRecord,\n    RepairEpisode,\n    EpisodeEvaluation,\n    normalize_target_path,\n    semantic_tool_family,\n)\n\n__all__ = [\n    \"COMPARISON_DIMENSIONS\",\n    \"ComparisonSpec\",\n    \"EPISODE_TERMINAL_STATES\",\n    \"EpisodeEvaluation\",\n    \"IMPROVEMENT_SCHEMA_VERSION\",\n    \"PATHLESS_SENTINEL\",\n    \"RepairEpisode\",\n    \"ResultRecord\",\n    \"apply_cohort_filters\",\n    \"build_comparison\",\n    \"build_improvement\",\n    \"evaluate_episodes\",\n    \"evaluate_first_observed\",\n    \"normalize_target_path\",\n    \"parse_cohort_filters\",\n    \"parse_result_records\",\n    \"semantic_tool_family\",\n]\n\n\ndef build_stats_improvement(entries: list[dict[str, object]]) -> ObjectDict:\n    \"\"\"Backward-compatible alias used by the stats analysis layer.\"\"\"\n    return build_improvement(entries)\n",
+    "file_path": "$REPO_SLOPGATE/src/slopgate/stats/improvement/__init__.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-1965edcb4550",
+  "_gold": {
+    "source_case_id": "1965edcb4550",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "stats/improvement/__init__.py",
+      "sha256": "0161428443726503bc6df6bdf9511e8348475e9caa1b7253b41437e1f479db60",
+      "text": "\"\"\"Canonical improvement measurement for Slopgate stats.\n\nPublic API: :func:`build_improvement` assembles the nested versioned\nimprovement object, :class:`ComparisonSpec` plus :func:`build_comparison`\npower guarded baseline/candidate reports, and the scope/episode helpers are\nre-exported for tests and the dashboard parity mirror.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom slopgate._types import ObjectDict\n\nfrom .comparison import (\n    COMPARISON_DIMENSIONS,\n    ComparisonSpec,\n    apply_cohort_filters,\n    build_comparison,\n    parse_cohort_filters,\n)\nfrom .episodes import evaluate_episodes, evaluate_first_observed, parse_result_records\nfrom .metrics import IMPROVEMENT_SCHEMA_VERSION, build_improvement\nfrom .scope_model import (\n    EPISODE_TERMINAL_STATES,\n    PATHLESS_SENTINEL,\n    ResultRecord,\n    RepairEpisode,\n    EpisodeEvaluation,\n    normalize_target_path,\n    semantic_tool_family,\n)\n\n__all__ = [\n    \"COMPARISON_DIMENSIONS\",\n    \"ComparisonSpec\",\n    \"EPISODE_TERMINAL_STATES\",\n    \"EpisodeEvaluation\",\n    \"IMPROVEMENT_SCHEMA_VERSION\",\n    \"PATHLESS_SENTINEL\",\n    \"RepairEpisode\",\n    \"ResultRecord\",\n    \"apply_cohort_filters\",\n    \"build_comparison\",\n    \"build_improvement\",\n    \"evaluate_episodes\",\n    \"evaluate_first_observed\",\n    \"normalize_target_path\",\n    \"parse_cohort_filters\",\n    \"parse_result_records\",\n    \"semantic_tool_family\",\n]\n\n\ndef build_stats_improvement(entries: list[dict[str, object]]) -> ObjectDict:\n    \"\"\"Backward-compatible alias used by the stats analysis layer.\"\"\"\n    return build_improvement(entries)\n"
+    }
+  ]
+}

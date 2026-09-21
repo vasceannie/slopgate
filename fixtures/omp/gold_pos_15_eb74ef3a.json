@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python -m pytest tests/e2e/test_multipage.py -q -p no:cacheprovider 2>&1 | tail -6",
+    "timeout": 300
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-eb74ef3a6f5c",
+  "_gold": {
+    "source_case_id": "eb74ef3a6f5c",
+    "platform": "omp",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

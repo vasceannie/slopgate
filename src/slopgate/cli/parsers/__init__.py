@@ -258,6 +258,11 @@ def _add_eval_parser(sub: SubparserRegistry) -> None:
         action="store_true",
         help="Also evaluate label_only rows (empty input / non-PreToolUse)",
     )
+    _ = eval_parser.add_argument(
+        "--overlay-out",
+        default=None,
+        help="Write current-engine sidecar JSONL keyed by case_id (does not rewrite the pack)",
+    )
 
 
 def _add_repo_enrollment_parsers(sub: SubparserRegistry) -> None:

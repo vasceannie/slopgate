@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git show HEAD:cloud/services/agent_runner/_navigation_dependencies/authentication.py > /tmp/opencode/authentication_head.py && uv run ruff format --check /tmp/opencode/authentication_head.py 2>&1 | tail -2; git show HEAD:cloud/services/agent_runner/_navigation_dependencies/email_verification.py > /tmp/opencode/email_head.py && uv run ruff format --check /tmp/opencode/email_head.py 2>&1 | tail -2",
+    "timeout": 120000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-69fd91263b69",
+  "_gold": {
+    "source_case_id": "69fd91263b69",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

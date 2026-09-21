@@ -1,0 +1,32 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from cloud.services.agent_runner_support.judge.types import ProfileExtractionResult"
+        ],
+        "op": "replace",
+        "pos": "8#RK"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/payload.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-028c21e2ea18",
+  "_gold": {
+    "source_case_id": "028c21e2ea18",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/payload.py",
+      "sha256": "fd6e63ed699632a2670fc9b3d7e462021c4dedbc89a5b454ab0ce685210ed85c",
+      "text": "from cloud.services.agent_runner_support.judge.types import ProfileExtractionResult"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "cutover smoke",
+    "file_path": "$REPO_SLOPGATE/config.json"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-79fdda61e1ab",
+  "_gold": {
+    "source_case_id": "79fdda61e1ab",
+    "platform": "codex",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "a73e9eaaa963aecd263afcef7bd24efe20987702577c3f5d8371a248880a310a",
+      "text": "cutover smoke"
+    }
+  ]
+}

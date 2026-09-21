@@ -1,0 +1,24 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "import asyncio\nimport json\n\nfrom playwright.async_api import async_playwright\n\nfrom src.browser_runtime.page_ops.apply.decision import resolve_application_page\nfrom src.browser_runtime.page_ops.apply.flow import page_has_application_form\nfrom src.llm import get_llm_client\n\nURL = \"https://jll.wd1.myworkdayjobs.com/jllcareers/job/Creve-Coeur-MO/Specialist--HVAC-Technician_REQ495034\"\nFORM_JS = \"\"\"\n() => {\n    const controls = Array.from(document.querySelectorAll('input, select, textarea, [role=\"textbox\"], [role=\"combobox\"], [role=\"listbox\"]'));\n    return controls.filter((el) => {\n        if (!(el instanceof HTMLElement)) return false;\n        const type = (el.getAttribute(\"type\") || \"\").toLowerCase();\n        if (type === \"hidden\" || type === \"search\" || type === \"submit\" || type === \"button\") return false;\n        const rect = el.getBoundingClientRect();\n        return rect.width > 0 && rect.height > 0;\n    }).map((el) => ({ tag: el.tagName, type: el.getAttribute(\"type\"), name: (el.getAttribute(\"name\")||\"\").slice(0,30), aria: (el.getAttribute(\"aria-label\")||\"\").slice(0,40) }));\n}\n\"\"\"\n\n\nasync def main() -> None:\n    model = get_llm_client()\n    async with async_playwright() as p:\n        browser = await p.chromium.launch(headless=True)\n        page = await browser.new_page()\n        apply_url = f\"{URL}/apply\"\n        response = await page.goto(apply_url, wait_until=\"domcontentloaded\", timeout=60000)\n        print(\"apply HTTP\", response.status if response else None)\n        for wait in (0, 2, 5, 10):\n            if wait:\n                await page.wait_for_timeout(wait * 1000)\n            controls = await page.evaluate(FORM_JS)\n            print(f\"t+{wait}s url={page.url} form={await page_has_application_form(page)} controls={len(controls)}\")\n            if wait == 10:\n                print(\"  sample:\", json.dumps(controls[:5]))\n                decision = await resolve_application_page(page, model=model)\n                print(\"  DECISION:\", decision.decision.value, decision.candidate_url, decision.evidence)\n        await browser.close()\n\n\nasyncio.run(main())\n",
+    "file_path": "/tmp/$TMP/apply_url_probe.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-238d801592bd",
+  "_gold": {
+    "source_case_id": "238d801592bd",
+    "platform": "claude",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tmp/$TMP/apply_url_probe.py",
+      "sha256": "efad31d16cd2b44530e3d96d93aa8246af5ad337ee7179546a3c63d2ab5dc3d4",
+      "text": "import asyncio\nimport json\n\nfrom playwright.async_api import async_playwright\n\nfrom src.browser_runtime.page_ops.apply.decision import resolve_application_page\nfrom src.browser_runtime.page_ops.apply.flow import page_has_application_form\nfrom src.llm import get_llm_client\n\nURL = \"https://jll.wd1.myworkdayjobs.com/jllcareers/job/Creve-Coeur-MO/Specialist--HVAC-Technician_REQ495034\"\nFORM_JS = \"\"\"\n() => {\n    const controls = Array.from(document.querySelectorAll('input, select, textarea, [role=\"textbox\"], [role=\"combobox\"], [role=\"listbox\"]'));\n    return controls.filter((el) => {\n        if (!(el instanceof HTMLElement)) return false;\n        const type = (el.getAttribute(\"type\") || \"\").toLowerCase();\n        if (type === \"hidden\" || type === \"search\" || type === \"submit\" || type === \"button\") return false;\n        const rect = el.getBoundingClientRect();\n        return rect.width > 0 && rect.height > 0;\n    }).map((el) => ({ tag: el.tagName, type: el.getAttribute(\"type\"), name: (el.getAttribute(\"name\")||\"\").slice(0,30), aria: (el.getAttribute(\"aria-label\")||\"\").slice(0,40) }));\n}\n\"\"\"\n\n\nasync def main() -> None:\n    model = get_llm_client()\n    async with async_playwright() as p:\n        browser = await p.chromium.launch(headless=True)\n        page = await browser.new_page()\n        apply_url = f\"{URL}/apply\"\n        response = await page.goto(apply_url, wait_until=\"domcontentloaded\", timeout=60000)\n        print(\"apply HTTP\", response.status if response else None)\n        for wait in (0, 2, 5, 10):\n            if wait:\n                await page.wait_for_timeout(wait * 1000)\n            controls = await page.evaluate(FORM_JS)\n            print(f\"t+{wait}s url={page.url} form={await page_has_application_form(page)} controls={len(controls)}\")\n            if wait == 10:\n                print(\"  sample:\", json.dumps(controls[:5]))\n                decision = await resolve_application_page(page, model=model)\n                print(\"  DECISION:\", decision.decision.value, decision.candidate_url, decision.evidence)\n        await browser.close()\n\n\nasyncio.run(main())\n"
+    }
+  ]
+}

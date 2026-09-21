@@ -1,0 +1,97 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "end": "39#YK",
+        "lines": [
+          "_APPLY_HREF_SETTLE_LIMIT = 2",
+          "_ACTIVATION_PASS_LIMIT = 3",
+          "_APPLY_SELECTOR_RENDER_WAIT_MS = 5 * 10**3",
+          "_MIN_APPLICATION_FORM_CONTROLS = 2"
+        ],
+        "op": "replace",
+        "pos": "37#BK"
+      },
+      {
+        "end": "336#QK",
+        "lines": [
+          "async def activate_apply_flow_if_needed(",
+          "    page: Page,",
+          "    target_url: str,",
+          "    timeout_ms: int,",
+          ") -> None:",
+          "    for _pass_index in range(_ACTIVATION_PASS_LIMIT):",
+          "        if await page_has_application_form(page):",
+          "            return",
+          "",
+          "        if await _try_navigate_external_apply_href(page, target_url):",
+          "            if (",
+          "                await page_has_application_form(page)",
+          "                or await page.locator(",
+          "                    \"input:not([type='hidden']):visible, textarea:visible, select:visible\"",
+          "                ).count()",
+          "                > 0",
+          "            ):",
+          "                return",
+          "            continue",
+          "",
+          "        host = urlparse(page.url).netloc.lower() or urlparse(target_url).netloc.lower()",
+          "        if await _navigate_workday_manual_apply(page, before_url=page.url):",
+          "            return",
+          "        selectors = _platform_apply_selectors(host)",
+          "        if selectors and _pass_index == 0:",
+          "            await _wait_for_apply_selector_render(page, selectors)",
+          "        advanced = False",
+          "        for selector in selectors:",
+          "            before_url = page.url",
+          "            if await _try_click_apply_selector(page, selector, timeout_ms):",
+          "                return",
+          "            if page.url != before_url:",
+          "                advanced = True",
+          "                break",
+          "        if not advanced:",
+          "            await _wait_for_application_form(page)",
+          "            return",
+          "",
+          "",
+          "async def _wait_for_apply_selector_render(",
+          "    page: Page,",
+          "    selectors: list[str],",
+          ") -> None:",
+          "    \"\"\"Wait a bounded window for one platform apply selector to render.\"\"\"",
+          "    try:",
+          "        await page.wait_for_selector(",
+          "            \", \".join(selectors),",
+          "            state=\"visible\",",
+          "            timeout=_APPLY_SELECTOR_RENDER_WAIT_MS,",
+          "        )",
+          "    except (RuntimeError, Error, ValueError):",
+          "        return"
+        ],
+        "op": "replace",
+        "pos": "303#QK"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/src/browser_runtime/page_ops/apply/flow.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-8750e2caad48",
+  "_gold": {
+    "source_case_id": "8750e2caad48",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-015"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/browser_runtime/page_ops/apply/flow.py",
+      "sha256": "ecbab3a13908119ccb33e68b1d43a56c99c0d013af7b3e71ad86bb151e53e37a",
+      "text": "_APPLY_HREF_SETTLE_LIMIT = 2\n_ACTIVATION_PASS_LIMIT = 3\n_APPLY_SELECTOR_RENDER_WAIT_MS = 5 * 10**3\n_MIN_APPLICATION_FORM_CONTROLS = 2\n\nasync def activate_apply_flow_if_needed(\n    page: Page,\n    target_url: str,\n    timeout_ms: int,\n) -> None:\n    for _pass_index in range(_ACTIVATION_PASS_LIMIT):\n        if await page_has_application_form(page):\n            return\n\n        if await _try_navigate_external_apply_href(page, target_url):\n            if (\n                await page_has_application_form(page)\n                or await page.locator(\n                    \"input:not([type='hidden']):visible, textarea:visible, select:visible\"\n                ).count()\n                > 0\n            ):\n                return\n            continue\n\n        host = urlparse(page.url).netloc.lower() or urlparse(target_url).netloc.lower()\n        if await _navigate_workday_manual_apply(page, before_url=page.url):\n            return\n        selectors = _platform_apply_selectors(host)\n        if selectors and _pass_index == 0:\n            await _wait_for_apply_selector_render(page, selectors)\n        advanced = False\n        for selector in selectors:\n            before_url = page.url\n            if await _try_click_apply_selector(page, selector, timeout_ms):\n                return\n            if page.url != before_url:\n                advanced = True\n                break\n        if not advanced:\n            await _wait_for_application_form(page)\n            return\n\n\nasync def _wait_for_apply_selector_render(\n    page: Page,\n    selectors: list[str],\n) -> None:\n    \"\"\"Wait a bounded window for one platform apply selector to render.\"\"\"\n    try:\n        await page.wait_for_selector(\n            \", \".join(selectors),\n            state=\"visible\",\n            timeout=_APPLY_SELECTOR_RENDER_WAIT_MS,\n        )\n    except (RuntimeError, Error, ValueError):\n        return"
+    }
+  ]
+}

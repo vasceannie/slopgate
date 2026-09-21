@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n 'TraceWriter\\|make_record\\|payload_for_done\\|write_start_trace\\|_trace_drilldown_fields\\|_trace_optional_fields' src tests"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-62b49cf1aa41",
+  "_gold": {
+    "source_case_id": "62b49cf1aa41",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

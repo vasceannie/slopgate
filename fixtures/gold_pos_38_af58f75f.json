@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat > /tmp/opencode/repro_judge.py <<'EOF'\n\"\"\"Reproduce: judge subgraph with llm_client=None + stale judge_result={} in state.\"\"\"\nimport asyncio\nfrom src.autopilot.config import PlannerBudgets\nfrom src.autopilot.contracts import PlannerAction\nfrom src.autopilot.graph.agents import JudgeDeps, build_judge\n\naction = PlannerAction(\n    control_id=\"f1\",\n    intent_id=\"intent.f1\",\n    widget_family=\"textbox\",\n    value=\"Ada\",\n    confidence=0.9,\n    required=True,\n    source=\"ai_inferred\",\n)\n\nasync def run_case(name, actions, judge_result_in):\n    deps = JudgeDeps(llm_client=None, adapter=None, budgets=PlannerBudgets())\n    graph = build_judge(deps)\n    state = {\n        \"actions\": actions,\n        \"parsed_fields\": [{\"control_id\": \"f1\"}],\n        \"judge_result\": judge_result_in,\n        \"per_field_verdicts\": {},\n        \"messages\": [],\n    }\n    result = await graph.ainvoke(state)\n    jr = result.get(\"judge_result\")\n    print(f\"[{name}] judge_result = {jr!r}\")\n    print(f\"[{name}] overall_verdict = {(jr or {}).get('overall_verdict')!r}\")\n    print(f\"[{name}] concerns = {len((jr or {}).get('concerns') or [])}\")\n    print()\n\nasync def main():\n    # Case 1: real run shape \u2014 stale {} from navigation reset, typed actions\n    await run_case(\"typed-actions + stale {}\", [action], {})\n    # Case 2: dict actions (post-serde) + stale {}\n    await run_case(\"dict-actions + stale {}\", [{\"control_id\": \"f1\", \"source\": \"ai_inferred\", \"intent_id\": \"intent.f1\"}], {})\n    # Case 3: control \u2014 no stale judge_result, typed actions (should match existing tests)\n    await run_case(\"typed-actions + no stale\", [action], None)\n\nasyncio.run(main())\nEOF\nuv run python /tmp/opencode/repro_judge.py",
+    "timeout": 120000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-af58f75fab0f",
+  "_gold": {
+    "source_case_id": "af58f75fab0f",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

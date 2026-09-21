@@ -1,0 +1,32 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from cloud.services.agent_runner_support.judge.types import PreexistingCorrectionResult"
+        ],
+        "op": "replace",
+        "pos": "6#BH"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/corrections.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0f4020f62154",
+  "_gold": {
+    "source_case_id": "0f4020f62154",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/corrections.py",
+      "sha256": "ae1a76faa85e46716ae14f7a1d981cc12c4726d07c919916179da388f94d9301",
+      "text": "from cloud.services.agent_runner_support.judge.types import PreexistingCorrectionResult"
+    }
+  ]
+}

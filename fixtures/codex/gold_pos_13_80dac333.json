@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n -i \"oh-my-pi\\|omp\" package.json pyproject.toml README.md docs src tests --glob '!*lock*' --glob '!*.jsonl'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-80dac333a7c8",
+  "_gold": {
+    "source_case_id": "80dac333a7c8",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

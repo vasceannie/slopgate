@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "import asyncio\nimport os\nimport uuid\n\nimport httpx\n\nBASE = \"http://127.0.0.1:8686\"\nAPI_KEY = $SECRET\"CLOUD_API_KEY\"]\nURL = \"https://jll.wd1.myworkdayjobs.com/jllcareers/job/Creve-Coeur-MO/Specialist--HVAC-Technician_REQ495034\"\n\n\nasync def main() -> None:\n    payload = {\n        \"request_id\": str(uuid.uuid4()),\n        \"url\": URL,\n        \"executor_backend\": \"playwright\",\n        \"execution_host\": \"local\",\n        \"controls\": [],\n        \"profile_data\": {},\n        \"debug_enabled\": True,\n    }\n    headers = {\"X-API-Key\": API_KEY, \"Content-Type\": \"application/json\"}\n    lines: list[str] = []\n    async with httpx.AsyncClient(timeout=None) as client:\n        async with client.stream(\n            \"POST\", f\"{BASE}/api/agent/stream\", json=payload, headers=headers\n        ) as response:\n            print(\"HTTP\", response.status_code)\n            async for line in response.aiter_lines():\n                if line:\n                    lines.append(line)\n    with open(\"/tmp/opencode/stream_full.jsonl\", \"w\") as fh:\n        fh.write(\"\\n\".join(lines))\n    print(\"captured\", len(lines), \"lines\")\n\n\nasyncio.run(main())\n",
+    "file_path": "/tmp/$TMP/live_capture.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b354f20813a4",
+  "_gold": {
+    "source_case_id": "b354f20813a4",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-AST-001",
+      "PY-QUALITY-009"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tmp/$TMP/live_capture.py",
+      "sha256": "cc07dfa18bbd9f216975489901f19d98ae0b794d9907f7695b537337ec24668b",
+      "text": "import asyncio\nimport os\nimport uuid\n\nimport httpx\n\nBASE = \"http://127.0.0.1:8686\"\nAPI_KEY = $SECRET\"CLOUD_API_KEY\"]\nURL = \"https://jll.wd1.myworkdayjobs.com/jllcareers/job/Creve-Coeur-MO/Specialist--HVAC-Technician_REQ495034\"\n\n\nasync def main() -> None:\n    payload = {\n        \"request_id\": str(uuid.uuid4()),\n        \"url\": URL,\n        \"executor_backend\": \"playwright\",\n        \"execution_host\": \"local\",\n        \"controls\": [],\n        \"profile_data\": {},\n        \"debug_enabled\": True,\n    }\n    headers = {\"X-API-Key\": API_KEY, \"Content-Type\": \"application/json\"}\n    lines: list[str] = []\n    async with httpx.AsyncClient(timeout=None) as client:\n        async with client.stream(\n            \"POST\", f\"{BASE}/api/agent/stream\", json=payload, headers=headers\n        ) as response:\n            print(\"HTTP\", response.status_code)\n            async for line in response.aiter_lines():\n                if line:\n                    lines.append(line)\n    with open(\"/tmp/opencode/stream_full.jsonl\", \"w\") as fh:\n        fh.write(\"\\n\".join(lines))\n    print(\"captured\", len(lines), \"lines\")\n\n\nasyncio.run(main())\n"
+    }
+  ]
+}

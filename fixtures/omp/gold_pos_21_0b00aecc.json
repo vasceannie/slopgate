@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk uv run python -c \"import xml.etree.ElementTree as E; r=E.parse(\"build/model-activity-full-suite.xml\").getroot(); s=list(r.iter(\"testsuite\")); assert s and all(int(x.attrib[\"failures\"]) == 0 and int(x.attrib[\"errors\"]) == 0 for x in s), \"Full suite must have no failures or errors\"; print([x.attrib for x in s])\" && rtk git add tests/tui/test_run_screen_layout.py && rtk git commit -m \"Isolate model activity rendering test from demo events\" && rtk bd close job-hunter-jstt --reason \"Confirmed live-demo projection race; one-line test setup fix preserves assertion. Delayed scheduling passes, layout module 27 passed, 6 serial/xdist runs passed, quality and final full suite passed.\" && rtk git pull --rebase && rtk bd dolt push && rtk git push && rtk git status --short --branch && rtk git log -1 --format=\"%h %s\"",
+    "i": "js prelude",
+    "timeout": 180
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-0b00aeccd847",
+  "_gold": {
+    "source_case_id": "0b00aeccd847",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

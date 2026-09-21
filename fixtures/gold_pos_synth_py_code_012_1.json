@@ -1,0 +1,29 @@
+{
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "src/envy_1.py"
+  },
+  "tool_response": {
+    "filePath": "src/envy_1.py",
+    "success": true
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-synth-py-code-012-1",
+  "files": [
+    {
+      "path": "src/envy_1.py",
+      "sha256": "46391322ff8bbeea888b62c7a7b298cecff9c37dc8b1bf95b7b2acf59e8b50fa",
+      "text": "service = object()\n\n\ndef render():\n    return (\n        service.alpha\n        + service.beta\n        + service.gamma\n        + service.delta\n        + service.epsilon\n        + service.zeta\n    )\n"
+    }
+  ],
+  "_gold": {
+    "source_case_id": "synth-py-code-012-1",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-012"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

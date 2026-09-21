@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk ps -ef | rtk grep 'orca orchestration ask' || true"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-5956f54646c2",
+  "_gold": {
+    "source_case_id": "5956f54646c2",
+    "platform": "codex",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

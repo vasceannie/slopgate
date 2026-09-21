@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "delete": true,
+    "edits": [],
+    "file_path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/judge_types.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a6c8f1a6e6a9",
+  "_gold": {
+    "source_case_id": "a6c8f1a6e6a9",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

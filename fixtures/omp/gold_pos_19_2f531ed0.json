@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "async": true,
+    "command": "rtk bd close job-hunter-63yo --reason \"All four original failures pass; final full suite 15339 passed, 50 skipped; make quality and Slopgate pass.\" && rtk git pull --rebase && rtk bd dolt push && rtk git push",
+    "i": "js prelude",
+    "timeout": 180
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-2f531ed0ee67",
+  "_gold": {
+    "source_case_id": "2f531ed0ee67",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

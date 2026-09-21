@@ -13,6 +13,22 @@ FIXTURE = (
     / "eval"
     / "l1_holdout_pilot.jsonl"
 )
+CI_SLICE = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "eval"
+    / "l1_ci.jsonl"
+)
+
+
+def test_load_ci_slice_cases() -> None:
+    assert CI_SLICE.is_file(), f"missing CI slice fixture: {CI_SLICE}"
+    cases = load_eval_cases(CI_SLICE)
+    assert len(cases) >= 200
+    first = cases[0]
+    assert first.get("case_id")
+    assert first.get("replay_payload")
+    assert first.get("tier") == "replayable"
 
 
 def test_load_pinned_holdout_cases() -> None:
@@ -119,3 +135,42 @@ def test_evaluate_pack_skips_label_only_by_default(tmp_path: Path) -> None:
     assert summary["n"] == 1
     assert summary["skipped_label_only"] == 1
     assert summary["replayable_only"] is True
+
+
+def test_evaluate_pack_writes_overlay_sidecar(tmp_path: Path) -> None:
+    from slopgate.eval import evaluate_pack, overlay_row_from_eval
+
+    pack = tmp_path / "pack.jsonl"
+    overlay = tmp_path / "overlay.jsonl"
+    case = {
+        "case_id": "overlay-1",
+        "tier": "replayable",
+        "platform": "claude",
+        "event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "primary_rule": "SHELL-001",
+        "expected": [{"rule_id": "SHELL-001"}],
+        "replay_payload": {
+            "cwd": "/tmp",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hi"},
+        },
+    }
+    pack.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    summary = evaluate_pack(pack, overlay_out=overlay, engine_version="test")
+    assert overlay.is_file()
+    assert summary["overlay_rows"] == 1
+    row = json.loads(overlay.read_text(encoding="utf-8").splitlines()[0])
+    assert row["case_id"] == "overlay-1"
+    assert row["engine_version"] == "test"
+    assert "current_rules" in row
+    assert "primary_hit" in row
+    rebuilt = overlay_row_from_eval(
+        case,
+        summary["results"][0],
+        engine_version="test",
+        evaluated_at=row["evaluated_at"],
+    )
+    assert rebuilt["case_id"] == row["case_id"]
+    assert rebuilt["exact_match"] == row["exact_match"]

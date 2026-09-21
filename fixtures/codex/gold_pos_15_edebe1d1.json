@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"trace\\|Trace\" src/slopgate/trace.py src/slopgate/engine/_trace_payloads.py tests/test_trace.py tests/engine/test_13_trace_records_platform_capability_and_repo_root.py tests/engine/test_14_result_trace_provenance.py tests/engine/test_15_opencode_outcome_trace.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-edebe1d19c37",
+  "_gold": {
+    "source_case_id": "edebe1d19c37",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

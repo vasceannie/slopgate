@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n 'judge\\|JUDGE\\|LLM_JUDGE\\|enable_llm_judge\\|should_stream' $REPO_JOB_HUNTER/.env.local.example 2>/dev/null; echo \"---\"; grep -n 'judge\\|JUDGE\\|LLM_JUDGE' $REPO_JOB_HUNTER/docker-compose.yml 2>/dev/null; echo \"---\"; grep -n 'judge\\|JUDGE' $REPO_JOB_HUNTER/Makefile 2>/dev/null; echo \"---\"; grep -n 'judge\\|JUDGE' $REPO_JOB_HUNTER/scripts/run_bridge_local.sh 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b847ef1c2b0a",
+  "_gold": {
+    "source_case_id": "b847ef1c2b0a",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SENSITIVE-DATA",
+      "REMIND-SEARCH-001",
+      "SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

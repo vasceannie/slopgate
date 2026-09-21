@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"assertion_free\\|eager\" tests | head -n 240"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-094cc018d4d1",
+  "_gold": {
+    "source_case_id": "094cc018d4d1",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from .judge.types import ("
+        ],
+        "op": "replace",
+        "pos": "18#QB"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/cloud/services/agent_runner_support/__init__.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-bca8dfb396cb",
+  "_gold": {
+    "source_case_id": "bca8dfb396cb",
+    "platform": "opencode",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner_support/__init__.py",
+      "sha256": "2def61187d1430fd3be9fe41ab9e7d5ae28aa1207b87c8788b98ebfa7f34b8b7",
+      "text": "from .judge.types import ("
+    }
+  ]
+}

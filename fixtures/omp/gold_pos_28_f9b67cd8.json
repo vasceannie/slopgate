@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cp baselines.json /tmp/slopgate-audit-run_f36588675f3f/d1-repair-baseline-before.json && env HOME=/tmp/slopgate-audit-run_f36588675f3f/D1/home XDG_CONFIG_HOME=/tmp/slopgate-audit-run_f36588675f3f/D1/config XDG_CACHE_HOME=/tmp/slopgate-audit-run_f36588675f3f/D1/cache XDG_RUNTIME_DIR=/tmp/slopgate-audit-run_f36588675f3f/D1/runtime TMPDIR=/tmp/slopgate-audit-run_f36588675f3f/D1/tmp SLOPGATE_CONFIG_DIR=/tmp/slopgate-audit-run_f36588675f3f/D1/config SLOPGATE_DAEMON_SOCKET=/tmp/slopgate-audit-run_f36588675f3f/D1/runtime/daemon.sock SLOPGATE_ROOT=/tmp/slopgate-audit-run_f36588675f3f/D1/root .venv/bin/slopgate lint check --details && cmp baselines.json /tmp/slopgate-audit-run_f36588675f3f/d1-repair-baseline-before.json && echo 'D1 baseline unchanged'",
+    "cwd": "$REPO_SLOPGATE/slop-audit-telemetry",
+    "timeout": 600
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-f9b67cd84cc7",
+  "_gold": {
+    "source_case_id": "f9b67cd84cc7",
+    "platform": "omp",
+    "current_rule_ids": [
+      "WARN-BASELINE-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

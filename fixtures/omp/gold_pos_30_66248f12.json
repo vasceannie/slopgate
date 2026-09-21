@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "new_string": "def make_field_tool_called(\n    control_id: str = ...,\n    tool_name: str = ...,\n    timestamp: str | None = ...,\n    verification_id: str | None = ...,\n    expected_value: str | None = ...,\n) -> FieldToolCalledEvent: ...\ndef make_field_verified(\n    control_id: str = ...,\n    verification_state: str = ...,\n    timestamp: str | None = ...,\n    expected_value: str | None = ...,\n    verification_id: str | None = ...,\n    current_value: str | None = ...,\n) -> FieldVerifiedEvent: ...",
+    "old_string": "def make_field_tool_called(\n    control_id: str = ...,\n    tool_name: str = ...,\n    timestamp: str | None = ...,\n) -> FieldToolCalledEvent: ...\ndef make_field_verified(\n    control_id: str = ...,\n    verification_state: str = ...,\n    timestamp: str | None = ...,\n    expected_value: str | None = ...,\n) -> FieldVerifiedEvent: ...",
+    "path": "tests/tui/fixtures/harness/events.pyi"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-66248f1276f0",
+  "_gold": {
+    "source_case_id": "66248f1276f0",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-CODE-009"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/tui/fixtures/harness/events.pyi",
+      "sha256": "faf1a7d89fb693ddeb98a47fc08e6bb4d080345d27ccd598a475ecdf18bc3f96",
+      "text": "def make_field_tool_called(\n    control_id: str = ...,\n    tool_name: str = ...,\n    timestamp: str | None = ...,\n    verification_id: str | None = ...,\n    expected_value: str | None = ...,\n) -> FieldToolCalledEvent: ...\ndef make_field_verified(\n    control_id: str = ...,\n    verification_state: str = ...,\n    timestamp: str | None = ...,\n    expected_value: str | None = ...,\n    verification_id: str | None = ...,\n    current_value: str | None = ...,\n) -> FieldVerifiedEvent: ..."
+    }
+  ]
+}

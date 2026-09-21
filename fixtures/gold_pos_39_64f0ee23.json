@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rg -n 'OPENCODE|process\\.env|env:' \"$HOME/.cache/opencode/packages/oh-my-openagent@latest/node_modules/oh-my-openagent/dist/index.js\" | rg 'claude-code-hooks|execute.*hook|spawn|Bun|Deno|execa|env'",
+    "timeout": 120000,
+    "workdir": "$REPO_SLOPGATE"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-64f0ee233baf",
+  "_gold": {
+    "source_case_id": "64f0ee233baf",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SENSITIVE-DATA"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

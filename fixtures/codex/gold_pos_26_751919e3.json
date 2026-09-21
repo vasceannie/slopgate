@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk rg -n -i 'assert_upload|mkdir.*write_bytes|helper.*assert|sut.*call|assert.*prefix' .beads .agents .codex docs README.md 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-751919e3d29e",
+  "_gold": {
+    "source_case_id": "751919e3d29e",
+    "platform": "codex",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

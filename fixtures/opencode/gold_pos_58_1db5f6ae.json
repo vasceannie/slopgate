@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/src/browser_runtime/page_ops/navigation/step_signature.py\n@@\n from __future__ import annotations\n \n+from collections.abc import Mapping\n from typing import Protocol, cast\n@@\n from src.key_catalog import PK_PHASE\n+from src.logging import get_logger\n@@\n from .signatures import _MAX_CONTROLS, _NAVIGATION_STEP_SCRIPT, _digest\n \n+logger = get_logger(__name__)\n+\n@@\n class _PageEvaluator(Protocol):\n     async def evaluate(self, expression: str, arg: int) -> object: ...\n \n \n+def _component_digests(payload: object) -> dict[str, str]:\n+    if not isinstance(payload, Mapping):\n+        return {}\n+    return {\n+        key: _digest(\"navigation-step-component.v1\", {\"value\": value})\n+        for key, value in payload.items()\n+        if isinstance(key, str)\n+    }\n+\n+\n async def navigation_step_signature(page: Page, *, phase: NavigationPhase) -> str:\n@@\n     evaluator = cast(_PageEvaluator, page)\n     payload = await evaluator.evaluate(_NAVIGATION_STEP_SCRIPT, _MAX_CONTROLS)\n-    return _digest(\"navigation-step.v2\", {PK_PHASE: phase.value, \"page\": payload})\n+    signature = _digest(\"navigation-step.v2\", {PK_PHASE: phase.value, \"page\": payload})\n+    logger.info(\n+        \"Navigation step signature computed\",\n+        phase=phase.value,\n+        component_digests=_component_digests(payload),\n+        signature=signature,\n+    )\n+    return signature\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-1db5f6aea337",
+  "_gold": {
+    "source_case_id": "1db5f6aea337",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/browser_runtime/page_ops/navigation/step_signature.py",
+      "sha256": "9191357346bf69243e3217bf51d481911f3355c6890f608d83beea2037dab331",
+      "text": "from collections.abc import Mapping\nfrom src.logging import get_logger\nlogger = get_logger(__name__)\n\ndef _component_digests(payload: object) -> dict[str, str]:\n    if not isinstance(payload, Mapping):\n        return {}\n    return {\n        key: _digest(\"navigation-step-component.v1\", {\"value\": value})\n        for key, value in payload.items()\n        if isinstance(key, str)\n    }\n\n\n    signature = _digest(\"navigation-step.v2\", {PK_PHASE: phase.value, \"page\": payload})\n    logger.info(\n        \"Navigation step signature computed\",\n        phase=phase.value,\n        component_digests=_component_digests(payload),\n        signature=signature,\n    )\n    return signature"
+    }
+  ]
+}

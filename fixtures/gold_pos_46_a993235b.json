@@ -1,0 +1,35 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_JOB_HUNTER/cloud/services/agent_runner/langfuse/observer.py\n@@\n-from src.agui import GraphOperationCompletedEvent, LLMUsageEvent\n+from src.agui import LLMUsageEvent\n@@\n-from .observations import (\n-    emit_observations,\n-    field_observation_requests,\n-    graph_operation_observation_request,\n-)\n+from .observations import emit_observations, field_observation_requests\n@@\n-    def observe_graph_operation(self, event: GraphOperationCompletedEvent) -> None:\n-        if self.handles is None:\n-            return\n-        with _LoggedLangfuseErrors(\n-            operation=\"graph_operation_observation\",\n-            run_id=self.handles.identity.run_id,\n-        ):\n-            logger.info(\n-                \"Langfuse graph operation observation boundary\",\n-                run_id=self.handles.identity.run_id,\n-                operation_id=event.operation_id,\n-                phase=event.phase,\n-            )\n-            emit_observations(\n-                self.handles.client,\n-                [\n-                    graph_operation_observation_request(\n-                        self.handles.identity.langfuse_trace_id,\n-                        event,\n-                    )\n-                ],\n-            )\n-\n     def observe_llm_usage(self, event: LLMUsageEvent) -> None:\n*** Add File: $REPO_JOB_HUNTER/cloud/services/agent_runner/langfuse/graph_operations.py\n+from __future__ import annotations\n+\n+from dataclasses import dataclass\n+\n+from src.agui import GraphOperationCompletedEvent\n+from src.logging import get_logger\n+\n+from .models import LangfuseHandles\n+from .observations import emit_observations, graph_operation_observation_request\n+from .observer import _LoggedLangfuseErrors\n+\n+logger = get_logger(__name__)\n+\n+\n+@dataclass(frozen=True)\n+class LangfuseGraphOperationObserver:\n+    handles: LangfuseHandles\n+\n+    def observe_graph_operation(self, event: GraphOperationCompletedEvent) -> None:\n+        with _LoggedLangfuseErrors(\n+            operation=\"graph_operation_observation\",\n+            run_id=self.handles.identity.run_id,\n+        ):\n+            logger.info(\n+                \"Langfuse graph operation observation boundary\",\n+                run_id=self.handles.identity.run_id,\n+                operation_id=event.operation_id,\n+                phase=event.phase,\n+            )\n+            emit_observations(\n+                self.handles.client,\n+                [\n+                    graph_operation_observation_request(\n+                        self.handles.identity.langfuse_trace_id,\n+                        event,\n+                    )\n+                ],\n+            )\n+\n+\n+__all__ = [\"LangfuseGraphOperationObserver\"]\n*** Update File: $REPO_JOB_HUNTER/cloud/services/agent_runner/lifecycle_streaming.py\n@@\n from cloud.services.agent_runner.langfuse import LangfuseRunObserver\n+from cloud.services.agent_runner.langfuse.graph_operations import (\n+    LangfuseGraphOperationObserver,\n+)\n@@\n logger = get_logger(__name__)\n+\n+\n+def _graph_operation_observer(\n+    observer: LangfuseRunObserver | None,\n+) -> LangfuseGraphOperationObserver | None:\n+    if observer is None or observer.handles is None:\n+        return None\n+    return LangfuseGraphOperationObserver(handles=observer.handles)\n@@\n-    run_ctx.graph_operation_observer = observer\n+    run_ctx.graph_operation_observer = _graph_operation_observer(observer)\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-a993235b369e",
+  "_gold": {
+    "source_case_id": "a993235b369e",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "cloud/services/agent_runner/langfuse/observer.py",
+      "sha256": "6b9192cc90d2d8950f922593477127c424c0fde69170a8898c57a1b3c17d9844",
+      "text": "from src.agui import LLMUsageEvent\nfrom .observations import emit_observations, field_observation_requests"
+    },
+    {
+      "path": "cloud/services/agent_runner/langfuse/graph_operations.py",
+      "sha256": "70878d9a31a0edaaffefe778f8ba696d705a272e1424d5d6ff39e9f5cd32c3b3",
+      "text": "from __future__ import annotations\n\nfrom dataclasses import dataclass\n\nfrom src.agui import GraphOperationCompletedEvent\nfrom src.logging import get_logger\n\nfrom .models import LangfuseHandles\nfrom .observations import emit_observations, graph_operation_observation_request\nfrom .observer import _LoggedLangfuseErrors\n\nlogger = get_logger(__name__)\n\n\n@dataclass(frozen=True)\nclass LangfuseGraphOperationObserver:\n    handles: LangfuseHandles\n\n    def observe_graph_operation(self, event: GraphOperationCompletedEvent) -> None:\n        with _LoggedLangfuseErrors(\n            operation=\"graph_operation_observation\",\n            run_id=self.handles.identity.run_id,\n        ):\n            logger.info(\n                \"Langfuse graph operation observation boundary\",\n                run_id=self.handles.identity.run_id,\n                operation_id=event.operation_id,\n                phase=event.phase,\n            )\n            emit_observations(\n                self.handles.client,\n                [\n                    graph_operation_observation_request(\n                        self.handles.identity.langfuse_trace_id,\n                        event,\n                    )\n                ],\n            )\n\n\n__all__ = [\"LangfuseGraphOperationObserver\"]"
+    },
+    {
+      "path": "cloud/services/agent_runner/lifecycle_streaming.py",
+      "sha256": "0c8fc3e6544b65fedd81b7a06173058a9a8bd2984ad225b5caf7df8df5cc2144",
+      "text": "from cloud.services.agent_runner.langfuse.graph_operations import (\n    LangfuseGraphOperationObserver,\n)\n\n\ndef _graph_operation_observer(\n    observer: LangfuseRunObserver | None,\n) -> LangfuseGraphOperationObserver | None:\n    if observer is None or observer.handles is None:\n        return None\n    return LangfuseGraphOperationObserver(handles=observer.handles)\n    run_ctx.graph_operation_observer = _graph_operation_observer(observer)"
+    }
+  ]
+}

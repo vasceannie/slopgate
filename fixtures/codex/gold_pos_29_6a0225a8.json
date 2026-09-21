@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk mkdir -p /tmp/slopgate-audit-run_f36588675f3f/lane-b/real-omp && chmod 700 /tmp/slopgate-audit-run_f36588675f3f/lane-b/real-omp && rtk flock -x /tmp/slopgate-audit-run_f36588675f3f/heavy-2.lock -c 'HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/home XDG_CONFIG_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-config XDG_CACHE_HOME=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-cache XDG_RUNTIME_DIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/xdg-runtime TMPDIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/tmp BUN_INSTALL_CACHE_DIR=/tmp/slopgate-audit-run_f36588675f3f/lane-b/bun-cache rtk bun -e '\\\nimport { EditTool } from \"./tests/runtime/omp/node_modules/@oh-my-pi/pi-coding-agent/src/edit/index.ts\";\\\nimport { computeFileHash } from \"./tests/runtime/omp/node_modules/@oh-my-pi/hashline/src/format.ts\";\\\nconst repo = \"/tmp/slopgate-audit-run_f36588675f3f/lane-b/real-omp\";\\\nconst nested = `${repo}/nested/test_navigation_authentication_return_to_job.py`;\\\nconst before = \"VALUE = 1\\\\n\";\\\nawait Bun.write(`${repo}/slopgate.toml`, \"[slopgate]\\\\nenabled = true\\\\n\");\\\nawait Bun.write(nested, before);\\\nconst settings = { get(key) { if (key === \"edit.fuzzyMatch\") return true; if (key === \"edit.fuzzyThreshold\") return 0.8; if (key === \"edit.enforceSeenLines\") return false; if (key === \"lsp.diagnosticsOnEdit\" || key === \"lsp.diagnosticsDeduplicate\" || key === \"edit.blackbox.enabled\") return false; return false; } };\\\nconst session = { cwd: repo, hasUI: false, enableLsp: false, settings, getSessionFile: () => null, getSessionSpawns: () => null };\\\nconst tool = new EditTool(session, \"hashline\");\\\nconst tag = computeFileHash(before);\\\nconst result = await tool.execute(\"native-smoke\", { input: `[test_navigation_authentication_return_to_job.py#${tag}]\\\\nPUT 1:\\\\n+VALUE = 2` });\\\nconst details = result.details || {};\\\nconsole.log(JSON.stringify({ changed: (await Bun.file(nested).text()) === \"VALUE = 2\\\\n\", exists: await Bun.file(nested).exists(), resultPath: details.path, sourcePath: details.sourcePath, op: details.op }));\\\n'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-6a0225a8c340",
+  "_gold": {
+    "source_case_id": "6a0225a8c340",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REPO-ENROLL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

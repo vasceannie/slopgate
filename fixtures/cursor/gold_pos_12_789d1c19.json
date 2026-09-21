@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls \"${XDG_RUNTIME_DIR:-/tmp}/slopgate-hookd.sock\" 2>/dev/null && echo \"socket exists\" || echo \"socket missing\"; echo \"XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-<unset>}\"",
+    "cwd": "",
+    "timeout": 30000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-789d1c19ae47",
+  "_gold": {
+    "source_case_id": "789d1c19ae47",
+    "platform": "cursor",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

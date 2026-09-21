@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk bash -lc 'SP=$HOME/.local/share/uv/tools/ai-slopgate; grep -rl \"sut_calls\\|eager\" $SP/lib/python*$REPO_SLOPGATE/ 2>/dev/null | head; grep -rn \"sut_calls\" $SP/lib/python*$REPO_SLOPGATE/ 2>/dev/null | head -20'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-12c85d4048fb",
+  "_gold": {
+    "source_case_id": "12c85d4048fb",
+    "platform": "omp",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

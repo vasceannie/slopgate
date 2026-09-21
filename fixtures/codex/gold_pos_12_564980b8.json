@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"recovery\\|skill\" bundle/manifest.yaml tests/test_bundle_skill_routing.py tests/test_bundle_recovery_installation.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-564980b84fdd",
+  "_gold": {
+    "source_case_id": "564980b84fdd",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat > /tmp/opencode/repro_structured.py <<'EOF'\nimport asyncio, os\nos.environ[\"LLM_USE_REAL_API\"] = \"1\"\nos.environ[\"OPENAI_BASE_URL\"] = \"http://llm.toy/v1\"\nos.environ[\"MODEL\"] = \"ling-3.0-flash\"\nos.environ[\"LLM_API_KEY\"] = \"sk-XgNV2_Hcxbned54ZOpL-iw\"\n\nfrom langchain_core.messages import HumanMessage, SystemMessage\nfrom src.llm import get_llm_client\nfrom src.browser_runtime.page_ops.apply.decision.models import ApplicationPageJudgeResult\n\nasync def main():\n    model = get_llm_client()\n    print(\"MODEL:\", type(model).__name__)\n    structured = model.with_structured_output(ApplicationPageJudgeResult)\n    try:\n        raw = await structured.ainvoke([\n            SystemMessage(content=\"You are a judge.\"),\n            HumanMessage(content='links: []\\ncurrent_url: https://kiongroup.wd5.myworkdayjobs.com/en-US/KionGroup/job/Atlanta-Georgia/Senior-Software-Engineer_R4814'),\n        ])\n        print(\"RAW:\", raw)\n    except Exception as exc:\n        print(\"EXC TYPE:\", type(exc).__name__)\n        print(\"EXC:\", repr(exc)[:2000])\n\nasyncio.run(main())\nEOF\nuv run python /tmp/opencode/repro_structured.py 2>&1 | tail -20",
+    "timeout": 90000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-f2c82f4665a5",
+  "_gold": {
+    "source_case_id": "f2c82f4665a5",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

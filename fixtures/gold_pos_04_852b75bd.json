@@ -1,0 +1,72 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "end": "19#RK",
+        "lines": [
+          "from .comparison import (",
+          "    COMPARISON_DIMENSIONS,",
+          "    ComparisonRequest,",
+          "    ComparisonSpec,",
+          "    apply_cohort_filters,",
+          "    build_comparison,",
+          "    parse_cohort_filters,",
+          "    resolve_comparison,",
+          ")"
+        ],
+        "op": "replace",
+        "pos": "13#ZR"
+      },
+      {
+        "end": "34#KN",
+        "lines": [
+          "__all__ = [",
+          "    \"COMPARISON_DIMENSIONS\",",
+          "    \"ComparisonRequest\",",
+          "    \"ComparisonSpec\","
+        ],
+        "op": "replace",
+        "pos": "32#QM"
+      },
+      {
+        "end": "48#HT",
+        "lines": [
+          "    \"parse_cohort_filters\",",
+          "    \"parse_result_records\",",
+          "    \"resolve_comparison\",",
+          "    \"semantic_tool_family\",",
+          "]"
+        ],
+        "op": "replace",
+        "pos": "47#SB"
+      },
+      {
+        "end": "55#YR",
+        "lines": null,
+        "op": "replace",
+        "pos": "53#BV"
+      }
+    ],
+    "file_path": "$REPO_SLOPGATE/src/slopgate/stats/improvement/__init__.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-852b75bd9de0",
+  "_gold": {
+    "source_case_id": "852b75bd9de0",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "stats/improvement/__init__.py",
+      "sha256": "16a464874391b9bdea6148a62dada756189509919b69ac79167838584aa7ff87",
+      "text": "from .comparison import (\n    COMPARISON_DIMENSIONS,\n    ComparisonRequest,\n    ComparisonSpec,\n    apply_cohort_filters,\n    build_comparison,\n    parse_cohort_filters,\n    resolve_comparison,\n)\n\n__all__ = [\n    \"COMPARISON_DIMENSIONS\",\n    \"ComparisonRequest\",\n    \"ComparisonSpec\",\n\n    \"parse_cohort_filters\",\n    \"parse_result_records\",\n    \"resolve_comparison\",\n    \"semantic_tool_family\",\n]"
+    }
+  ]
+}

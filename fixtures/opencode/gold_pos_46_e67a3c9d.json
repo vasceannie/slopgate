@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git show HEAD:tests/agent_stream/test_langfuse_integration/test_event_observations.py > /tmp/opencode/toe_orig.py && wc -l /tmp/opencode/toe_orig.py && sed -n '120,172p' /tmp/opencode/toe_orig.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e67a3c9d9c8f",
+  "_gold": {
+    "source_case_id": "e67a3c9d9c8f",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

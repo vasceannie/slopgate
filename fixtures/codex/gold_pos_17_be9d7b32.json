@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk grep -n \"hint\\|skill\" src/slopgate/engine src/slopgate/rules/_hints.py src/slopgate 2>/dev/null"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-be9d7b32bd9b",
+  "_gold": {
+    "source_case_id": "be9d7b32bd9b",
+    "platform": "codex",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

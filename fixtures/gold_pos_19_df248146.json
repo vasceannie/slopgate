@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n \"autouse\\|os\\.environ\\|monkeypatch\\|reset_llm\\|load_dotenv\\|candidate_dotenv\" $REPO_JOB_HUNTER/tests/agent_stream/conftest.py $REPO_JOB_HUNTER/tests/agent_stream/_fixtures/env.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-df248146ffff",
+  "_gold": {
+    "source_case_id": "df248146ffff",
+    "platform": "claude",
+    "current_rule_ids": [
+      "GLOBAL-BUILTIN-SENSITIVE-DATA",
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

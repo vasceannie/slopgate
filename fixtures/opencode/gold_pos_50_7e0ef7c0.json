@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "uv run pytest -q tests/agent_stream/test_agent_stream.py --no-cov -p no:randomly 2>&1 | tail -2 ; git stash list | head -2 ; git diff HEAD --stat -- src/llm/ | tail -3",
+    "timeout": 600000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7e0ef7c06d83",
+  "_gold": {
+    "source_case_id": "7e0ef7c06d83",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "GIT-003",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

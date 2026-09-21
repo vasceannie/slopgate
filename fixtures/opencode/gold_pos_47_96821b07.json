@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; git show HEAD:tests/agent_stream/test_langfuse_integration/test_event_observations.py > /tmp/opencode/toe_orig.py && wc -l /tmp/opencode/toe_orig.py && sed -n '120,172p' /tmp/opencode/toe_orig.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-96821b07944b",
+  "_gold": {
+    "source_case_id": "96821b07944b",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "PY-SHELL-001",
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "from orders.bus import EventBus\n\n\ndef publish_order_created(bus: EventBus, order_id: str) -> None:\n    event = {\"order_id\": order_id}\n    bus.publish(\"order.created\", event)\n",
+    "file_path": "src/orders/events.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-2fc55187e3fd",
+  "_gold": {
+    "source_case_id": "2fc55187e3fd",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-LOG-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/orders/events.py",
+      "sha256": "5e8b6e968af488e8fece18aa3a45350c8ffaa97d9c4af4372e06c6568f393823",
+      "text": "from orders.bus import EventBus\n\n\ndef publish_order_created(bus: EventBus, order_id: str) -> None:\n    event = {\"order_id\": order_id}\n    bus.publish(\"order.created\", event)\n"
+    }
+  ]
+}

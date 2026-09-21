@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk proxy rg -n \"\\[project\\.scripts\\]|slopgate test|pytest|quality\" pyproject.toml Makefile"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-c4bf783b8022",
+  "_gold": {
+    "source_case_id": "c4bf783b8022",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-PYTEST-MP"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

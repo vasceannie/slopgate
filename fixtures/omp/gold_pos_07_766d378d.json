@@ -1,0 +1,21 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk git -c rebase.autoStash=false pull --rebase && rtk bd dolt push && rtk git push",
+    "cwd": "$REPO_JOB_HUNTER",
+    "i": "js prelude",
+    "timeout": 30
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-766d378df360",
+  "_gold": {
+    "source_case_id": "766d378df360",
+    "platform": "omp",
+    "current_rule_ids": [
+      "GIT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

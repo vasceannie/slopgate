@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/stats/improvement/scope_model.py\n@@\n-from slopgate.constants import BASH_TOOL_LOWER\n+from slopgate.constants import BASH_TOOL_LOWER, UNKNOWN_VALUE as UNKNOWN_VALUE\n@@\n-__all__ = [\"parse_result_record\"]\n+__all__ = [\"UNKNOWN_VALUE\", \"parse_result_record\"]\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-b47a3d0e570f",
+  "_gold": {
+    "source_case_id": "b47a3d0e570f",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-002"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "stats/improvement/scope_model.py",
+      "sha256": "05ba684dfecec98ceaf28f6a86b45bffec0df9a2ce8f6b33b697be42b671f293",
+      "text": "from slopgate.constants import BASH_TOOL_LOWER, UNKNOWN_VALUE as UNKNOWN_VALUE\n__all__ = [\"UNKNOWN_VALUE\", \"parse_result_record\"]"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 from slopgate._types import ObjectDict, object_dict
@@ -80,9 +81,47 @@ def case_is_replayable(case: ObjectDict) -> bool:
     return True
 
 
-def evaluate_case(case: ObjectDict) -> ObjectDict:
+def overlay_row_from_eval(
+    case: ObjectDict,
+    result: ObjectDict,
+    *,
+    engine_version: str,
+    cwd_kind: str = "enrolled_temp",
+    evaluated_at: str | None = None,
+    schema_version: int = 1,
+) -> ObjectDict:
+    """Sidecar row keyed by ``case_id``. Does not mutate historical ``expected``."""
+    current = [str(item) for item in (result.get("got_rules") or [])]
+    return {
+        "schema_version": schema_version,
+        "case_id": case.get("case_id"),
+        "engine_version": engine_version,
+        "evaluated_at": evaluated_at
+        or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cwd_kind": cwd_kind,
+        "current_rules": current,
+        "primary_rule_current": current[0] if current else "_CLEAN",
+        "primary_hit": bool(result.get("primary_hit")),
+        "exact_match": bool(result.get("exact_rule_set_match")),
+        "error": result.get("error"),
+        "replayable": bool(result.get("replayable")),
+    }
+
+
+def write_overlay_jsonl(path: Path | str, rows: Sequence[ObjectDict]) -> None:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, separators=(",", ":")) + "\n")
+
+
+def evaluate_case(case: ObjectDict, *, cwd: str | None = None) -> ObjectDict:
     """Replay one case through ``evaluate_payload`` and compare rule sets."""
     payload = object_dict(case.get("replay_payload")) or {}
+    if cwd:
+        payload = dict(payload)
+        payload["cwd"] = cwd
     platform = str(case.get("platform") or "claude")
     expected = [
         str(item.get("rule_id"))
@@ -151,6 +190,10 @@ def evaluate_pack(
     *,
     limit: int | None = None,
     replayable_only: bool = True,
+    cwd: str | None = None,
+    overlay_out: Path | str | None = None,
+    engine_version: str | None = None,
+    cwd_kind: str = "as_payload",
 ) -> ObjectDict:
     """Load, evaluate, and summarize an L1 JSONL pack.
 
@@ -165,12 +208,28 @@ def evaluate_pack(
         cases = filtered
     if limit is not None:
         cases = cases[:limit]
-    rows = [evaluate_case(case) for case in cases]
+    rows = [evaluate_case(case, cwd=cwd) for case in cases]
     summary = summarize_eval(rows)
     summary["results"] = list(rows)
     summary["pack"] = str(path)
     summary["replayable_only"] = replayable_only
     summary["skipped_label_only"] = skipped
+    if overlay_out is not None:
+        from slopgate import __version__ as installed_version
+
+        version = engine_version or str(installed_version)
+        overlay_rows = [
+            overlay_row_from_eval(
+                case,
+                result,
+                engine_version=version,
+                cwd_kind=cwd_kind if cwd else "as_payload",
+            )
+            for case, result in zip(cases, rows, strict=True)
+        ]
+        write_overlay_jsonl(overlay_out, overlay_rows)
+        summary["overlay_out"] = str(overlay_out)
+        summary["overlay_rows"] = len(overlay_rows)
     return summary
 
 

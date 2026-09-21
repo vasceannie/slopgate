@@ -1,0 +1,19 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls tests/agent_stream/test_submit_authorization_dispatch/ tests/eval_llm/test_application_entry_navigation/ 2>/dev/null; echo ---; grep -n \"importmode\\|asyncio_mode\\|markers\\|testpaths\" pyproject.toml | head -40"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-ae1f89a6cd0b",
+  "_gold": {
+    "source_case_id": "ae1f89a6cd0b",
+    "platform": "omp",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001",
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

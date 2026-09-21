@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Drive a real agent-stream run against the production bridge and log every event.\"\"\"\n\nfrom __future__ import annotations\n\nimport json\nimport sys\nimport time\nimport uuid\n\nimport httpx\n\nAPI = \"http://127.0.0.1:8686\"\nURL = sys.argv[1]\nENV_PATH = \"$REPO_JOB_HUNTER/.env\"\n\napi_key: str | None = None\nfor line in open(ENV_PATH):\n    if line.startswith(\"CLOUD_API_KEY=\"):\n        api_key = $SECRET\"=\", 1)[1].strip().strip('\"').strip(\"'\")\n        break\n\npayload = {\n    \"request_id\": uuid.uuid4().hex,\n    \"url\": URL,\n    \"executor_backend\": \"playwright\",\n    \"execution_host\": \"local\",\n    \"controls\": [],\n    \"profile_data\": {},\n    \"debug_enabled\": True,\n}\nheaders = {\"X-API-Key\": api_key} if api_key else {}\nprint(\n    f\"POST {API}/api/agent/stream request_id={payload['request_id']} url={URL}\",\n    flush=True,\n)\nwith httpx.stream(\n    \"POST\",\n    f\"{API}/api/agent/stream\",\n    headers=headers,\n    json=payload,\n    timeout=httpx.Timeout(900.0, connect=30.0),\n) as resp:\n    print(f\"status={resp.status_code}\", flush=True)\n    if resp.status_code >= 400:\n        print(resp.read().decode()[:2000], flush=True)\n        sys.exit(1)\n    for line in resp.iter_lines():\n        if not line:\n            continue\n        if line.startswith(\"data:\"):\n            raw = line[5:].strip()\n            try:\n                ev = json.loads(raw)\n                stamp = time.strftime(\"%H:%M:%S\")\n                summary = {\n                    k: v\n                    for k, v in ev.items()\n                    if k not in (\"type\", \"sequence\")\n                }\n                print(\n                    f\"[{stamp}] {ev.get('type')} seq={ev.get('sequence')} \"\n                    f\"{json.dumps(summary)[:400]}\",\n                    flush=True,\n                )\n            except json.JSONDecodeError:\n                print(f\"RAW: {raw[:300]}\", flush=True)\n        elif line.startswith(\"event:\"):\n            print(f\"EVENT: {line[6:].strip()}\", flush=True)\n        else:\n            print(f\"RAW: {line[:200]}\", flush=True)\n",
+    "file_path": "/tmp/$TMP/live_auth_proof.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-7b3c069f2c30",
+  "_gold": {
+    "source_case_id": "7b3c069f2c30",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-AST-001",
+      "PY-QUALITY-010"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tmp/$TMP/live_auth_proof.py",
+      "sha256": "416c2195d7ded417f3f15cf812516cb1290baf9d1d28674a9f0a24c01502dab2",
+      "text": "\"\"\"Drive a real agent-stream run against the production bridge and log every event.\"\"\"\n\nfrom __future__ import annotations\n\nimport json\nimport sys\nimport time\nimport uuid\n\nimport httpx\n\nAPI = \"http://127.0.0.1:8686\"\nURL = sys.argv[1]\nENV_PATH = \"$REPO_JOB_HUNTER/.env\"\n\napi_key: str | None = None\nfor line in open(ENV_PATH):\n    if line.startswith(\"CLOUD_API_KEY=\"):\n        api_key = $SECRET\"=\", 1)[1].strip().strip('\"').strip(\"'\")\n        break\n\npayload = {\n    \"request_id\": uuid.uuid4().hex,\n    \"url\": URL,\n    \"executor_backend\": \"playwright\",\n    \"execution_host\": \"local\",\n    \"controls\": [],\n    \"profile_data\": {},\n    \"debug_enabled\": True,\n}\nheaders = {\"X-API-Key\": api_key} if api_key else {}\nprint(\n    f\"POST {API}/api/agent/stream request_id={payload['request_id']} url={URL}\",\n    flush=True,\n)\nwith httpx.stream(\n    \"POST\",\n    f\"{API}/api/agent/stream\",\n    headers=headers,\n    json=payload,\n    timeout=httpx.Timeout(900.0, connect=30.0),\n) as resp:\n    print(f\"status={resp.status_code}\", flush=True)\n    if resp.status_code >= 400:\n        print(resp.read().decode()[:2000], flush=True)\n        sys.exit(1)\n    for line in resp.iter_lines():\n        if not line:\n            continue\n        if line.startswith(\"data:\"):\n            raw = line[5:].strip()\n            try:\n                ev = json.loads(raw)\n                stamp = time.strftime(\"%H:%M:%S\")\n                summary = {\n                    k: v\n                    for k, v in ev.items()\n                    if k not in (\"type\", \"sequence\")\n                }\n                print(\n                    f\"[{stamp}] {ev.get('type')} seq={ev.get('sequence')} \"\n                    f\"{json.dumps(summary)[:400]}\",\n                    flush=True,\n                )\n            except json.JSONDecodeError:\n                print(f\"RAW: {raw[:300]}\", flush=True)\n        elif line.startswith(\"event:\"):\n            print(f\"EVENT: {line[6:].strip()}\", flush=True)\n        else:\n            print(f\"RAW: {line[:200]}\", flush=True)\n"
+    }
+  ]
+}

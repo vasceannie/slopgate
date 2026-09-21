@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic, time
@@ -131,16 +132,55 @@ def _extract_tool_output(payload: ObjectMapping) -> str | None:
     return str(tool_output)
 
 
-def _trace_join_fields(payload: ObjectMapping) -> ObjectDict:
-    """Always persist join keys so later extracts can pair events↔results."""
+_CALL_ID_KEYS = (
+    "call_id",
+    "callId",
+    "callID",
+    "tool_use_id",
+    "toolUseId",
+    "tool_call_id",
+    "opencode_call_id",
+)
+_SESSION_JOIN_KEYS = (
+    "opencode_session_id",
+    "opencodeSessionId",
+    "opencodeSessionID",
+    "sessionID",
+    "sessionId",
+)
+
+
+def _first_text(payload: ObjectMapping, keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _trace_join_fields(ctx: HookContext) -> ObjectDict:
+    """Always persist join keys so later extracts can pair events↔results.
+
+    Uses payload aliases when present. Otherwise falls back to the resolved
+    session id and a stable hash of session/event/tool/timestamp so every
+    result row is joinable even when a harness omitted call_id.
+    """
+    payload = ctx.payload.payload
+    session = _first_text(payload, _SESSION_JOIN_KEYS) or ctx.session_id
+    call_id = _first_text(payload, _CALL_ID_KEYS)
+    if not call_id:
+        stamp = str(payload.get("timestamp") or payload.get("time") or "")
+        seed = f"{ctx.session_id}|{ctx.event_name}|{ctx.tool_name}|{stamp}"
+        call_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
     return {
-        "opencode_session_id": str(payload.get("opencode_session_id") or ""),
-        "call_id": str(payload.get("call_id") or ""),
+        "opencode_session_id": str(session or ""),
+        "call_id": call_id,
     }
 
 
-def _trace_optional_fields(payload: ObjectMapping) -> ObjectDict:
-    fields = _trace_join_fields(payload)
+def _trace_optional_fields(ctx: HookContext) -> ObjectDict:
+    payload = ctx.payload.payload
+    fields = _trace_join_fields(ctx)
     for key in _TRACE_OPTIONAL_FIELDS:
         if key in payload:
             fields[key] = payload[key]
@@ -163,7 +203,7 @@ def _trace_drilldown_fields(ctx: HookContext) -> ObjectDict:
         "mutating": ctx.mutating,
         "candidate_path_source": ctx.candidate_path_source,
         "platform_event_name": ctx.platform_event_name,
-        **_trace_optional_fields(ctx.payload.payload),
+        **_trace_optional_fields(ctx),
     }
 
 

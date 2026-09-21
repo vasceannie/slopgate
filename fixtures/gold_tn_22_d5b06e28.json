@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_SLOPGATE/stats/improvement/__init__.py\n@@\n-from slopgate._types import ObjectDict\n-\n from .comparison import (\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-d5b06e287fcf",
+  "_gold": {
+    "source_case_id": "d5b06e287fcf",
+    "platform": "claude",
+    "current_rule_ids": [],
+    "label_kind": "true_negative",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

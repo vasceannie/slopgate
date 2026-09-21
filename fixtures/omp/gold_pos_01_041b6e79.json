@@ -1,0 +1,27 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "content": "\"\"\"Throwaway basedpyright repro for AsyncMock attribute typing.\"\"\"\n\nfrom dataclasses import dataclass\nfrom unittest.mock import AsyncMock\n\n\n@dataclass(slots=True)\nclass Arrangement:\n    inbox: int\n    sleep: AsyncMock\n\n\ndef via_dataclass(arrangement: Arrangement) -> None:\n    arrangement.sleep.assert_awaited_once_with(5.0)\n\n\ndef via_local() -> None:\n    sleep = AsyncMock()\n    sleep.assert_awaited_once_with(5.0)\n\n\ndef via_annotated_field(arrangement: Arrangement) -> None:\n    spy: AsyncMock = arrangement.sleep\n    spy.assert_awaited_once_with(5.0)\n",
+    "path": "_tmp_repro_check.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-041b6e79a051",
+  "_gold": {
+    "source_case_id": "041b6e79a051",
+    "platform": "omp",
+    "current_rule_ids": [
+      "PY-CODE-013",
+      "PY-QUALITY-011"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "_tmp_repro_check.py",
+      "sha256": "fdee2fc7086ab7fc24ca0540e753f0a2adb1afe6351420948b870903f5c9b7c8",
+      "text": "\"\"\"Throwaway basedpyright repro for AsyncMock attribute typing.\"\"\"\n\nfrom dataclasses import dataclass\nfrom unittest.mock import AsyncMock\n\n\n@dataclass(slots=True)\nclass Arrangement:\n    inbox: int\n    sleep: AsyncMock\n\n\ndef via_dataclass(arrangement: Arrangement) -> None:\n    arrangement.sleep.assert_awaited_once_with(5.0)\n\n\ndef via_local() -> None:\n    sleep = AsyncMock()\n    sleep.assert_awaited_once_with(5.0)\n\n\ndef via_annotated_field(arrangement: Arrangement) -> None:\n    spy: AsyncMock = arrangement.sleep\n    spy.assert_awaited_once_with(5.0)\n"
+    }
+  ]
+}

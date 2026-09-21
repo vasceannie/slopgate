@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n \"ObjectDict\\|object_dict\\|object_list\" $REPO_SLOPGATE/_types.py 2>/dev/null | head -20"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-2f64c71a6fc3",
+  "_gold": {
+    "source_case_id": "2f64c71a6fc3",
+    "platform": "opencode",
+    "current_rule_ids": [
+      "OC-PROJECTION-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

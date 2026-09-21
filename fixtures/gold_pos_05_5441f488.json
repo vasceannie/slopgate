@@ -1,0 +1,113 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "lines": [
+          "from ._analysis import analyze",
+          "from ._load import default_log_path, load_entries",
+          "from .improvement import ComparisonRequest, resolve_comparison"
+        ],
+        "op": "replace",
+        "pos": "12#QX"
+      },
+      {
+        "end": "148#QK",
+        "lines": [
+          "def _print_churn_metrics(stats: Mapping[str, object]) -> None:",
+          "    print(\"\\n--- Deny Churn ---\")",
+          "    resolution_rate = stats.get(\"first_time_resolution_rate\", 0.0)",
+          "    median_retries = stats.get(\"median_retries_before_resolution\", 0.0)",
+          "    if isinstance(resolution_rate, (float, int)):",
+          "        print(f\"  First-time resolution rate: {float(resolution_rate) * 100:.1f}%\")",
+          "    print(\"  (legacy churn metric: counts single-denial scopes, not observed\")",
+          "    print(\"   resolution; see the Improvement section for outcome-valid rates)\")",
+          "    if isinstance(median_retries, (float, int)):",
+          "        print(f\"  Median retries before resolution: {float(median_retries):.2f}\")",
+          "    print(\"  Repeated deny rate by rule:\")",
+          "    for rule, count in _pairs(stats, \"repeated_deny_rate_by_rule\")[:5]:",
+          "        print(f\"    {rule:24s} {count:5,}\")",
+          "    print(\"  Top looping files:\")",
+          "    for path, count in _pairs(stats, \"top_looping_files\")[:5]:",
+          "        print(f\"    {count:4,}  {path}\")",
+          "    print(\"  Top pathless loop rules:\")",
+          "    for rule, count in _pairs(stats, \"top_pathless_loop_rules\")[:5]:",
+          "        print(f\"    {rule:24s} {count:5,}\")"
+        ],
+        "op": "replace",
+        "pos": "141#VM"
+      },
+      {
+        "end": "182#WS",
+        "lines": [
+          "def run_stats(",
+          "    log_path: str | None = None,",
+          "    days: int | None = None,",
+          "    as_json: bool = False,",
+          "    baseline_policy: str | None = None,",
+          "    candidate_policy: str | None = None,",
+          "    baseline_guidance: str | None = None,",
+          "    candidate_guidance: str | None = None,",
+          "    cohort_filters: Sequence[str] = (),",
+          ") -> int:",
+          "    path = Path(log_path) if log_path else default_log_path()",
+          "    if not path.exists():",
+          "        print(f\"Log not found: {path}\", file=sys.stderr)",
+          "        return 1",
+          "",
+          "    label = f\" (last {days} days)\" if days else \"\"",
+          "    if not as_json:",
+          "        print(f\"Loading {path}{label}...\")",
+          "",
+          "    entries = load_entries(path, days)",
+          "    request = ComparisonRequest(",
+          "        baseline_policy=baseline_policy,",
+          "        candidate_policy=candidate_policy,",
+          "        baseline_guidance=baseline_guidance,",
+          "        candidate_guidance=candidate_guidance,",
+          "        cohorts=tuple(cohort_filters),",
+          "    )",
+          "    comparison, error = resolve_comparison(entries, request)",
+          "    if error is not None:",
+          "        print(f\"Comparison error: {error}\", file=sys.stderr)",
+          "        return 1",
+          "",
+          "    stats = analyze(entries)",
+          "    if comparison is not None:",
+          "        improvement = object_dict(stats.get(\"improvement\"))",
+          "        improvement[\"comparison\"] = comparison",
+          "        stats[\"improvement\"] = improvement",
+          "",
+          "    if as_json:",
+          "        print(json.dumps(stats, indent=2, default=str))",
+          "    else:",
+          "        print_report(stats)",
+          "",
+          "    return 0"
+        ],
+        "op": "replace",
+        "pos": "160#SW"
+      }
+    ],
+    "file_path": "$REPO_SLOPGATE/src/slopgate/stats/_report.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-5441f4888728",
+  "_gold": {
+    "source_case_id": "5441f4888728",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-009"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "stats/_report.py",
+      "sha256": "dfe078bfee41a13b0e87c1fa45d20592204aa31b3dff4de8bdfc0567a1461b79",
+      "text": "from ._analysis import analyze\nfrom ._load import default_log_path, load_entries\nfrom .improvement import ComparisonRequest, resolve_comparison\n\ndef _print_churn_metrics(stats: Mapping[str, object]) -> None:\n    print(\"\\n--- Deny Churn ---\")\n    resolution_rate = stats.get(\"first_time_resolution_rate\", 0.0)\n    median_retries = stats.get(\"median_retries_before_resolution\", 0.0)\n    if isinstance(resolution_rate, (float, int)):\n        print(f\"  First-time resolution rate: {float(resolution_rate) * 100:.1f}%\")\n    print(\"  (legacy churn metric: counts single-denial scopes, not observed\")\n    print(\"   resolution; see the Improvement section for outcome-valid rates)\")\n    if isinstance(median_retries, (float, int)):\n        print(f\"  Median retries before resolution: {float(median_retries):.2f}\")\n    print(\"  Repeated deny rate by rule:\")\n    for rule, count in _pairs(stats, \"repeated_deny_rate_by_rule\")[:5]:\n        print(f\"    {rule:24s} {count:5,}\")\n    print(\"  Top looping files:\")\n    for path, count in _pairs(stats, \"top_looping_files\")[:5]:\n        print(f\"    {count:4,}  {path}\")\n    print(\"  Top pathless loop rules:\")\n    for rule, count in _pairs(stats, \"top_pathless_loop_rules\")[:5]:\n        print(f\"    {rule:24s} {count:5,}\")\n\ndef run_stats(\n    log_path: str | None = None,\n    days: int | None = None,\n    as_json: bool = False,\n    baseline_policy: str | None = None,\n    candidate_policy: str | None = None,\n    baseline_guidance: str | None = None,\n    candidate_guidance: str | None = None,\n    cohort_filters: Sequence[str] = (),\n) -> int:\n    path = Path(log_path) if log_path else default_log_path()\n    if not path.exists():\n        print(f\"Log not found: {path}\", file=sys.stderr)\n        return 1\n\n    label = f\" (last {days} days)\" if days else \"\"\n    if not as_json:\n        print(f\"Loading {path}{label}...\")\n\n    entries = load_entries(path, days)\n    request = ComparisonRequest(\n        baseline_policy=baseline_policy,\n        candidate_policy=candidate_policy,\n        baseline_guidance=baseline_guidance,\n        candidate_guidance=candidate_guidance,\n        cohorts=tuple(cohort_filters),\n    )\n    comparison, error = resolve_comparison(entries, request)\n    if error is not None:\n        print(f\"Comparison error: {error}\", file=sys.stderr)\n        return 1\n\n    stats = analyze(entries)\n    if comparison is not None:\n        improvement = object_dict(stats.get(\"improvement\"))\n        improvement[\"comparison\"] = comparison\n        stats[\"improvement\"] = improvement\n\n    if as_json:\n        print(json.dumps(stats, indent=2, default=str))\n    else:\n        print_report(stats)\n\n    return 0"
+    }
+  ]
+}

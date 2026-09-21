@@ -1,0 +1,87 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "edits": [
+      {
+        "end": "32#SX",
+        "lines": [
+          "from .dom import (",
+          "    APPLICATION_FORM_JS,",
+          "    APPLY_HREFS_JS,",
+          "    APPLY_LINK_HREF_JS,",
+          "    ASHBY_APPLY_SELECTORS,",
+          "    AVATURE_APPLY_SELECTORS,",
+          "    DEFAULT_APPLY_SELECTORS,",
+          "    HAS_ACTIONABLE_JS,",
+          "    RIPPLING_APPLY_SELECTORS,",
+          "    SMARTRECRUITERS_APPLY_SELECTORS,",
+          "    TRUSTED_APPLY_HOSTS,",
+          "    WORKATO_APPLY_SELECTORS,",
+          "    WORKDAY_APPLY_SELECTORS,",
+          "    wait_for_apply_selector_render,",
+          ")"
+        ],
+        "op": "replace",
+        "pos": "20#XK"
+      },
+      {
+        "end": "37#QK",
+        "lines": [
+          "_APPLY_HREF_SETTLE_LIMIT = 2",
+          "_ACTIVATION_PASS_LIMIT = 3",
+          "_MIN_APPLICATION_FORM_CONTROLS = 2"
+        ],
+        "op": "replace",
+        "pos": "34#YV"
+      },
+      {
+        "end": "346#QK",
+        "lines": [
+          "    selectors = _platform_apply_selectors(host)",
+          "    if selectors and pass_index == 0:",
+          "        await wait_for_apply_selector_render(page, selectors)",
+          "    for selector in selectors:",
+          "        before_url = page.url",
+          "        if await _try_click_apply_selector(page, selector, timeout_ms):",
+          "            return True",
+          "        if page.url != before_url:",
+          "            break",
+          "    await _wait_for_application_form(page)",
+          "    return True"
+        ],
+        "op": "replace",
+        "pos": "337#QK"
+      },
+      {
+        "end": "349#QK",
+        "lines": [
+          "",
+          "",
+          "async def _wait_for_application_form(page: Page) -> bool:"
+        ],
+        "op": "replace",
+        "pos": "346#QK"
+      }
+    ],
+    "file_path": "$REPO_JOB_HUNTER/src/browser_runtime/page_ops/apply/flow.py"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-e1ed36f1c3d9",
+  "_gold": {
+    "source_case_id": "e1ed36f1c3d9",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-IMPORT-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "src/browser_runtime/page_ops/apply/flow.py",
+      "sha256": "f17af409d94516c18dade06ee052a277c6ba9606fe474acf546787b97091418c",
+      "text": "from .dom import (\n    APPLICATION_FORM_JS,\n    APPLY_HREFS_JS,\n    APPLY_LINK_HREF_JS,\n    ASHBY_APPLY_SELECTORS,\n    AVATURE_APPLY_SELECTORS,\n    DEFAULT_APPLY_SELECTORS,\n    HAS_ACTIONABLE_JS,\n    RIPPLING_APPLY_SELECTORS,\n    SMARTRECRUITERS_APPLY_SELECTORS,\n    TRUSTED_APPLY_HOSTS,\n    WORKATO_APPLY_SELECTORS,\n    WORKDAY_APPLY_SELECTORS,\n    wait_for_apply_selector_render,\n)\n\n_APPLY_HREF_SETTLE_LIMIT = 2\n_ACTIVATION_PASS_LIMIT = 3\n_MIN_APPLICATION_FORM_CONTROLS = 2\n\n    selectors = _platform_apply_selectors(host)\n    if selectors and pass_index == 0:\n        await wait_for_apply_selector_render(page, selectors)\n    for selector in selectors:\n        before_url = page.url\n        if await _try_click_apply_selector(page, selector, timeout_ms):\n            return True\n        if page.url != before_url:\n            break\n    await _wait_for_application_form(page)\n    return True\n\n\n\nasync def _wait_for_application_form(page: Page) -> bool:"
+    }
+  ]
+}

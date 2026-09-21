@@ -1,0 +1,26 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ApplyPatch",
+  "tool_input": {
+    "patch_text": "*** Begin Patch\n*** Update File: $REPO_PERF/tests/engine/test_13_trace_records_platform_capability_and_repo_root.py\n@@\n import json\n \n+from slopgate._types import object_dict\n from tests.test_engine import (\n@@\n )\n \n \n+def _evaluate_traced_bash(\n+    tmp_path: Path,\n+    monkeypatch: MonkeyPatch,\n+    repo_name: str,\n+    command: str,\n+    platform: str,\n+) -> None:\n+    repo = write_slopgate(tmp_path / repo_name)\n+    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)\n+    monkeypatch.setenv(\"SLOPGATE_ROOT\", str(tmp_path / \"vf-root\"))\n+    _ = evaluate_payload(pretool_bash_payload(repo, command), platform=platform)\n+\n+\n+def _latest_result_timing(tmp_path: Path) -> dict[str, object]:\n+    results_path = tmp_path / \"vf-root\" / \"logs\" / \"results.jsonl\"\n+    records = [\n+        json.loads(line)\n+        for line in results_path.read_text(encoding=\"utf-8\").splitlines()\n+    ]\n+    return object_dict(records[-1].get(\"timing\"))\n+\n+\n def test_trace_records_platform_capability_and_repo_root(\n@@\n def test_results_trace_records_aggregate_timing_metadata(\n     tmp_path: Path, monkeypatch: MonkeyPatch\n ) -> None:\n-    repo = write_slopgate(tmp_path / \"repo_trace_timing\")\n-    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)\n-    monkeypatch.setenv(\"SLOPGATE_ROOT\", str(tmp_path / \"vf-root\"))\n-\n-    _ = evaluate_payload(pretool_bash_payload(repo, \"git status\"), platform=\"opencode\")\n-\n-    results_path = tmp_path / \"vf-root\" / \"logs\" / \"results.jsonl\"\n-    records = [\n-        json.loads(line)\n-        for line in results_path.read_text(encoding=\"utf-8\").splitlines()\n-    ]\n-    timing = records[-1][\"timing\"]\n+    _evaluate_traced_bash(\n+        tmp_path, monkeypatch, \"repo_trace_timing\", \"git status\", \"opencode\"\n+    )\n+    timing = _latest_result_timing(tmp_path)\n*** End Patch"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-dd0e18e6f618",
+  "_gold": {
+    "source_case_id": "dd0e18e6f618",
+    "platform": "claude",
+    "current_rule_ids": [
+      "PY-CODE-009",
+      "PY-CODE-016"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  },
+  "files": [
+    {
+      "path": "tests/engine/test_13_trace_records_platform_capability_and_repo_root.py",
+      "sha256": "aea5ebe9e2f07499af090d43b1cd88176c2083ab85e8555d3da06aa60acf4d7d",
+      "text": "from slopgate._types import object_dict\ndef _evaluate_traced_bash(\n    tmp_path: Path,\n    monkeypatch: MonkeyPatch,\n    repo_name: str,\n    command: str,\n    platform: str,\n) -> None:\n    repo = write_slopgate(tmp_path / repo_name)\n    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)\n    monkeypatch.setenv(\"SLOPGATE_ROOT\", str(tmp_path / \"vf-root\"))\n    _ = evaluate_payload(pretool_bash_payload(repo, command), platform=platform)\n\n\ndef _latest_result_timing(tmp_path: Path) -> dict[str, object]:\n    results_path = tmp_path / \"vf-root\" / \"logs\" / \"results.jsonl\"\n    records = [\n        json.loads(line)\n        for line in results_path.read_text(encoding=\"utf-8\").splitlines()\n    ]\n    return object_dict(records[-1].get(\"timing\"))\n\n\n    _evaluate_traced_bash(\n        tmp_path, monkeypatch, \"repo_trace_timing\", \"git status\", \"opencode\"\n    )\n    timing = _latest_result_timing(tmp_path)"
+    }
+  ]
+}

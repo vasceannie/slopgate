@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rtk env | rtk grep -i 'orca\\|dispatch\\|capab'"
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-4d686d0fffef",
+  "_gold": {
+    "source_case_id": "4d686d0fffef",
+    "platform": "codex",
+    "current_rule_ids": [
+      "REMIND-SEARCH-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}

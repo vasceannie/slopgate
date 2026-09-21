@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "kill %1 2>/dev/null; sleep 1\ncd $REPO_JOB_HUNTER && slopgate daemon --socket /tmp/slopgate-hookd-1000.sock &\nsleep 2\nls -la /tmp/slopgate-hookd-1000.sock 2>&1",
+    "cwd": "",
+    "timeout": 6000
+  },
+  "cwd": "/tmp/example-repo",
+  "session_id": "gold-8435f5eb3efd",
+  "_gold": {
+    "source_case_id": "8435f5eb3efd",
+    "platform": "cursor",
+    "current_rule_ids": [
+      "SHELL-001"
+    ],
+    "label_kind": "positive",
+    "verified": "current-engine-enrolled-repo"
+  }
+}
