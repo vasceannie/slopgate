@@ -18,6 +18,11 @@
 
 - Keep README aligned with upstream docs; prefer "partial"/"best-effort" over parity claims.
 
+## Git remotes
+
+- Push to GitLab only: `origin` (`https://lab.baked.rocks/claude/slopgate.git`). Never push to the `github` remote.
+- Beads syncs over the same GitLab remote (`refs/dolt/data` via `bd dolt push`).
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
