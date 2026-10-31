@@ -173,7 +173,7 @@ def _trace_join_fields(ctx: HookContext) -> ObjectDict:
         seed = f"{ctx.session_id}|{ctx.event_name}|{ctx.tool_name}|{stamp}"
         call_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
     return {
-        "opencode_session_id": str(session or ""),
+        "opencode_session_id": session or "",
         "call_id": call_id,
     }
 

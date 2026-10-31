@@ -66,14 +66,16 @@ def _files_from_payload(payload: dict) -> list[dict[str, str]]:
     rel = _safe_relpath(str(path))
     if not rel:
         return []
-    text = content if len(content) <= MAX_FILE_CHARS else f"{content[:MAX_FILE_CHARS]}...[truncated {len(content) - MAX_FILE_CHARS} chars]"
+    overflow = len(content) - MAX_FILE_CHARS
+    text = content if overflow <= 0 else f"{content[:MAX_FILE_CHARS]}...[truncated {overflow} chars]"
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return [{"path": rel, "sha256": digest, "text": text}]
 
 
 def _materialize_workspace(repo: Path, payload: dict) -> None:
     for item in _files_from_payload(payload):
-        rel = _safe_relpath(str(item.get("path") or ""))
+        path = item.get("path")
+        rel = _safe_relpath(path) if isinstance(path, str) else None
         text = item.get("text")
         if not rel or not isinstance(text, str):
             continue

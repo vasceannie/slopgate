@@ -142,7 +142,7 @@ def test_evaluate_pack_writes_overlay_sidecar(tmp_path: Path) -> None:
 
     pack = tmp_path / "pack.jsonl"
     overlay = tmp_path / "overlay.jsonl"
-    case = {
+    case: dict[str, object] = {
         "case_id": "overlay-1",
         "tier": "replayable",
         "platform": "claude",
@@ -166,9 +166,13 @@ def test_evaluate_pack_writes_overlay_sidecar(tmp_path: Path) -> None:
     assert row["engine_version"] == "test"
     assert "current_rules" in row
     assert "primary_hit" in row
+    results = summary["results"]
+    assert isinstance(results, list), "evaluate_pack must return per-case results"
+    first_result = results[0]
+    assert isinstance(first_result, dict), "each eval result must be a dict row"
     rebuilt = overlay_row_from_eval(
         case,
-        summary["results"][0],
+        first_result,
         engine_version="test",
         evaluated_at=row["evaluated_at"],
     )

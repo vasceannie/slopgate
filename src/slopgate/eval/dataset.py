@@ -91,7 +91,8 @@ def overlay_row_from_eval(
     schema_version: int = 1,
 ) -> ObjectDict:
     """Sidecar row keyed by ``case_id``. Does not mutate historical ``expected``."""
-    current = [str(item) for item in (result.get("got_rules") or [])]
+    got_rules = result.get("got_rules")
+    current = [str(item) for item in got_rules] if isinstance(got_rules, list) else []
     return {
         "schema_version": schema_version,
         "case_id": case.get("case_id"),
@@ -123,9 +124,10 @@ def evaluate_case(case: ObjectDict, *, cwd: str | None = None) -> ObjectDict:
         payload = dict(payload)
         payload["cwd"] = cwd
     platform = str(case.get("platform") or "claude")
+    expected_items = case.get("expected")
     expected = [
         str(item.get("rule_id"))
-        for item in (case.get("expected") or [])
+        for item in (expected_items if isinstance(expected_items, list) else [])
         if isinstance(item, dict) and item.get("rule_id")
     ]
     expected_unique: list[str] = []
@@ -215,9 +217,9 @@ def evaluate_pack(
     summary["replayable_only"] = replayable_only
     summary["skipped_label_only"] = skipped
     if overlay_out is not None:
-        from slopgate import __version__ as installed_version
+        from slopgate import __version__
 
-        version = engine_version or str(installed_version)
+        version = engine_version or __version__
         overlay_rows = [
             overlay_row_from_eval(
                 case,

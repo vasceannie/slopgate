@@ -137,7 +137,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2))
     else:
         print(json.dumps(report, separators=(",", ":")))
-    return 0 if int(report.get("errors") or 0) == 0 else 1
+    errors = report.get("errors")
+    return 1 if isinstance(errors, int) and errors > 0 else 0
 
 
 def cmd_install(args: argparse.Namespace) -> int:
