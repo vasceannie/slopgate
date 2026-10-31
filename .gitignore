@@ -26,6 +26,7 @@ headroom_memory.db
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.beads.gate.lock
 
 # oh-my-agent runtime (local artifacts — do not commit)
 .agents/oma-config.local.cue
