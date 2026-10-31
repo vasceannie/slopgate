@@ -1,5 +1,5 @@
 {
-  "defaultBranch": "main",
+  "defaultBranch": "master",
   "skipContextFiles": true,
   "skipSkills": true,
   "embeddings": true,
