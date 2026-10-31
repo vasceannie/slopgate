@@ -21,6 +21,7 @@
 ## Git remotes
 
 - Push to GitLab only: `origin` (`https://lab.baked.rocks/claude/slopgate.git`). Never push to the `github` remote.
+- Exception: `make publish` (PyPI release) pushes the release tag and branch to both `origin` and `github`.
 - Beads syncs over the same GitLab remote (`refs/dolt/data` via `bd dolt push`).
 
 <!-- gitnexus:start -->
