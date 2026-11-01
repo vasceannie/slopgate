@@ -18,11 +18,6 @@ from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.adapters.opencode_projection.models import OPENCODE_TOOL_CONTRACT_VERSION
 from slopgate.resources import resource_path
 from slopgate.state import RepairRequiredPayload, RepairTarget
-from tests.integration.opencode_plugin_v2_support import (
-    link_v2_dependencies,
-    v2_before_input,
-    v2_plugin_setup_source,
-)
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
@@ -94,13 +89,12 @@ def run_generated_plugin(
         render_opencode_plugin(
             template,
             sys.executable,
-            {"opencode_version": "2.2.5"},
+            {"opencode_version": "1.18.21"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(_runner_source(plugin_path, repo, case), encoding="utf-8")
-    link_v2_dependencies(tmp_path)
     env = dict(os.environ)
     env.pop("SLOPGATE_BIN", None)
     env["SLOPGATE_DAEMON_SOCKET"] = str(tmp_path / "no-daemon.sock")
@@ -118,11 +112,19 @@ def _runner_source(plugin_path: Path, repo: Path, case: ObjectDict) -> str:
     tool_name = string_value(case.get("tool_name")) or ""
     call_id = string_value(case.get("id")) or "contract-call"
     tool_input = object_dict(case.get("tool_input"))
-    return (
-        v2_plugin_setup_source(plugin_path, repo)
-        + v2_before_input(tool_name, "capability-contract", tool_input, call_id)
-        + 'console.log("allowed")\n'
-    )
+    return f"""
+import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
+const handlers = await EnforcerPlugin({{
+  client: {{ app: {{ log: async () => {{}} }} }},
+  directory: {json.dumps(str(repo))},
+  worktree: {json.dumps(str(repo))},
+}})
+await handlers["tool.execute.before"](
+  {{ tool: {json.dumps(tool_name)}, sessionID: "capability-contract", callID: {json.dumps(call_id)} }},
+  {{ args: {json.dumps(tool_input)} }},
+)
+console.log("allowed")
+"""
 
 
 _CASES = tuple(

@@ -17,9 +17,6 @@ from slopgate.constants import PLATFORM_OPENCODE, UNKNOWN_VALUE
 from slopgate.util.platform import child_creation_flags, user_config_dir
 
 _VERSION_TOKEN = re.compile(r"v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)")
-_OPENCODE_API_TARGET = "2.2.5"
-_PLUGIN_PACKAGE = "@opencode/plugin"
-_DEPENDENCY_RESOLUTION = "opencode-host"
 
 
 def _json_file(path: Path) -> ObjectDict:
@@ -31,7 +28,7 @@ def _json_file(path: Path) -> ObjectDict:
 
 def _dependency_version(payload: ObjectMapping) -> str:
     dependencies = object_dict(payload.get("dependencies"))
-    value = dependencies.get(_PLUGIN_PACKAGE)
+    value = dependencies.get("@opencode-ai/plugin")
     return value if isinstance(value, str) else ""
 
 
@@ -61,7 +58,7 @@ def _canonical_version(value: str) -> str:
 
 def _opencode_lock_version(lock_content: str) -> str:
     lock_match = re.search(
-        rf'"{re.escape(_PLUGIN_PACKAGE)}"\s*:\s*("(?:\\.|[^"\\])*")', lock_content
+        r'"@opencode-ai/plugin"\s*:\s*("(?:\\.|[^"\\])*")', lock_content
     )
     lock_literal = lock_match.group(1) if lock_match else '""'
     try:
@@ -71,21 +68,15 @@ def _opencode_lock_version(lock_content: str) -> str:
     return lock_value if isinstance(lock_value, str) else ""
 
 
-def _opencode_identity_status(runtime: str) -> tuple[str, str]:
-    if not runtime:
+def _opencode_identity_status(observed: list[str]) -> tuple[str, str]:
+    canonical = {_canonical_version(value) for value in observed}
+    if not observed:
         return UNKNOWN_VALUE, "OpenCode identity could not be observed."
-    canonical_runtime = _canonical_version(runtime)
-    if canonical_runtime == _OPENCODE_API_TARGET:
+    if len(canonical) == 1:
         return "compatible", "none"
-    major_token = canonical_runtime.partition(".")[0]
-    if major_token.isdigit() and int(major_token) < 2:
-        return (
-            "stale",
-            "OpenCode 2.2.5 is required for the v2 plugin; upgrade OpenCode, then restart OpenCode.",
-        )
     return (
-        UNKNOWN_VALUE,
-        "OpenCode runtime is not verified against the supported v2 plugin API target.",
+        "stale",
+        "Reinstall OpenCode plugin dependencies, then restart OpenCode.",
     )
 
 
@@ -104,17 +95,15 @@ def collect_opencode_install_identity(
         lock_content = ""
     lock = _opencode_lock_version(lock_content)
     installed_payload = _json_file(
-        root / "node_modules" / "@opencode" / "plugin" / "package.json"
+        root / "node_modules" / "@opencode-ai" / "plugin" / "package.json"
     )
     installed_value = installed_payload.get("version")
     installed = installed_value if isinstance(installed_value, str) else ""
     runtime_probe = runtime_version or opencode_runtime_version
     runtime = runtime_probe() if probe_runtime else ""
-    status, remediation = _opencode_identity_status(runtime)
+    observed = [value for value in (runtime, declared, lock, installed) if value]
+    status, remediation = _opencode_identity_status(observed)
     return {
-        "plugin_package": _PLUGIN_PACKAGE,
-        "plugin_api_target": _OPENCODE_API_TARGET,
-        "dependency_resolution": _DEPENDENCY_RESOLUTION,
         "status": status,
         "opencode_version": runtime,
         "opencode_version_source": "opencode --version",
@@ -124,7 +113,7 @@ def collect_opencode_install_identity(
         "plugin_lock_source": str(root / "bun.lock"),
         "plugin_installed_version": installed,
         "plugin_installed_source": str(
-            root / "node_modules" / "@opencode" / "plugin" / "package.json"
+            root / "node_modules" / "@opencode-ai" / "plugin" / "package.json"
         ),
         "slopgate_version": __version__,
         "slopgate_binary": str(Path(binary).expanduser().resolve()),

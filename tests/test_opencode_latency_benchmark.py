@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from hypothesis import given, settings, strategies
 
+from slopgate.adapters.opencode_projection import OPENCODE_TOOL_CONTRACT_VERSION
 from slopgate.benchmarks.opencode_latency.models import (
     BenchmarkConfig,
     BenchmarkExecutionError,
@@ -26,6 +27,7 @@ _TOTAL_LATENCY_STRATEGY = strategies.floats(
     min_value=0.0, max_value=_MAX_BENCHMARK_TOTAL_MS, allow_nan=False
 )
 _PLUGIN_OUTCOME_STRATEGY = strategies.sampled_from(("returned", "blocked:policy"))
+_PROJECTION_CONTRACT = "slopgate-opencode-projection-v1"
 
 
 @contextmanager
@@ -70,6 +72,12 @@ def test_benchmark_run_preserves_observed_samples() -> None:
         "evaluation_ms": 10,
         "subprocess_startup_ms": 2,
     }, "run should preserve phase trace rows"
+
+
+def test_projection_contract_is_release_independent() -> None:
+    assert OPENCODE_TOOL_CONTRACT_VERSION == _PROJECTION_CONTRACT, (
+        "OpenCode release updates must not change Slopgate's projection protocol"
+    )
 
 
 @given(

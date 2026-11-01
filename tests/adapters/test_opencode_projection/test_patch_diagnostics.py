@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from slopgate.adapters.opencode_projection.patch import apply_update
+from slopgate.adapters.opencode_projection.patch import (
+    apply_update,
+    parse_patch,
+    section_content,
+)
 from slopgate.engine import evaluate_payload
 
 from .support import enroll_repo, raw_payload, write_source
@@ -27,7 +31,7 @@ def test_invalid_patch_identifies_unmatched_target(
 
     # When: OpenCode projects the mutation before execution.
     result = evaluate_payload(
-        raw_payload(repo, "patch", {"patchText": patch_text}),
+        raw_payload(repo, "apply_patch", {"patchText": patch_text}),
         platform="opencode",
     )
 
@@ -46,11 +50,6 @@ def test_invalid_patch_identifies_unmatched_target(
     )
 
 
-def test_apply_update_rejects_unmatched_hunk() -> None:
-    result = apply_update("VALUE = 1\n", ("@@", "-VALUE = 2", "+VALUE = 3"))
-    assert result is None, "an unmatched update hunk must remain fail-closed invalid"
-
-
 def test_apply_update_selects_first_forward_match_for_repeated_anchor() -> None:
     result = apply_update(
         "A = 1\nMARK\nEND\nEND\n",
@@ -67,6 +66,11 @@ def test_apply_update_selects_first_forward_match_for_repeated_anchor() -> None:
     assert result == "A = 1\nMARK\nEND\nTAIL\nEND\n", (
         "a repeated anchor must resolve to the first forward match after the previous hunk"
     )
+
+
+def test_apply_update_rejects_unmatched_hunk() -> None:
+    result = apply_update("VALUE = 1\n", ("@@", "-VALUE = 2", "+VALUE = 3"))
+    assert result is None, "an unmatched update hunk must remain fail-closed invalid"
 
 
 def test_apply_update_keeps_forward_cursor_after_line_count_change() -> None:
@@ -102,6 +106,22 @@ def test_apply_update_does_not_match_just_inserted_lines() -> None:
     )
 
 
+def test_apply_update_matches_via_unicode_punctuation_table() -> None:
+    result = apply_update("A \u2013 B\n", ("@@", "-A - B", "+A - B"))
+
+    assert result == "A - B\n", (
+        "unicode dashes must normalize to ASCII like native opencode"
+    )
+
+
+def test_apply_update_appends_pure_addition_at_end_of_file() -> None:
+    result = apply_update("A\nB\n", ("@@", "+C"))
+
+    assert result == "A\nB\nC\n", (
+        "a hunk without old lines must append at the end of the file"
+    )
+
+
 def test_apply_update_seeks_anchor_context_before_matching() -> None:
     result = apply_update(
         "END\nA\nEND\n",
@@ -124,59 +144,35 @@ def test_apply_update_retries_hunk_with_trailing_blank_line() -> None:
     )
 
 
-def test_apply_update_matches_via_unicode_punctuation_table() -> None:
-    result = apply_update("A \u2013 B\n", ("@@", "-A - B", "+A - B"))
+def test_patch_stops_collection_at_end_of_file_marker() -> None:
+    patch_text = """*** Begin Patch
+*** Update File: src/app.py
+@@
+ A
++X
+*** End of File
+-B
++Y
+*** End Patch"""
 
-    assert result == "A - B\n", (
-        "unicode dashes must normalize to ASCII like native opencode"
+    sections = parse_patch(patch_text)
+
+    assert sections is not None and len(sections) == 1, (
+        "the marker must not break patch envelope parsing"
+    )
+    content = section_content(sections[0], "A\nB\n")
+    assert content == "A\nX\nB\n", (
+        "the end-of-file marker must terminate chunk collection before the tail lines"
     )
 
 
-def test_apply_update_appends_pure_addition_at_end_of_file() -> None:
-    result = apply_update("A\nB\n", ("@@", "+C"))
-
-    assert result == "A\nB\nC\n", (
-        "a hunk without old lines must append at the end of the file"
-    )
-
-
-def test_apply_update_accepts_headerless_chunk() -> None:
+def test_apply_update_rejects_hunk_before_eof_addition() -> None:
     result = apply_update(
-        "A\nB\n",
-        ("-B", "+C"),
-    )
-
-    assert result == "A\nC\n", "native patch updates may omit an explicit hunk header"
-
-
-def test_apply_update_matches_final_line_without_source_newline() -> None:
-    result = apply_update(
-        "A\nB",
-        ("@@", "-B", "+C"),
-    )
-
-    assert result == "A\nC\n", (
-        "native patch updates always emit a trailing LF after an EOF match"
-    )
-
-
-def test_apply_update_eof_marker_matches_final_source_line() -> None:
-    result = apply_update(
-        "A\nB\n",
-        ("@@", "-B", "+C", "*** End of File"),
-    )
-
-    assert result == "A\nC\n", (
-        "an EOF marker must constrain the hunk to the final source line"
-    )
-
-
-def test_apply_update_rejects_nonblank_tail_after_eof_marker() -> None:
-    result = apply_update(
-        "A\nB\n",
-        ("@@", "-B", "+X", "*** End of File", "-A", "+Y"),
+        "A\nB\nC\n",
+        ("@@", "+X", "@@", "-B", "+B1", "+B2"),
     )
 
     assert result is None, (
-        "native EOF hunks must reject nonblank tail lines without a new hunk marker"
+        "an EOF addition must advance the cursor so a later hunk cannot match earlier "
+        "content and corrupt the stored insertion index"
     )

@@ -13,7 +13,7 @@ from slopgate.util import platform
 def _write_opencode_package_metadata(root: Path, version: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "package.json").write_text(
-        json.dumps({"dependencies": {"@opencode/plugin": version}}),
+        json.dumps({"dependencies": {"@opencode-ai/plugin": version}}),
         encoding="utf-8",
     )
 
@@ -29,7 +29,7 @@ def _install_both_scope_plugins(
     )
     user_root = tmp_path / ".config" / "opencode"
     project_root = tmp_path / "project"
-    _write_opencode_package_metadata(user_root, "2.2.5")
+    _write_opencode_package_metadata(user_root, "1.18.21")
     _write_opencode_package_metadata(project_root / ".opencode", "1.19.0")
     status = _opencode.install_opencode(
         dry_run=False, scope="both", project_root=project_root
@@ -48,7 +48,7 @@ def test_opencode_user_identity_uses_user_install_root(
     expected = (
         '"install_scope":"user"',
         f'"install_root":{json.dumps(str(tmp_path / ".config" / "opencode"))}',
-        '"plugin_declared_version":"2.2.5"',
+        '"plugin_declared_version":"1.18.21"',
     )
 
     assert status == 0, "user and project OpenCode installs should succeed"

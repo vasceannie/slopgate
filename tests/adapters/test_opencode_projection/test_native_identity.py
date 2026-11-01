@@ -11,18 +11,18 @@ from .support import enroll_repo, projection_for, raw_payload, write_source
 _NATIVE_MUTATION_ID_COLLISIONS = [
     pytest.param(
         "w_r_i_t_e",
-        {"path": "src/app.py", "content": "VALUE = 2\n"},
+        {"filePath": "src/app.py", "content": "VALUE = 2\n"},
         id="write-separator-collision",
     ),
     pytest.param(
-        "p_a_t_c_h",
+        "apply__patch",
         {
             "patchText": (
                 "*** Begin Patch\n*** Update File: src/app.py\n@@\n"
                 "-VALUE = 1\n+VALUE = 2\n*** End Patch"
             )
         },
-        id="patch-separator-collision",
+        id="apply-patch-separator-collision",
     ),
 ]
 
@@ -42,9 +42,9 @@ def test_protocol_skew_blocks_native_mutation_id_collision(
     result = evaluate_payload(payload, platform="opencode")
 
     assert result.output is not None and result.output.get("action") == "block"
-    assert any(finding.rule_id == "OC-PROJECTION-001" for finding in result.findings), (
-        "separator-collision tools must not inherit native mutation protocol deferral"
-    )
+    assert any(
+        finding.rule_id == "OC-PROJECTION-001" for finding in result.findings
+    ), "separator-collision tools must not inherit native mutation protocol deferral"
 
 
 @pytest.mark.parametrize(("tool_name", "tool_input"), _NATIVE_MUTATION_ID_COLLISIONS)

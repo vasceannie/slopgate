@@ -23,11 +23,9 @@ from slopgate.adapters.opencode_projection.models import (
     PROJECTION_KEY,
     ProjectionRequest,
 )
-from slopgate.adapters.opencode_projection.projector import (
-    normalize_projected_tool_input,
-)
+from slopgate.adapters.opencode_projection.projector import normalize_projected_tool_input
 from slopgate.models import RuleFinding
-from slopgate.opencode_tool_capabilities import OPENCODE_PATCH_TOOL_ID
+from slopgate.opencode_tool_capabilities import normalize_opencode_tool_id
 from slopgate.util import logger
 
 from slopgate.constants import (
@@ -43,32 +41,35 @@ from slopgate.constants import (
 )
 
 OPENCODE_EVENT_MAP: dict[str, str] = {
+    "command.executed": "CommandExecuted",
+    "file.edited": POST_TOOL_USE,
     "permission.replied": "PermissionReplied",
-    "session.compaction.ended": "PostCompact",
+    "shell.env": "ShellEnv",
+    "session.compacted": "PostCompact",
     "tool.execute.before": PRE_TOOL_USE,
     "tool.execute.after": POST_TOOL_USE,
     "session.created": SESSION_START,
     "session.idle": STOP,
-    "session.execution.failed": "SessionError",
+    "session.error": "SessionError",
     "session.status": "SessionStatus",
     "permission.asked": PERMISSION_REQUEST,
 }
 
 OPENCODE_TOOL_ALIAS_MAP: dict[str, str] = {
     "bash": "Bash",
-    "shell": "Bash",
     "edit": "Edit",
     "glob": "Glob",
     "grep": "Grep",
     "multiedit": "MultiEdit",
     "notebookedit": "NotebookEdit",
     "read": "Read",
-    "subagent": "Task",
     "todowrite": "TodoWrite",
     "webfetch": "WebFetch",
     "websearch": "WebSearch",
     "write": "Write",
 }
+
+OPENCODE_MUTATION_EVENTS = frozenset({"file.edited"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +95,11 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["opencode_hook_event"] = oc_event
 
         tool_name = string_value(raw.get(METADATA_TOOL_NAME)) or ""
+        if not tool_name and oc_event in OPENCODE_MUTATION_EVENTS:
+            tool_name = "Write"
         if tool_name:
-            normalized_tool_id = tool_name.strip()
-            canonical["opencode_raw_tool_name"] = normalized_tool_id
+            normalized_tool_id = normalize_opencode_tool_id(tool_name)
+            canonical["opencode_raw_tool_name"] = tool_name.strip()
             canonical["opencode_native_tool_name"] = normalized_tool_id
             canonical[METADATA_TOOL_NAME] = OPENCODE_TOOL_ALIAS_MAP.get(
                 normalized_tool_id, normalized_tool_id
@@ -122,7 +125,7 @@ class OpenCodeAdapter(PlatformAdapter):
             canonical["tool_input"] = normalized_tool_input
             projection = object_dict(normalized_tool_input.get(PROJECTION_KEY))
             if (
-                tool_name.strip() == OPENCODE_PATCH_TOOL_ID
+                normalize_opencode_tool_id(tool_name) == "apply_patch"
                 and projection.get("status") == "projected"
             ):
                 canonical[METADATA_TOOL_NAME] = "MultiEdit"

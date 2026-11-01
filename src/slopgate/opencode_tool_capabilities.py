@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+import re
 import shlex
 from typing import Final
 
@@ -13,12 +14,18 @@ from slopgate.constants import BASH_TOOL_LOWER, METADATA_COMMAND, METADATA_SLOPG
 from slopgate.util.payloads import is_safe_read_shell_command
 
 
-OPENCODE_PATCH_TOOL_ID: Final = "patch"
-# The host re-enters execute.before for every tool an execute program calls, so
-# the outer call adds no file access of its own and inner calls stay gated. The
-# plugin's permission hook gates the program's fetch, which no tool hook sees.
-OPENCODE_CODE_MODE_TOOL_ID: Final = "execute"
-OPENCODE_SHELL_TOOL_IDS: Final = frozenset({"shell", BASH_TOOL_LOWER})
+_CAMEL_CASE_BOUNDARY: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_ACRONYM_BOUNDARY: Final = re.compile(r"(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def normalize_opencode_tool_id(tool_name: str) -> str:
+    """Normalize OpenCode case variants to declared registry IDs."""
+    with_acronym_boundaries = _ACRONYM_BOUNDARY.sub("_", tool_name.strip())
+    normalized = _CAMEL_CASE_BOUNDARY.sub("_", with_acronym_boundaries).lower()
+    if normalized in READ_ONLY_TOOL_IDS or normalized in EFFECTFUL_TOOL_IDS:
+        return normalized
+    compact = normalized.replace("_", "")
+    return _DECLARED_TOOL_IDS_BY_COMPACT.get(compact, normalized)
 
 
 class OpenCodeToolCapability(StrEnum):
@@ -73,7 +80,7 @@ READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "gitnexus_trace",
         "glob",
         "grep",
-        "grep_app_searchGitHub",
+        "grep_app_search_github",
         "headroom_headroom_retrieve",
         "headroom_headroom_stats",
         "headroom_retrieve",
@@ -91,7 +98,6 @@ READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "list_mcp_resource_templates",
         "list_mcp_resources",
         "look_at",
-        "opencode_models",
         "ls",
         "lsp",
         "lsp_diagnostics",
@@ -112,11 +118,6 @@ READ_ONLY_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "skill",
         "task_get",
         "task_list",
-        "opencode_worktree_list",
-        "opencode_list_mcp_resources",
-        "opencode_read_mcp_resource",
-        "opencode_artifact_read",
-        "opencode_schedule_list",
         "webfetch",
         "websearch",
         "websearch_cited",
@@ -131,8 +132,7 @@ EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "agentmemory_memory_reflect",
         "agentmemory_memory_save",
         "api_delete_resource",
-        OPENCODE_PATCH_TOOL_ID,
-        OPENCODE_CODE_MODE_TOOL_ID,
+        "apply_patch",
         "background_cancel",
         BASH_TOOL_LOWER,
         "browser_control",
@@ -171,32 +171,23 @@ EFFECTFUL_TOOL_IDS: Final[frozenset[str]] = frozenset(
         "memory_update",
         "multi_tool_use.parallel",
         "skill_mcp",
-        "experimental_image_generate",
-        "opencode_artifact_create",
-        "opencode_artifact_delete",
-        "opencode_artifact_update",
-        "opencode_schedule_create",
-        "opencode_schedule_delete",
-        "opencode_schedule_pause",
-        "opencode_schedule_resume",
-        "opencode_session_move",
-        "opencode_session_rename",
-        "subagent",
         "slopgate_verify_repair",
-        "shell",
         "task",
         "task_create",
         "task_update",
         "todo_write",
-        "opencode_worktree_create",
-        "opencode_worktree_remove",
         "todowrite",
         "write",
     }
 )
 
+_DECLARED_TOOL_IDS_BY_COMPACT: Final[dict[str, str]] = {
+    tool_id.replace("-", "").replace("_", ""): tool_id
+    for tool_id in (*READ_ONLY_TOOL_IDS, *EFFECTFUL_TOOL_IDS)
+}
+
 REPAIR_MUTATION_TOOL_IDS: Final[frozenset[str]] = frozenset(
-    {OPENCODE_PATCH_TOOL_ID, "edit", "write"}
+    {"apply_patch", "edit", "write"}
 )
 REPAIR_LINT_FLAGS: Final[frozenset[str]] = frozenset({"--details", "--verbose"})
 VERIFY_TOOL_ID: Final = "slopgate_verify_repair"
@@ -220,14 +211,15 @@ _READ_ONLY_GIT_SUBCOMMANDS: Final[frozenset[str]] = frozenset(
 
 
 def native_opencode_mutation_tool_id(tool_name: str) -> str | None:
-    """Return the exact native mutation ID, or None for any other tool."""
-    normalized = tool_name.strip()
+    """Return the native mutation ID without compact separator fallback."""
+    with_acronym_boundaries = _ACRONYM_BOUNDARY.sub("_", tool_name.strip())
+    normalized = _CAMEL_CASE_BOUNDARY.sub("_", with_acronym_boundaries).lower()
     return normalized if normalized in REPAIR_MUTATION_TOOL_IDS else None
 
 
 def opencode_tool_capability(tool_name: str) -> OpenCodeToolCapability | None:
-    """Return the trusted capability for an exact host tool ID."""
-    normalized = tool_name.strip()
+    """Return the trusted capability for a normalized tool identifier."""
+    normalized = normalize_opencode_tool_id(tool_name)
     if normalized in READ_ONLY_TOOL_IDS:
         return OpenCodeToolCapability.READ_ONLY
     if normalized in EFFECTFUL_TOOL_IDS:
@@ -240,10 +232,10 @@ def opencode_tool_is_explicit_repair_command(
     tool_input: ObjectMapping,
 ) -> bool:
     """Return whether a tool invocation is an approved repair command."""
-    normalized = tool_name.strip()
+    normalized = normalize_opencode_tool_id(tool_name)
     if normalized == VERIFY_TOOL_ID:
         return True
-    if normalized not in OPENCODE_SHELL_TOOL_IDS:
+    if normalized != BASH_TOOL_LOWER:
         return False
     command = next(
         (
@@ -276,18 +268,14 @@ def _is_read_only_bash_command(tool_input: ObjectMapping) -> bool:
         tokens = shlex.split(command)
     except ValueError:
         return False
-    if not tokens or any(
-        token in {";", "&&", "||", "|", ">", ">>"} for token in tokens
-    ):
+    if not tokens or any(token in {";", "&&", "||", "|", ">", ">>"} for token in tokens):
         return False
     executable = Path(tokens[0]).name.lower()
     if executable in _READ_ONLY_BASH_COMMANDS:
         return True
     if executable != GIT_BIN:
         return False
-    subcommand = next(
-        (token.lower() for token in tokens[1:] if not token.startswith("-")), ""
-    )
+    subcommand = next((token.lower() for token in tokens[1:] if not token.startswith("-")), "")
     return subcommand in _READ_ONLY_GIT_SUBCOMMANDS
 
 
@@ -296,15 +284,11 @@ def opencode_tool_allowed_during_repair(
     tool_input: ObjectMapping,
 ) -> bool:
     """Return whether an OpenCode invocation may run during repair."""
-    normalized = tool_name.strip()
+    normalized = normalize_opencode_tool_id(tool_name)
     return (
         normalized in READ_ONLY_TOOL_IDS
-        or normalized == OPENCODE_CODE_MODE_TOOL_ID
         or native_opencode_mutation_tool_id(tool_name) is not None
-        or (
-            normalized in OPENCODE_SHELL_TOOL_IDS
-            and _is_read_only_bash_command(tool_input)
-        )
+        or (normalized == BASH_TOOL_LOWER and _is_read_only_bash_command(tool_input))
         or opencode_tool_is_explicit_repair_command(tool_name, tool_input)
     )
 
@@ -312,12 +296,12 @@ def opencode_tool_allowed_during_repair(
 __all__ = [
     "EFFECTFUL_TOOL_IDS",
     "OpenCodeToolCapability",
-    "OPENCODE_PATCH_TOOL_ID",
     "READ_ONLY_TOOL_IDS",
     "REPAIR_LINT_FLAGS",
     "REPAIR_MUTATION_TOOL_IDS",
     "VERIFY_TOOL_ID",
     "native_opencode_mutation_tool_id",
+    "normalize_opencode_tool_id",
     "opencode_tool_allowed_during_repair",
     "opencode_tool_capability",
     "opencode_tool_is_explicit_repair_command",

@@ -97,19 +97,12 @@ slopgate install opencode
 
 Native Windows hook commands are emitted through a PowerShell-compatible
 launcher so installed console scripts under `AppData` can be called even when
-their path contains spaces. `slopgate install opencode` writes the OpenCode
-V2 plugin to `%APPDATA%\opencode\plugins\slopgate-plugin.ts` and embeds the
-discovered binary path with JSON/TypeScript-safe escaping; set `SLOPGATE_BIN`
-to override it at runtime. The OpenCode 2.2.5 host SDK auto-discovers this
-local plugin file in its plugins directory, so this file path is intentionally
-retained. This auto-discovered path is distinct from an explicit V2 `plugins`
-configuration entry, which must name a directory containing `index.ts` per the
-[V2 migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1/).
-The plugin uses the host-provided `@opencode/plugin` API; local package
-metadata records compatibility but does not replace host SDK/runtime
-verification. Codex CLI hook availability on native Windows still depends on
-the installed Codex version; if Codex does not run hooks on Windows, use WSL or
-Git Bash for runtime enforcement.
+their path contains spaces. `slopgate install opencode` writes the plugin to
+`%APPDATA%\opencode\plugins\slopgate-plugin.ts` and embeds the discovered
+binary path with JSON/TypeScript-safe escaping; set `SLOPGATE_BIN` to override
+it at runtime. Codex CLI hook availability on native Windows still
+depends on the installed Codex version; if Codex does not run hooks on Windows,
+use WSL or Git Bash for runtime enforcement.
 
 ### 4. Verify
 

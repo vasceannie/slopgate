@@ -27,7 +27,9 @@ from tests.adapters.test_opencode_projection.support import (
 from tests.test_enrichment_public_api import context_for_source
 
 BROKEN_INDENT_SOURCE = (
-    "def compute(value: int) -> int:\n    total = value + 1\n   return total\n"
+    "def compute(value: int) -> int:\n"
+    "    total = value + 1\n"
+    "   return total\n"
 )
 
 
@@ -45,12 +47,12 @@ def _single_py_ast_finding(result: EngineResult, expected_path: str) -> RuleFind
 
 
 def _assert_no_parser_leak(result: EngineResult) -> None:
-    assert all(finding.rule_id != "PY-CODE-010" for finding in result.findings), (
-        "incomplete tokenization must not produce long-line findings"
-    )
-    assert all("PY-CODE-010" not in error for error in result.errors), (
-        f"parser exceptions must not leak as PY-CODE-010 runtime errors: {result.errors!r}"
-    )
+    assert all(
+        finding.rule_id != "PY-CODE-010" for finding in result.findings
+    ), "incomplete tokenization must not produce long-line findings"
+    assert all(
+        "PY-CODE-010" not in error for error in result.errors
+    ), f"parser exceptions must not leak as PY-CODE-010 runtime errors: {result.errors!r}"
 
 
 def _assert_projected_parse_diagnostic(finding: RuleFinding) -> None:
@@ -65,7 +67,9 @@ def _assert_projected_parse_diagnostic(finding: RuleFinding) -> None:
     assert "unindent does not match" in message, (
         f"finding message must render parser message: {message!r}"
     )
-    assert "line 3" in message, f"finding message must render parser line: {message!r}"
+    assert "line 3" in message, (
+        f"finding message must render parser line: {message!r}"
+    )
     assert "offset" in message, (
         f"finding message must render parser offset: {message!r}"
     )
@@ -120,12 +124,12 @@ def test_projected_opencode_mutation_normalizes_indentation_failure(
         raw_payload(
             repo,
             "write",
-            {"path": "src/app.py", "content": BROKEN_INDENT_SOURCE},
+            {"filePath": "src/app.py", "content": BROKEN_INDENT_SOURCE},
         ),
         platform="opencode",
     )
 
-    finding = _single_py_ast_finding(result, str(repo.resolve() / "src/app.py"))
+    finding = _single_py_ast_finding(result, "src/app.py")
     assert finding.metadata["exception_type"] == "IndentationError", (
         f"projected mutation must preserve parser provenance: {finding.metadata!r}"
     )
@@ -143,7 +147,7 @@ def test_stale_native_edit_does_not_become_projected_parse_failure(
         f"fixture must exercise native stale-edit parity: {projection!r}"
     )
     assert not _py_ast_findings(result), (
-        "native exact-edit snapshot failures must not be reported as projected AST failures"
+        "native hashline parity failures must not be reported as projected AST failures"
     )
 
 

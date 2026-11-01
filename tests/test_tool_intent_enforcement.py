@@ -36,17 +36,16 @@ CODEX_EVENT_CASES = (
 OPENCODE_EVENT_CASES = (
     pytest.param("tool.execute.before", "PreToolUse", id="tool_before"),
     pytest.param("tool.execute.after", "PostToolUse", id="tool_after"),
+    pytest.param("file.edited", "PostToolUse", id="file_edited"),
     pytest.param("permission.asked", "PermissionRequest", id="permission_asked"),
     pytest.param("permission.replied", "PermissionReplied", id="permission_replied"),
     pytest.param("session.created", "SessionStart", id="session_created"),
-    pytest.param(
-        "session.compaction.ended", "PostCompact", id="session_compaction_ended"
-    ),
+    pytest.param("session.compacted", "PostCompact", id="session_compacted"),
     pytest.param("session.idle", "Stop", id="session_idle"),
-    pytest.param(
-        "session.execution.failed", "SessionError", id="session_execution_failed"
-    ),
+    pytest.param("session.error", "SessionError", id="session_error"),
     pytest.param("session.status", "SessionStatus", id="session_status"),
+    pytest.param("shell.env", "ShellEnv", id="shell_env"),
+    pytest.param("command.executed", "CommandExecuted", id="command_executed"),
 )
 
 
@@ -67,30 +66,6 @@ def _posttool_payload(
         "session_id": "intent-test",
         "cwd": str(cwd),
         "hook_event_name": "PostToolUse",
-        "tool_name": tool_name,
-        "tool_input": tool_input,
-    }
-
-
-def _opencode_native_posttool_payload(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tool_name: str,
-    tool_input: dict[str, object],
-) -> dict[str, object]:
-    write_config_from_defaults(
-        tmp_path,
-        monkeypatch,
-        enable_failing_post_edit_quality_command,
-    )
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n")
-    _ = (repo / "app.py").write_text("print('ok')\n")
-    return {
-        "session_id": "intent-test",
-        "cwd": str(repo),
-        "hook_event_name": "tool.execute.after",
         "tool_name": tool_name,
         "tool_input": tool_input,
     }
@@ -256,50 +231,52 @@ def test_posttool_read_skips_quality_and_records_intent(tmp_path: Path) -> None:
     assert "QUALITY-LINT-001" not in ids, "read must skip touched-file lint"
 
 
-@pytest.mark.parametrize(
-    ("tool_name", "tool_input"),
-    [
-        pytest.param(
-            "write",
-            {"path": "app.py", "content": "print('updated')\n"},
-            id="native_write",
-        ),
-        pytest.param(
-            "edit",
-            {
-                "path": "app.py",
-                "oldString": "print('ok')\n",
-                "newString": "print('updated')\n",
-            },
-            id="native_edit",
-        ),
-    ],
-)
-def test_opencode_native_posttool_mutation_runs_post_edit_quality(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tool_name: str,
-    tool_input: dict[str, object],
+def test_opencode_file_edited_reaches_post_edit_quality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    payload = _opencode_native_posttool_payload(
+    write_config_from_defaults(
         tmp_path,
         monkeypatch,
-        tool_name,
-        tool_input,
+        enable_failing_post_edit_quality_command,
     )
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n")
+    _ = (repo / "app.py").write_text("print('ok')\n")
+    payload = {
+        "session_id": "intent-test",
+        "cwd": str(repo),
+        "hook_event_name": "file.edited",
+        "path": "app.py",
+    }
 
     result = evaluate_payload(payload, platform="opencode")
 
     assert "QUALITY-POST-001" in finding_ids(result), (
-        f"native {tool_name} should route through post-edit quality"
+        "file.edited must route through post-edit quality"
     )
+
+
+def test_opencode_file_edited_is_mutating(tmp_path: Path) -> None:
+    payload = {
+        "session_id": "intent-test",
+        "cwd": str(tmp_path),
+        "hook_event_name": "file.edited",
+        "path": "app.py",
+    }
+
+    result = evaluate_payload(payload, platform="opencode")
+    normalized = get_adapter("opencode").normalize_payload(payload)
+
+    assert result.event_name == "PostToolUse", "file.edited should map post-tool"
+    assert tool_intent(normalized) == "mutate", "file.edited should mutate"
+    assert is_mutating_tool_use(normalized), "file.edited should be mutating"
+    assert result.findings == [], "empty edit metadata should not invent findings"
 
 
 def test_platform_event_name_prefers_original_opencode_event() -> None:
     normalized = get_adapter("opencode").normalize_payload(
-        {"session_id": "intent-test", "hook_event_name": "session.execution.failed"}
+        {"session_id": "intent-test", "hook_event_name": "file.edited"}
     )
 
-    assert platform_event_name(normalized) == "session.execution.failed", (
-        "original event kept"
-    )
+    assert platform_event_name(normalized) == "file.edited", "original event kept"
