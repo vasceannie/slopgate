@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from hypothesis import example, given
 from hypothesis import strategies
 
@@ -50,6 +51,27 @@ def test_path_glob_matching_is_case_insensitive_for_python_paths(path: str) -> N
         "basename_match": True,
         "any_empty": True,
     }
+
+
+_DOUBLE_STAR_CASES = [
+    pytest.param("a.py", "**/*.py", True, id="root-level-file"),
+    pytest.param("./a.py", "**/*.py", True, id="dot-prefixed-file"),
+    pytest.param("conftest.py", "**/conftest.py", True, id="root-level-exclude"),
+    pytest.param("test_a.py", "**/test_*.py", True, id="root-level-test-name"),
+    pytest.param("sub/a.py", "**/*.py", True, id="nested-file"),
+    pytest.param("/repo/a.py", "**/*.py", True, id="absolute-file"),
+    pytest.param("a.ts", "**/*.py", False, id="other-suffix"),
+    pytest.param("xconftest.py", "**/conftest.py", False, id="name-suffix-only"),
+]
+
+
+@pytest.mark.parametrize(("path", "pattern", "expected"), _DOUBLE_STAR_CASES)
+def test_double_star_prefix_matches_zero_or_more_directories(
+    path: str, pattern: str, expected: bool
+) -> None:
+    assert path_matches_glob(path, pattern) is expected, (
+        "a leading **/ spans zero directories, so root-level files stay in scope"
+    )
 
 
 @example(path="src/0.py", content="\r")

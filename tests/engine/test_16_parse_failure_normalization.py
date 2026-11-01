@@ -125,7 +125,7 @@ def test_projected_opencode_mutation_normalizes_indentation_failure(
         platform="opencode",
     )
 
-    finding = _single_py_ast_finding(result, "src/app.py")
+    finding = _single_py_ast_finding(result, str(repo.resolve() / "src/app.py"))
     assert finding.metadata["exception_type"] == "IndentationError", (
         f"projected mutation must preserve parser provenance: {finding.metadata!r}"
     )

@@ -121,18 +121,34 @@ def test_parent_traversal_out_of_repo_is_rejected(
     )
 
 
-def test_projected_edit_paths_resolve_from_engine_cwd(
+def _canonical_nested_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+) -> tuple[dict[str, object], Path]:
     _repo, directory = _nested_session(tmp_path, monkeypatch)
-
     canonical = OpenCodeAdapter().normalize_payload(
         raw_payload(directory, "write", {"path": "a.py", "content": "VALUE = 1\n"})
     )
+    return object_dict(canonical["tool_input"]), directory.resolve() / "a.py"
 
-    edit = object_dict(object_list(object_dict(canonical["tool_input"])["edits"])[0])
-    assert edit["file_path"] == "a.py", (
-        "rules resolve edit paths against cwd, so they must be session-relative"
+
+def test_projected_edit_path_is_absolute_under_session_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool_input, written = _canonical_nested_write(tmp_path, monkeypatch)
+
+    edit = object_dict(object_list(tool_input["edits"])[0])
+    assert edit["file_path"] == str(written), (
+        "rules resolve against both cwd and repo root, so only absolute is unambiguous"
+    )
+
+
+def test_top_level_path_matches_the_projected_edit_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool_input, written = _canonical_nested_write(tmp_path, monkeypatch)
+
+    assert tool_input["path"] == str(written), (
+        "targets dedupe by exact path, so one file must have one spelling"
     )
 
 

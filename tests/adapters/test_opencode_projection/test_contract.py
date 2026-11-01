@@ -158,9 +158,9 @@ def test_projection_public_contract_returns_complete_write_metadata(
     assert projection["status"] == "projected", (
         "public projection should trust a valid write"
     )
-    assert normalized["edits"] == [{"file_path": "new.py", "content": "VALUE = 1\n"}], (
-        "normalization should expose complete content through the canonical edits seam"
-    )
+    assert normalized["edits"] == [
+        {"file_path": str(tmp_path.resolve() / "new.py"), "content": "VALUE = 1\n"}
+    ], "normalization should expose complete content through the canonical edits seam"
 
 
 def test_patch_primitives_preserve_typed_sections_and_apply_exact_updates() -> None:
@@ -213,7 +213,7 @@ def test_normalized_delete_preserves_candidate_path(tmp_path: Path) -> None:
     normalized = normalize_projected_tool_input(request)
 
     assert normalized["edits"] == [
-        {"file_path": "src/app.py", "operation": "delete"}
+        {"file_path": str(tmp_path.resolve() / "src/app.py"), "operation": "delete"}
     ], "delete projections must retain the target path for policy enforcement"
 
 

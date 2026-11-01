@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Literal
 
 from slopgate._types import (
@@ -220,13 +218,6 @@ def _session_scoped(request: ProjectionRequest) -> ProjectionRequest:
     return replace(request, root=root.resolve(), directory=directory)
 
 
-def _session_relative(request: ProjectionRequest, relative: str) -> str:
-    """Rewrite a root-relative path for rules that resolve against the session cwd."""
-    logger.debug("OpenCode session-relative path requested", path=relative)
-    directory = request.directory or request.root
-    return Path(os.path.relpath(request.root / relative, directory)).as_posix()
-
-
 def _project_scoped(request: ProjectionRequest) -> ObjectDict:
     logger.debug("OpenCode tool projection requested", tool=request.tool_name)
     if request.contract_version != OPENCODE_TOOL_CONTRACT_VERSION:
@@ -264,13 +255,17 @@ def normalize_projected_tool_input(request: ProjectionRequest) -> ObjectDict:
     for value in object_list(projection.get("files")):
         item = object_dict(value)
         relative = string_value(item.get(METADATA_PATH)) or ""
-        edit: ObjectDict = {"file_path": _session_relative(request, relative)}
+        # Absolute because rules variously resolve paths against cwd and repo root.
+        edit: ObjectDict = {"file_path": str(request.root / relative)}
         if item.get("operation") == "delete":
             edit["operation"] = "delete"
         else:
             edit[METADATA_CONTENT] = item.get(METADATA_CONTENT, "")
         projected_edits.append(edit)
     enriched_input["edits"] = projected_edits
+    if METADATA_PATH in enriched_input and projected_edits:
+        # Targets dedupe by exact path, so one file must have one spelling.
+        enriched_input[METADATA_PATH] = projected_edits[0]["file_path"]
     if native_opencode_mutation_tool_id(request.tool_name) == OPENCODE_PATCH_TOOL_ID:
         original_patch_text = patch_text(enriched_input) or ""
         enriched_input.pop("patchText", None)
