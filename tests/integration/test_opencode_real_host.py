@@ -23,6 +23,9 @@ def test_host_activates_generated_plugins(real_opencode_host: HostObservation) -
     assert real_opencode_host.plugins["slopgate"] == "active", (
         "the rendered enforcement plugin must load on the real host"
     )
+    assert real_opencode_host.plugins["slopgate.isx"] == "active", (
+        "the rendered isx plugin must load on the real host"
+    )
 
 
 def test_repair_verifier_is_not_hidden_behind_code_mode(
