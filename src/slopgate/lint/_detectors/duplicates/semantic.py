@@ -11,6 +11,7 @@ from collections.abc import Callable, Hashable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard, TypeVar, cast
 from typing_extensions import override
+from slopgate.constants import SHORT_HASH_HEX_CHARS
 from slopgate.lint._baseline import Violation
 from slopgate.lint._config import get_config
 from .semantic_builtins import (
@@ -109,7 +110,7 @@ def normalize_ast(node: ast.AST) -> str:
 
 
 def structure_hash(canonical: str) -> str:
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+    return hashlib.sha256(canonical.encode()).hexdigest()[:SHORT_HASH_HEX_CHARS]
 
 
 def is_import_stmt(stmt: ast.stmt) -> TypeGuard[ast.Import | ast.ImportFrom]:

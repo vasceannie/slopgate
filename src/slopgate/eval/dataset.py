@@ -5,25 +5,82 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from slopgate._types import ObjectDict, object_dict
-from slopgate.engine import evaluate_payload
-
-_PRETOOL_EVENTS = frozenset({"PreToolUse", "tool.execute.before"})
-_FILE_MUTATION_TOOLS = frozenset(
-    {
-        "Write",
-        "Edit",
-        "MultiEdit",
-        "apply_patch",
-        "ApplyPatch",
-        "replace",
-        "edit",
-        "write",
-    }
+from slopgate.constants import (
+    EDIT_TOOL_NAMES,
+    ERROR_KEY,
+    EVENT_NAME_KEY,
+    HOOK_EVENT_NAME_KEY,
+    METADATA_CONTENT,
+    METADATA_CWD,
+    METADATA_PATH,
+    METADATA_TOOL_NAME,
+    PATCH_BLOB_KEYS,
+    PLATFORM_CLAUDE,
+    PLATFORM_KEY,
+    PRE_TOOL_USE,
+    REPLACE,
+    RULE_ID_KEY,
 )
+from slopgate.engine import evaluate_payload
+from slopgate.util import warning
+
+from .overlay import (
+    CLEAN_PRIMARY_RULE,
+    OverlayProvenance,
+    overlay_row_from_eval,
+    write_overlay_jsonl,
+)
+
+_PRETOOL_EVENTS = frozenset({PRE_TOOL_USE, "tool.execute.before"})
+_FILE_MUTATION_TOOLS = EDIT_TOOL_NAMES | {REPLACE}
+_MUTATION_TARGET_KEYS = (
+    "file_path",
+    "filePath",
+    METADATA_PATH,
+    *PATCH_BLOB_KEYS,
+    METADATA_CONTENT,
+)
+_DECLARED_TIER_REPLAYABILITY = {"replayable": True, "label_only": False}
+AS_PAYLOAD_CWD_KIND = "as_payload"
+OVERLAY_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+# Rule errors are captured inside the engine, so these are the replay failures
+# left: bad platform or payload shapes, and unreadable config, state, or logs.
+_REPLAY_FAILURES = (
+    AttributeError,
+    KeyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OverlayOutput:
+    """Where to write a pack's overlay sidecar and how to label its rows."""
+
+    path: Path | str
+    engine_version: str | None = None
+    cwd_kind: str = AS_PAYLOAD_CWD_KIND
+
+
+@dataclass(frozen=True, slots=True)
+class EvalPackOptions:
+    """Case selection and output settings for one pack evaluation.
+
+    ``replayable_only`` (default) skips label_only rows so empty-input
+    lifecycle cases are not treated as a quality gate.
+    """
+
+    limit: int | None = None
+    replayable_only: bool = True
+    cwd: str | None = None
+    overlay: OverlayOutput | None = None
 
 
 def load_eval_cases(path: Path | str) -> list[ObjectDict]:
@@ -42,127 +99,90 @@ def _finding_rule_ids(result: object) -> list[str]:
     findings = getattr(result, "findings", None) or []
     rules: list[str] = []
     for finding in findings:
-        rule_id = getattr(finding, "rule_id", None)
+        rule_id = getattr(finding, RULE_ID_KEY, None)
         if rule_id is None and isinstance(finding, dict):
-            rule_id = finding.get("rule_id")
+            rule_id = finding.get(RULE_ID_KEY)
         if rule_id and str(rule_id) not in rules:
             rules.append(str(rule_id))
     return rules
 
 
+def _has_mutation_target(case: ObjectDict, tool_input: ObjectDict) -> bool:
+    if case.get("redacted_paths"):
+        return True
+    return any(tool_input.get(key) for key in _MUTATION_TARGET_KEYS)
+
+
 def case_is_replayable(case: ObjectDict) -> bool:
     """True for PreToolUse cases with non-empty input (and paths for mutations)."""
-    tier = case.get("tier")
-    if tier == "replayable":
-        return True
-    if tier == "label_only":
-        return False
+    declared = _DECLARED_TIER_REPLAYABILITY.get(str(case.get("tier")))
+    if declared is not None:
+        return declared
     payload = object_dict(case.get("replay_payload")) or {}
-    event = str(case.get("event_name") or payload.get("hook_event_name") or "")
-    if event not in _PRETOOL_EVENTS:
+    event = case.get(EVENT_NAME_KEY) or payload.get(HOOK_EVENT_NAME_KEY)
+    if str(event or "") not in _PRETOOL_EVENTS:
         return False
-    tool_input = payload.get("tool_input")
-    if not isinstance(tool_input, dict) or not tool_input:
+    tool_input = object_dict(payload.get("tool_input"))
+    if not tool_input:
         return False
-    tool_name = str(case.get("tool_name") or payload.get("tool_name") or "")
-    if tool_name in _FILE_MUTATION_TOOLS:
-        paths = case.get("redacted_paths") or []
-        file_path = (
-            tool_input.get("file_path")
-            or tool_input.get("filePath")
-            or tool_input.get("path")
-            or tool_input.get("patch")
-            or tool_input.get("patchText")
-            or tool_input.get("patch_text")
-            or tool_input.get("content")
-        )
-        if not paths and not file_path:
-            return False
-    return True
+    tool_name = case.get(METADATA_TOOL_NAME) or payload.get(METADATA_TOOL_NAME)
+    if str(tool_name or "").lower() not in _FILE_MUTATION_TOOLS:
+        return True
+    return _has_mutation_target(case, tool_input)
 
 
-def overlay_row_from_eval(
-    case: ObjectDict,
-    result: ObjectDict,
-    *,
-    engine_version: str,
-    cwd_kind: str = "enrolled_temp",
-    evaluated_at: str | None = None,
-    schema_version: int = 1,
-) -> ObjectDict:
-    """Sidecar row keyed by ``case_id``. Does not mutate historical ``expected``."""
-    got_rules = result.get("got_rules")
-    current = [str(item) for item in got_rules] if isinstance(got_rules, list) else []
-    return {
-        "schema_version": schema_version,
-        "case_id": case.get("case_id"),
-        "engine_version": engine_version,
-        "evaluated_at": evaluated_at
-        or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "cwd_kind": cwd_kind,
-        "current_rules": current,
-        "primary_rule_current": current[0] if current else "_CLEAN",
-        "primary_hit": bool(result.get("primary_hit")),
-        "exact_match": bool(result.get("exact_rule_set_match")),
-        "error": result.get("error"),
-        "replayable": bool(result.get("replayable")),
-    }
+def _expected_rule_ids(case: ObjectDict) -> list[str]:
+    items = case.get("expected")
+    rule_ids = [
+        str(item.get(RULE_ID_KEY))
+        for item in (items if isinstance(items, list) else [])
+        if isinstance(item, dict) and item.get(RULE_ID_KEY)
+    ]
+    return list(dict.fromkeys(rule_ids))
 
 
-def write_overlay_jsonl(path: Path | str, rows: Sequence[ObjectDict]) -> None:
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, separators=(",", ":")) + "\n")
+def _replay_rule_ids(
+    case: ObjectDict, platform: str, cwd: str | None
+) -> tuple[list[str], str | None]:
+    """Replay one case, reporting a failure as data so the pack keeps running."""
+    payload = object_dict(case.get("replay_payload")) or {}
+    if cwd:
+        payload = {**payload, METADATA_CWD: cwd}
+    try:
+        return _finding_rule_ids(evaluate_payload(payload, platform=platform)), None
+    except _REPLAY_FAILURES as exc:
+        error_type = type(exc).__name__
+        warning("eval case replay failed", case_id=case.get("case_id"), error_type=error_type)
+        return [], f"{error_type}: {exc}"
 
 
 def evaluate_case(case: ObjectDict, *, cwd: str | None = None) -> ObjectDict:
     """Replay one case through ``evaluate_payload`` and compare rule sets."""
-    payload = object_dict(case.get("replay_payload")) or {}
-    if cwd:
-        payload = dict(payload)
-        payload["cwd"] = cwd
-    platform = str(case.get("platform") or "claude")
-    expected_items = case.get("expected")
-    expected = [
-        str(item.get("rule_id"))
-        for item in (expected_items if isinstance(expected_items, list) else [])
-        if isinstance(item, dict) and item.get("rule_id")
-    ]
-    expected_unique: list[str] = []
-    for rule_id in expected:
-        if rule_id not in expected_unique:
-            expected_unique.append(rule_id)
-
-    error: str | None = None
-    got: list[str] = []
-    try:
-        result = evaluate_payload(payload, platform=platform)
-        got = _finding_rule_ids(result)
-    except Exception as exc:  # noqa: BLE001 — eval reports failures
-        error = f"{type(exc).__name__}: {exc}"
-
-    overlap = sorted(set(got) & set(expected_unique))
+    platform = str(case.get(PLATFORM_KEY) or PLATFORM_CLAUDE)
+    expected = _expected_rule_ids(case)
+    got, error = _replay_rule_ids(case, platform, cwd)
+    overlap = sorted(set(got) & set(expected))
     primary = str(case.get("primary_rule") or "")
-    true_negative = case.get("label_kind") == "true_negative" or primary == "_CLEAN"
+    true_negative = (
+        case.get("label_kind") == "true_negative" or primary == CLEAN_PRIMARY_RULE
+    )
     if true_negative:
         exact = not got and error is None
         primary_hit = exact
     else:
-        exact = got == expected_unique
+        exact = got == expected
         primary_hit = bool(primary and primary in got)
     return {
         "case_id": case.get("case_id"),
-        "platform": platform,
+        PLATFORM_KEY: platform,
         "primary_rule": case.get("primary_rule"),
-        "expected_rules": expected_unique,
+        "expected_rules": expected,
         "got_rules": got,
         "overlap": overlap,
         "exact_rule_set_match": exact,
         "any_overlap": bool(overlap) or (true_negative and exact),
         "primary_hit": primary_hit,
-        "error": error,
+        ERROR_KEY: error,
         "replayable": case_is_replayable(case),
     }
 
@@ -178,7 +198,7 @@ def summarize_eval(results: Sequence[ObjectDict]) -> ObjectDict:
         "exact_matches": sum(1 for row in results if row.get("exact_rule_set_match")),
         "any_overlap": sum(1 for row in results if row.get("any_overlap")),
         "primary_hits": sum(1 for row in results if row.get("primary_hit")),
-        "errors": sum(1 for row in results if row.get("error")),
+        "errors": sum(1 for row in results if row.get(ERROR_KEY)),
         "by_primary_rule": by_rule.most_common(),
         "note": (
             "Historical labels may diverge from current policy; use as a "
@@ -187,52 +207,56 @@ def summarize_eval(results: Sequence[ObjectDict]) -> ObjectDict:
     }
 
 
-def evaluate_pack(
-    path: Path | str,
-    *,
-    limit: int | None = None,
-    replayable_only: bool = True,
-    cwd: str | None = None,
-    overlay_out: Path | str | None = None,
-    engine_version: str | None = None,
-    cwd_kind: str = "as_payload",
+def _select_cases(
+    cases: list[ObjectDict], options: EvalPackOptions
+) -> tuple[list[ObjectDict], int]:
+    """Return the cases to evaluate and how many label-only rows were skipped."""
+    selected = cases
+    if options.replayable_only:
+        selected = [case for case in cases if case_is_replayable(case)]
+    skipped = len(cases) - len(selected)
+    if options.limit is not None:
+        selected = selected[: options.limit]
+    return selected, skipped
+
+
+def _write_pack_overlay(
+    cases: Sequence[ObjectDict], rows: Sequence[ObjectDict], options: EvalPackOptions
 ) -> ObjectDict:
-    """Load, evaluate, and summarize an L1 JSONL pack.
+    """Write the sidecar for this run and return its summary fields."""
+    overlay = options.overlay
+    if overlay is None:
+        return {}
+    from slopgate import __version__
 
-    ``replayable_only`` (default) skips label_only rows so empty-input
-    lifecycle cases are not treated as a quality gate.
-    """
-    cases = load_eval_cases(path)
-    skipped = 0
-    if replayable_only:
-        filtered = [case for case in cases if case_is_replayable(case)]
-        skipped = len(cases) - len(filtered)
-        cases = filtered
-    if limit is not None:
-        cases = cases[:limit]
-    rows = [evaluate_case(case, cwd=cwd) for case in cases]
-    summary = summarize_eval(rows)
-    summary["results"] = list(rows)
-    summary["pack"] = str(path)
-    summary["replayable_only"] = replayable_only
-    summary["skipped_label_only"] = skipped
-    if overlay_out is not None:
-        from slopgate import __version__
+    provenance = OverlayProvenance(
+        engine_version=overlay.engine_version or __version__,
+        evaluated_at=datetime.now(timezone.utc).strftime(OVERLAY_TIMESTAMP_FORMAT),
+        cwd_kind=overlay.cwd_kind if options.cwd else AS_PAYLOAD_CWD_KIND,
+    )
+    overlay_rows = [
+        overlay_row_from_eval(case, result, provenance)
+        for case, result in zip(cases, rows, strict=True)
+    ]
+    write_overlay_jsonl(overlay.path, overlay_rows)
+    return {"overlay_out": str(overlay.path), "overlay_rows": len(overlay_rows)}
 
-        version = engine_version or __version__
-        overlay_rows = [
-            overlay_row_from_eval(
-                case,
-                result,
-                engine_version=version,
-                cwd_kind=cwd_kind if cwd else "as_payload",
-            )
-            for case, result in zip(cases, rows, strict=True)
-        ]
-        write_overlay_jsonl(overlay_out, overlay_rows)
-        summary["overlay_out"] = str(overlay_out)
-        summary["overlay_rows"] = len(overlay_rows)
-    return summary
+
+def evaluate_pack(
+    path: Path | str, options: EvalPackOptions | None = None
+) -> ObjectDict:
+    """Load, evaluate, and summarize an L1 JSONL pack."""
+    pack_options = options or EvalPackOptions()
+    cases, skipped = _select_cases(load_eval_cases(path), pack_options)
+    rows = [evaluate_case(case, cwd=pack_options.cwd) for case in cases]
+    return {
+        **summarize_eval(rows),
+        "results": list(rows),
+        "pack": str(path),
+        "replayable_only": pack_options.replayable_only,
+        "skipped_label_only": skipped,
+        **_write_pack_overlay(cases, rows, pack_options),
+    }
 
 
 def iter_case_ids(results: Iterable[ObjectDict]) -> list[str]:

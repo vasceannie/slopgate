@@ -6,7 +6,7 @@ from typing import Final
 
 from slopgate._types import ObjectDict, ObjectMapping, string_value
 from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
-from slopgate.constants import SESSION_ID
+from slopgate.constants import HOOK_EVENT_NAME_KEY, SESSION_ID
 
 
 PI_FAMILY_TOOL_MAP: Final[dict[str, str]] = {
@@ -37,7 +37,7 @@ def canonical_event_name(
 ) -> str:
     """Return a canonical hook event name from common raw event aliases."""
     SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.canonical_event_name")
-    event = _first_raw_string(raw, "hook_event_name", "hookEventName")
+    event = _first_raw_string(raw, HOOK_EVENT_NAME_KEY, "hookEventName")
     if not event:
         return ""
     if event in known_events:
@@ -50,7 +50,7 @@ def canonical_payload_with_event(raw: ObjectMapping, event_name: str) -> ObjectD
     SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.canonical_payload")
     canonical = dict(raw)
     if event_name:
-        canonical["hook_event_name"] = event_name
+        canonical[HOOK_EVENT_NAME_KEY] = event_name
     return canonical
 
 

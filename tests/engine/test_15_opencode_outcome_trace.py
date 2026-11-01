@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -10,7 +11,7 @@ from typing import cast
 import pytest
 
 from slopgate._types import object_dict
-from slopgate.constants import BLOCK, PLATFORM_OPENCODE
+from slopgate.constants import BLOCK, PLATFORM_OPENCODE, SHORT_HASH_HEX_CHARS
 from slopgate.context import HookContext
 from slopgate.engine._evaluation import _record_opencode_repair_required
 from slopgate.engine._trace_payloads import (
@@ -107,15 +108,6 @@ def _repair_context(
     )
 
 
-def _blocking_finding() -> RuleFinding:
-    return RuleFinding(
-        rule_id="PY-CODE-010",
-        title="long line",
-        severity=Severity.MEDIUM,
-        decision=BLOCK,
-    )
-
-
 def test_trace_payload_interface_keeps_typed_metadata_and_timing_contract(
     tmp_path: Path,
 ) -> None:
@@ -139,9 +131,15 @@ def test_failed_opencode_execution_does_not_create_repair_lock(
     execution_outcome: str,
 ) -> None:
     context = _repair_context(execution_outcome=execution_outcome)
+    finding = RuleFinding(
+        rule_id="PY-CODE-010",
+        title="long line",
+        severity=Severity.MEDIUM,
+        decision=BLOCK,
+    )
 
     _record_opencode_repair_required(
-        cast(HookContext, context), [_blocking_finding()], PLATFORM_OPENCODE
+        cast(HookContext, context), [finding], PLATFORM_OPENCODE
     )
 
     assert context.state.marked == [], (
@@ -257,27 +255,57 @@ def test_opencode_trace_preserves_native_ids_and_raw_after_output(
     )
 
 
-def test_result_and_event_rows_always_persist_join_keys(
+def _latest_join_key_rows(
     tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
+) -> dict[str, dict[str, object]]:
+    """Evaluate one Write without join-key aliases; return its last log rows."""
     repo = write_slopgate(tmp_path / "repo_join_keys")
     write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
     monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
     payload = pretool_bash_payload(repo, "git status")
-    payload.update({"tool_name": "Write", "tool_input": {"file_path": "src/app.py", "content": "x = 1\n"}})
+    payload.update(
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "src/app.py", "content": "x = 1\n"},
+        }
+    )
     _ = evaluate_payload(payload, platform="opencode")
+    logs = tmp_path / "vf-root" / "logs"
+    return {
+        name: json.loads((logs / name).read_text(encoding="utf-8").splitlines()[-1])
+        for name in ("results.jsonl", "events.jsonl")
+    }
 
-    results_path = tmp_path / "vf-root" / "logs" / "results.jsonl"
-    events_path = tmp_path / "vf-root" / "logs" / "events.jsonl"
-    result_row = json.loads(results_path.read_text(encoding="utf-8").strip().splitlines()[-1])
-    event_row = json.loads(events_path.read_text(encoding="utf-8").strip().splitlines()[-1])
 
-    for row in (result_row, event_row):
-        assert "opencode_session_id" in row
-        assert "call_id" in row
-        assert isinstance(row["candidate_paths"], list)
-    assert result_row["candidate_paths"]
-    assert event_row["candidate_paths"] == result_row["candidate_paths"]
+@pytest.mark.parametrize("log_name", ("results.jsonl", "events.jsonl"))
+def test_trace_rows_derive_join_keys_when_the_harness_omits_them(
+    tmp_path: Path, monkeypatch: MonkeyPatch, log_name: str
+) -> None:
+    row = _latest_join_key_rows(tmp_path, monkeypatch)[log_name]
+
+    assert row["opencode_session_id"] == row["session_id"], (
+        "the join key should fall back to the resolved session id"
+    )
+    assert re.fullmatch(f"[0-9a-f]{{{SHORT_HASH_HEX_CHARS}}}", str(row["call_id"])), (
+        "a missing call id should fall back to a short stable hash"
+    )
+
+
+def test_result_and_event_rows_join_on_the_same_keys(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    rows = _latest_join_key_rows(tmp_path, monkeypatch)
+    result_row, event_row = rows["results.jsonl"], rows["events.jsonl"]
+
+    assert str(result_row["candidate_paths"]).count("src/app.py") == 1, (
+        "the result row should record the written path as its only candidate"
+    )
+    assert event_row["candidate_paths"] == result_row["candidate_paths"], (
+        "event and result rows should report the same candidate paths"
+    )
+    assert event_row["call_id"] == result_row["call_id"], (
+        "event and result rows for one evaluation should share a call id"
+    )
 
 
 def test_opencode_trace_exposes_each_owned_timing_phase(

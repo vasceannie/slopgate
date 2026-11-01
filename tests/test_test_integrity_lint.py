@@ -131,10 +131,7 @@ def assert_high_fan_in_style_helper_discount(output: str, result: int) -> None:
     )
 
 
-def write_holistic_suite_gap_project(tmp_path: Path) -> None:
-    write_project(
-        tmp_path,
-        """
+HOLISTIC_SUITE_GAP_TEST_BODY = """
 from pkg.core import covered, old_api, transform
 from pkg.removed import Missing
 
@@ -149,10 +146,9 @@ def test_transform_examples():
 
 def test_old_api_compatibility():
     assert old_api() == "old"
-""".lstrip(),
-    )
-    (tmp_path / "src" / "pkg" / "core.py").write_text(
-        """
+""".lstrip()
+
+HOLISTIC_SUITE_GAP_CORE_SOURCE = """
 def uncovered() -> str:
     return "missing"
 
@@ -183,25 +179,34 @@ def transform(text: str, options: dict[str, int]) -> list[str]:
 def old_api() -> str:
     '''Deprecated compatibility API.'''
     return "old"
-""".lstrip(),
-        encoding="utf-8",
+""".lstrip()
+
+
+def write_holistic_suite_gap_project(tmp_path: Path) -> None:
+    write_project(tmp_path, HOLISTIC_SUITE_GAP_TEST_BODY)
+    (tmp_path / "src" / "pkg" / "core.py").write_text(
+        HOLISTIC_SUITE_GAP_CORE_SOURCE, encoding="utf-8"
     )
 
 
 def assert_holistic_suite_gap_report(output: str) -> None:
-    assert "  src:     " in output
-    assert "[NEW] untested-production-code" in output
-    assert "static_test_reference_coverage=" in output
-    assert "unreferenced=uncovered" in output
-    assert "[NEW] missing-integration-test" in output
-    assert "production_callers=2" in output
-    assert "[NEW] hypothesis-candidate" in output
-    assert "property_test_score=" in output
-    assert "[NEW] obsolete-or-deprecated-test" in output
-    assert "imports missing production module `pkg.removed`" in output
-    assert "test references deprecated production function `pkg.core.old_api`" in output
-    assert "add one thin integration/contract test" in output
-    assert "add a small Hypothesis property" in output
+    expected_report = [
+        "  src:     ",
+        "[NEW] untested-production-code",
+        "static_test_reference_coverage=",
+        "unreferenced=uncovered",
+        "[NEW] missing-integration-test",
+        "production_callers=2",
+        "[NEW] hypothesis-candidate",
+        "property_test_score=",
+        "[NEW] obsolete-or-deprecated-test",
+        "imports missing production module `pkg.removed`",
+        "test references deprecated production function `pkg.core.old_api`",
+        "add one thin integration/contract test",
+        "add a small Hypothesis property",
+    ]
+    missing_report = [line for line in expected_report if line not in output]
+    assert missing_report == [], "holistic suite report should name every gap"
 
 
 def write_runtime_coverage_project(tmp_path: Path) -> None:

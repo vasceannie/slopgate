@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,15 @@ def _gold_files() -> list[Path]:
     return files
 
 
-def _gold_meta(path: Path) -> tuple[str, str, str]:
+@dataclass(frozen=True, slots=True)
+class GoldCase:
+    path: Path
+    platform: str
+    primary_rule: str
+    label_kind: str
+
+
+def _gold_case(path: Path) -> GoldCase:
     payload = json.loads(path.read_text(encoding="utf-8"))
     meta = payload.get("_gold") or {}
     platform = str(meta.get("platform") or (
@@ -42,7 +51,7 @@ def _gold_meta(path: Path) -> tuple[str, str, str]:
     kind = str(meta.get("label_kind") or "positive")
     rules = meta.get("current_rule_ids") or []
     primary = "_CLEAN" if kind == "true_negative" or not rules else str(rules[0])
-    return platform, primary, kind
+    return GoldCase(path, platform, primary, kind)
 
 
 def _safe_relpath(path: str) -> str | None:
@@ -84,12 +93,9 @@ def _materialize_workspace(repo: Path, payload: dict) -> None:
         dest.write_text(text, encoding="utf-8")
 
 
-GOLD_CASES = tuple(
-    (path, *_gold_meta(path))
-    for path in _gold_files()
-)
-GOLD_POS = tuple(case for case in GOLD_CASES if case[3] != "true_negative")
-GOLD_TN = tuple(case for case in GOLD_CASES if case[3] == "true_negative")
+GOLD_CASES = tuple(_gold_case(path) for path in _gold_files())
+GOLD_POS = tuple(case for case in GOLD_CASES if case.label_kind != "true_negative")
+GOLD_TN = tuple(case for case in GOLD_CASES if case.label_kind == "true_negative")
 
 
 def test_gold_fixtures_exist() -> None:
@@ -97,8 +103,8 @@ def test_gold_fixtures_exist() -> None:
 
 
 def test_gold_coverage_meets_ci_minima() -> None:
-    platforms = {platform for _path, platform, _rule, _kind in GOLD_CASES}
-    rules = {rule for _path, _platform, rule, _kind in GOLD_CASES}
+    platforms = {case.platform for case in GOLD_CASES}
+    rules = {case.primary_rule for case in GOLD_CASES}
     missing = [name for name in REQUIRED_PLATFORMS if name not in platforms]
     assert not missing, f"gold missing required platforms: {missing}"
     assert len(GOLD_CASES) >= MIN_GOLD_TOTAL
@@ -106,54 +112,49 @@ def test_gold_coverage_meets_ci_minima() -> None:
 
 
 def _replay_gold(
-    gold_path: Path,
-    platform: str,
+    case: GoldCase,
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> list[str]:
     repo = write_slopgate(tmp_path / "gold_repo")
     write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
     monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
-    payload = object_dict(json.loads(gold_path.read_text(encoding="utf-8")))
+    payload = object_dict(json.loads(case.path.read_text(encoding="utf-8")))
     payload.pop("_gold", None)
     _materialize_workspace(repo, payload)
     payload.pop("files", None)
     payload["cwd"] = str(repo)
-    result = evaluate_payload(payload, platform=platform)
-    assert result.errors == [], f"{gold_path.name} errors={result.errors}"
+    result = evaluate_payload(payload, platform=case.platform)
+    assert result.errors == [], f"{case.path.name} errors={result.errors}"
     return [finding.rule_id for finding in result.findings]
 
 
 @pytest.mark.parametrize(
-    ("gold_path", "platform", "primary_rule"),
+    "case",
     [
-        pytest.param(path, platform, primary, id=f"{platform}-{primary}-{path.name}")
-        for path, platform, primary, _kind in GOLD_POS
+        pytest.param(case, id=f"{case.platform}-{case.primary_rule}-{case.path.name}")
+        for case in GOLD_POS
     ],
 )
 def test_gold_positive_primary_still_fires(
-    gold_path: Path,
-    platform: str,
-    primary_rule: str,
+    case: GoldCase,
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    got = _replay_gold(gold_path, platform, tmp_path, monkeypatch)
-    assert primary_rule in got, f"{gold_path.name} missing primary {primary_rule} in {got}"
+    got = _replay_gold(case, tmp_path, monkeypatch)
+    assert case.primary_rule in got, (
+        f"{case.path.name} missing primary {case.primary_rule} in {got}"
+    )
 
 
 @pytest.mark.parametrize(
-    ("gold_path", "platform"),
-    [
-        pytest.param(path, platform, id=f"{platform}-tn-{path.name}")
-        for path, platform, _primary, _kind in GOLD_TN
-    ],
+    "case",
+    [pytest.param(case, id=f"{case.platform}-tn-{case.path.name}") for case in GOLD_TN],
 )
 def test_gold_true_negative_stays_clean(
-    gold_path: Path,
-    platform: str,
+    case: GoldCase,
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    got = _replay_gold(gold_path, platform, tmp_path, monkeypatch)
-    assert got == [], f"{gold_path.name} expected clean, got {got}"
+    got = _replay_gold(case, tmp_path, monkeypatch)
+    assert got == [], f"{case.path.name} expected clean, got {got}"

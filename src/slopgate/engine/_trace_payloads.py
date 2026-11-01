@@ -13,6 +13,7 @@ from slopgate.constants import (
     MILLISECONDS_PER_SECOND,
     PLATFORM_KEY,
     SESSION_ID,
+    SHORT_HASH_HEX_CHARS,
     TOOL_EDIT,
     TOOL_GLOB,
     TOOL_GREP,
@@ -171,7 +172,7 @@ def _trace_join_fields(ctx: HookContext) -> ObjectDict:
     if not call_id:
         stamp = str(payload.get("timestamp") or payload.get("time") or "")
         seed = f"{ctx.session_id}|{ctx.event_name}|{ctx.tool_name}|{stamp}"
-        call_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+        call_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:SHORT_HASH_HEX_CHARS]
     return {
         "opencode_session_id": session or "",
         "call_id": call_id,

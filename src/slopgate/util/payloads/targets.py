@@ -4,6 +4,7 @@ import json
 from collections.abc import Iterable
 
 from slopgate._types import ObjectMapping, object_dict, object_list
+from slopgate.constants import PATCH_BLOB_KEYS
 from slopgate.models import ContentTarget
 
 from ._basic import (
@@ -116,7 +117,7 @@ def multi_edit_content_targets(
 
 
 def patch_content_targets(tool_input: ObjectMapping) -> list[ContentTarget]:
-    patch_blob = first_present(tool_input, ("patch", "patchText", "patch_text"))
+    patch_blob = first_present(tool_input, PATCH_BLOB_KEYS)
     if not patch_blob:
         return []
     partitioned = [
@@ -163,7 +164,7 @@ def multi_edit_candidate_paths(tool_input: ObjectMapping) -> list[str]:
 
 
 def patch_candidate_paths(tool_input: ObjectMapping) -> list[str]:
-    patch_blob = first_present(tool_input, ("patch", "patchText", "patch_text"))
+    patch_blob = first_present(tool_input, PATCH_BLOB_KEYS)
     return parse_patch_candidate_paths(patch_blob) if patch_blob else []
 
 

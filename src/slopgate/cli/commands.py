@@ -101,18 +101,17 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 def cmd_eval(args: argparse.Namespace) -> int:
     """Replay a redacted L1 JSONL pack and print an overlap summary."""
-    from slopgate.eval import evaluate_pack
+    from slopgate.eval import EvalPackOptions, OverlayOutput, evaluate_pack
 
     pack = Path(string_arg(args, "pack")).resolve()
-    limit = _int_arg(args, "limit")
-    replayable_only = not _bool_arg(args, "include_label_only")
-    overlay = getattr(args, "overlay_out", None)
-    overlay_out = Path(str(overlay)).resolve() if overlay else None
+    overlay_out = getattr(args, "overlay_out", None)
     report = evaluate_pack(
         pack,
-        limit=limit,
-        replayable_only=replayable_only,
-        overlay_out=overlay_out,
+        EvalPackOptions(
+            limit=_int_arg(args, "limit"),
+            replayable_only=not _bool_arg(args, "include_label_only"),
+            overlay=OverlayOutput(Path(str(overlay_out)).resolve()) if overlay_out else None,
+        ),
     )
     if not _bool_arg(args, "verbose"):
         report = {

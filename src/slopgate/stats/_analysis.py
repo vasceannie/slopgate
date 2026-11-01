@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from slopgate._types import ObjectDict, object_dict, object_list
 from slopgate.constants import (
     DECISION_KEY,
+    EVENT_NAME_KEY,
     RULE_ID_KEY,
     SESSION_ID,
     STATS_TOP_RULE_LIMIT,
@@ -143,7 +144,7 @@ def _process_entry(entry: dict[str, object], counters: _Counters) -> None:
         return
 
     counters.analyzed_events += 1
-    event = str(entry.get("event_name", UNKNOWN_STATS_VALUE))
+    event = str(entry.get(EVENT_NAME_KEY, UNKNOWN_STATS_VALUE))
     counters.by_event[event] += 1
     tool = str(entry.get("tool_name", "")) or "(none)"
     counters.by_tool[tool] += 1

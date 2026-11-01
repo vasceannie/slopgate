@@ -59,3 +59,19 @@ def _add_command_parser(
 
 add_command_parser = _add_command_parser
 add_config_parsers = _add_config_parsers
+
+
+def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument(METADATA_PATH, nargs="?", default=".")
+
+
+def add_path_command_parser(
+    sub: SubparserRegistry,
+    name: str,
+    *,
+    help_text: str,
+    func: object,
+) -> argparse.ArgumentParser:
+    parser = add_command_parser(sub, name, help_text=help_text, func=func)
+    add_optional_path_argument(parser)
+    return parser

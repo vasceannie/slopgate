@@ -5,7 +5,6 @@ from typing import cast
 
 from slopgate._argparse_types import SubparserRegistry
 
-from slopgate.cli._migrate import cmd_migrate
 from slopgate.cli.platforms import add_platform_argument
 from slopgate.cli.commands import (
     INSTALL_TARGETS,
@@ -13,34 +12,38 @@ from slopgate.cli.commands import (
     cmd_check,
     cmd_daemon,
     cmd_enroll,
-    cmd_eval,
     cmd_handle,
     cmd_handle_async,
     cmd_install,
     cmd_install_suite,
     cmd_replay,
-    cmd_stats,
     cmd_uninstall,
     cmd_update_suite,
     cmd_version,
 )
 from slopgate.cli._install_scope_args import add_install_scope_arguments
 from slopgate.cli.repair import add_repair_parsers
-from slopgate.constants import DEFAULT_UPDATE_SOURCE, METADATA_PATH, VERSION_SUBCOMMAND
+from slopgate.constants import DEFAULT_UPDATE_SOURCE, VERSION_SUBCOMMAND
 
 from .config import (
     add_command_parser,
     add_config_parsers,
+    add_optional_path_argument,
+    add_path_command_parser,
 )
+from .maintenance import add_eval_parser, add_maintenance_parsers
+
+__all__ = [
+    "add_details_argument",
+    "add_dry_run_argument",
+    "add_optional_path_argument",
+    "build_parser",
+]
 
 _INSTALL_SCOPE_HELP = (
     "Hook install target: user config dir, project dir (./.claude, ./.codex, "
     "./.cursor, ./.opencode), or both"
 )
-
-
-def add_optional_path_argument(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(METADATA_PATH, nargs="?", default=".")
 
 
 def add_dry_run_argument(parser: argparse.ArgumentParser) -> None:
@@ -78,18 +81,6 @@ def build_parser() -> argparse.ArgumentParser:
     version = sub.add_parser(VERSION_SUBCOMMAND, help="Print version")
     version.set_defaults(func=cmd_version)
     add_repair_parsers(sub)
-    return parser
-
-
-def _add_path_command_parser(
-    sub: SubparserRegistry,
-    name: str,
-    *,
-    help_text: str,
-    func: object,
-) -> argparse.ArgumentParser:
-    parser = add_command_parser(sub, name, help_text=help_text, func=func)
-    add_optional_path_argument(parser)
     return parser
 
 
@@ -222,55 +213,15 @@ def _add_hook_runtime_parsers(sub: SubparserRegistry) -> None:
         func_by_name=func_by_name,
     )
     add_hook_runtime_parsers(sub, registration)
-    _add_eval_parser(sub)
-
-
-def _add_eval_parser(sub: SubparserRegistry) -> None:
-    eval_parser = add_command_parser(
-        sub,
-        "eval",
-        help_text="Evaluate a redacted L1 JSONL attempt-case pack",
-        func=cmd_eval,
-    )
-    _ = eval_parser.add_argument(
-        "--pack",
-        required=True,
-        help="Path to L1 eval JSONL (slopdata or tests/fixtures/eval)",
-    )
-    _ = eval_parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Optional max cases to evaluate",
-    )
-    _ = eval_parser.add_argument(
-        "--pretty",
-        action="store_true",
-        help="Pretty-print JSON summary",
-    )
-    _ = eval_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Include per-case result rows in the JSON output",
-    )
-    _ = eval_parser.add_argument(
-        "--include-label-only",
-        action="store_true",
-        help="Also evaluate label_only rows (empty input / non-PreToolUse)",
-    )
-    _ = eval_parser.add_argument(
-        "--overlay-out",
-        default=None,
-        help="Write current-engine sidecar JSONL keyed by case_id (does not rewrite the pack)",
-    )
+    add_eval_parser(sub)
 
 
 def _add_repo_enrollment_parsers(sub: SubparserRegistry) -> None:
-    _add_path_command_parser(
+    add_path_command_parser(
         sub, "check", help_text="Check quality gate for a repo", func=cmd_check
     )
 
-    enroll = _add_path_command_parser(
+    enroll = add_path_command_parser(
         sub,
         "enroll",
         help_text="Enroll a repo in quality gate enforcement",
@@ -293,61 +244,11 @@ def _add_platform_install_parsers(sub: SubparserRegistry) -> None:
     _add_suite_parsers(sub)
 
 
-def _add_maintenance_parsers(sub: SubparserRegistry) -> None:
-    from slopgate.cli.changed_tests_parser import add_changed_test_parser
-
-    stats = add_command_parser(
-        sub, "stats", help_text="Analyze hook activity logs", func=cmd_stats
-    )
-    _ = stats.add_argument("--log")
-    _ = stats.add_argument("--days", type=int)
-    _ = stats.add_argument("--json", action="store_true")
-    for option, help_text in (
-        ("--baseline-policy", "Select the baseline effective-policy fingerprint"),
-        ("--candidate-policy", "Select the candidate effective-policy fingerprint"),
-        ("--baseline-guidance", "Select the baseline guidance fingerprint"),
-        ("--candidate-guidance", "Select the candidate guidance fingerprint"),
-    ):
-        _ = stats.add_argument(option, type=str, metavar="HASH", help=help_text)
-    _ = stats.add_argument(
-        "--cohort",
-        action="append",
-        default=[],
-        metavar="DIM=VALUE",
-        help="Restrict comparisons to one cohort dimension value (repeatable)",
-    )
-
-    add_changed_test_parser(sub)
-
-    migrate = _add_path_command_parser(
-        sub,
-        "migrate",
-        help_text="Migrate legacy slopgate config and quality_gate.toml to slopgate",
-        func=cmd_migrate,
-    )
-    _ = migrate.add_argument("--dry-run", action="store_true")
-    _ = migrate.add_argument(
-        "--force",
-        action="store_true",
-        help="Replace existing ~/.config/slopgate when migrating user config",
-    )
-    _ = migrate.add_argument(
-        "--user-only",
-        action="store_true",
-        help="Only migrate user config and OpenCode plugin",
-    )
-    _ = migrate.add_argument(
-        "--repo-only",
-        action="store_true",
-        help="Only migrate repo slopgate.toml and disable sentinels",
-    )
-
-
 def _add_core_parsers(sub: SubparserRegistry) -> None:
     from .bundle import add_bundle_parsers
 
     _add_hook_runtime_parsers(sub)
     _add_repo_enrollment_parsers(sub)
     _add_platform_install_parsers(sub)
-    _add_maintenance_parsers(sub)
+    add_maintenance_parsers(sub)
     add_bundle_parsers(sub)

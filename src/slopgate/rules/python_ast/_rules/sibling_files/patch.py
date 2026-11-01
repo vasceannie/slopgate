@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from slopgate.constants import PATCH_BLOB_KEYS
 from slopgate.util.path_filters import is_authored_python_path
 from slopgate.util.payloads import first_present
 
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 def flat_sibling_patch_blob(ctx: HookContext) -> str:
     """Return patch text from the hook payload, or empty when absent."""
-    blob = first_present(ctx.tool_input, ("patch", "patchText", "patch_text"))
+    blob = first_present(ctx.tool_input, PATCH_BLOB_KEYS)
     if not isinstance(blob, str):
         return ""
     if blob == "":
