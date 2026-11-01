@@ -479,6 +479,7 @@ async function callEnforcer(
     let settled = false
     let stdout = ""
     let stderr = ""
+    let inputLost = false
     let timer: ReturnType<typeof setTimeout>
     const finish = (result: EnforcerResult | null): void => {
       if (settled) return
@@ -525,6 +526,11 @@ async function callEnforcer(
       child.stderr?.on("data", (chunk: Buffer | string) => {
         stderr += chunk.toString()
       })
+      // Unhandled, an enforcer exiting before it reads would crash the host's plugin process.
+      child.stdin?.on("error", (err: Error) => {
+        inputLost = true
+        console.error(`[slopgate] enforcer stdin failed: ${err}`)
+      })
       child.on("error", (err: Error) => {
         console.error(`[slopgate] callEnforcer failed: ${err}`)
         finish(enforcerFailureResult(
@@ -543,6 +549,16 @@ async function callEnforcer(
             managedRepo,
             repairStatusUnavailable,
             "slopgate degraded mode: enforcer subprocess failed in managed repo.",
+          ))
+          return
+        }
+        if (inputLost) {
+          // A clean exit is not a verdict when the enforcer never saw the whole payload.
+          finish(enforcerFailureResult(
+            payload,
+            managedRepo,
+            repairStatusUnavailable,
+            "slopgate degraded mode: enforcer did not read its input in managed repo.",
           ))
           return
         }

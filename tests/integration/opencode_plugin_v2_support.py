@@ -34,7 +34,12 @@ if sys.argv[1:3] == ["repair", "status"]:
         raise SystemExit(2)
     print(status)
 elif sys.argv[1:2] == ["handle"]:
-    print(os.environ["FAKE_HANDLE_OUTPUT"])
+    output = os.environ["FAKE_HANDLE_OUTPUT"]
+    if output == "exit-nonzero-unread":
+        raise SystemExit(2)
+    if output != "exit-zero-unread":
+        sys.stdin.read()
+        print(output)
 """
 
 

@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -21,12 +22,17 @@ from tests.integration.opencode_plugin_v2_support import (
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
 
 
-def _write_fake_slopgate(
-    tmp_path: Path, *, enabled: bool = True, commented_header: bool = False
-) -> Path:
-    header = "[slopgate] # managed by test" if commented_header else "[slopgate]"
+@dataclass(frozen=True, slots=True)
+class _PendingRepairRepo:
+    status_available: bool = True
+    enabled: bool = True
+    commented_header: bool = False
+
+
+def _write_fake_slopgate(tmp_path: Path, repo: _PendingRepairRepo) -> Path:
+    header = "[slopgate] # managed by test" if repo.commented_header else "[slopgate]"
     (tmp_path / "slopgate.toml").write_text(
-        f"{header}\nenabled = {'true' if enabled else 'false'}\n", encoding="utf-8"
+        f"{header}\nenabled = {'true' if repo.enabled else 'false'}\n", encoding="utf-8"
     )
     executable = tmp_path / "slopgate"
     executable.write_text(
@@ -40,6 +46,7 @@ if sys.argv[1:3] == ["repair", "status"]:
         raise SystemExit(2)
     print(json.dumps({"status": "REPAIR_REQUIRED", "generation": "generation-1"}))
 else:
+    sys.stdin.read()
     print(json.dumps({"action": "allow"}))
 """,
         encoding="utf-8",
@@ -48,17 +55,7 @@ else:
     return executable
 
 
-def _run_pending_repair_file_tool(
-    tmp_path: Path,
-    tool_name: str,
-    status_available: bool = True,
-    *,
-    enabled: bool = True,
-    commented_header: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    executable = _write_fake_slopgate(
-        tmp_path, enabled=enabled, commented_header=commented_header
-    )
+def _write_runner(tmp_path: Path, executable: Path, statements: str) -> Path:
     plugin_path = tmp_path / "slopgate-plugin.ts"
     plugin_path.write_text(
         render_opencode_plugin(
@@ -70,23 +67,35 @@ def _run_pending_repair_file_tool(
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        v2_plugin_setup_source(plugin_path, tmp_path)
-        + v2_before_input(
+        v2_plugin_setup_source(plugin_path, tmp_path) + statements, encoding="utf-8"
+    )
+    link_v2_dependencies(tmp_path)
+    return runner
+
+
+def _run_pending_repair_file_tool(
+    tmp_path: Path,
+    tool_name: str,
+    repo: _PendingRepairRepo = _PendingRepairRepo(),
+) -> subprocess.CompletedProcess[str]:
+    executable = _write_fake_slopgate(tmp_path, repo)
+    runner = _write_runner(
+        tmp_path,
+        executable,
+        v2_before_input(
             tool_name,
             "session",
             {"patchText": "*** Begin Patch\\n*** End Patch"},
         )
         + 'console.log("allowed")\n',
-        encoding="utf-8",
     )
-    link_v2_dependencies(tmp_path)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
         env=os.environ
         | {
             "SLOPGATE_BIN": str(executable),
-            "REPAIR_STATUS_AVAILABLE": "1" if status_available else "0",
+            "REPAIR_STATUS_AVAILABLE": "1" if repo.status_available else "0",
         },
         text=True,
         capture_output=True,
@@ -107,7 +116,9 @@ def test_pending_repair_allows_direct_file_repair_tool(
 def test_pending_repair_allows_bootstrap_when_status_is_unavailable(
     tmp_path: Path,
 ) -> None:
-    result = _run_pending_repair_file_tool(tmp_path, "patch", status_available=False)
+    result = _run_pending_repair_file_tool(
+        tmp_path, "patch", _PendingRepairRepo(status_available=False)
+    )
 
     assert result.returncode == 0, result.stderr
 
@@ -118,8 +129,7 @@ def test_opencode_toml_header_comments_preserve_relaxed_repo_mode(
     result = _run_pending_repair_file_tool(
         tmp_path,
         "unknown_tool",
-        enabled=False,
-        commented_header=True,
+        _PendingRepairRepo(enabled=False, commented_header=True),
     )
 
     assert result.returncode == 0, result.stderr
@@ -152,6 +162,7 @@ elif sys.argv[1:3] == ["repair", "verify"]:
     Path(os.environ["REPAIR_STATE_PATH"]).unlink(missing_ok=True)
     print(json.dumps({"status": "cleared", "generation": "generation-1"}))
 else:
+    sys.stdin.read()
     print(json.dumps({"action": "allow"}))
 """,
         encoding="utf-8",
@@ -160,34 +171,8 @@ else:
     return executable
 
 
-def _run_verify_repair(
-    tmp_path: Path,
-    *,
-    timeout_ms: int,
-    concurrent: bool,
-    abort_first: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    executable = _write_timeout_slopgate(tmp_path)
-    started = tmp_path / "verify-started.txt"
-    started.write_text("0", encoding="utf-8")
-    state = tmp_path / "repair-state.json"
-    state.write_text(
-        json.dumps({"status": "REPAIR_REQUIRED", "generation": "generation-1"}),
-        encoding="utf-8",
-    )
-    plugin_path = tmp_path / "slopgate-plugin.ts"
-    plugin_path.write_text(
-        render_opencode_plugin(
-            resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
-            str(executable),
-            {"opencode_version": "2.2.5"},
-        ),
-        encoding="utf-8",
-    )
-    runner = tmp_path / "runner.ts"
-    runner.write_text(
-        v2_plugin_setup_source(plugin_path, tmp_path)
-        + f"""
+def _verify_statements(*, concurrent: bool, abort_first: bool) -> str:
+    return f"""
 const tool = __slopgateTools["slopgate_verify_repair"]
 const firstController = new AbortController()
 const secondController = new AbortController()
@@ -215,10 +200,29 @@ console.log(JSON.stringify(results.map((item) => {{
   if (item.status === "fulfilled") return item.value
   return {{ error: String(item.reason) }}
 }})))
-""",
+"""
+
+
+def _run_verify_repair(
+    tmp_path: Path,
+    *,
+    timeout_ms: int,
+    concurrent: bool,
+    abort_first: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    executable = _write_timeout_slopgate(tmp_path)
+    started = tmp_path / "verify-started.txt"
+    started.write_text("0", encoding="utf-8")
+    state = tmp_path / "repair-state.json"
+    state.write_text(
+        json.dumps({"status": "REPAIR_REQUIRED", "generation": "generation-1"}),
         encoding="utf-8",
     )
-    link_v2_dependencies(tmp_path)
+    runner = _write_runner(
+        tmp_path,
+        executable,
+        _verify_statements(concurrent=concurrent, abort_first=abort_first),
+    )
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
