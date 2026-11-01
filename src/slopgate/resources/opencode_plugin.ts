@@ -16,7 +16,7 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { Plugin } from "@opencode/plugin"
-import { Error as ToolError } from "@opencode/plugin/promise/tool"
+import { Error as ToolError, type Result as ToolResult } from "@opencode/plugin/promise/tool"
 import type { Session } from "@opencode/schema/session"
 
 type ToolHookEvent = Parameters<Parameters<Plugin.Context["tool"]["hook"]>[1]>[0]
@@ -286,6 +286,38 @@ async function evaluatePermission(ctx: Plugin.Context, event: PermissionEvaluati
   event.message = denial
 }
 
+function withNotice(result: ToolResult, notice: string): ToolResult {
+  const { content, output } = result
+  const original = typeof content === "string"
+    ? [{ type: "text" as const, text: content }]
+    : content?.length
+      ? content
+      : output === undefined
+        ? []
+        : [{ type: "text" as const, text: typeof output === "string" ? output : JSON.stringify(output) ?? String(output) }]
+  return { ...result, content: [...original, { type: "text" as const, text: notice }] }
+}
+
+function postToolNotice(reason: string, pending: RepairGateState | null): string {
+  const notice = `[slopgate] This tool call already ran and was not rolled back, but a post-tool check failed: ${reason}`
+  if (pending?.status !== "REPAIR_REQUIRED") return notice
+  return `${notice} Repair generation ${pending.generation || "unknown"} is now required. ${repairRecoverySteps(pending.targets)}`
+}
+
+// A thrown after-hook cannot reject the call, so the result is the model's only signal.
+async function tellModelAboutPostToolBlock(event: ToolAfterEvent, reason: string, scope: SessionScope): Promise<void> {
+  const notice = postToolNotice(reason, await repairGateState(scope.directory, scope.worktree))
+  if (event.status === "completed") {
+    event.result = withNotice(event.result, notice)
+    return
+  }
+  event.error = new ToolError({
+    message: `${event.error.message}\n\n${notice}`,
+    error: event.error.error,
+    metadata: event.error.metadata,
+  })
+}
+
 async function afterTool(ctx: Plugin.Context, event: ToolAfterEvent): Promise<void> {
   // Inner tools share the execute call's ID, so only its own completion ends gating.
   if (nativeToolId(event.tool) === CODE_MODE_TOOL) runningCodeModeCalls.delete(event.id)
@@ -313,6 +345,9 @@ async function afterTool(ctx: Plugin.Context, event: ToolAfterEvent): Promise<vo
         `post-tool detection only: execution already ${completed ? "completed" : "failed"}; `
         + "no prevention or rollback occurred. " + detail
         + (result?.action === "block" ? " Repair is required before the next mutation." : ""))
+    }
+    if (result?.action === "block") {
+      await tellModelAboutPostToolBlock(event, result.reason || "Blocked by policy", scope)
     }
   } catch (error: unknown) {
     logDecision("error", "post-tool-advisory-failed", String(error))
@@ -689,7 +724,13 @@ function repairRecoveryProtocol(
 ): string {
   return (
     `STOP: do not retry this blocked mutation; equivalent retries remain blocked `
-    + `until generation ${generation} clears. Recovery protocol: `
+    + `until generation ${generation} clears. ${repairRecoverySteps(targets)}`
+  )
+}
+
+function repairRecoverySteps(targets: unknown): string {
+  return (
+    "Recovery protocol: "
     + `(1) read the first causal finding: ${firstCausalLabel(targets)}; `
     + "(2) inspect affected files with declared read-only tools; "
     + "(3) make one focused repair with an allowed mutation tool "
