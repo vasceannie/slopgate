@@ -64,7 +64,8 @@ class HookStateSnapshot(TypedDict):
     retry_locks: dict[str, ObjectDict]
     repair_plans: dict[str, ObjectDict]
     repair_required: ObjectDict
+    session_mutations: dict[str, ObjectDict]
 
 
-ObjectStateSection = Literal["retry_locks", "repair_plans"]
+ObjectStateSection = Literal["retry_locks", "repair_plans", "session_mutations"]
 IntStateSection = Literal["search_reminders"]

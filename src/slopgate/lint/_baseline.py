@@ -21,6 +21,7 @@ from slopgate.util.atomic_files import write_text_atomic_locked
 from typing_extensions import override
 
 from slopgate.lint._config import get_config
+from slopgate.lint.baseline_drift import current_ids_by_rule, reconcile_line_drift
 
 SCHEMA_VERSION = 1
 
@@ -120,15 +121,6 @@ def save_baseline(violations_by_rule: dict[str, list[Violation]]) -> None:
     )
 
 
-def _current_ids_by_rule(
-    collectors: list[tuple[str, list[Violation]]],
-) -> dict[str, set[str]]:
-    return {
-        rule: {violation.stable_id for violation in violations}
-        for rule, violations in collectors
-    }
-
-
 def _baseline_rules_equal(
     left: dict[str, set[str]],
     right: dict[str, set[str]],
@@ -147,8 +139,13 @@ def compute_synced_baseline_rules(
     prune_only: bool,
     accepted_baseline: dict[str, set[str]] | None = None,
 ) -> tuple[dict[str, set[str]], int]:
-    """Return baseline rules after sync and the number of stale ids removed."""
-    current_by_rule = _current_ids_by_rule(collectors)
+    """Return baseline rules after sync and the number of stale ids removed.
+
+    Known ids whose only change is a shifted ``file:line`` are swapped for the
+    current id, so moved debt is refreshed instead of pruned as fixed.
+    """
+    current_by_rule = current_ids_by_rule(collectors)
+    old_baseline = reconcile_line_drift(old_baseline, current_by_rule)
     all_rules = set(old_baseline) | set(current_by_rule)
     synced: dict[str, set[str]] = {}
     stale_removed = 0

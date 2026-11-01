@@ -5,52 +5,13 @@ from pathlib import Path
 import pytest
 
 from slopgate import rules
-from slopgate.config import load_config
 from slopgate.context import HookContext
 from slopgate.rules.common.quality.lint import _TouchedLintReport
 from slopgate.rules.python_ast import PythonPytestAsyncioRule
-from slopgate.state import HookStateStore
-from slopgate.trace import TraceWriter
-from slopgate.util.payloads import HookPayload
 
-from tests.integration.config_override_support import (
-    GuardRuleConfigOverrides,
-    apply_guard_rule_config_overrides,
-)
+from tests.integration.config_override_support import GuardRuleConfigOverrides
+from tests.integration.guard_context_support import context_for_payload, write_payload
 from tests.support import SKIP_UNIX_ONLY
-
-
-def context_for_payload(
-    tmp_path: Path,
-    payload: dict[str, object],
-    config_overrides: GuardRuleConfigOverrides | None = None,
-) -> HookContext:
-    config = load_config(
-        root=tmp_path,
-        repo_root=tmp_path,
-        ensure_enrollment=False,
-        ensure_trace=False,
-    )
-    if config_overrides is not None:
-        config = apply_guard_rule_config_overrides(config, config_overrides)
-    trace = TraceWriter(tmp_path / ".slopgate" / "trace")
-    return HookContext(
-        payload=HookPayload(payload, config),
-        config=config,
-        trace=trace,
-        state=HookStateStore(trace.trace_dir),
-    )
-
-
-def write_payload(
-    file_path: str, content: str, event: str = "PreToolUse"
-) -> dict[str, object]:
-    return {
-        "session_id": "test-session",
-        "hook_event_name": event,
-        "tool_name": "Write",
-        "tool_input": {"file_path": file_path, "content": content},
-    }
 
 
 def bash_payload(command: str, event: str = "PreToolUse") -> dict[str, object]:
@@ -215,10 +176,30 @@ def test_require_quality_check_rule_emits_stop_reminder(tmp_path: Path) -> None:
             "stop_response": "Implemented the change.",
         },
     )
+    ctx.state.record_session_mutation("quality-session", "Write")
 
     findings = rules.RequireQualityCheckRule().evaluate(ctx)
 
-    assert [item.rule_id for item in findings] == ["STOP-002"]
+    assert [item.rule_id for item in findings] == ["STOP-002"], (
+        f"expected STOP-002 after a code change, got {findings}"
+    )
+
+
+def test_require_quality_check_rule_skips_read_only_session(tmp_path: Path) -> None:
+    ctx = context_for_payload(
+        tmp_path,
+        {
+            "session_id": "quality-read-only-session",
+            "hook_event_name": "Stop",
+            "stop_response": "Answered the question.",
+        },
+    )
+
+    findings = rules.RequireQualityCheckRule().evaluate(ctx)
+
+    assert findings == [], (
+        f"expected no quality reminder without a code change, got {findings}"
+    )
 
 
 def test_warn_large_file_rule_reports_large_content(tmp_path: Path) -> None:

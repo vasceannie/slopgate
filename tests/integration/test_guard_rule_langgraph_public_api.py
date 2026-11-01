@@ -5,7 +5,7 @@ from pathlib import Path
 from slopgate import rules
 from slopgate.context import HookContext
 
-from tests.integration.test_guard_rule_public_api import (
+from tests.integration.guard_context_support import (
     context_for_payload,
     write_payload,
 )

@@ -216,11 +216,19 @@ slopgate.engine.evaluate_payload = synthetic_evaluate
 		expect(settled).toBeUndefined();
 	}, 30000);
 
-	test("displays one STOP-002 reminder without continuing the fresh session", async () => {
+	test("displays one STOP-002 reminder after a code change without continuing the session", async () => {
 		// Given
 		const activeHarness = requireHarness();
 		const before = activeHarness.sentMessages.length;
 		const response = assistantTextMessage("Implemented the requested change and verified it.");
+		await activeHarness.runner.emitToolResult({
+			type: "tool_result",
+			toolCallId: "stop-002-edit",
+			toolName: "write",
+			input: { path: "src/app.ts", content: "export const value = 1;\n" },
+			content: [{ type: "text", text: "Wrote file" }],
+			isError: false,
+		});
 
 		// When
 		const result = await emitStop(activeHarness, { lastMessage: response });
@@ -234,5 +242,22 @@ slopgate.engine.evaluate_payload = synthetic_evaluate
 		expect(settled).toBeUndefined();
 		expect(displayed).toHaveLength(1);
 		expect(displayed[0]).toContain("slopgate lint check");
+	}, 30000);
+
+	test("skips STOP-002 for a session without code changes", async () => {
+		// Given
+		const activeHarness = requireHarness();
+		const before = activeHarness.sentMessages.length;
+		const response = assistantTextMessage("Answered the question without touching code.");
+
+		// When
+		const result = await emitStop(activeHarness, { lastMessage: response });
+		const ruleIds = await readRuleIds(requireTemporaryRoot());
+		const displayed = activeHarness.sentMessages.slice(before);
+
+		// Then
+		expect(result).toBeUndefined();
+		expect(ruleIds).not.toContain("STOP-002");
+		expect(displayed).toHaveLength(0);
 	}, 30000);
 });

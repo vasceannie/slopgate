@@ -152,6 +152,7 @@ HOOK_RULE_CATEGORIES: dict[ParityCategory, frozenset[str]] = {
         {
             "BUILTIN-ENFORCE-FULL-READ",
             "BUILTIN-INJECT-PROMPT",
+            "BUILTIN-TRACK-MUTATION",
             "GIT-001",
             "GIT-002",
             "GIT-003",

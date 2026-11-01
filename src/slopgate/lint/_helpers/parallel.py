@@ -24,8 +24,17 @@ def parse_attempt_job(path: Path) -> FileParseAttempt:
 
 
 def parse_attempts_parallel(paths: Sequence[Path]) -> list[FileParseAttempt]:
-    """Parse *paths* with a process pool, preserving input order."""
+    """Parse *paths* with a process pool, preserving input order.
+
+    Spawned workers do not inherit the parent's lint config context, so the
+    initializer installs it; otherwise ``ParsedFile.rel`` falls back to
+    absolute paths and every path-scoped detector sees the wrong location.
+    """
+    from slopgate.lint._config import get_config, set_config
+
     workers = os.cpu_count()
     max_workers = workers if workers is not None and workers > 1 else 1
-    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+    with ProcessPoolExecutor(
+        max_workers=max_workers, initializer=set_config, initargs=(get_config(),)
+    ) as pool:
         return list(pool.map(parse_attempt_job, paths))

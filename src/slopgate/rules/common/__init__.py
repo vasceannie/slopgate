@@ -50,6 +50,7 @@ __all__ = [
     "lint_target_summary",
     "post_lint_oversized_guidance",
     "post_lint_split_detail",
+    "SessionMutationTrackingRule",
 ]
 from ._shell_safe_read import (
     FIND_MUTATING_ACTIONS,
@@ -106,3 +107,4 @@ from .quality import (
     resolve_python_candidates,
     run_quality_commands,
 )
+from .session_mutation import SessionMutationTrackingRule

@@ -18,6 +18,7 @@ __all__ = [
     "PromptContextRule",
     "ProtectedPathsRule",
     "SearchReminderRule",
+    "SessionMutationTrackingRule",
     "SensitiveDataRule",
     "SystemProtectionRule",
     "DefaultSwallowRule",
@@ -60,6 +61,7 @@ from slopgate.rules.common import (
     PromptContextRule,
     ProtectedPathsRule,
     SearchReminderRule,
+    SessionMutationTrackingRule,
     SensitiveDataRule,
     SystemProtectionRule,
 )
@@ -249,6 +251,7 @@ def build_repo_strict_rules(ctx: HookContext) -> list[Rule]:
         SearchReminderRule(),
         PostEditQualityRule(),
         PostEditLintRule(),
+        SessionMutationTrackingRule(),
         BaselineGuardRule(),
         IgnorePreexistingRule(),
         RequireQualityCheckRule(),

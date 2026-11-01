@@ -82,6 +82,7 @@ __all__ = [
     "DenyHitStateMixin",
     "FullReadStateMixin",
     "SearchReminderStateMixin",
+    "SessionMutationStateMixin",
     "SessionStateMutationMixin",
 ]
 
@@ -97,6 +98,37 @@ class SessionStateMutationMixin(StateKeyMixin, StateSnapshotMixin):
                 "timestamp": int(time()),
             }
             self._save_state(state)
+
+
+SESSION_MUTATION_REFRESH_SECONDS = 300
+
+
+class SessionMutationStateMixin(SessionStateMutationMixin):
+    def has_session_mutation(self, session_id: str) -> bool:
+        key = session_id.strip()
+        if not key:
+            # Id-less payloads cannot be told apart; one shared "" key would let
+            # any session unlock another, so keep the ungated behavior instead.
+            return True
+        logger.debug("session mutation state checked", session_id=key)
+        return key in self._load_state()["session_mutations"]
+
+    def record_session_mutation(self, session_id: str, tool_name: str) -> None:
+        key = session_id.strip()
+        if not key or self._session_mutation_is_fresh(key):
+            return
+        self._write_object_state_entry(
+            "session_mutations", key, {"tool": tool_name.strip().lower()}
+        )
+
+    def _session_mutation_is_fresh(self, key: str) -> bool:
+        """Skip the locked rewrite when this session was marked moments ago."""
+        entry = self._load_state()["session_mutations"].get(key, {})
+        timestamp = entry.get("timestamp")
+        return (
+            isinstance(timestamp, int)
+            and timestamp >= int(time()) - SESSION_MUTATION_REFRESH_SECONDS
+        )
 
 
 class FullReadStateMixin(StateKeyMixin, StateSnapshotMixin):

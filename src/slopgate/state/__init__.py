@@ -19,6 +19,7 @@ __all__ = [
     "DenyHitStateMixin",
     "FullReadStateMixin",
     "SearchReminderStateMixin",
+    "SessionMutationStateMixin",
     "SessionStateMutationMixin",
     "StateKeyMixin",
     "HookStateStore",
@@ -43,6 +44,7 @@ from ._keys import (
     DenyHitStateMixin,
     FullReadStateMixin,
     SearchReminderStateMixin,
+    SessionMutationStateMixin,
     SessionStateMutationMixin,
     StateKeyMixin,
 )

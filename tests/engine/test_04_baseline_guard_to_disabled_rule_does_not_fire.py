@@ -89,7 +89,9 @@ def test_subagent_stop_preexisting_blocked(bundle_root: Path) -> None:
     )
 
 
-def test_clean_stop_gets_quality_reminder(bundle_root: Path) -> None:
+def test_clean_stop_without_code_changes_skips_quality_reminder(
+    bundle_root: Path,
+) -> None:
     payload = {
         "session_id": "t",
         "cwd": str(bundle_root),
@@ -97,12 +99,12 @@ def test_clean_stop_gets_quality_reminder(bundle_root: Path) -> None:
         "stop_response": "All tasks completed successfully.",
     }
     result = evaluate_payload(payload)
-    output = require_output(result)
-    assert output_string(output, "decision") != "block"
-    ctx = output_string(output, "systemMessage") or output_string(
-        hook_output(result), "additionalContext"
+    assert result.output is None, (
+        f"Expected no quality reminder for a read-only session, got: {result.output}"
     )
-    assert "quality" in ctx.lower(), f"Expected quality reminder, got: {ctx}"
+    assert "STOP-002" not in finding_ids(result), (
+        "A read-only session must not trigger the stop quality reminder"
+    )
 
 
 def test_git_commit_gets_quality_context(bundle_root: Path) -> None:

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Literal
 from slopgate.constants import MAX_LINT_VIOLATIONS_SHOWN
 from slopgate.cli.lint.report_format import colorize, existing_location_lines
 from slopgate.lint._baseline import BaselineSyncResult, Violation
+from slopgate.lint.baseline_drift import current_ids_by_rule, reconcile_line_drift
 
 if TYPE_CHECKING:
     from slopgate.lint._config import QualityConfig
@@ -66,10 +67,6 @@ class LintRunTotals:
 class BaselineInputs:
     stored: dict[str, set[str]]
     accepted: dict[str, set[str]]
-
-    @property
-    def effective(self) -> dict[str, set[str]]:
-        return _merge_rule_ids(self.stored, self.accepted)
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,7 +273,7 @@ def _print_baseline_sync_result(
     if result.stale_removed:
         parts.append(f"removed {result.stale_removed} stale")
     if result.inherited_added:
-        parts.append(f"recorded {result.inherited_added} git-base inherited")
+        parts.append(f"refreshed {result.inherited_added} line-shifted")
     if result.wrote and not result.inherited_added:
         parts.append("pruned fixed debt")
     if parts:
@@ -309,6 +306,11 @@ def print_collector_results(
     report_options = options or CollectorReportOptions()
     color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     baseline_inputs = _coerce_baseline_inputs(baseline)
+    current_ids = current_ids_by_rule(collectors)
+    effective_baseline = _merge_rule_ids(
+        reconcile_line_drift(baseline_inputs.stored, current_ids),
+        reconcile_line_drift(baseline_inputs.accepted, current_ids),
+    )
     totals = LintRunTotals(0, 0, 0)
     for rule_name, violations in collectors:
         if not violations:
@@ -317,7 +319,7 @@ def print_collector_results(
             TallyInput(
                 rule_name=rule_name,
                 violations=violations,
-                baseline=baseline_inputs.effective,
+                baseline=effective_baseline,
                 gate=report_options.gate,
                 details=report_options.details,
             )

@@ -18,6 +18,7 @@ from ._keys import (
     DenyHitStateMixin,
     FullReadStateMixin,
     SearchReminderStateMixin,
+    SessionMutationStateMixin,
     StateKeyMixin,
 )
 from ._files import StateSnapshotMixin
@@ -181,6 +182,7 @@ class RepairPlanStateMixin(StateKeyMixin, StateSnapshotMixin):
 class HookStateStore(
     FullReadStateMixin,
     SearchReminderStateMixin,
+    SessionMutationStateMixin,
     AdvisoryHitStateMixin,
     DenyHitStateMixin,
     RetryLockStateMixin,

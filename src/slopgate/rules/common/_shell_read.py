@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing_extensions import override
@@ -67,7 +67,37 @@ def path_matches_any(path_value: str, patterns: list[str]) -> str | None:
     return None
 
 
-def read_context_fragment(root: Path, relative: str) -> str | None:
+MUTATION_GATED_CONTEXT_HEADINGS: tuple[str, ...] = ("## Before Stopping",)
+MARKDOWN_FENCE_MARKERS: tuple[str, ...] = ("```", "~~~")
+
+
+def _drop_context_sections(content: str, headings: Sequence[str]) -> str:
+    """Drop level-2 markdown sections whose heading matches *headings*.
+
+    Lines inside fenced code blocks are never headings, so shell comments
+    like ``# run this`` cannot end or start a dropped section.
+    """
+    if not headings:
+        return content
+    targets = {heading.strip() for heading in headings}
+    kept: list[str] = []
+    dropping = False
+    in_fence = False
+    for line in content.splitlines():
+        if line.lstrip().startswith(MARKDOWN_FENCE_MARKERS):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith(("# ", "## ")):
+            dropping = line.strip() in targets
+            if dropping:
+                continue
+        if not dropping:
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def read_context_fragment(
+    root: Path, relative: str, *, drop_headings: Sequence[str] = ()
+) -> str | None:
     """Read a prompt context file and return its fragment, or None to skip."""
     path = root / relative
     if not path.exists():
@@ -76,6 +106,7 @@ def read_context_fragment(root: Path, relative: str) -> str | None:
         content = path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
+    content = _drop_context_sections(content, drop_headings)
     return f"## {relative}\n{content}" if content else None
 
 
@@ -88,10 +119,18 @@ class PromptContextRule(Rule):
     def evaluate(self, ctx: "HookContext") -> list[RuleFinding]:
         if not is_rule_enabled(ctx, self.rule_id):
             return []
+        drop_headings: Sequence[str] = MUTATION_GATED_CONTEXT_HEADINGS
+        if ctx.state.has_session_mutation(ctx.session_id):
+            drop_headings = ()
         fragments = [
             frag
             for relative in ctx.config.prompt_context_files
-            if (frag := read_context_fragment(ctx.config.root, relative)) is not None
+            if (
+                frag := read_context_fragment(
+                    ctx.config.root, relative, drop_headings=drop_headings
+                )
+            )
+            is not None
         ]
         if not fragments:
             return []

@@ -1,6 +1,6 @@
 # Rules Reference
 
-## Built-in Python Rules (42: 3 always-on + 39 repo-strict)
+## Built-in Python Rules (43: 3 always-on + 40 repo-strict)
 
 ### Path & System Protection
 
@@ -22,8 +22,9 @@
 | Rule ID | Severity | Events | Description |
 |---|---|---|---|
 | BUILTIN-ENFORCE-FULL-READ | MEDIUM | PreToolUse, PermissionRequest | Requires full file read before partial reads |
-| BUILTIN-INJECT-PROMPT | LOW | UserPromptSubmit | Injects prompt context files on each prompt |
+| BUILTIN-INJECT-PROMPT | LOW | UserPromptSubmit | Injects prompt context files on each prompt; `## Before Stopping` stays hidden until the session changes code |
 | REMIND-SEARCH-001 | LOW | PreToolUse | Adds reminder message on search operations |
+| BUILTIN-TRACK-MUTATION | LOW | PostToolUse | Records session code mutations for stop-time guidance |
 | QUALITY-POST-001 | HIGH | PostToolUse | Runs configured quality commands after edits |
 | WARN-LARGE-001 | MEDIUM | PreToolUse, PermissionRequest | Warns on edits to files > 50K characters |
 
@@ -47,7 +48,7 @@
 | Rule ID | Severity | Events | Description |
 |---|---|---|---|
 | STOP-001 | HIGH | Stop, SubagentStop | Blocks dismissing issues as "pre-existing" |
-| STOP-002 | LOW | Stop, SubagentStop | Reminds to run quality gate before stopping |
+| STOP-002 | LOW | Stop, SubagentStop | Reminds to run quality gate before stopping when the session changed code |
 | SESSION-001 | LOW | SessionStart | Injects git context on session start |
 | CONFIG-001 | CRITICAL | ConfigChange | Blocks disabling hooks via config changes |
 

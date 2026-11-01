@@ -13,6 +13,8 @@ from slopgate._types import ObjectDict, ObjectMapping, is_object_dict, object_di
 from slopgate.util.logger import warning
 from ._models import HookStateSnapshot, fcntl, msvcrt
 
+SESSION_MUTATION_TTL_SECONDS = 86400
+
 
 class HookStateCorruptionError(RuntimeError):
     """Raised when persisted hook state cannot be trusted."""
@@ -103,6 +105,12 @@ class StateSnapshotMixin(StateFileMixin):
         retry_locks = self._coerce_object_map(state.get("retry_locks"), cutoff)
         repair_plans = self._coerce_object_map(state.get("repair_plans"), cutoff)
         repair_required = object_dict(state.get("repair_required"))
+        # Uncommitted edits outlive the generic TTL; keep the mutation mark for
+        # the working day so long read-only tails still get the stop reminder.
+        session_mutations = self._coerce_object_map(
+            state.get("session_mutations"),
+            int(time()) - SESSION_MUTATION_TTL_SECONDS,
+        )
         return {
             "full_reads": full_reads,
             "search_reminders": search_reminders,
@@ -111,6 +119,7 @@ class StateSnapshotMixin(StateFileMixin):
             "retry_locks": retry_locks,
             "repair_plans": repair_plans,
             "repair_required": repair_required,
+            "session_mutations": session_mutations,
         }
 
     @staticmethod

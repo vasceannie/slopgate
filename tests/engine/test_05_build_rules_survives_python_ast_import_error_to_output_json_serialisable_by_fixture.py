@@ -219,6 +219,15 @@ def test_permission_request_uses_decision_behavior(bundle_root: Path) -> None:
 
 
 def test_stop_clean_uses_systemMessage(bundle_root: Path) -> None:
+    _ = evaluate_payload(
+        {
+            "session_id": "t",
+            "cwd": str(bundle_root),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "example.py", "content": "value = 1\n"},
+        }
+    )
     payload = {
         "session_id": "t",
         "cwd": str(bundle_root),

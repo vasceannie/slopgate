@@ -8,6 +8,8 @@ __all__ = [
     "WarnLargeFileRule",
     "PREEXISTING_PHRASES",
     "QUALITY_REMINDER",
+    "find_dismissal_phrase",
+    "reminder_session_key",
     "TAIL_BYTES",
     "SLOPGATE_REPO_SUFFIX",
     "default_branch_name",
@@ -53,11 +55,7 @@ __all__ = [
     "repo_enrollment_sentinel_finding",
 ]
 from ._git_quality import (
-    IgnorePreexistingRule,
-    RequireQualityCheckRule,
     WarnLargeFileRule,
-    PREEXISTING_PHRASES,
-    QUALITY_REMINDER,
     TAIL_BYTES,
     SLOPGATE_REPO_SUFFIX,
     default_branch_name,
@@ -72,6 +70,14 @@ from ._git_quality import (
     normalize_git_remote,
     resolve_candidate_path,
     tail_read,
+)
+from .quality import (
+    IgnorePreexistingRule,
+    RequireQualityCheckRule,
+    PREEXISTING_PHRASES,
+    QUALITY_REMINDER,
+    find_dismissal_phrase,
+    reminder_session_key,
 )
 from ._infra_security import (
     HookInfraExecProtectionRule,
