@@ -20,6 +20,7 @@ error.log
 .hypothesis/
 headroom_memory.db
 .slopgate/cache/
+.slopgate/trace/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
