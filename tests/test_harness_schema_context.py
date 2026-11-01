@@ -51,21 +51,32 @@ REQUIRED_SOURCES = {
     "opencode_config_schema": ("opencode", "json_schema"),
     "opencode_config_docs": ("opencode", "config_doc"),
     "opencode_plugin_docs": ("opencode", "plugin_doc"),
+    "opencode_plugin_migration_docs": ("opencode", "migration_doc"),
     "codex_hooks": ("codex", "hooks_doc"),
     "codex_config_reference": ("codex", "config_reference"),
     "codex_config_advanced": ("codex", "config_advanced"),
 }
 
+
 REQUIRED_SOURCE_KEYWORDS = {
     "claude_hooks": {"PreToolUse", "PermissionRequest", "hookSpecificOutput"},
     "opencode_plugin_docs": {
-        "tool.execute.before",
-        "tool.execute.after",
-        "permission.asked",
-        "session.idle",
+        "Plugin.define",
+        "ctx.location.directory",
+        "ctx.tool.transform",
+        "ctx.permission.assert",
+        "ctx.session.get",
+    },
+    "opencode_plugin_migration_docs": {
+        "plugins",
+        "index.ts",
+        "ctx.tool.hook",
+        "execute.before",
+        "execute.after",
     },
     "codex_hooks": {"codex_hooks", "PreToolUse", "PermissionRequest"},
 }
+
 
 EXPECTED_OPENCODE_SCHEMA_DEFS = {
     "Config",

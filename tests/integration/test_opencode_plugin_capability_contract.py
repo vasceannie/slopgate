@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -11,6 +10,11 @@ import pytest
 
 from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.resources import resource_path
+from tests.integration.opencode_plugin_v2_support import (
+    link_v2_dependencies,
+    v2_before_input,
+    v2_plugin_setup_source,
+)
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
@@ -78,28 +82,18 @@ def _run_plugin_with_real_slopgate(
         render_opencode_plugin(
             resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
             sys.executable,
-            {"opencode_version": "1.18.21"},
+            {"opencode_version": "2.2.5"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
-await handlers["tool.execute.before"](
-  {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
-  {{ args: {json.dumps(tool_args)} }},
-)
-console.log("allowed")
-""",
+        v2_plugin_setup_source(plugin_path, tmp_path)
+        + v2_before_input(tool_name, "session", tool_args)
+        + 'console.log("allowed")\n',
         encoding="utf-8",
     )
+    link_v2_dependencies(tmp_path)
     env = dict(os.environ)
     env.pop("SLOPGATE_BIN", None)
     env["SLOPGATE_DAEMON_SOCKET"] = str(tmp_path / "no-daemon.sock")
@@ -116,14 +110,14 @@ console.log("allowed")
 
 def test_generated_plugin_blocks_invalid_mutating_projection(tmp_path: Path) -> None:
     result = _run_plugin_with_real_slopgate(
-        tmp_path, "apply_patch", {"patchText": "not a patch"}
+        tmp_path, "patch", {"patchText": "not a patch"}
     )
     assert result.returncode != 0, "unresolved mutating projections must not execute"
     assert "invalid" in result.stderr, "the plugin must surface the engine denial"
 
 
 def test_generated_plugin_allows_known_read_only_tool(tmp_path: Path) -> None:
-    result = _run_plugin_with_real_slopgate(tmp_path, "read", {"filePath": "sample.py"})
+    result = _run_plugin_with_real_slopgate(tmp_path, "read", {"path": "sample.py"})
     assert result.returncode == 0, result.stderr
     assert "allowed" in result.stdout
 

@@ -8,8 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from slopgate._types import object_dict
 from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.resources import resource_path
+from tests.integration.opencode_plugin_v2_support import (
+    link_v2_dependencies,
+    v2_before_input,
+    v2_plugin_setup_source,
+)
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
@@ -42,26 +48,17 @@ else:
         render_opencode_plugin(
             resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
             str(executable),
-            {"opencode_version": "1.18.21"},
+            {"opencode_version": "2.2.5"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
-await handlers["tool.execute.before"](
-  {{ tool: "write", sessionID: "session", callID: "call" }},
-  {{ args: {{ filePath: "sample.py", content: "x" }} }},
-)
-""",
+        v2_plugin_setup_source(plugin_path, tmp_path)
+        + v2_before_input("write", "session", {"path": "sample.py", "content": "x"}),
         encoding="utf-8",
     )
+    link_v2_dependencies(tmp_path)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
@@ -110,32 +107,28 @@ def _run_enforcer_case(
         render_opencode_plugin(
             resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
             str(executable),
-            {"opencode_version": "1.18.21"},
+            {"opencode_version": "2.2.5"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
+        v2_plugin_setup_source(plugin_path, tmp_path)
+        + f"""
 try {{
-  await handlers["tool.execute.before"](
-    {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
-    {{ args: {{ filePath: "sample.py", content: "x" }} }},
-  )
+{v2_before_input(tool_name, "session", {"path": "sample.py", "content": "x"})}
   console.log("allowed")
 }} catch (error) {{
-  console.error(String(error))
+  const detail = error && typeof error === "object"
+    ? {{ _tag: error._tag, message: error.message }}
+    : {{ _tag: "Error", message: String(error) }}
+  process.stderr.write(JSON.stringify(detail) + "\\n")
   process.exitCode = 1
 }}
 """,
         encoding="utf-8",
     )
+    link_v2_dependencies(tmp_path)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
@@ -161,7 +154,11 @@ def test_enforcer_malformed_json_fails_closed_in_managed_repo(tmp_path: Path) ->
     )
 
     assert result.returncode != 0
-    assert "callEnforcer failed" in result.stderr
+    error = object_dict(json.loads(result.stderr))
+    assert error["_tag"] == "Tool.Error"
+    assert "slopgate degraded mode: enforcer call failed in managed repo." in str(
+        error["message"]
+    )
 
 
 def test_enforcer_spawn_failure_is_not_blocking_outside_managed_repo(

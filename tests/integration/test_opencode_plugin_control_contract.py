@@ -16,18 +16,54 @@ from tests.integration.opencode_plugin_control_support import (
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
 
 
-def test_file_edited_block_is_logged_without_throwing(tmp_path: Path) -> None:
-    result = run_plugin_contract(tmp_path, "file.edited")
-
-    assert result.returncode == 0, result.stderr
-    assert "contract block" in result.stdout
-
-
 def test_typed_before_hook_still_throws_for_block(tmp_path: Path) -> None:
     result = run_plugin_contract(tmp_path, "tool.execute.before")
 
     assert result.returncode != 0
     assert "contract block" in result.stderr
+
+
+def test_empty_enforcer_success_is_a_no_op(tmp_path: Path) -> None:
+    result = run_plugin_contract(tmp_path, "tool.execute.before", "empty-success")
+
+    assert result.returncode == 0, result.stderr
+    assert '"args"' in result.stdout
+
+
+def test_completed_after_hook_forwards_structured_result_content(
+    tmp_path: Path,
+) -> None:
+    result = run_plugin_contract(tmp_path, "tool.execute.after", "assert-completed")
+
+    assert result.returncode == 0, result.stderr
+    assert "completed-result-observed" in result.stdout
+
+
+def test_failed_after_hook_preserves_failed_execution_evidence(tmp_path: Path) -> None:
+    result = run_plugin_contract(tmp_path, "tool.execute.after", "assert-failed")
+
+    assert result.returncode == 0, result.stderr
+    assert "failed-result-observed" in result.stdout
+
+
+def test_event_stream_cleanup_ignores_foreign_location(tmp_path: Path) -> None:
+    foreign_event = {
+        "id": "foreign-event",
+        "type": "session.created",
+        "created": 1,
+        "location": {"directory": str(tmp_path / "foreign")},
+        "data": {"sessionID": "foreign-session"},
+    }
+    result = run_plugin_contract(
+        tmp_path,
+        "event.stream",
+        "event-sentinel",
+        events=[foreign_event],
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "foreign-event-observed" not in result.stdout
+    assert '"streamAborted":true' in result.stdout
 
 
 def test_typed_after_hook_logs_detection_without_claiming_prevention(
@@ -50,7 +86,7 @@ def test_installed_plugin_forwards_tool_contract_version(tmp_path: Path) -> None
     result = run_plugin_contract(tmp_path, "tool.execute.before")
 
     assert result.returncode != 0
-    assert "version=slopgate-opencode-projection-v1" in result.stderr
+    assert "version=slopgate-opencode-projection-v2" in result.stderr
 
 
 def test_pending_repair_blocks_unknown_effect_tool(tmp_path: Path) -> None:

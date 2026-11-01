@@ -8,8 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from slopgate._types import object_dict, object_list
 from slopgate.installer._opencode import render_opencode_plugin
 from slopgate.resources import resource_path
+from tests.integration.opencode_plugin_v2_support import (
+    link_v2_dependencies,
+    v2_before_input,
+    v2_plugin_setup_source,
+)
 
 
 pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="Bun is required")
@@ -58,28 +64,22 @@ def _run_pending_repair_file_tool(
         render_opencode_plugin(
             resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
             str(executable),
-            {"opencode_version": "1.18.21"},
+            {"opencode_version": "2.2.5"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
-await handlers["tool.execute.before"](
-  {{ tool: {json.dumps(tool_name)}, sessionID: "session", callID: "call" }},
-  {{ args: {{ patchText: "*** Begin Patch\\n*** End Patch" }} }},
-)
-console.log("allowed")
-""",
+        v2_plugin_setup_source(plugin_path, tmp_path)
+        + v2_before_input(
+            tool_name,
+            "session",
+            {"patchText": "*** Begin Patch\\n*** End Patch"},
+        )
+        + 'console.log("allowed")\n',
         encoding="utf-8",
     )
+    link_v2_dependencies(tmp_path)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
@@ -94,7 +94,7 @@ console.log("allowed")
     )
 
 
-@pytest.mark.parametrize("tool_name", ("apply_patch", "edit", "write"))
+@pytest.mark.parametrize("tool_name", ("patch", "edit", "write"))
 def test_pending_repair_allows_direct_file_repair_tool(
     tmp_path: Path, tool_name: str
 ) -> None:
@@ -107,9 +107,7 @@ def test_pending_repair_allows_direct_file_repair_tool(
 def test_pending_repair_allows_bootstrap_when_status_is_unavailable(
     tmp_path: Path,
 ) -> None:
-    result = _run_pending_repair_file_tool(
-        tmp_path, "apply_patch", status_available=False
-    )
+    result = _run_pending_repair_file_tool(tmp_path, "patch", status_available=False)
 
     assert result.returncode == 0, result.stderr
 
@@ -182,33 +180,45 @@ def _run_verify_repair(
         render_opencode_plugin(
             resource_path("opencode_plugin.ts").read_text(encoding="utf-8"),
             str(executable),
-            {"opencode_version": "1.18.21"},
+            {"opencode_version": "2.2.5"},
         ),
         encoding="utf-8",
     )
     runner = tmp_path / "runner.ts"
     runner.write_text(
-        f"""
-import {{ EnforcerPlugin }} from {json.dumps(plugin_path.as_uri())}
-
-const handlers = await EnforcerPlugin({{
-  client: {{ app: {{ log: async () => {{}} }} }},
-  directory: {json.dumps(str(tmp_path))},
-  worktree: {json.dumps(str(tmp_path))},
-}})
-const tool = handlers.tool.slopgate_verify_repair
+        v2_plugin_setup_source(plugin_path, tmp_path)
+        + f"""
+const tool = __slopgateTools["slopgate_verify_repair"]
 const firstController = new AbortController()
-const first = tool.execute({{}}, {{ abort: firstController.signal }})
-const second = {json.dumps(concurrent)} ? tool.execute({{}}) : Promise.resolve(null)
+const secondController = new AbortController()
+const firstContext = {{
+  sessionID: "session",
+  agent: "build",
+  messageID: "message",
+  id: "verify-call",
+  signal: firstController.signal,
+}}
+const secondContext = {{
+  sessionID: "session",
+  agent: "build",
+  messageID: "message",
+  id: "verify-call-2",
+  signal: secondController.signal,
+}}
+const first = tool.execute({{}}, firstContext)
+const second = {json.dumps(concurrent)}
+  ? tool.execute({{}}, secondContext)
+  : Promise.resolve(null)
 if ({json.dumps(abort_first)}) setTimeout(() => firstController.abort(), 50)
 const results = await Promise.allSettled([first, second])
 console.log(JSON.stringify(results.map((item) => {{
   if (item.status === "fulfilled") return item.value
-  return String(item.reason)
+  return {{ error: String(item.reason) }}
 }})))
 """,
         encoding="utf-8",
     )
+    link_v2_dependencies(tmp_path)
     return subprocess.run(
         ["bun", "run", str(runner)],
         cwd=tmp_path,
@@ -262,6 +272,10 @@ def test_verify_repair_first_caller_abort_does_not_cancel_shared_flight(
     )
 
     assert result.returncode == 0, result.stderr
-    results = json.loads(result.stdout)
-    assert all("cleared" in item for item in results)
+    results = object_list(json.loads(result.stdout))
+    assert all(
+        isinstance(item, dict)
+        and "cleared" in str(object_dict(item).get("content", ""))
+        for item in results
+    )
     assert not (tmp_path / "repair-state.json").exists()

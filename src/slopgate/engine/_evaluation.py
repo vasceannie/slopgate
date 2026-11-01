@@ -185,12 +185,12 @@ def _opencode_repair_recovery_message(
         f"(1) read the first causal finding: {causal_label}; "
         "(2) inspect affected files with declared read-only tools; "
         "(3) make one focused repair with an allowed mutation tool "
-        "(write, edit, apply_patch); "
+        "(write, edit, patch); "
         "(4) run slopgate_verify_repair; it resolves the pending generation from repair "
         "state and clears it only after clean verification. Allowed during repair: "
-        "declared read-only tools, write/edit/apply_patch, slopgate_verify_repair, exact "
-        "slopgate lint check; Bash, patch, diagnostic, and wrapper-tool retries "
-        "remain blocked."
+        "declared read-only tools, write/edit/patch, slopgate_verify_repair, Code Mode "
+        "execute (each tool it calls is gated), exact slopgate lint check; compound "
+        "shell, diagnostic, and wrapper-tool retries remain blocked."
     )
 
 

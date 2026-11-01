@@ -12,7 +12,7 @@ from slopgate.adapters.opencode import OpenCodeAdapter
 from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
 
-OPENCODE_TOOL_CONTRACT_VERSION = "slopgate-opencode-projection-v1"
+OPENCODE_TOOL_CONTRACT_VERSION = "slopgate-opencode-projection-v2"
 UNKNOWN_TOOL_INPUTS = strategies.dictionaries(
     strategies.text(min_size=1),
     strategies.one_of(
@@ -64,7 +64,9 @@ def write_source(repo: Path, relative: str, content: str) -> Path:
 def enroll_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "slopgate.toml").write_text("[slopgate]\nenabled = true\n", encoding="utf-8")
+    (repo / "slopgate.toml").write_text(
+        "[slopgate]\nenabled = true\n", encoding="utf-8"
+    )
     monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "slopgate-root"))
     return repo
 
@@ -88,7 +90,7 @@ def evaluate_stale_edit(
     payload = raw_payload(
         repo,
         "edit",
-        {"filePath": "src/app.py", "oldString": "VALUE = 1", "newString": "VALUE = 2"},
+        {"path": "src/app.py", "oldString": "VALUE = 1", "newString": "VALUE = 2"},
     )
     result = evaluate_payload(payload, platform="opencode")
     projection = projection_meta(OpenCodeAdapter().normalize_payload(payload))

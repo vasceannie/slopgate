@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from slopgate._types import object_dict
+from slopgate._types import ObjectDict, object_dict, object_list
 from slopgate.engine import evaluate_payload
+from tests.adapters.test_opencode_projection.support import (
+    raw_payload,
+)
 from tests.test_engine import (
     keep_default_config,
     write_config_from_defaults,
@@ -24,6 +27,8 @@ MIN_GOLD_TOTAL = 10
 MIN_DISTINCT_RULES = 5
 REQUIRED_PLATFORMS = ("claude", "opencode")
 MAX_FILE_CHARS = 4000
+V2_SAFE_WRITE_CONTENT = "VALUE = 1\n"
+V2_UNSAFE_WRITE_CONTENT = "def broken(:\n"
 
 
 def _gold_files() -> list[Path]:
@@ -45,13 +50,73 @@ class GoldCase:
 def _gold_case(path: Path) -> GoldCase:
     payload = json.loads(path.read_text(encoding="utf-8"))
     meta = payload.get("_gold") or {}
-    platform = str(meta.get("platform") or (
-        "opencode" if path.parent.name == "opencode" else "claude"
-    ))
+    platform = str(
+        meta.get("platform")
+        or ("opencode" if path.parent.name == "opencode" else "claude")
+    )
     kind = str(meta.get("label_kind") or "positive")
     rules = meta.get("current_rule_ids") or []
     primary = "_CLEAN" if kind == "true_negative" or not rules else str(rules[0])
     return GoldCase(path, platform, primary, kind)
+
+
+def _payload_for_case(case: GoldCase) -> ObjectDict:
+    return object_dict(json.loads(case.path.read_text(encoding="utf-8")))
+
+
+def _is_legacy_opencode_mutation(case: GoldCase) -> bool:
+    """Identify archived v1 mutations that are not valid V2 inputs.
+
+    These mined OpenCode payloads predate the top-level V2 contract and carry
+    hashline ``edits`` plus ``filePath``/``file_path`` (or an embedded V1
+    projection).  They must remain replayed as fail-closed mutations rather
+    than being treated as current V2 true negatives.
+    """
+    if case.platform != "opencode":
+        return False
+    payload = _payload_for_case(case)
+    if "opencode_tool_contract_version" in payload:
+        return False
+    tool_input = object_dict(payload.get("tool_input"))
+    projection = object_dict(tool_input.get("_slopgate_projection"))
+    if projection.get("contract_version") == "slopgate-opencode-projection-v1":
+        return True
+    return "edits" in tool_input and any(
+        key in tool_input for key in ("filePath", "file_path")
+    )
+
+
+def _replay_current_v2_write(
+    content: str,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> list[str]:
+    repo = write_slopgate(tmp_path / "v2_repo")
+    write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
+    monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "v2-root"))
+    payload = raw_payload(repo, "write", {"path": "src/app.py", "content": content})
+    result = evaluate_payload(payload, platform="opencode")
+    assert result.errors == [], f"V2 replay errors={result.errors}"
+    return [finding.rule_id for finding in result.findings]
+
+
+def test_current_v2_safe_write_replay_stays_clean(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    got = _replay_current_v2_write(V2_SAFE_WRITE_CONTENT, tmp_path, monkeypatch)
+    assert got == [], f"complete safe V2 write expected clean, got {got}"
+
+
+def test_current_v2_unsafe_write_replay_uses_native_rules(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    got = _replay_current_v2_write(V2_UNSAFE_WRITE_CONTENT, tmp_path, monkeypatch)
+    assert "PY-AST-001" in got, f"native V2 write must catch unsafe content: {got}"
+    assert "OC-PROJECTION-001" not in got, (
+        f"valid V2 mutation must not be denied as an unresolved projection: {got}"
+    )
 
 
 def _safe_relpath(path: str) -> str | None:
@@ -63,12 +128,16 @@ def _safe_relpath(path: str) -> str | None:
     return text or None
 
 
-def _files_from_payload(payload: dict) -> list[dict[str, str]]:
-    listed = payload.get("files")
-    if isinstance(listed, list) and listed:
-        return [item for item in listed if isinstance(item, dict)]
-    tool_input = payload.get("tool_input") or {}
-    path = tool_input.get("file_path") or tool_input.get("filePath") or tool_input.get("path")
+def _files_from_payload(payload: ObjectDict) -> list[ObjectDict]:
+    listed = object_list(payload.get("files"))
+    if listed:
+        return [object_dict(item) for item in listed if isinstance(item, dict)]
+    tool_input = object_dict(payload.get("tool_input"))
+    path = (
+        tool_input.get("file_path")
+        or tool_input.get("filePath")
+        or tool_input.get("path")
+    )
     content = tool_input.get("content")
     if not path or not isinstance(content, str) or not content:
         return []
@@ -76,12 +145,16 @@ def _files_from_payload(payload: dict) -> list[dict[str, str]]:
     if not rel:
         return []
     overflow = len(content) - MAX_FILE_CHARS
-    text = content if overflow <= 0 else f"{content[:MAX_FILE_CHARS]}...[truncated {overflow} chars]"
+    text = (
+        content
+        if overflow <= 0
+        else f"{content[:MAX_FILE_CHARS]}...[truncated {overflow} chars]"
+    )
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return [{"path": rel, "sha256": digest, "text": text}]
 
 
-def _materialize_workspace(repo: Path, payload: dict) -> None:
+def _materialize_workspace(repo: Path, payload: ObjectDict) -> None:
     for item in _files_from_payload(payload):
         path = item.get("path")
         rel = _safe_relpath(path) if isinstance(path, str) else None
@@ -96,10 +169,18 @@ def _materialize_workspace(repo: Path, payload: dict) -> None:
 GOLD_CASES = tuple(_gold_case(path) for path in _gold_files())
 GOLD_POS = tuple(case for case in GOLD_CASES if case.label_kind != "true_negative")
 GOLD_TN = tuple(case for case in GOLD_CASES if case.label_kind == "true_negative")
+GOLD_LEGACY_OPENCODE_TN = tuple(
+    case for case in GOLD_TN if _is_legacy_opencode_mutation(case)
+)
+GOLD_CURRENT_TN = tuple(
+    case for case in GOLD_TN if not _is_legacy_opencode_mutation(case)
+)
 
 
 def test_gold_fixtures_exist() -> None:
-    assert len(_gold_files()) >= MIN_GOLD_TOTAL, "expected at least 10 hand-verified gold fixtures"
+    assert len(_gold_files()) >= MIN_GOLD_TOTAL, (
+        "expected at least 10 hand-verified gold fixtures"
+    )
 
 
 def test_gold_coverage_meets_ci_minima() -> None:
@@ -119,7 +200,7 @@ def _replay_gold(
     repo = write_slopgate(tmp_path / "gold_repo")
     write_config_from_defaults(tmp_path, monkeypatch, keep_default_config)
     monkeypatch.setenv("SLOPGATE_ROOT", str(tmp_path / "vf-root"))
-    payload = object_dict(json.loads(case.path.read_text(encoding="utf-8")))
+    payload = _payload_for_case(case)
     payload.pop("_gold", None)
     _materialize_workspace(repo, payload)
     payload.pop("files", None)
@@ -149,7 +230,32 @@ def test_gold_positive_primary_still_fires(
 
 @pytest.mark.parametrize(
     "case",
-    [pytest.param(case, id=f"{case.platform}-tn-{case.path.name}") for case in GOLD_TN],
+    [
+        pytest.param(
+            case,
+            id=f"{case.platform}-legacy-tn-{case.path.name}",
+        )
+        for case in GOLD_LEGACY_OPENCODE_TN
+    ],
+)
+def test_gold_legacy_opencode_mutation_is_fail_closed(
+    case: GoldCase,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Archived v1 hashline/filePath payloads are denied under the V2 contract."""
+    got = _replay_gold(case, tmp_path, monkeypatch)
+    assert "OC-PROJECTION-001" in got, (
+        f"{case.path.name} legacy mutation must be denied by projection: {got}"
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(case, id=f"{case.platform}-tn-{case.path.name}")
+        for case in GOLD_CURRENT_TN
+    ],
 )
 def test_gold_true_negative_stays_clean(
     case: GoldCase,

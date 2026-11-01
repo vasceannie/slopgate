@@ -1,58 +1,133 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 import pytest
 
+from slopgate.cli.check import cmd_check
 from slopgate.installer import _opencode
 import slopgate.installer._shared
-from slopgate.resources import resource_path
 from slopgate.util import platform
 
-OPENCODE_PLUGIN_RESOURCE = "opencode_plugin.ts"
+
+_V1_PLUGIN = (
+    "/** OpenCode Slopgate Plugin */\n"
+    'const SLOPGATE_BIN = "slopgate"\n'
+    "export const EnforcerPlugin = async () => ({})\n"
+)
 
 
-def test_opencode_renderer_embeds_install_identity_snapshot() -> None:
-    template = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    identity = {
-        "status": "compatible",
-        "opencode_version": "1.18.19",
-        "plugin_declared_version": "1.18.19",
-        "plugin_lock_version": "1.18.19",
-        "plugin_installed_version": "1.18.19",
-        "slopgate_version": "2.1.6",
-        "slopgate_binary": "/tmp/slopgate",
-        "captured_at": "2026-08-22T00:00:00+00:00",
-        "provenance": "install",
-        "remediation": "none",
-    }
-
-    rendered = _opencode.render_opencode_plugin(template, "/tmp/slopgate", identity)
-
-    assert '"__SLOPGATE_OPENCODE_IDENTITY__"' not in rendered, "placeholder leaked"
-    assert '"__SLOPGATE_READ_ONLY_TOOL_IDS__"' not in rendered, (
-        "read-only capability placeholder should be rendered"
+def _isolated_user_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(platform, "is_windows", lambda: False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(
+        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
     )
-    assert '"__SLOPGATE_EFFECTFUL_TOOL_IDS__"' not in rendered, (
-        "effectful capability placeholder should be rendered"
-    )
-    assert '"opencode_version":"1.18.19"' in rendered, "runtime version not embedded"
-    assert '"gitnexus_context"' in rendered, "read-only capability not embedded"
-    assert '"github_update_issue"' in rendered, "effectful capability not embedded"
-    assert '"slopgate_binary":"/tmp/slopgate"' in rendered, "binary path not embedded"
+    return tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
 
 
-def test_opencode_plugin_treats_empty_success_as_allow_noop() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    assert "empty enforcer response" not in plugin, (
-        "empty plugin output should not be treated as an enforcer error"
+def test_v1_plugin_is_reported_as_inert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _isolated_user_config(tmp_path, monkeypatch)
+    target.parent.mkdir(parents=True)
+    target.write_text(_V1_PLUGIN, encoding="utf-8")
+
+    inert = _opencode.inert_opencode_plugins(tmp_path / "project")
+
+    assert inert == [target], "the V2 host refuses a V1 export, leaving no enforcement"
+
+
+def test_installed_v2_plugin_is_not_reported_as_inert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolated_user_config(tmp_path, monkeypatch)
+    assert _opencode.install_opencode(dry_run=False) == 0, "install must succeed"
+
+    inert = _opencode.inert_opencode_plugins(tmp_path / "project")
+
+    assert inert == [], "a freshly rendered plugin must count as healthy"
+
+
+def test_unowned_plugin_is_not_reported_as_inert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _isolated_user_config(tmp_path, monkeypatch)
+    target.parent.mkdir(parents=True)
+    target.write_text("export const Mine = 1\n", encoding="utf-8")
+
+    inert = _opencode.inert_opencode_plugins(tmp_path / "project")
+
+    assert inert == [], "files slopgate does not own are not its health signal"
+
+
+def _project_with_inert_user_plugin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    target = _isolated_user_config(tmp_path, monkeypatch)
+    target.parent.mkdir(parents=True)
+    target.write_text(_V1_PLUGIN, encoding="utf-8")
+    project = tmp_path / "project"
+    project.mkdir()
+    return project, target
+
+
+def test_check_warning_names_inert_plugin_and_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project, target = _project_with_inert_user_plugin(tmp_path, monkeypatch)
+
+    cmd_check(argparse.Namespace(path=str(project)))
+
+    stderr = capsys.readouterr().err
+    assert str(target) in stderr, "the warning must name the inert plugin"
+    assert "slopgate install opencode" in stderr, "it must state the remedy"
+
+
+def test_check_output_stays_parseable_with_inert_plugin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project, _target = _project_with_inert_user_plugin(tmp_path, monkeypatch)
+
+    status = cmd_check(argparse.Namespace(path=str(project)))
+
+    assert status == 0, "health warnings must not change the check exit status"
+    assert json.loads(capsys.readouterr().out)["path"] == str(project), (
+        "stdout must stay parseable JSON for scripts"
     )
-    assert "if (!trimmed) return null" in plugin, (
-        "empty plugin output should return no-op"
+
+
+def test_both_scope_install_warns_project_copy_loses_duplicate_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    user_target = _isolated_user_config(tmp_path, monkeypatch)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    status = _opencode.install_opencode(
+        dry_run=False, scope="both", project_root=project
     )
-    assert "exits 0 with no stdout" in plugin, (
-        "the plugin should document empty stdout as a successful no-op"
+
+    output = capsys.readouterr().out
+    assert status == 0, "both-scope install must still succeed"
+    assert "Duplicate plugin ID: slopgate" in output, (
+        "the host keeps only one plugin per ID, which the operator must be told"
+    )
+    assert str(user_target) in output, "the note must name the copy that stays active"
+
+
+def test_single_scope_install_has_no_duplicate_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _isolated_user_config(tmp_path, monkeypatch)
+
+    _opencode.install_opencode(dry_run=False)
+
+    assert "Duplicate plugin ID" not in capsys.readouterr().out, (
+        "one installed copy cannot collide"
     )
 
 
@@ -66,19 +141,6 @@ def test_opencode_installer_uses_appdata_plugin_dir_on_windows(
         _opencode.opencode_user_plugin_path()
         == appdata / "opencode" / "plugins" / "slopgate-plugin.ts"
     ), "Windows installs should use the AppData OpenCode plugin directory"
-
-
-def test_opencode_installer_embeds_safely_quoted_binary_fallback() -> None:
-    binary = 'C:\\Users\\Trav App\\bin\\slopgate "quoted".exe'
-    template = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    rendered = _opencode.render_opencode_plugin(template, binary)
-    assert (
-        f"Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : {json.dumps([binary])}"
-        in rendered
-    ), "binary fallback should be safely quoted in the rendered plugin"
-    assert '"__SLOPGATE_BIN__"' not in rendered, (
-        "binary placeholder should not remain in the rendered plugin"
-    )
 
 
 def test_opencode_install_backs_up_existing_plugin_before_overwrite(
@@ -101,11 +163,6 @@ def test_opencode_install_backs_up_existing_plugin_before_overwrite(
     assert backups[0].read_text(encoding="utf-8") == "custom plugin\n", (
         "the backup should preserve the existing plugin"
     )
-    installed = target.read_text(encoding="utf-8")
-    assert (
-        'Bun.env.SLOPGATE_BIN ? [Bun.env.SLOPGATE_BIN] : ["/tmp/Slopgate Bin/slopgate"]'
-        in installed
-    ), "installed plugin should contain the safely quoted binary fallback"
 
 
 def _plant_opencode_user_leaf_symlink(tmp_path: Path) -> tuple[Path, Path]:
@@ -146,7 +203,7 @@ def test_opencode_uninstall_removes_legacy_owned_plugin(
     target = tmp_path / ".config" / "opencode" / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir(parents=True)
     target.write_text(
-        "/* OpenCode Slopgate Plugin */\nconst SLOPGATE_BIN = \"slopgate\";\n",
+        '/* OpenCode Slopgate Plugin */\nconst SLOPGATE_BIN = "slopgate";\n',
         encoding="utf-8",
     )
 
@@ -154,32 +211,6 @@ def test_opencode_uninstall_removes_legacy_owned_plugin(
         "legacy owned plugins must remain uninstallable"
     )
     assert not target.exists(), "legacy owned plugin should be removed"
-
-
-def test_official_opencode_types_match_declared_target() -> None:
-    matrix = json.loads(
-        (Path(__file__).with_name("fixtures") / "opencode_hook_contract_matrix.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    target = matrix["compatibility_target"]["version"]
-
-    assert target == _opencode.OPENCODE_TYPES_TARGET, (
-        "installer types target must match the published OpenCode compatibility version"
-    )
-    assert f"@opencode-ai/plugin@{target}" in plugin, (
-        "generated plugin types must name the official OpenCode package target"
-    )
-    assert "project?: unknown" in plugin, "official PluginInput.project is missing"
-    assert "experimental_workspace?: unknown" in plugin, (
-        "official PluginInput.experimental_workspace is missing"
-    )
-    assert "serverUrl?: URL" in plugin, "official PluginInput.serverUrl is missing"
-    assert "options?: Record<string, unknown>" in plugin, (
-        "official Plugin options argument is missing"
-    )
-    assert "output: string" in plugin, "official after-hook output must be a string"
 
 
 def test_opencode_uninstall_refuses_unrecognized_plugin(
@@ -217,127 +248,4 @@ def test_opencode_uninstall_refuses_custom_plugin_with_incidental_marker_text(
     assert target.exists(), "custom plugin should remain after refused uninstall"
     assert "this is custom" in target.read_text(encoding="utf-8"), (
         "refused uninstall should preserve custom plugin content"
-    )
-
-
-def test_opencode_plugin_logs_posttool_context_actions() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    expected_fragments = (
-        'result.action !== "block" && result.action !== "warn"',
-        'const detail = result.reason || result.context',
-        'level: "warn"',
-        "post-tool detection only",
-        "no prevention or rollback occurred",
-        "Repair is required before the next mutation",
-    )
-
-    missing = [fragment for fragment in expected_fragments if fragment not in plugin]
-    assert not missing, f"post-tool contract fragments missing: {missing}"
-
-
-def test_opencode_plugin_forwards_documented_runtime_events() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    expected_fragments = [
-        'event.type === "file.edited"',
-        '"slopgate-file-edited"',
-        'payloadForEvent("file.edited", "Write"',
-        'event.type === "permission.replied"',
-        'event.type === "session.compacted"',
-        'event.type === "session.error"',
-        'event.type === "session.status"',
-        'event.type === "shell.env"',
-        'event.type === "command.executed"',
-        "eventToolArgs(event)",
-        "payloadForEvent(",
-        "logAdvisoryResult(",
-    ]
-    missing_fragments = [
-        fragment for fragment in expected_fragments if fragment not in plugin
-    ]
-    assert missing_fragments == [], (
-        "OpenCode plugin must forward documented runtime events"
-    )
-
-
-def test_opencode_plugin_preserves_session_created_identity_for_traces() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    expected_fragments = [
-        "function eventIdentityFields(",
-        'const data = objectValue(event, "data")',
-        'const dataInfo = data ? objectValue(data, "info") : null',
-        "const directSessionIdKeys = [",
-        "const infoSessionIdKeys = [",
-        '"sessionID"',
-        '"callID"',
-        '"id"',
-        '"threadTitle"',
-        '"conversationTitle"',
-        'session_title_source: "opencode-event"',
-        'session_identity_source: "opencode-event"',
-        'payloadForEvent("session.created", "", {}, eventIdentityFields(event, true))',
-    ]
-    missing_fragments = [
-        fragment for fragment in expected_fragments if fragment not in plugin
-    ]
-    assert missing_fragments == [], (
-        "OpenCode plugin should preserve session-created identity metadata for traces"
-    )
-
-
-def test_opencode_plugin_uses_native_tool_fields_without_correlation_cache() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    forbidden_fragments = (
-        "SESSION_ID",
-        "postToolArgCache",
-        "rememberToolArgs",
-        "takeRememberedToolArgs",
-        "POST_TOOL_ARG_CACHE_TTL_MS",
-        "output.result",
-        "input.cwd",
-        "event.cwd",
-    )
-    required_fragments = (
-        "input.sessionID",
-        "input.callID",
-        "output.args",
-        "input.args",
-        "output.title",
-        "output.output",
-        "output.metadata",
-        'objectValue(event, "properties")',
-    )
-    assert not any(fragment in plugin for fragment in forbidden_fragments), (
-        "native tool field handling should not use the removed correlation cache"
-    )
-    assert all(fragment in plugin for fragment in required_fragments), (
-        "native tool field handling should preserve required OpenCode fields"
-    )
-
-
-def test_opencode_plugin_records_conservative_tool_outcome_axes() -> None:
-    plugin = resource_path(OPENCODE_PLUGIN_RESOURCE).read_text(encoding="utf-8")
-    required_fragments = (
-        "interface OpenCodeToolBeforeInput",
-        "interface OpenCodeToolBeforeOutput",
-        "interface OpenCodeToolAfterInput",
-        "interface OpenCodeToolAfterOutput",
-        "const preToolArgs = cloneArgs(outputArgs)",
-        "const postToolArgs = cloneArgs(input.args)",
-        '...outcomeFields("unknown", "unresolved", "unknown", "unresolved")',
-        '...outcomeFields("returned", "pinned-source", "unknown", "unresolved")',
-        '...outcomeFields("unknown", "unresolved", "partial", "local-observed")',
-        "execution_outcome",
-        "mutation_outcome",
-        "evidence_tier",
-        "tool_title: output.title",
-        "tool_metadata: output.metadata",
-        "tool_output: output.output",
-        "unknown OpenCode tool allowed;",
-        "isKnownEffectTool(",
-    )
-    assert all(fragment in plugin for fragment in required_fragments), (
-        "OpenCode outcomes must use typed fields and conservative evidence tiers"
-    )
-    assert 'mutation_outcome: "committed"' not in plugin, (
-        "OpenCode after hooks must not claim that a mutation was committed"
     )
