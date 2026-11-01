@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import cast
 from hypothesis import given
 from hypothesis import strategies
+import pytest
 import slopgate.lint._baseline
 from slopgate._types import object_dict, object_list
-from slopgate.cli.lint import lint_check, lint_freeze
+from slopgate.cli.lint import lint_check, lint_freeze, lint_test_integrity
 from slopgate.lint._collectors import CollectorRunOptions, run_all_collectors
 from tests.lint_paths_support import (
     freeze_rules_payload,
@@ -168,6 +169,30 @@ def test_lint_check_persists_only_git_base_debt_when_branch_adds_new_finding(
     assert not (tmp_path / "baselines.json").exists(), (
         "lint_check should not persist inherited or new branch debt to baselines.json"
     )
+
+
+def test_lint_test_integrity_treats_git_base_findings_as_inherited_debt(
+    tmp_path: Path,
+) -> None:
+    _seed_git_base_debt_repo(tmp_path)
+    assert lint_test_integrity(tmp_path) == 0, (
+        "findings already at the git base must not fail the branch gate"
+    )
+    assert not (tmp_path / "baselines.json").exists(), (
+        "lint_test_integrity should not persist inherited git-base debt"
+    )
+
+
+def test_lint_test_integrity_reports_only_branch_added_findings_as_new(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src = _seed_git_base_debt_repo(tmp_path)
+    (src / "branch_debt.py").write_text("x = 1\n" * 130, encoding="utf-8")
+    result = lint_test_integrity(tmp_path)
+    output = capsys.readouterr().out
+    assert result == 1, "a finding added on the branch must still fail the gate"
+    assert "+ src/branch_debt.py" in output, "branch finding should be listed as NEW"
+    assert "+ src/base_debt.py" not in output, "inherited finding should not be NEW"
 
 
 def test_lint_check_writes_git_base_debt_cache_for_repeated_checks(

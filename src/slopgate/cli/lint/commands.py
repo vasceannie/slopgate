@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
-from slopgate.cli.lint.git_base_debt import scan_git_base_debt
+from slopgate.cli.lint.git_base_debt import GitBaseDebt, scan_git_base_debt
 from slopgate.cli.lint.report import (
     BASELINE_DISABLED_MESSAGE,
     CollectorReportOptions,
@@ -48,6 +48,19 @@ def _configured_lint_files(root: Path, *, force_all_scope: bool) -> LintFiles:
         reset_quality_scope(scope_token)
 
 
+def _inherited_git_base_debt(files: LintFiles) -> GitBaseDebt | None:
+    """Scan the git base for inherited debt, restoring the active lint config."""
+    if not files.cfg.enable_git_base_debt:
+        return None
+    from slopgate.lint._config import set_config
+
+    git_base_debt = scan_git_base_debt(
+        files.cfg.project_root, configured_lint_files=_configured_lint_files
+    )
+    set_config(files.cfg)
+    return git_base_debt
+
+
 def _lint_scan(
     root: Path, *, gate: LintGateMode, header_label: str, details: bool = False
 ) -> int:
@@ -58,14 +71,7 @@ def _lint_scan(
     files = _configured_lint_files(root, force_all_scope=True)
     baseline = load_baseline()
     collectors = run_all_collectors(files.src_files, files.test_files)
-    git_base_debt = None
-    if gate == "new" and files.cfg.enable_git_base_debt:
-        from slopgate.lint._config import set_config
-
-        git_base_debt = scan_git_base_debt(
-            files.cfg.project_root, configured_lint_files=_configured_lint_files
-        )
-        set_config(files.cfg)
+    git_base_debt = _inherited_git_base_debt(files) if gate == "new" else None
     print_lint_header(
         LintHeader(
             lint_version=__version__,
@@ -153,11 +159,24 @@ def lint_test_integrity(root: Path, *, details: bool = False) -> int:
     from slopgate.lint._collectors import run_test_integrity_collectors
 
     files = _configured_lint_files(root, force_all_scope=False)
-    print_lint_header(LintHeader(__version__, "test-integrity", files, gate="new"))
+    baseline = load_baseline()
     collectors = run_test_integrity_collectors(files.src_files, files.test_files)
+    git_base_debt = _inherited_git_base_debt(files)
+    print_lint_header(
+        LintHeader(
+            __version__,
+            "test-integrity",
+            files,
+            gate="new",
+            git_base_note=git_base_debt.note if git_base_debt is not None else None,
+        )
+    )
     return print_collector_results(
         collectors,
-        load_baseline(),
+        BaselineInputs(
+            stored=baseline,
+            accepted=git_base_debt.rules if git_base_debt is not None else {},
+        ),
         CollectorReportOptions(details=details),
     )
 
