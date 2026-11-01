@@ -330,6 +330,7 @@ _RECOVERY_PROTOCOL_FRAGMENTS = (
     "resolves the pending generation from repair state",
     "Allowed during repair: declared read-only",
     "write/edit/patch, slopgate_verify_repair, Code Mode execute",
+    "its fetch is denied",
     "exact slopgate lint check",
     "compound shell, diagnostic, and wrapper-tool retries remain blocked",
 )

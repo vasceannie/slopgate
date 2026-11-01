@@ -1,7 +1,8 @@
 /**
  * OpenCode Slopgate Plugin — @opencode/plugin@2.2.5.
  *
- * V2-only server plugin. Blocking decisions belong to execute.before;
+ * V2-only server plugin. Blocking decisions belong to execute.before, and to
+ * permission.evaluate for a Code Mode program's fetch, which no tool hook sees.
  * execute.after and the public event stream report detection, not prevention.
  * Session locations, not the plugin instance's location, scope enforcement.
  * Stop findings remain advisory; no experimental continuation hooks are used.
@@ -21,6 +22,7 @@ import type { Session } from "@opencode/schema/session"
 type ToolHookEvent = Parameters<Parameters<Plugin.Context["tool"]["hook"]>[1]>[0]
 type ToolBeforeEvent = Exclude<ToolHookEvent, { status: string }>
 type ToolAfterEvent = Extract<ToolHookEvent, { status: string }>
+type PermissionEvaluation = Parameters<Parameters<Plugin.Context["permission"]["hook"]>[1]>[0]
 
 
 declare const Bun: { env: Record<string, string | undefined> }
@@ -95,11 +97,17 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
 const SHELL_MUTATION_MARKERS = /(?:&&|\|\||[;|<>]|\$\([^)]*\)|`[^`]*`)/
 const VERIFY_TOOL = "slopgate_verify_repair"
 // The host re-enters execute.before for every tool an execute program calls, so
-// the outer call adds no file access of its own and inner calls stay gated.
+// the outer call adds no file access of its own and inner calls stay gated. The
+// program's fetch has no tool hook, so evaluatePermission gates it instead.
 const CODE_MODE_TOOL = "execute"
+// Host fetch asserts the same permission as the webfetch tool.
+const FETCH_PERMISSION = "webfetch"
 const DEFAULT_REPAIR_TIMEOUT_MS = 60_000
 const DEFAULT_ENFORCER_TIMEOUT_MS = 10_000
 const verifyFlights = new Map<string, Promise<RepairCommandResult>>()
+// Host fetch names its execute call as the permission source, the only thing
+// separating it from the direct webfetch tool.
+const runningCodeModeCalls = new Set<string>()
 
 // V2 tool IDs are exact: Read and read would be different tools.
 function nativeToolId(toolName: string): string {
@@ -250,9 +258,37 @@ async function beforeTool(ctx: Plugin.Context, event: ToolBeforeEvent): Promise<
     event.input = { ...args, ...result.updated_args }
   }
   if (result?.context) logDecision("info", "slopgate-pretool", result.context)
+  if (nativeToolId(event.tool) === CODE_MODE_TOOL) runningCodeModeCalls.add(event.id)
+}
+
+async function codeModeFetchDenial(ctx: Plugin.Context, sessionID: Session.ID): Promise<string | null> {
+  const unavailable = "[slopgate] fetch is denied: repair gate state is unavailable in a managed repo."
+  try {
+    const scope = await sessionScope(ctx, sessionID)
+    if (enforcementModeFor(scope.directory) !== "repo_strict") return null
+    const pending = await repairGateState(scope.directory, scope.worktree)
+    if (pending === null) return unavailable
+    if (pending.status !== "REPAIR_REQUIRED") return null
+    return `[slopgate] fetch is denied during repair. ${repairRecoveryProtocol(pending.generation || "unknown", pending.targets)}`
+  } catch (error: unknown) {
+    logDecision("error", "code-mode-fetch-gate-failed", String(error))
+    return unavailable
+  }
+}
+
+async function evaluatePermission(ctx: Plugin.Context, event: PermissionEvaluation): Promise<void> {
+  if (event.action !== FETCH_PERMISSION) return
+  if (!event.source || !runningCodeModeCalls.has(event.source.id)) return
+  // Read per request: a program can outlive the state it started under.
+  const denial = await codeModeFetchDenial(ctx, event.sessionID)
+  if (denial === null) return
+  event.effect = "deny"
+  event.message = denial
 }
 
 async function afterTool(ctx: Plugin.Context, event: ToolAfterEvent): Promise<void> {
+  // Inner tools share the execute call's ID, so only its own completion ends gating.
+  if (nativeToolId(event.tool) === CODE_MODE_TOOL) runningCodeModeCalls.delete(event.id)
   try {
     const scope = await sessionScope(ctx, event.sessionID)
     const completed = event.status === "completed"
@@ -661,7 +697,7 @@ function repairRecoveryProtocol(
     + "(4) run slopgate_verify_repair; it resolves the pending generation from repair state "
     + "and clears it only after clean verification. Allowed during repair: declared read-only "
     + "tools, write/edit/patch, slopgate_verify_repair, Code Mode execute (each tool it "
-    + "calls is gated), exact slopgate lint check; "
+    + "calls is gated and its fetch is denied), exact slopgate lint check; "
     + "compound shell, diagnostic, and wrapper-tool retries remain blocked."
   )
 }
@@ -742,6 +778,7 @@ export default Plugin.define({
     }))
     await ctx.tool.hook("execute.before", (event) => beforeTool(ctx, event))
     await ctx.tool.hook("execute.after", (event) => afterTool(ctx, event))
+    await ctx.permission.hook("evaluate", (event) => evaluatePermission(ctx, event))
     await ctx.tool.transform((editor) => {
       editor.add({
         name: VERIFY_TOOL,

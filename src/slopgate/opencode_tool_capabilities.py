@@ -15,7 +15,8 @@ from slopgate.util.payloads import is_safe_read_shell_command
 
 OPENCODE_PATCH_TOOL_ID: Final = "patch"
 # The host re-enters execute.before for every tool an execute program calls, so
-# the outer call adds no file access of its own and inner calls stay gated.
+# the outer call adds no file access of its own and inner calls stay gated. The
+# plugin's permission hook gates the program's fetch, which no tool hook sees.
 OPENCODE_CODE_MODE_TOOL_ID: Final = "execute"
 OPENCODE_SHELL_TOOL_IDS: Final = frozenset({"shell", BASH_TOOL_LOWER})
 

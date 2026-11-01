@@ -61,6 +61,9 @@ const __context = {{
     }},
     transform: async (callback) => callback(__editor),
   }},
+  permission: {{
+    hook: async () => {{}},
+  }},
   event: {{
     subscribe: (options) => __eventStream(options?.signal),
   }},

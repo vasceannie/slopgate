@@ -189,8 +189,8 @@ def _opencode_repair_recovery_message(
         "(4) run slopgate_verify_repair; it resolves the pending generation from repair "
         "state and clears it only after clean verification. Allowed during repair: "
         "declared read-only tools, write/edit/patch, slopgate_verify_repair, Code Mode "
-        "execute (each tool it calls is gated), exact slopgate lint check; compound "
-        "shell, diagnostic, and wrapper-tool retries remain blocked."
+        "execute (each tool it calls is gated and its fetch is denied), exact slopgate "
+        "lint check; compound shell, diagnostic, and wrapper-tool retries remain blocked."
     )
 
 
