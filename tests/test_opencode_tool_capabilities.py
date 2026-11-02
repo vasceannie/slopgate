@@ -14,7 +14,6 @@ from slopgate.opencode_tool_capabilities import (
     opencode_tool_allowed_during_repair,
     opencode_tool_capability,
     opencode_tool_is_explicit_repair_command,
-    normalize_opencode_tool_id,
 )
 
 _INVENTORY_PATH = Path(__file__).parents[1] / "docs" / "opencode-tool-inventory.json"
@@ -22,26 +21,49 @@ _INVENTORY_PATH = Path(__file__).parents[1] / "docs" / "opencode-tool-inventory.
 
 _OPENCODE_TOOL_CAPABILITY_CASES = (
     ("read", OpenCodeToolCapability.READ_ONLY),
-    ("BackgroundOutput", OpenCodeToolCapability.READ_ONLY),
-    ("LspDiagnostics", OpenCodeToolCapability.READ_ONLY),
-    ("CodegraphCodegraphExplore", OpenCodeToolCapability.READ_ONLY),
+    ("background_output", OpenCodeToolCapability.READ_ONLY),
+    ("lsp_diagnostics", OpenCodeToolCapability.READ_ONLY),
+    ("codegraph_codegraph_explore", OpenCodeToolCapability.READ_ONLY),
     ("bash", OpenCodeToolCapability.EFFECTFUL),
-    ("ApplyPatch", OpenCodeToolCapability.EFFECTFUL),
-    ("BackgroundCancel", OpenCodeToolCapability.EFFECTFUL),
-    ("LibraryCommandsListTools", OpenCodeToolCapability.READ_ONLY),
-    ("LibrarySkillsSaveSkill", OpenCodeToolCapability.EFFECTFUL),
+    ("shell", OpenCodeToolCapability.EFFECTFUL),
+    ("patch", OpenCodeToolCapability.EFFECTFUL),
+    ("execute", OpenCodeToolCapability.EFFECTFUL),
+    ("background_cancel", OpenCodeToolCapability.EFFECTFUL),
     ("library-skills_list_skills", OpenCodeToolCapability.READ_ONLY),
     ("library-commands_list_tools", OpenCodeToolCapability.READ_ONLY),
     ("library-skills_save_skill", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_artifact_read", OpenCodeToolCapability.READ_ONLY),
+    ("opencode_artifact_create", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_artifact_update", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_artifact_delete", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_schedule_list", OpenCodeToolCapability.READ_ONLY),
+    ("opencode_schedule_create", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_schedule_pause", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_schedule_resume", OpenCodeToolCapability.EFFECTFUL),
+    ("opencode_schedule_delete", OpenCodeToolCapability.EFFECTFUL),
+    ("experimental_image_generate", OpenCodeToolCapability.EFFECTFUL),
     ("powershell", None),
 )
 
 
 @pytest.mark.parametrize(("tool_name", "expected"), _OPENCODE_TOOL_CAPABILITY_CASES)
-def test_opencode_tool_capability_normalizes_declared_ids(
+def test_opencode_tool_capability_classifies_declared_ids(
     tool_name: str, expected: OpenCodeToolCapability | None
 ) -> None:
     assert opencode_tool_capability(tool_name) is expected
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    ("Read", "READ", "li_st", "Web_Fetch", "LspDiagnostics", "Patch", "BackgroundOutput"),
+)
+def test_case_and_separator_variants_are_distinct_tools(tool_name: str) -> None:
+    assert opencode_tool_capability(tool_name) is None, (
+        "V2 tool IDs are exact, so a variant must not inherit a declared capability"
+    )
+    assert not opencode_tool_allowed_during_repair(tool_name, {}), (
+        "a variant of a read-only ID must not pass the repair gate"
+    )
 
 
 @pytest.mark.parametrize(
@@ -69,13 +91,13 @@ def test_mutation_capable_legacy_tools_are_effectful(tool_name: str) -> None:
     (
         pytest.param("slopgate_verify_repair", {}, True, id="dedicated-verifier"),
         pytest.param(
-            "bash",
+            "shell",
             {"command": "slopgate lint check --details --verbose"},
             True,
             id="exact-lint-check",
         ),
         pytest.param(
-            "bash",
+            "shell",
             {"command": "slopgate lint check && touch bypassed"},
             False,
             id="compound-command",
@@ -94,9 +116,16 @@ def test_explicit_repair_command_requires_exact_tool_and_tokens(
     assert opencode_tool_is_explicit_repair_command(tool_name, tool_input) is expected
 
 
+def test_code_mode_outer_call_is_allowed_during_repair() -> None:
+    assert opencode_tool_allowed_during_repair("execute", {"code": "1"}), (
+        "the host gates each inner Code Mode call, so blocking the outer call only "
+        "hides read-only tools and the repair verifier"
+    )
+
+
 @pytest.mark.parametrize(
     "tool_name",
-    ("apply_patch", "edit", "write"),
+    ("patch", "edit", "write"),
 )
 def test_exact_file_repair_tools_remain_allowed(tool_name: str) -> None:
     assert opencode_tool_allowed_during_repair(tool_name, {})
@@ -113,8 +142,11 @@ def test_exact_file_repair_tools_remain_allowed(tool_name: str) -> None:
         "git show HEAD:README.md",
     ),
 )
-def test_read_only_bash_inspection_remains_allowed(command: str) -> None:
-    assert opencode_tool_allowed_during_repair("bash", {"command": command})
+@pytest.mark.parametrize("tool_name", ("shell", "bash"))
+def test_read_only_bash_inspection_remains_allowed(
+    command: str, tool_name: str
+) -> None:
+    assert opencode_tool_allowed_during_repair(tool_name, {"command": command})
 
 
 @pytest.mark.parametrize(
@@ -125,8 +157,11 @@ def test_read_only_bash_inspection_remains_allowed(command: str) -> None:
         "git show HEAD:README.md > copied",
     ),
 )
-def test_compound_or_redirected_bash_remains_blocked(command: str) -> None:
-    assert not opencode_tool_allowed_during_repair("bash", {"command": command})
+@pytest.mark.parametrize("tool_name", ("shell", "bash"))
+def test_compound_or_redirected_bash_remains_blocked(
+    command: str, tool_name: str
+) -> None:
+    assert not opencode_tool_allowed_during_repair(tool_name, {"command": command})
 
 
 @pytest.mark.parametrize("tool_name", ("w_r_i_t_e", "apply__patch"))
@@ -135,56 +170,22 @@ def test_repair_allowlist_rejects_separator_collisions(tool_name: str) -> None:
 
 
 @given(
-    tool_name=strategies.sampled_from(
-        ("read", "apply_patch", "slopgate_verify_repair")
-    ),
+    tool_name=strategies.sampled_from(("read", "patch", "slopgate_verify_repair")),
     prefix=strategies.text(alphabet=" \t", max_size=3),
     suffix=strategies.text(alphabet=" \t", max_size=3),
 )
-def test_repair_allowlist_normalization_preserves_declared_tools(
+def test_repair_allowlist_ignores_only_surrounding_whitespace(
     tool_name: str, prefix: str, suffix: str
 ) -> None:
-    assert opencode_tool_allowed_during_repair(
-        f"{prefix}{tool_name.upper()}{suffix}", {}
-    )
-
-
-@pytest.mark.parametrize(
-    ("tool_name", "expected"),
-    (
-        pytest.param("LspDiagnostics", "lsp_diagnostics", id="pascal-case"),
-        pytest.param(
-            "CodegraphCodegraphExplore",
-            "codegraph_codegraph_explore",
-            id="multiword-pascal-case",
-        ),
-        pytest.param("ApplyPatch", "apply_patch", id="camel-case"),
-        pytest.param(
-            "LibraryCommandsListTools",
-            "library-commands_list_tools",
-            id="structured-pascal-case",
-        ),
-        pytest.param(
-            "library-commands_list_tools",
-            "library-commands_list_tools",
-            id="structured-tool-id",
-        ),
-    ),
-)
-def test_normalize_opencode_tool_id_preserves_declared_shape(
-    tool_name: str, expected: str
-) -> None:
-    assert normalize_opencode_tool_id(tool_name) == expected
+    assert opencode_tool_allowed_during_repair(f"{prefix}{tool_name}{suffix}", {})
 
 
 def test_audited_opencode_inventory_matches_declared_registry() -> None:
     inventory = json.loads(_INVENTORY_PATH.read_text(encoding="utf-8"))
-    read_only = {
-        normalize_opencode_tool_id(tool_id) for tool_id in inventory["read_only"]
-    }
-    effectful = {
-        normalize_opencode_tool_id(tool_id) for tool_id in inventory["effectful"]
-    }
 
-    assert read_only == READ_ONLY_TOOL_IDS
-    assert effectful == EFFECTFUL_TOOL_IDS
+    assert set(inventory["read_only"]) == READ_ONLY_TOOL_IDS, (
+        "the audited read-only inventory must match the declared registry"
+    )
+    assert set(inventory["effectful"]) == EFFECTFUL_TOOL_IDS, (
+        "the audited effectful inventory must match the declared registry"
+    )

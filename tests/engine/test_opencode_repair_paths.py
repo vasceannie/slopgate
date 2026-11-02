@@ -232,7 +232,7 @@ def test_repair_gate_finding_demands_stop_and_names_allowed_tools(
     assert "equivalent retries remain blocked" in message, (
         f"missing blocked-retry statement: {message}"
     )
-    assert "write, edit, apply_patch" in message, (
+    assert "write, edit, patch" in message, (
         f"missing allowed mutation tools: {message}"
     )
     assert "slopgate_verify_repair" in message, (
@@ -325,12 +325,14 @@ _RECOVERY_PROTOCOL_FRAGMENTS = (
     "read the first causal finding:",
     "inspect affected files with declared read-only tools",
     "make one focused repair with an allowed mutation tool",
-    "write, edit, apply_patch",
+    "write, edit, patch",
     "run slopgate_verify_repair",
     "resolves the pending generation from repair state",
     "Allowed during repair: declared read-only",
-    "write/edit/apply_patch, slopgate_verify_repair, exact slopgate lint check",
-    "Bash, patch, diagnostic, and wrapper-tool retries remain blocked",
+    "write/edit/patch, slopgate_verify_repair, Code Mode execute",
+    "its fetch is denied",
+    "exact slopgate lint check",
+    "compound shell, diagnostic, and wrapper-tool retries remain blocked",
 )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from slopgate.cli.io import string_arg
@@ -78,10 +79,23 @@ def _check_report(target: Path, config: RuntimeConfig) -> dict[str, object]:
     }
 
 
+def _warn_inert_opencode_plugins(target: Path) -> None:
+    from slopgate.installer._opencode import inert_opencode_plugins
+
+    project_root = target if target.is_dir() else target.parent
+    for path in inert_opencode_plugins(project_root):
+        print(
+            f"warning: OpenCode 2 cannot load the V1 Slopgate plugin at {path}, so "
+            "OpenCode enforcement is off. Run `slopgate install opencode`.",
+            file=sys.stderr,
+        )
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     from slopgate.config import load_config
 
     target = Path(string_arg(args, METADATA_PATH, ".")).resolve()
     config = load_config(repo_root=target, ensure_enrollment=False, ensure_trace=False)
     print(json.dumps(_check_report(target, config), indent=2))
+    _warn_inert_opencode_plugins(target)
     return 0

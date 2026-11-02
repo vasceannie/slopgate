@@ -37,7 +37,7 @@ from slopgate.opencode_tool_capabilities import (
 )
 from slopgate.util.platform import user_config_dir
 
-__all__ = ["install_opencode", "uninstall_opencode"]
+__all__ = ["inert_opencode_plugins", "install_opencode", "uninstall_opencode"]
 _PLUGIN_NAME = "slopgate-plugin.ts"
 _PLUGIN_ARGV_PLACEHOLDER_LITERAL = '["__SLOPGATE_BIN__"]'
 _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL = (
@@ -45,11 +45,14 @@ _PLUGIN_IDENTITY_PLACEHOLDER_LITERAL = (
 )
 _READ_ONLY_TOOLS_PLACEHOLDER_LITERAL = '["__SLOPGATE_READ_ONLY_TOOL_IDS__"]'
 _EFFECTFUL_TOOLS_PLACEHOLDER_LITERAL = '["__SLOPGATE_EFFECTFUL_TOOL_IDS__"]'
-OPENCODE_TYPES_TARGET = "1.18.21"
+OPENCODE_TYPES_TARGET = "2.2.5"
 PLUGIN_OWNERSHIP_MARKERS = (
     "OpenCode Slopgate Plugin",
     "const SLOPGATE_BIN",
 )
+_PLUGIN_V2_ENTRYPOINT = "export default Plugin.define("
+
+
 class OpenCodeTemplateError(RuntimeError):
     """Raised when the bundled OpenCode plugin template cannot be rendered."""
 
@@ -73,6 +76,32 @@ def opencode_user_plugin_path() -> Path:
 
 def _opencode_project_plugin_path(project_root: Path) -> Path:
     return project_root / ".opencode" / "plugins" / _PLUGIN_NAME
+
+
+def inert_opencode_plugins(project_root: Path | None) -> list[Path]:
+    """Return owned plugins whose V1 export the V2 host refuses to load."""
+    root = resolve_project_root(project_root)
+    candidates = (opencode_user_plugin_path(), _opencode_project_plugin_path(root))
+    return [
+        path
+        for path in candidates
+        if opencode_plugin_has_owned_slopgate(path)
+        and _PLUGIN_V2_ENTRYPOINT not in path.read_text(encoding="utf-8", errors=REPLACE)
+    ]
+
+
+def _warn_duplicate_plugin_id(user_path: Path, project_path: Path) -> None:
+    if not (
+        opencode_plugin_has_owned_slopgate(user_path)
+        and opencode_plugin_has_owned_slopgate(project_path)
+    ):
+        return
+    print(
+        f"Note: OpenCode loads one plugin per ID, so {user_path} stays active and "
+        f"{project_path} reports 'Duplicate plugin ID: slopgate' without loading. "
+        "Keep one with `slopgate uninstall opencode --install-scope user` or "
+        "`--install-scope project`."
+    )
 
 
 _render_opencode_invocation = InvocationTemplateRenderer(
@@ -228,16 +257,12 @@ def install_opencode(
         target_spec = _OpenCodeInstallTarget(
             path=target,
             identity_root=(
-                _opencode_config_dir()
-                if target == user_target
-                else root / ".opencode"
+                _opencode_config_dir() if target == user_target else root / ".opencode"
             ),
             scope="user" if target == user_target else "project",
             dry_run=dry_run,
         )
-        status = _install_opencode_target(
-            template_content, binary, target_spec, root
-        )
+        status = _install_opencode_target(template_content, binary, target_spec, root)
         if status != 0:
             if not dry_run:
                 rollback_completed_installs(
@@ -249,6 +274,8 @@ def install_opencode(
             return status
         completed.append(target)
         last_status = status
+    if not dry_run:
+        _warn_duplicate_plugin_id(user_target, _opencode_project_plugin_path(root))
     return last_status
 
 

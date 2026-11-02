@@ -10,14 +10,15 @@ from slopgate._types import ObjectDict, ObjectMapping
 from slopgate.constants import METADATA_CONTENT, METADATA_PATH
 from slopgate.util import logger
 
-OPENCODE_TOOL_CONTRACT_VERSION: Final = "slopgate-opencode-projection-v1"
+OPENCODE_TOOL_CONTRACT_VERSION: Final = "slopgate-opencode-projection-v2"
 PROJECTION_KEY: Final = "_slopgate_projection"
 
 ProjectionStatus: TypeAlias = Literal[
     "projected", "invalid", "stale", "unsupported", "protocol_mismatch"
 ]
 ProjectionReason: TypeAlias = Literal[
-    "empty_insertion", "stale_hash_anchor", "target_outside_root", "update_hunk_mismatch"
+    "target_outside_root",
+    "update_hunk_mismatch",
 ]
 SnapshotStatus: TypeAlias = Literal["invalid", "missing", "stale"]
 PatchOperation: TypeAlias = Literal["add", "update", "delete"]
@@ -35,6 +36,8 @@ class ProjectionRequest:
     tool_input: ObjectMapping
     root: Path
     contract_version: str
+    # Session directory the host resolves relative paths against; root bounds them.
+    directory: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

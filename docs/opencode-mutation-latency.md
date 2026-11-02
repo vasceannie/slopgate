@@ -1,6 +1,8 @@
 # OpenCode mutation-hook latency
 
-OpenCode awaits typed `tool.execute.before` and `tool.execute.after` plugin hooks. Slopgate therefore treats the latency of its generated plugin and hook subprocess as interactive latency. OpenCode does not document a hook timeout, ordering guarantee, concurrency guarantee, or latency SLO; the target below belongs only to Slopgate.
+OpenCode 2.2.5 exposes typed `tool.execute.before` and `tool.execute.after` plugin hooks, so Slopgate treats the awaited plugin and hook subprocess as interactive latency. Hard mutation control belongs only to `tool.execute.before`; `tool.execute.after` observes completed or error outcomes after execution and cannot reject or roll back them. The public event observer filters event locations and stops through abort cleanup. OpenCode does not document a hook timeout, ordering guarantee, concurrency guarantee, or latency SLO; the target below belongs only to Slopgate.
+
+The V2 API shape is grounded in the [official migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1/) and the pinned OpenCode 2.2.5 native tool declarations at `node_modules/@opencode/plugin/dist/promise/tool.d.ts`. The host SDK/runtime is distinct from declared, lockfile, and installed dependency metadata recorded by Slopgate.
 
 ## Slopgate target
 
@@ -35,9 +37,9 @@ The benchmark renders the installed OpenCode plugin, drives its real awaited `to
 - OpenCode, plugin, Slopgate, policy, and projection-contract identities
 - decision and stable-finding parity
 
-## 2026-08-22 baseline
+## 2026-08-22 historical V1 baseline (not current V2 evidence)
 
-The representative sample contained 1,565 tracked files and 16,056,777 tracked bytes. The touched target was `src/slopgate/lint/_helpers/parsing.py` at 9,228 bytes. OpenCode was `1.18.21`; the Slopgate-owned projection contract was `slopgate-opencode-projection-v1`; Slopgate was `2.1.6`. The projection contract is independent of OpenCode's release number and changes only when Slopgate changes the projected payload schema.
+The representative sample contained 1,565 tracked files and 16,056,777 tracked bytes. The touched target was `src/slopgate/lint/_helpers/parsing.py` at 9,228 bytes. This run used the pre-V2 OpenCode `1.18.21` plugin path; the Slopgate-owned projection contract was `slopgate-opencode-projection-v1`; Slopgate was `2.1.6`. The projection contract is independent of OpenCode's release number and changes only when Slopgate changes the projected payload schema.
 
 Ten measured iterations after two warmups produced:
 

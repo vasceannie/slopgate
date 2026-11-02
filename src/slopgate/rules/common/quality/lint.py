@@ -77,7 +77,8 @@ def _candidate_file(ctx: HookContext, candidate: str) -> Path | None:
     if is_third_party_or_virtualenv_path(candidate):
         return None
     path = Path(candidate)
-    full = path if path.is_absolute() else ctx.config.repo_root / path
+    # Hosts resolve relative tool paths from the session cwd, not the repo root.
+    full = path if path.is_absolute() else ctx.cwd / path
     if not full.exists() or not full.is_file():
         return None
     return full.resolve()
@@ -248,7 +249,8 @@ class PostEditLintRule(Rule):
         if report.first_diagnostic is not None:
             metadata["first_diagnostic"] = report.first_diagnostic
         if targets:
-            metadata[METADATA_PATH] = targets[0]
+            # Lint targets are repo-relative, but repair resolves paths from the cwd.
+            metadata[METADATA_PATH] = str(ctx.config.repo_root / targets[0])
         return [
             RuleFinding(
                 rule_id=self.rule_id,

@@ -18,6 +18,7 @@
       "authority": "human-authored-source-cross-checked",
       "source_ids": [
         "opencode_plugin_docs",
+        "opencode_plugin_migration_docs",
         "opencode_config_schema"
       ]
     }
@@ -87,38 +88,33 @@
       ]
     },
     "opencode": {
-      "blocking_notes": "Plugin-mediated. tool.execute.before is the strongest blocking point; stop/prompt behavior is degraded/advisory unless proven by current docs and local smoke.",
+      "blocking_notes": "Plugin-mediated. tool.execute.before is the strongest blocking point; tool.execute.after and event subscriptions are advisory after execution.",
       "regression_matrix": "tests/fixtures/opencode_hook_contract_matrix.json",
       "canonical_events": [
-        "CommandExecuted",
+        "PermissionReplied",
+        "PostCompact",
         "PreToolUse",
         "PostToolUse",
-        "PermissionReplied",
-        "PermissionRequest",
-        "PostCompact",
         "SessionStart",
+        "Stop",
         "SessionError",
         "SessionStatus",
-        "ShellEnv",
-        "Stop"
+        "PermissionRequest"
       ],
       "native_events": [
-        "command.executed",
-        "file.edited",
         "permission.replied",
-        "shell.env",
-        "session.compacted",
+        "session.compaction.ended",
         "tool.execute.before",
         "tool.execute.after",
-        "permission.asked",
         "session.created",
-        "session.error",
+        "session.idle",
+        "session.execution.failed",
         "session.status",
-        "session.idle"
+        "permission.asked"
       ]
     }
   },
-  "generated_at_utc": "2026-08-22T00:00:00+00:00",
+  "generated_at_utc": "2026-11-01T00:00:00+00:00",
   "harness_event_surfaces": {
     "claude": {
       "authority": "official-docs-plus-local-installer",
@@ -1469,155 +1465,80 @@
     "opencode": [
       {
         "keywords": [
-          "Notification"
+          "Plugin.define",
+          "@opencode/plugin",
+          "setup"
         ],
-        "line": 274,
-        "source_id": "opencode_config_docs",
-        "text": "\"mouse\": true,\n  \"attention\": {\n    \"enabled\": true,\n    \"notifications\": true,\n    \"sound\": true,\n    \"volume\": 0.4\n  }"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 283,
-        "source_id": "opencode_config_docs",
-        "text": "Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.\n\nSet `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).\n\nLegacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible."
-      },
-      {
-        "keywords": [
-          "tool.execute.before"
-        ],
-        "line": 88,
+        "line": 14,
         "source_id": "opencode_plugin_docs",
-        "text": "export const MyPlugin = async (ctx) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"bash\") {\n        output.args.command = escape(output.args.command)\n      }"
+        "text": "```ts title=\".opencode/plugins/example/index.ts\"\nimport { Plugin } from \"@opencode/plugin\"\n\nexport default Plugin.define({\n  id: \"example\",\n  async setup(ctx) {\n    await ctx.storage.set(\"loaded\", true)\n  },\n})\n```"
       },
       {
         "keywords": [
-          "permission.asked"
+          "ctx.location.directory",
+          "session"
         ],
-        "line": 168,
+        "line": 54,
         "source_id": "opencode_plugin_docs",
-        "text": "#### Permission Events\n\n- `permission.asked`\n- `permission.replied`\n\n#### Server Events"
+        "text": "`ctx.location` describes the location where this plugin instance is loaded. It\nincludes `directory`, optional `workspaceID`, and `project` metadata (`id`,\n`directory`, and `canonical`). It is available in both Promise and Effect plugins.\nThis is the plugin instance's location, not the location of every session it can\naccess or event it receives."
       },
       {
         "keywords": [
-          "session.created"
+          "ctx.tool.transform",
+          "JSON Schema",
+          "content"
         ],
-        "line": 177,
+        "line": 980,
         "source_id": "opencode_plugin_docs",
-        "text": "#### Session Events\n\n- `session.created`\n- `session.compacted`\n- `session.deleted`\n- `session.diff`"
+        "text": "Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data\nbefore registering or reloading. A later valid registration overrides the same effective tool name.\n\n```ts\nconst registration = await ctx.tool.transform((editor) => {\n  editor.namespace({\n    name: \"acme\",\n    description: \"Customer account tools\",\n  })\n  editor.add({\n    name: \"greeting\",\n    description: \"Create a greeting\",\n    input: {\n      type: \"object\",\n      properties: { name: { type: \"string\" } },\n      required: [\"name\"],\n      additionalProperties: false,\n    },\n    options: { namespace: \"acme\", codemode: true },\n    execute: async (input, context) => {\n      await context.progress({ status: \"greeting\" })\n      return { content: `Hello ${(input as { name: string }).name}!` }\n    },\n  })\n})\n```"
       },
       {
         "keywords": [
-          "session.idle"
+          "ctx.permission.assert",
+          "source"
         ],
-        "line": 182,
+        "line": 731,
         "source_id": "opencode_plugin_docs",
-        "text": "- `session.deleted`\n- `session.diff`\n- `session.error`\n- `session.idle`\n- `session.status`\n- `session.updated`"
+        "text": "Ask for permission before performing an action. `assert` evaluates the session's [permission rules](/permissions),\nincluding saved approvals, and prompts the user when a rule resolves to `ask`. It resolves once the action is allowed.\n\n```ts\nexecute: async (input, context) => {\n  await ctx.permission.assert({\n    sessionID: context.sessionID,\n    agent: context.agent,\n    source: { type: \"tool\", messageID: context.messageID, id: context.id },\n    action: \"deploy\",\n    resources: [input.environment],\n    save: [input.environment],\n  })\n  return { content: await deploy(input.environment) }\n}\n```"
       },
       {
         "keywords": [
-          "tool.execute.after"
+          "ctx.session.get",
+          "sessionID"
         ],
-        "line": 196,
+        "line": 775,
         "source_id": "opencode_plugin_docs",
-        "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+        "text": "### Sessions\n\nCreate or read a session.\n\n```ts\nconst created = await ctx.session.create({ title: \"Review\" })\nconst session = await ctx.session.get({ sessionID })\nconst messages = await ctx.session.context({ sessionID })\n```"
       },
       {
         "keywords": [
-          "tool.execute.before"
+          "plugins",
+          "index.ts",
+          "configured"
         ],
-        "line": 197,
-        "source_id": "opencode_plugin_docs",
-        "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
+        "line": 20,
+        "source_id": "opencode_plugin_migration_docs",
+        "text": "Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object:\n\n```jsonc\n// V1\n{\n  \"plugin\": [\n    \"opencode-example-plugin\",\n    [\"./plugin/local.ts\", { \"enabled\": true }]\n  ]\n}\n\n// V2\n{\n  \"plugins\": [\n    \"opencode-example-plugin\",\n    {\n      \"package\": \"./plugin/local\",\n      \"options\": { \"enabled\": true }\n    }\n  ]\n}\n```\n\nV2 discovers local plugins from both `.opencode/plugin/` and `.opencode/plugins/`; use `.opencode/plugins/` for V2 files.\nConfigured local paths must name directories. For the example above, move the ported implementation to\n`./plugin/local/index.ts`; a configured `./plugin/local.ts` file is skipped with a warning in the log."
       },
       {
         "keywords": [
-          "Notification"
+          "Plugin.define",
+          "id",
+          "@opencode/plugin"
         ],
-        "line": 213,
-        "source_id": "opencode_plugin_docs",
-        "text": "---\n\n### Send notifications\n\nSend notifications when certain events occur:"
+        "line": 49,
+        "source_id": "opencode_plugin_migration_docs",
+        "text": "Change the package import, replace the exported plugin function with `Plugin.define`, and move initialization into\n`setup`.\n\n```ts title=\"V2\"\nimport { Plugin } from \"@opencode/plugin\"\n\nexport default Plugin.define({\n  id: \"example\",\n  async setup(ctx) {\n    await ctx.storage.set(\"last-project\", ctx.location.project.id)\n    console.log(`Loaded for ${ctx.location.directory}`)\n  },\n})\n```\n\nEvery V2 plugin needs a stable `id`. Plugin storage is scoped by this ID, and the ID also identifies the plugin in status\nand diagnostics."
       },
       {
         "keywords": [
-          "Notification"
+          "ctx.tool.hook",
+          "execute.before",
+          "execute.after"
         ],
-        "line": 215,
-        "source_id": "opencode_plugin_docs",
-        "text": "### Send notifications\n\nSend notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 217,
-        "source_id": "opencode_plugin_docs",
-        "text": "Send notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 218,
-        "source_id": "opencode_plugin_docs",
-        "text": "Send notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {\n      // Send notification on session completion"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 221,
-        "source_id": "opencode_plugin_docs",
-        "text": "export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {\n  return {\n    event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }"
-      },
-      {
-        "keywords": [
-          "session.idle"
-        ],
-        "line": 222,
-        "source_id": "opencode_plugin_docs",
-        "text": "return {\n    event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }\n    },"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 223,
-        "source_id": "opencode_plugin_docs",
-        "text": "event: async ({ event }) => {\n      // Send notification on session completion\n      if (event.type === \"session.idle\") {\n        await $`osascript -e 'display notification \"Session completed!\" with title \"opencode\"'`\n      }\n    },\n  }"
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 230,
-        "source_id": "opencode_plugin_docs",
-        "text": "}\n```\n\nWe are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.\n\n:::note\nIf you\u2019re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors."
-      },
-      {
-        "keywords": [
-          "Notification"
-        ],
-        "line": 233,
-        "source_id": "opencode_plugin_docs",
-        "text": "We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.\n\n:::note\nIf you\u2019re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.\n:::\n\n---"
-      },
-      {
-        "keywords": [
-          "tool.execute.before"
-        ],
-        "line": 245,
-        "source_id": "opencode_plugin_docs",
-        "text": "```javascript title=\".opencode/plugins/env-protection.js\"\nexport const EnvProtection = async ({ project, client, $, directory, worktree }) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"read\" && output.args.filePath.includes(\".env\")) {\n        throw new Error(\"Do not read .env files\")\n      }"
-      },
-      {
-        "keywords": [
-          "decision"
-        ],
-        "line": 349,
-        "source_id": "opencode_plugin_docs",
-        "text": "Include any state that should persist across compaction:\n- Current task status\n- Important decisions made\n- Files being actively worked on\n`)\n    },"
+        "line": 149,
+        "source_id": "opencode_plugin_migration_docs",
+        "text": "Use this table to find the closest V2 API for each V1 hook:\n\n| V1 hook                                | V2 API                                                       |\n| -------------------------------------- | ------------------------------------------------------------ |\n| `event`                                | `ctx.event.subscribe()`                                      |\n| `dispose`                              | cleanup function returned by `setup`                         |\n| `config`                               | transforms on the affected domains                          |\n| `tool` map                             | `ctx.tool.transform(...)`                                    |\n| `auth`                                 | `ctx.integration.transform(...)` and integration APIs        |\n| `provider`                             | `ctx.provider.transform(...)` and `ctx.model.transform(...)` |\n| `chat.message`                         | `ctx.session.hook(\"prompt\", ...)`                           |\n| `chat.params`                          | `ctx.session.hook(\"context\", ...)`                          |\n| `chat.headers`                         | `ctx.session.hook(\"model.request\", ...)` or `\"http.request\"` |\n| `permission.ask`                       | `ctx.permission.hook(\"evaluate\", ...)`                       |\n| `command.execute.before`               | command transforms or the prompt hook, depending on intent   |\n| `tool.execute.before`                  | `ctx.tool.hook(\"execute.before\", ...)`                       |\n| `tool.execute.after`                   | `ctx.tool.hook(\"execute.after\", ...)`                        |\n| `shell.env`                            | `ctx.shell.hook(\"create.before\", ...)`                       |\n| `tool.definition`                      | `ctx.tool.transform(...)`                                    |\n| `experimental.chat.system.transform`   | `ctx.session.hook(\"context\", ...)` and edit `event.system`   |\n| `experimental.chat.messages.transform` | `ctx.session.hook(\"context\", ...)` and edit `event.messages` |\n| `experimental.session.compacting`      | `ctx.session.hook(\"compaction\", ...)`                        |"
       }
     ]
   },
@@ -1708,13 +1629,18 @@
     ],
     "opencode_config_schema": [],
     "opencode_plugin_docs": [
-      "Notification",
-      "decision",
-      "permission.asked",
-      "session.created",
-      "session.idle",
-      "tool.execute.after",
-      "tool.execute.before"
+      "Plugin.define",
+      "ctx.location.directory",
+      "ctx.tool.transform",
+      "ctx.permission.assert",
+      "ctx.session.get"
+    ],
+    "opencode_plugin_migration_docs": [
+      "plugins",
+      "index.ts",
+      "ctx.tool.hook",
+      "execute.before",
+      "execute.after"
     ]
   },
   "source_snapshot_policy": "manual-regeneration-required",
@@ -2165,72 +2091,97 @@
       "url": "https://opencode.ai/config.json"
     },
     "opencode_plugin_docs": {
-      "bytes": 9392,
-      "content_type": "text/plain; charset=utf-8",
+      "bytes": 61744,
+      "content_type": "text/markdown; charset=utf-8",
       "harness": "opencode",
       "kind": "plugin_doc",
-      "retrieved_at_utc": "2026-05-20T09:35:21+00:00",
-      "sha256": "ab99892a03931c7d7cb36f93beba067346492cb9adae0f263fb6ac83f83391bb",
+      "retrieved_at_utc": "2026-11-01T00:00:00+00:00",
+      "sha256": "9a236089d96a88ac2624a6bd093794c0eee55a4cec5c64d779104d660664041d",
       "snippets": [
         {
           "keywords": [
-            "tool.execute.before"
+            "Plugin.define",
+            "@opencode/plugin",
+            "setup"
           ],
-          "line": 88,
-          "text": "export const MyPlugin = async (ctx) => {\n  return {\n    \"tool.execute.before\": async (input, output) => {\n      if (input.tool === \"bash\") {\n        output.args.command = escape(output.args.command)\n      }"
+          "line": 14,
+          "text": "```ts title=\".opencode/plugins/example/index.ts\"\nimport { Plugin } from \"@opencode/plugin\"\n\nexport default Plugin.define({\n  id: \"example\",\n  async setup(ctx) {\n    await ctx.storage.set(\"loaded\", true)\n  },\n})\n```"
         },
         {
           "keywords": [
-            "permission.asked"
+            "ctx.location.directory",
+            "session"
           ],
-          "line": 168,
-          "text": "#### Permission Events\n\n- `permission.asked`\n- `permission.replied`\n\n#### Server Events"
+          "line": 54,
+          "text": "`ctx.location` describes the location where this plugin instance is loaded. It\nincludes `directory`, optional `workspaceID`, and `project` metadata (`id`,\n`directory`, and `canonical`). It is available in both Promise and Effect plugins.\nThis is the plugin instance's location, not the location of every session it can\naccess or event it receives."
         },
         {
           "keywords": [
-            "session.created"
+            "ctx.tool.transform",
+            "JSON Schema",
+            "content"
           ],
-          "line": 177,
-          "text": "#### Session Events\n\n- `session.created`\n- `session.compacted`\n- `session.deleted`\n- `session.diff`"
+          "line": 980,
+          "text": "Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data\nbefore registering or reloading. A later valid registration overrides the same effective tool name.\n\n```ts\nconst registration = await ctx.tool.transform((editor) => {\n  editor.namespace({\n    name: \"acme\",\n    description: \"Customer account tools\",\n  })\n  editor.add({\n    name: \"greeting\",\n    description: \"Create a greeting\",\n    input: {\n      type: \"object\",\n      properties: { name: { type: \"string\" } },\n      required: [\"name\"],\n      additionalProperties: false,\n    },\n    options: { namespace: \"acme\", codemode: true },\n    execute: async (input, context) => {\n      await context.progress({ status: \"greeting\" })\n      return { content: `Hello ${(input as { name: string }).name}!` }\n    },\n  })\n})\n```"
         },
         {
           "keywords": [
-            "session.idle"
+            "ctx.permission.assert",
+            "source"
           ],
-          "line": 182,
-          "text": "- `session.deleted`\n- `session.diff`\n- `session.error`\n- `session.idle`\n- `session.status`\n- `session.updated`"
+          "line": 731,
+          "text": "Ask for permission before performing an action. `assert` evaluates the session's [permission rules](/permissions),\nincluding saved approvals, and prompts the user when a rule resolves to `ask`. It resolves once the action is allowed.\n\n```ts\nexecute: async (input, context) => {\n  await ctx.permission.assert({\n    sessionID: context.sessionID,\n    agent: context.agent,\n    source: { type: \"tool\", messageID: context.messageID, id: context.id },\n    action: \"deploy\",\n    resources: [input.environment],\n    save: [input.environment],\n  })\n  return { content: await deploy(input.environment) }\n}\n```"
         },
         {
           "keywords": [
-            "tool.execute.after"
+            "ctx.session.get",
+            "sessionID"
           ],
-          "line": 196,
-          "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
-        },
-        {
-          "keywords": [
-            "tool.execute.before"
-          ],
-          "line": 197,
-          "text": "#### Tool Events\n\n- `tool.execute.after`\n- `tool.execute.before`\n\n#### TUI Events"
-        },
-        {
-          "keywords": [
-            "Notification"
-          ],
-          "line": 213,
-          "text": "---\n\n### Send notifications\n\nSend notifications when certain events occur:"
-        },
-        {
-          "keywords": [
-            "Notification"
-          ],
-          "line": 215,
-          "text": "### Send notifications\n\nSend notifications when certain events occur:\n\n```js title=\".opencode/plugins/notification.js\"\nexport const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {"
+          "line": 775,
+          "text": "### Sessions\n\nCreate or read a session.\n\n```ts\nconst created = await ctx.session.create({ title: \"Review\" })\nconst session = await ctx.session.get({ sessionID })\nconst messages = await ctx.session.context({ sessionID })\n```"
         }
       ],
       "status_code": 200,
-      "url": "https://opencode.ai/docs/plugins.md"
+      "url": "https://opencode.ai/v2/docs/build/plugins/server"
+    },
+    "opencode_plugin_migration_docs": {
+      "bytes": 15078,
+      "content_type": "text/markdown; charset=utf-8",
+      "harness": "opencode",
+      "kind": "migration_doc",
+      "retrieved_at_utc": "2026-11-01T00:00:00+00:00",
+      "sha256": "4f91d15e16a0372843c1ea0d814081546ddee9e1f02611c97517e8d82a279756",
+      "snippets": [
+        {
+          "keywords": [
+            "plugins",
+            "index.ts",
+            "configured"
+          ],
+          "line": 20,
+          "text": "Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object:\n\n```jsonc\n// V1\n{\n  \"plugin\": [\n    \"opencode-example-plugin\",\n    [\"./plugin/local.ts\", { \"enabled\": true }]\n  ]\n}\n\n// V2\n{\n  \"plugins\": [\n    \"opencode-example-plugin\",\n    {\n      \"package\": \"./plugin/local\",\n      \"options\": { \"enabled\": true }\n    }\n  ]\n}\n```\n\nV2 discovers local plugins from both `.opencode/plugin/` and `.opencode/plugins/`; use `.opencode/plugins/` for V2 files.\nConfigured local paths must name directories. For the example above, move the ported implementation to\n`./plugin/local/index.ts`; a configured `./plugin/local.ts` file is skipped with a warning in the log."
+        },
+        {
+          "keywords": [
+            "Plugin.define",
+            "id",
+            "@opencode/plugin"
+          ],
+          "line": 49,
+          "text": "Change the package import, replace the exported plugin function with `Plugin.define`, and move initialization into\n`setup`.\n\n```ts title=\"V2\"\nimport { Plugin } from \"@opencode/plugin\"\n\nexport default Plugin.define({\n  id: \"example\",\n  async setup(ctx) {\n    await ctx.storage.set(\"last-project\", ctx.location.project.id)\n    console.log(`Loaded for ${ctx.location.directory}`)\n  },\n})\n```\n\nEvery V2 plugin needs a stable `id`. Plugin storage is scoped by this ID, and the ID also identifies the plugin in status\nand diagnostics."
+        },
+        {
+          "keywords": [
+            "ctx.tool.hook",
+            "execute.before",
+            "execute.after"
+          ],
+          "line": 149,
+          "text": "Use this table to find the closest V2 API for each V1 hook:\n\n| V1 hook                                | V2 API                                                       |\n| -------------------------------------- | ------------------------------------------------------------ |\n| `event`                                | `ctx.event.subscribe()`                                      |\n| `dispose`                              | cleanup function returned by `setup`                         |\n| `config`                               | transforms on the affected domains                          |\n| `tool` map                             | `ctx.tool.transform(...)`                                    |\n| `auth`                                 | `ctx.integration.transform(...)` and integration APIs        |\n| `provider`                             | `ctx.provider.transform(...)` and `ctx.model.transform(...)` |\n| `chat.message`                         | `ctx.session.hook(\"prompt\", ...)`                           |\n| `chat.params`                          | `ctx.session.hook(\"context\", ...)`                          |\n| `chat.headers`                         | `ctx.session.hook(\"model.request\", ...)` or `\"http.request\"` |\n| `permission.ask`                       | `ctx.permission.hook(\"evaluate\", ...)`                       |\n| `command.execute.before`               | command transforms or the prompt hook, depending on intent   |\n| `tool.execute.before`                  | `ctx.tool.hook(\"execute.before\", ...)`                       |\n| `tool.execute.after`                   | `ctx.tool.hook(\"execute.after\", ...)`                        |\n| `shell.env`                            | `ctx.shell.hook(\"create.before\", ...)`                       |\n| `tool.definition`                      | `ctx.tool.transform(...)`                                    |\n| `experimental.chat.system.transform`   | `ctx.session.hook(\"context\", ...)` and edit `event.system`   |\n| `experimental.chat.messages.transform` | `ctx.session.hook(\"context\", ...)` and edit `event.messages` |\n| `experimental.session.compacting`      | `ctx.session.hook(\"compaction\", ...)`                        |"
+        }
+      ],
+      "status_code": 200,
+      "url": "https://opencode.ai/v2/docs/build/plugins/migrate-v1"
     }
   }
 }

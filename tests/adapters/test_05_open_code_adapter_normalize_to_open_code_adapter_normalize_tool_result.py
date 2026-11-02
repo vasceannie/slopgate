@@ -7,7 +7,6 @@ from tests.test_adapters import (
     Severity,
     require_rendered,
 )
-from slopgate.util.payloads import is_mutating_tool_use, tool_intent
 
 
 class TestOpenCodeAdapterNormalize:
@@ -52,39 +51,38 @@ class TestOpenCodeAdapterNormalize:
         canonical = adapter.normalize_payload(raw)
         assert canonical["tool_name"] == "Write", "known lowercase alias not mapped"
 
-    def test_normalize_preserves_unknown_lowercase_tool_name(self) -> None:
+    def test_normalize_preserves_native_patch_tool_name(self) -> None:
         adapter = OpenCodeAdapter()
         raw: ObjectDict = {
             "hook_event_name": "tool.execute.before",
-            "tool_name": "apply_patch",
+            "tool_name": "patch",
             "tool_input": {},
             "cwd": "/tmp",
             "session_id": "oc3b",
         }
         canonical = adapter.normalize_payload(raw)
-        assert canonical["tool_name"] == "apply_patch", (
-            "unknown or structured tool names should not be title-cased"
+        assert canonical["tool_name"] == "patch", (
+            "native patch IDs should remain lowercase and canonical"
         )
 
-    def test_normalize_maps_camel_case_tool_id_for_capability_checks(self) -> None:
+    def test_normalize_keeps_exact_tool_id_for_capability_checks(self) -> None:
         adapter = OpenCodeAdapter()
         raw: ObjectDict = {
             "hook_event_name": "tool.execute.before",
             "tool_name": "LspDiagnostics",
-            "tool_input": {"filePath": "src/app.py"},
+            "tool_input": {"path": "src/app.py"},
             "cwd": "/tmp",
-            "session_id": "oc-camel-case",
+            "session_id": "oc-exact-id",
         }
 
         canonical = adapter.normalize_payload(raw)
 
-        assert canonical["tool_name"] == "lsp_diagnostics", (
-            "OpenCode PascalCase IDs should normalize to declared snake_case IDs"
+        assert canonical["tool_name"] == "LspDiagnostics", (
+            "V2 tool IDs are exact, so variants must not become declared IDs"
         )
-        assert canonical["opencode_native_tool_name"] == "lsp_diagnostics", (
-            "native capability checks should receive the normalized tool ID"
+        assert canonical["opencode_native_tool_name"] == "LspDiagnostics", (
+            "native capability checks should receive the exact tool ID"
         )
-        assert canonical["opencode_raw_tool_name"] == "LspDiagnostics"
 
     def test_normalize_session_idle_maps_to_stop(self) -> None:
         """session.idle → Stop."""
@@ -114,22 +112,6 @@ class TestOpenCodeAdapterNormalize:
             "permission.asked not mapped to PermissionRequest"
         )
         assert canonical["tool_name"] == "Bash", "tool name not capitalized"
-
-    def test_normalize_file_edited_is_mutating(self) -> None:
-        adapter = OpenCodeAdapter()
-        raw: ObjectDict = {
-            "hook_event_name": "file.edited",
-            "path": "app.py",
-            "cwd": "/tmp",
-            "session_id": "oc-file-edited",
-        }
-        canonical = adapter.normalize_payload(raw)
-
-        assert canonical["hook_event_name"] == "PostToolUse", (
-            "file.edited should normalize to post-tool"
-        )
-        assert tool_intent(canonical) == "mutate", "file.edited should mutate"
-        assert is_mutating_tool_use(canonical), "file.edited should be mutating"
 
     def test_normalize_does_not_mutate_original(self) -> None:
         """normalize_payload must return a new dict, not modify the input."""
@@ -215,7 +197,7 @@ class TestOpenCodeAdapterIdentity:
     def test_normalize_ignores_unrelated_top_level_event_id(self) -> None:
         adapter = OpenCodeAdapter()
         raw: ObjectDict = {
-            "hook_event_name": "command.executed",
+            "hook_event_name": "session.execution.failed",
             "cwd": "/tmp",
             "session_id": "opencode-plugin-synthetic",
             "id": "evt_opaque_event_id",

@@ -2,6 +2,7 @@
   "name": "slopgate-tooling",
   "private": true,
   "devDependencies": {
+    "@opencode/plugin": "2.2.5",
     "@types/node": "^22.16.5",
     "typescript": "6.0.3"
   }

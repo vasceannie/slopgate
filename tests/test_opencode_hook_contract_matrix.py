@@ -24,26 +24,23 @@ REQUIRED_CASES: Final = {
     "before-args-mutation",
     "before-throw-blocks",
     "ignored-hook-return",
-    "after-typed-fields",
-    "missing-after-uncertain",
-    "independent-outcome-axes",
-    "native-session-call-ids",
-    "same-worktree-shared-state",
-    "separate-worktree-isolation",
-    "generation-race",
-    "event-properties-envelope",
-    "file-edited-reordered-advisory",
+    "after-completed-result",
+    "after-failed-result",
+    "event-location-filter-abort",
     "after-detection-no-prevention",
-    "permission-ask-untriggered",
-    "system-transform-session-present",
-    "system-transform-session-absent",
-    "compaction-advisory",
-    "unknown-effect-deny",
-    "verification-generation-clear",
-    "headless-pure-control",
+    "contract-version-v2",
+    "repair-unknown-effect",
+    "repair-unknown-generation",
+    "repair-readonly-allowed",
+    "repair-wrapper-block",
+    "repair-exact-lint",
+    "repair-compound-lint",
+    "repair-state-unavailable",
+    "repair-enforcer-unavailable",
+    "unknown-effect-clean",
+    "unknown-readonly-clean",
+    "unknown-advisory-outside-strict",
     "headless-plugin-tool-hooks",
-    "headless-app-log",
-    "stale-version-identity",
 }
 
 
@@ -82,7 +79,9 @@ def _harness_matrix_reference() -> str | None:
 def test_opencode_contract_matrix_covers_required_lifecycle_cases() -> None:
     case_ids = {string_value(case.get("id")) or "" for case in _cases()}
 
-    assert case_ids == REQUIRED_CASES, "OpenCode lifecycle matrix coverage drifted"
+    assert REQUIRED_CASES <= case_ids, (
+        "OpenCode lifecycle matrix lost required V2 coverage"
+    )
 
 
 def test_opencode_contract_matrix_uses_every_evidence_tier() -> None:

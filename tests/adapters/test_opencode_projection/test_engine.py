@@ -16,6 +16,7 @@ from .support import (
     write_source,
 )
 
+
 @dataclass(frozen=True)
 class _ProjectionExpectation:
     tool_input: dict[str, object]
@@ -31,25 +32,24 @@ def _required_text(value: object) -> str:
 
 _UNRESOLVED_MUTATIONS = [
     pytest.param(
-        "apply_patch",
+        "patch",
         {"patchText": "not a patch"},
         "invalid",
         "invalid",
         id="invalid-patch",
     ),
     pytest.param(
-        "ApplyPatch",
-        {"patchText": "not a patch"},
-        "invalid",
-        "invalid",
-        id="invalid-pascal-case-patch",
-    ),
-    pytest.param(
         "edit",
-        {"filePath": "missing.py"},
+        {"path": "missing.py"},
         "invalid",
         "invalid",
         id="invalid-edit",
+    ),
+    pytest.param(
+        "edit",
+        {"path": "src/app.py", "oldString": "VALUE = 1", "newString": "VALUE = 2"},
+        "protocol_mismatch",
+        "contract mismatch",
     ),
 ]
 _UNRESOLVED_MUTATION_CASES = [
@@ -147,13 +147,15 @@ def test_unresolved_mutating_projections_are_blocked(
     assert projection["status"] == expectation.expected_status, (
         "unresolved mutating projections must keep their fail-closed status"
     )
-    assert result.output is not None, "OpenCode must receive a rendered before-hook denial"
+    assert result.output is not None, (
+        "OpenCode must receive a rendered before-hook denial"
+    )
     assert result.output.get("action") == "block", (
         "unresolved mutating projections must not reach execution"
     )
-    assert any(
-        finding.rule_id == "OC-PROJECTION-001" for finding in result.findings
-    ), "the engine must inject the fail-closed projection finding"
+    assert any(finding.rule_id == "OC-PROJECTION-001" for finding in result.findings), (
+        "the engine must inject the fail-closed projection finding"
+    )
     assert expectation.reason in str(result.output.get("reason")), (
         "the denial must name the unresolved projection cause"
     )
@@ -170,9 +172,9 @@ def test_stale_edit_projection_is_blocked(
     assert result.output is not None and result.output.get("action") == "block", (
         "stale mutation projections must be blocked"
     )
-    assert any(
-        finding.rule_id == "OC-PROJECTION-001" for finding in result.findings
-    ), "stale projections must trip the fail-closed finding"
+    assert any(finding.rule_id == "OC-PROJECTION-001" for finding in result.findings), (
+        "stale projections must trip the fail-closed finding"
+    )
     assert "stale" in str(result.output.get("reason"))
     assert outside.read_text(encoding="utf-8") == "VALUE = 1\n", (
         "fail-closed projection must leave the external target unchanged"
@@ -195,9 +197,9 @@ def test_known_read_only_tools_remain_available(
     assert result.output is None or result.output.get("action") != "block", (
         "known read-only OpenCode tools must remain available"
     )
-    assert all(
-        finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
-    ), "read-only tools must not trip unresolved-projection denial"
+    assert all(finding.rule_id != "OC-PROJECTION-001" for finding in result.findings), (
+        "read-only tools must not trip unresolved-projection denial"
+    )
 
 
 @pytest.mark.parametrize("repo_config", _NON_STRICT_REPO_CONFIGS)
@@ -218,9 +220,7 @@ def test_unknown_tools_are_not_hard_denied_outside_strict_repos(
     )
 
     assert result.output is None or result.output.get("action") != "block"
-    assert all(
-        finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
-    )
+    assert all(finding.rule_id != "OC-PROJECTION-001" for finding in result.findings)
 
 
 @pytest.mark.parametrize(("tool_name", "tool_input"), _UNPROJECTED_EFFECT_TOOLS)
@@ -243,9 +243,9 @@ def test_declared_unprojected_effects_remain_available_in_clean_state(
     assert result.output is None or result.output.get("action") != "block", (
         "explicitly classified remote effects should remain available in clean state"
     )
-    assert all(
-        finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
-    ), "declared unprojected effects must not be reported as unknown mutations"
+    assert all(finding.rule_id != "OC-PROJECTION-001" for finding in result.findings), (
+        "declared unprojected effects must not be reported as unknown mutations"
+    )
 
 
 @pytest.mark.parametrize(("tool_name", "tool_input"), _UNCLASSIFIED_TOOLS)
@@ -268,9 +268,9 @@ def test_unclassified_tools_remain_available_in_clean_state(
     assert result.output is None or result.output.get("action") != "block", (
         "registry drift must not block unclassified tools while the repo is clean"
     )
-    assert all(
-        finding.rule_id != "OC-PROJECTION-001" for finding in result.findings
-    ), "clean unclassified tools must not emit projection denials"
+    assert all(finding.rule_id != "OC-PROJECTION-001" for finding in result.findings), (
+        "clean unclassified tools must not emit projection denials"
+    )
 
 
 def test_projected_write_emits_one_finding_for_one_edit(
@@ -282,7 +282,7 @@ def test_projected_write_emits_one_finding_for_one_edit(
         raw_payload(
             repo,
             "write",
-            {"filePath": "src/app.py", "content": "def broken(:\n"},
+            {"path": "src/app.py", "content": "def broken(:\n"},
         ),
         platform="opencode",
     )
@@ -293,7 +293,7 @@ def test_projected_write_emits_one_finding_for_one_edit(
     assert len(ast_findings) == 1, "one projected write must produce one AST finding"
 
 
-def test_projected_apply_patch_is_checked_as_complete_python_before_mutation(
+def test_projected_patch_is_checked_as_complete_python_before_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -307,7 +307,7 @@ def test_projected_apply_patch_is_checked_as_complete_python_before_mutation(
 *** End Patch"""
 
     result = evaluate_payload(
-        raw_payload(repo, "apply_patch", {"patchText": patch_text}),
+        raw_payload(repo, "patch", {"patchText": patch_text}),
         platform="opencode",
     )
 

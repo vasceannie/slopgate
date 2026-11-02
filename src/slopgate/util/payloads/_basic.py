@@ -134,7 +134,12 @@ def path_matches_glob(path_value: str, pattern: str) -> bool:
         )
     if "/" not in normalized_pattern:
         return fnmatch.fnmatch(basename, normalized_pattern)
-    return fnmatch.fnmatch(normalized_path, normalized_pattern)
+    if fnmatch.fnmatch(normalized_path, normalized_pattern):
+        return True
+    # fnmatch needs a literal slash here, but a leading **/ also spans zero directories.
+    return normalized_pattern.startswith("**/") and fnmatch.fnmatch(
+        normalized_path, normalized_pattern.removeprefix("**/")
+    )
 
 
 def any_path_matches(path_value: str, patterns: list[str]) -> bool:
