@@ -13,7 +13,6 @@ from slopgate.installer._install_scope import (
     ResidualInstallScopeWarning,
     warn_residual_install_scope,
 )
-import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TIMEOUT_LONG,
     HOOK_TIMEOUT_SHORT,
@@ -30,6 +29,9 @@ from slopgate.installer._shared import (
     uninstall_hooks_file,
     write_contained_json,
 )
+from slopgate.installer.native.model import HOOKS_KEY, VERSION_KEY
+from slopgate.installer.native.hook_install import prepare_native_hooks_install
+
 
 _CursorHookEntry = dict[str, object]
 _CursorHooks = dict[str, list[_CursorHookEntry]]
@@ -154,20 +156,20 @@ def _install_cursor_at(
     if site.dry_run:
         print(f"Would write: {hooks_path}")
         print(f"Binary: {binary}")
-        print(json.dumps({"version": 1, "hooks": hooks}, indent=2))
+        print(json.dumps({VERSION_KEY: 1, HOOKS_KEY: hooks}, indent=2))
         return 0
     existing: dict[str, object]
     if not hooks_path.exists():
-        existing = {"version": 1}
+        existing = {VERSION_KEY: 1}
     else:
         parsed = require_json_object(hooks_path, "Cursor hooks", action="overwrite")
         if parsed is None:
             return 1
         existing = parsed
-    existing.setdefault("version", 1)
-    existing["hooks"] = _merge_cursor_hooks(existing.get("hooks"), hooks)
+    existing.setdefault(VERSION_KEY, 1)
+    existing[HOOKS_KEY] = _merge_cursor_hooks(existing.get(HOOKS_KEY), hooks)
     try:
-        write_contained_json(hooks_path, existing, root=site.root, label="hooks")
+        write_contained_json(hooks_path, existing, root=site.root, label=HOOKS_KEY)
     except UnsafeInstallPathError as exc:
         print(str(exc))
         return 1
@@ -178,8 +180,7 @@ def _install_cursor_at(
 def install_cursor(
     dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
-    install_scope = normalize_install_scope(scope)
-    binary = slopgate.installer._shared.find_binary()
+    install_scope, binary = prepare_native_hooks_install(scope)
     hooks = cursor_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(

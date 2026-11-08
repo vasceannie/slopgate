@@ -86,7 +86,8 @@ def inert_opencode_plugins(project_root: Path | None) -> list[Path]:
         path
         for path in candidates
         if opencode_plugin_has_owned_slopgate(path)
-        and _PLUGIN_V2_ENTRYPOINT not in path.read_text(encoding="utf-8", errors=REPLACE)
+        and _PLUGIN_V2_ENTRYPOINT
+        not in path.read_text(encoding="utf-8", errors=REPLACE)
     ]
 
 
@@ -242,6 +243,7 @@ def install_opencode(
         print(f"OpenCode plugin template not found at {template}")
         return 1
     binary = slopgate.installer._shared.find_binary()
+    print("Installation mode: auto-discovered plugin (not a native package install)")
     root = resolve_project_root(project_root)
     user_target = opencode_user_plugin_path()
     paths = resolve_scoped_install_paths(

@@ -14,6 +14,7 @@ class ContainedWrite:
     root: Path
     label: str
     backup: bool = True
+    exact_newlines: bool = False
 
 
 @dataclass(frozen=True, slots=True)

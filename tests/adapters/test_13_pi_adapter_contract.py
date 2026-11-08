@@ -10,32 +10,9 @@ from slopgate.constants import POST_TOOL_USE, PRE_TOOL_USE
 from tests.test_adapters import RuleFinding, Severity, require_rendered, support
 
 _PI_FAILURE_CASES: Final = (
-    pytest.param("tool_result", {"isError": True}, id="top-level-is-error"),
-    pytest.param(
-        "tool_execution_end",
-        {"details": {"exitCode": 2}},
-        id="top-level-exit-code",
-    ),
-    pytest.param(
-        "tool_result",
-        {"details": {"exit_code": 2}},
-        id="top-level-exit-code-alias",
-    ),
-    pytest.param(
-        "tool_result",
-        {"pi_event": {"isError": True}},
-        id="nested-is-error",
-    ),
-    pytest.param(
-        "tool_execution_end",
-        {"pi_event": {"details": {"exitCode": 2}}},
-        id="nested-exit-code",
-    ),
-    pytest.param(
-        "tool_result",
-        {"pi_event": {"details": {"exit_code": 2}}},
-        id="nested-exit-code-alias",
-    ),
+    pytest.param({"isError": True}, id="top-level-is-error"),
+    pytest.param({"details": {"exitCode": 2}}, id="top-level-exit-code"),
+    pytest.param({"details": {"exit_code": 2}}, id="top-level-exit-code-alias"),
 )
 
 
@@ -101,17 +78,13 @@ def test_pi_normalizes_transcript_style_tool_arguments() -> None:
     }, "Pi transcript arguments must normalize to tool_input"
 
 
-@pytest.mark.parametrize(
-    ("raw_event", "failure_fields"),
-    _PI_FAILURE_CASES,
-)
-def test_pi_failed_tool_events_map_to_post_tool_use_failure(
-    raw_event: str,
+@pytest.mark.parametrize("failure_fields", _PI_FAILURE_CASES)
+def test_pi_failed_tool_results_map_to_post_tool_use_failure(
     failure_fields: ObjectDict,
 ) -> None:
     payload = PiAdapter().normalize_payload(
         {
-            "hook_event_name": raw_event,
+            "hook_event_name": "tool_result",
             "tool_name": "bash",
             "tool_result": {"stdout": "failed"},
             **failure_fields,
@@ -125,9 +98,9 @@ def test_pi_failed_tool_events_map_to_post_tool_use_failure(
 def test_pi_zero_exit_maps_to_post_tool_use() -> None:
     payload = PiAdapter().normalize_payload(
         {
-            "hook_event_name": "tool_execution_end",
+            "hook_event_name": "tool_result",
             "tool_result": {"stdout": "done"},
-            "pi_event": {"details": {"exitCode": 0}},
+            "details": {"exitCode": 0},
         }
     )
     assert payload["hook_event_name"] == POST_TOOL_USE, (
@@ -146,11 +119,32 @@ def test_pi_premapped_post_tool_events_pass_through(canonical_event: str) -> Non
     payload = PiAdapter().normalize_payload(
         {
             "hook_event_name": canonical_event,
-            "pi_event": {"isError": True, "details": {"exitCode": 2}},
+            "isError": True,
+            "details": {"exitCode": 2},
         }
     )
     assert payload["hook_event_name"] == canonical_event, (
         "Pi canonical post-tool events must pass through unchanged"
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw_event", "canonical_event"),
+    [
+        pytest.param("session_start", "SessionStart", id="startup"),
+        pytest.param("before_agent_start", "before_agent_start", id="run-preparation"),
+        pytest.param(
+            "tool_execution_end", "tool_execution_end", id="execution-notification"
+        ),
+    ],
+)
+def test_pi_session_start_is_only_native_startup(
+    raw_event: str, canonical_event: str
+) -> None:
+    payload = PiAdapter().normalize_payload({"hook_event_name": raw_event})
+    assert payload["hook_event_name"] == canonical_event, (
+        "Pi startup is the native session_start event; run preparation and "
+        "execution notifications must not alias to canonical lifecycle events"
     )
 
 
@@ -212,7 +206,7 @@ def test_pi_context_only_returns_context() -> None:
     assert output == {"context": "remember local rules"}
 
 
-def test_pi_posttool_block_is_advisory_context_only() -> None:
+def test_pi_posttool_block_reports_reason_and_context_for_native_result() -> None:
     output = PiAdapter().render_output(
         POST_TOOL_USE,
         [
@@ -229,15 +223,38 @@ def test_pi_posttool_block_is_advisory_context_only() -> None:
         context="inspect the result",
         updated_input={},
     )
-    assert output == {
-        "context": "inspect the result",
-        "tool_result_patch": {
-            "details": {
-                "slopgate": {
-                    "decision": "block",
-                    "context": "inspect the result",
-                    "reason": None,
-                }
+    rendered = require_rendered(output)
+    reason = support.required_string(rendered, "reason")
+    assert "post tool finding" in reason
+    assert rendered["context"] == "inspect the result"
+    assert rendered["tool_result_patch"] == {
+        "details": {
+            "slopgate": {
+                "decision": "block",
+                "context": "inspect the result",
+                "reason": reason,
             }
-        },
+        }
     }
+    assert "block" not in rendered, "post-tool findings cannot roll back execution"
+
+
+def test_pi_post_tool_failure_renders_like_success() -> None:
+    output = PiAdapter().render_output(
+        "PostToolUseFailure",
+        [
+            RuleFinding(
+                rule_id="PI-POST-FAIL",
+                title="Pi failed post tool",
+                severity=Severity.HIGH,
+                decision="block",
+                message="failure finding",
+            )
+        ],
+        decision="block",
+        context=None,
+        updated_input={},
+    )
+    rendered = require_rendered(output)
+    assert "failure finding" in support.required_string(rendered, "reason")
+    assert "tool_result_patch" in rendered

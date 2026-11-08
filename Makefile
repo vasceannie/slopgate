@@ -1,4 +1,4 @@
-.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump quality test gitnexus-analyze-dankbox ci
+.PHONY: dashboard-api dashboard-dev dashboard-build dashboard-build-local dashboard-build-ssh dashboard-prod publish bump quality test gitnexus-analyze-dankbox ci harness-drift
 
 SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
@@ -106,6 +106,10 @@ quality:
 
 test:
 	uv run slopgate test
+
+# Report harness releases ahead of the versions Slopgate declares it targets (never fails on drift).
+harness-drift:
+	uv run python scripts/harness_target_drift.py
 
 gitnexus-analyze-dankbox:
 	@ssh '$(DANKBOX_SSH)' "wsl.exe sh -lc 'cd $(DANKBOX_WSL_GITNEXUS_DIR) && docker compose exec -T gitnexus-server sh -lc \"gitnexus analyze /sources/slopgate --embeddings 0 --pdg --embedding-base-url http://llm.toy/v1 --embedding-model qwen3-embedding:0.6b --embedding-dims 1024 --index-only\"'"

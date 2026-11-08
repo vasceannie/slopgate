@@ -130,7 +130,7 @@ beforeEach(async () => {
 	temporaryRoot = await createTemporaryRoot("slopgate-omp-real-cli-");
 	setIsolatedEnvironment(temporaryRoot, `omp-real-${crypto.randomUUID()}`);
 	recordPath = await createRecordPath(temporaryRoot, "stdin.json");
-	harness = await createRuntimeHarness();
+	harness = await createRuntimeHarness({ withUI: true });
 	await harness.runner.emit({ type: "session_start" });
 });
 
@@ -219,7 +219,7 @@ slopgate.engine.evaluate_payload = synthetic_evaluate
 	test("displays one STOP-002 reminder after a code change without continuing the session", async () => {
 		// Given
 		const activeHarness = requireHarness();
-		const before = activeHarness.sentMessages.length;
+		const before = activeHarness.notifications.length;
 		const response = assistantTextMessage("Implemented the requested change and verified it.");
 		await activeHarness.runner.emitToolResult({
 			type: "tool_result",
@@ -234,7 +234,7 @@ slopgate.engine.evaluate_payload = synthetic_evaluate
 		const result = await emitStop(activeHarness, { lastMessage: response });
 		const ruleIds = await readRuleIds(requireTemporaryRoot());
 		const settled = await emitStop(activeHarness, { active: true, lastMessage: response });
-		const displayed = activeHarness.sentMessages.slice(before);
+		const displayed = activeHarness.notifications.slice(before);
 
 		// Then
 		expect(result).toBeUndefined();
@@ -242,18 +242,19 @@ slopgate.engine.evaluate_payload = synthetic_evaluate
 		expect(settled).toBeUndefined();
 		expect(displayed).toHaveLength(1);
 		expect(displayed[0]).toContain("slopgate lint check");
+		expect(activeHarness.sendMessageCalls).toBe(0);
 	}, 30000);
 
 	test("skips STOP-002 for a session without code changes", async () => {
 		// Given
 		const activeHarness = requireHarness();
-		const before = activeHarness.sentMessages.length;
+		const before = activeHarness.notifications.length;
 		const response = assistantTextMessage("Answered the question without touching code.");
 
 		// When
 		const result = await emitStop(activeHarness, { lastMessage: response });
 		const ruleIds = await readRuleIds(requireTemporaryRoot());
-		const displayed = activeHarness.sentMessages.slice(before);
+		const displayed = activeHarness.notifications.slice(before);
 
 		// Then
 		expect(result).toBeUndefined();

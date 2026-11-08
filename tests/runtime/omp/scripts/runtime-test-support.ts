@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -15,6 +16,7 @@ type StopOptions = {
 	readonly active?: boolean;
 	readonly lastMessage?: AgentMessage;
 	readonly sessionId?: string;
+	readonly signal?: AbortSignal;
 	readonly turnId?: number;
 };
 
@@ -36,6 +38,11 @@ export function configureFakeResponse(response: Readonly<Record<string, unknown>
 	delete process.env.SLOPGATE_FAKE_RECORD_PATH;
 }
 
+export function configureFakeMode(mode: "hang" | "ignore-stdin" | undefined): void {
+	if (mode === undefined) delete process.env.SLOPGATE_FAKE_MODE;
+	else process.env.SLOPGATE_FAKE_MODE = mode;
+}
+
 export function configureFakeFailure(stdout: string, exitCode = 0): void {
 	process.env.SLOPGATE_FAKE_STDOUT = stdout;
 	process.env.SLOPGATE_FAKE_EXIT_CODE = String(exitCode);
@@ -53,6 +60,10 @@ export function clearRuntimeEnvironment(): void {
 		"SLOPGATE_BIN",
 		"SLOPGATE_SESSION_ID",
 		"SLOPGATE_OMP_INPUT_REWRITE",
+		"SLOPGATE_ENFORCER_TIMEOUT_MS",
+		"SLOPGATE_FAKE_LOG_PATH",
+		"SLOPGATE_FAKE_MODE",
+		"SLOPGATE_FAKE_PIDS_PATH",
 		"SLOPGATE_FAKE_RESPONSE",
 		"SLOPGATE_FAKE_STDOUT",
 		"SLOPGATE_FAKE_EXIT_CODE",
@@ -71,6 +82,16 @@ export async function createRecordPath(root: string, name: string): Promise<stri
 	const recordPath = path.join(root, name);
 	process.env.SLOPGATE_FAKE_RECORD_PATH = recordPath;
 	return recordPath;
+}
+
+export function configureInvocationLog(logPath: string | undefined): void {
+	if (logPath === undefined) delete process.env.SLOPGATE_FAKE_LOG_PATH;
+	else process.env.SLOPGATE_FAKE_LOG_PATH = logPath;
+}
+
+export async function readInvocationLog(logPath: string): Promise<readonly string[]> {
+	if (!(await Bun.file(logPath).exists())) return [];
+	return (await Bun.file(logPath).text()).split("\n").filter(line => line.length > 0);
 }
 
 export async function readRecordedPayload(recordPath: string): Promise<Readonly<Record<string, unknown>>> {
@@ -127,7 +148,7 @@ export async function emitStop(harness: RuntimeHarness, options: StopOptions = {
 	return await harness.runner.emitSessionStop({
 		messages: [],
 		session_id: options.sessionId ?? harness.sessionManager.getSessionId(),
-		signal: new AbortController().signal,
+		signal: options.signal ?? new AbortController().signal,
 		stop_hook_active: options.active ?? false,
 		turn_id: options.turnId ?? 1,
 		...(options.lastMessage === undefined ? {} : { last_assistant_message: options.lastMessage }),
@@ -195,4 +216,46 @@ export async function requestContinuations(harness: RuntimeHarness, count: numbe
 	const flags = await collectContinuationFlags(harness, count);
 	const missingIndex = flags.findIndex(flag => !flag);
 	if (missingIndex >= 0) throw new ContractFixtureError(`Continuation ${missingIndex + 1} was not requested`);
+}
+
+
+const FILE_POLL_INTERVAL_MS = 5;
+const FILE_WAIT_DEADLINE_MS = 20_000;
+const PROCESS_STATE_ZOMBIE = "Z";
+
+export type HangingPids = { readonly child: number; readonly grandchild: number };
+
+/** Barrier: resolves once the fake enforcer has published its pid file. */
+export async function waitForFile(filePath: string): Promise<void> {
+	const deadline = Date.now() + FILE_WAIT_DEADLINE_MS;
+	while (!(await Bun.file(filePath).exists())) {
+		if (Date.now() > deadline) throw new ContractFixtureError(`Barrier file never appeared: ${filePath}`);
+		await Bun.sleep(FILE_POLL_INTERVAL_MS);
+	}
+}
+
+export async function readHangingPids(pidsPath: string): Promise<HangingPids> {
+	await waitForFile(pidsPath);
+	const parsed = await readRecordedPayload(pidsPath);
+	const { child, grandchild } = parsed;
+	if (typeof child !== "number" || typeof grandchild !== "number") {
+		throw new ContractFixtureError("Pid barrier file is malformed");
+	}
+	return { child, grandchild };
+}
+
+/** A zombie awaiting its parent's wait counts as dead: the process no longer runs. */
+export function isProcessAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+	} catch {
+		return false;
+	}
+	try {
+		const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+		const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
+		return state !== PROCESS_STATE_ZOMBIE;
+	} catch {
+		return true;
+	}
 }

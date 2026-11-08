@@ -4,6 +4,10 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { registerExtensionDeliveryContractTests } from "./scripts/extension-delivery-contract.ts";
+import { registerExtensionEnforcerContractTests } from "./scripts/extension-enforcer-contract.ts";
+import { registerExtensionPackageGuardContractTests } from "./scripts/extension-package-guard-contract.ts";
+import { registerExtensionSessionContractTests } from "./scripts/extension-session-contract.ts";
 import { registerExtensionLifecycleContractTests } from "./scripts/extension-lifecycle-contract.ts";
 import { registerExtensionToolContractTests } from "./scripts/extension-tool-contract.ts";
 import { assertCaptureDirectoriesEqual, captureEnvelopes } from "./scripts/envelope-capture.ts";
@@ -170,3 +174,7 @@ describe("Todo 6 workspace contract", () => {
 
 registerExtensionToolContractTests();
 registerExtensionLifecycleContractTests();
+registerExtensionDeliveryContractTests();
+registerExtensionSessionContractTests();
+registerExtensionEnforcerContractTests();
+registerExtensionPackageGuardContractTests();

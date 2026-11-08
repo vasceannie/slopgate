@@ -1,0 +1,45 @@
+#!/usr/bin/env bun
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { appendFile, rename, writeFile } from "node:fs/promises";
+
+const mode = process.env.SLOPGATE_PI_FAKE_MODE ?? "response";
+if (mode === "early-exit") process.exit(0);
+
+const raw = await Bun.stdin.text();
+const recordPath = process.env.SLOPGATE_PI_RECORD_PATH;
+if (recordPath !== undefined) await appendFile(recordPath, `${raw}\n`);
+const realBinary = process.env.SLOPGATE_PI_FAKE_REAL_BIN;
+if (realBinary !== undefined) {
+  const child = Bun.spawn([realBinary, ...process.argv.slice(2)], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdin: new Blob([raw]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+  ]);
+  process.stdout.write(new Uint8Array(stdout));
+  process.stderr.write(new Uint8Array(stderr));
+  process.exitCode = exitCode;
+} else if (mode === "hang") {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"], { stdio: "ignore" });
+  const childPidPath = process.env.SLOPGATE_PI_CHILD_PID_PATH;
+  if (childPidPath !== undefined && child.pid !== undefined) {
+    const temporaryPath = `${childPidPath}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporaryPath, String(child.pid), "utf8");
+    await rename(temporaryPath, childPidPath);
+  }
+  await new Promise<void>(() => {});
+} else if (mode === "invalid") {
+  process.stdout.write("{not-json");
+} else if (mode === "nonzero") {
+  process.stderr.write("PRIVATE_CHILD_STDERR\n");
+  process.exitCode = Number(process.env.SLOPGATE_PI_FAKE_EXIT_CODE ?? "7");
+} else if (mode !== "empty") {
+  process.stdout.write(process.env.SLOPGATE_PI_FAKE_RESPONSE ?? "{}");
+}

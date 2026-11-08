@@ -83,6 +83,33 @@ def test_user_platform_dirs_respect_xdg_config_home(
     }
 
 
+def test_windows_user_data_dir_prefers_local_appdata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    local_root = tmp_path / "local-appdata"
+    roaming_root = tmp_path / "appdata"
+    monkeypatch.setattr(platform, "is_windows", lambda: True)
+    monkeypatch.setenv("LOCALAPPDATA", str(local_root))
+    monkeypatch.setenv("APPDATA", str(roaming_root))
+
+    assert user_data_dir("slopgate-test") == local_root / "slopgate-test", (
+        "Windows user data should prefer LOCALAPPDATA when both roots are configured"
+    )
+
+
+def test_windows_user_data_dir_falls_back_to_appdata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roaming_root = tmp_path / "appdata"
+    monkeypatch.setattr(platform, "is_windows", lambda: True)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setenv("APPDATA", str(roaming_root))
+
+    assert user_data_dir("slopgate-test") == roaming_root / "slopgate-test", (
+        "Windows user data should fall back to APPDATA without LOCALAPPDATA"
+    )
+
+
 @pytest.mark.parametrize(
     ("tool_name", "expected"),
     [

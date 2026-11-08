@@ -87,24 +87,25 @@ export function registerExtensionToolContractTests(): void {
 		const temporaryPaths: string[] = [];
 		let harness: RuntimeHarness | undefined;
 
-		beforeAll(async () => {
+		beforeAll(() => {
 			configureRuntimeEnvironment();
-			harness = await createRuntimeHarness();
 		});
 
+		// Startup runs once per session identity, so each test owns a fresh session.
 		beforeEach(async () => {
 			configureFakeResponse({});
 			process.env.SLOPGATE_SESSION_ID = FIXED_SESSION_ID;
 			delete process.env.SLOPGATE_OMP_INPUT_REWRITE;
-			await requireHarness(harness).runner.emit({ type: "session_start" });
+			harness = await createRuntimeHarness();
 		});
 
 		afterEach(async () => {
+			await harness?.close();
+			harness = undefined;
 			await Promise.all(temporaryPaths.splice(0).map(root => rm(root, { recursive: true, force: true })));
 		});
 
-		afterAll(async () => {
-			await harness?.close();
+		afterAll(() => {
 			clearRuntimeEnvironment();
 		});
 
@@ -118,6 +119,7 @@ export function registerExtensionToolContractTests(): void {
 			const activeHarness = requireHarness(harness);
 			await activeHarness.runner.emit({ type: "session_start" });
 			const payload = await readRecordedPayload(recordPath);
+			const native = Object.keys(payload);
 
 			// Then
 			expect(payload).toMatchObject({
@@ -127,6 +129,8 @@ export function registerExtensionToolContractTests(): void {
 				tool_call_id: "",
 				tool_name: "",
 			});
+			expect(native).not.toContain("omp_event");
+			expect(native).not.toContain("tool_response");
 			expect(path.resolve(activeHarness.runner.cwd)).toBe(WORKSPACE_ROOT);
 		}, 30000);
 
@@ -196,17 +200,24 @@ export function registerExtensionToolContractTests(): void {
 		// Then
 		expect({
 			executions: activeHarness.bashTool.observedExecutions.slice(executionStart),
-			observedEvent: payload.omp_event,
+			classified: {
+				event: payload.hook_event_name,
+				toolName: payload.tool_name,
+				toolCallId: payload.tool_call_id,
+				nativeInput: payload.input,
+			},
+			legacy: ["omp_event", "tool_response"].filter(key => key in payload),
 			normalized: payload.tool_input,
 			outcome,
 		}).toEqual({
 			executions: [original],
-			observedEvent: {
-				type: "tool_call",
-				toolCallId: "returned-env-member-fixed",
+			classified: {
+				event: "tool_call",
 				toolName: "bash",
-				input: original,
+				toolCallId: "returned-env-member-fixed",
+				nativeInput: original,
 			},
+			legacy: [],
 			normalized: original,
 			outcome: { input: original, kind: "executed", rewriteApplied: false },
 		});
@@ -243,17 +254,24 @@ export function registerExtensionToolContractTests(): void {
 		// Then
 		expect({
 			executions: activeHarness.bashTool.observedExecutions.slice(executionStart),
-			observedEvent: payload.omp_event,
+			classified: {
+				event: payload.hook_event_name,
+				toolName: payload.tool_name,
+				toolCallId: payload.tool_call_id,
+				nativeInput: payload.input,
+			},
+			legacy: ["omp_event", "tool_response"].filter(key => key in payload),
 			normalized: payload.tool_input,
 			outcome,
 		}).toEqual({
 			executions: [original],
-			observedEvent: {
-				type: "tool_call",
-				toolCallId: "observed-non-object-fixed",
+			classified: {
+				event: "tool_call",
 				toolName: "bash",
-				input: original,
+				toolCallId: "observed-non-object-fixed",
+				nativeInput: original,
 			},
+			legacy: [],
 			normalized: {},
 			outcome: { input: original, kind: "executed", rewriteApplied: false },
 		});

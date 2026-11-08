@@ -1,20 +1,22 @@
 from __future__ import annotations
-import pytest
-import plistlib
+
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
+
 import slopgate.installer._suite
-from slopgate.installer.suite import autoupdate
 from slopgate.cli.commands import cmd_install_suite, cmd_uninstall, cmd_update_suite
 from slopgate.cli.parsers import build_parser
-from slopgate.constants import PLATFORM_CLAUDE
+from slopgate.installer.suite import autoupdate
+from tests.native.hosts import FakeHosts, tree_digest
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
 
 WINDOWS_SLOPGATE_EXE = "C:\\Tools\\slopgate.exe"
 
 
-def _patch_linux_installer_config_dirs(
+def patch_linux_installer_config_dirs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> Path:
     config_home = tmp_path / ".config"
@@ -129,51 +131,11 @@ def test_update_suite_parser_keeps_platform_choices_out_of_hook_platforms() -> N
 
 
 @SKIP_LINUX_ONLY
-def test_discover_install_sites_respects_current_device_home(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
-    (tmp_path / ".claude").mkdir()
-    (tmp_path / ".config" / "opencode").mkdir(parents=True)
-    sites = slopgate.installer._suite.discover_install_sites()
-    all_sites = slopgate.installer._suite.discover_install_sites(include_missing=True)
-    assert (
-        [(site.platform, site.present) for site in sites],
-        [site.platform for site in all_sites],
-        next(site.path for site in all_sites if site.platform == "pi"),
-        next(site.path for site in all_sites if site.platform == "omp"),
-    ) == (
-        [(PLATFORM_CLAUDE, True), ("opencode", True)],
-        [PLATFORM_CLAUDE, "codex", "opencode", "cursor", "pi", "omp"],
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
-        tmp_path / ".omp" / "agent" / "extensions" / "omp-slopgate" / "index.ts",
-    )
-
-
-@SKIP_WINDOWS_ONLY
-def test_discover_install_sites_respects_windows_appdata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    appdata = tmp_path / "AppData" / "Roaming"
-    monkeypatch.setenv("APPDATA", str(appdata))
-    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    (tmp_path / ".claude").mkdir()
-    (appdata / "opencode").mkdir(parents=True)
-    sites = slopgate.installer._suite.discover_install_sites()
-    assert [(site.platform, site.present) for site in sites] == [
-        (PLATFORM_CLAUDE, True),
-        ("opencode", True),
-    ]
-
-
-@SKIP_LINUX_ONLY
 def test_linux_scheduler_plan_uses_systemd_user_timer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    config_home = patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: "/tmp/slopgate bin"
     )
@@ -252,7 +214,7 @@ def test_scheduler_plan_falls_back_to_python_module_invocation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: sys.executable
     )
@@ -268,9 +230,11 @@ def test_default_scheduler_plan_tracks_canonical_master_branch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        slopgate.installer._suite, "find_binary", lambda: "/home/trav/.local/bin/slopgate"
+        slopgate.installer._suite,
+        "find_binary",
+        lambda: "/home/trav/.local/bin/slopgate",
     )
     plan = slopgate.installer._suite.build_scheduler_plan()
     assert "git+https://github.com/vasceannie/slopgate.git@master" in plan.content
@@ -291,31 +255,11 @@ def test_scheduler_plan_rejects_newline_source_for_systemd_units(
         )
 
 
-@SKIP_DARWIN_ONLY
-def test_macos_scheduler_plan_escapes_plist_arguments(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(slopgate.installer._suite, "is_windows", lambda: False)
-    monkeypatch.setattr(slopgate.installer._suite.sys, "platform", "darwin")
-    monkeypatch.setattr(
-        slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
-    )
-    plan = slopgate.installer._suite.build_scheduler_plan(
-        "git+https://example.invalid/vf.git?x=1&y=<two>"
-    )
-    parsed = plistlib.loads(plan.content.encode("utf-8"))
-    assert (
-        parsed["ProgramArguments"][-1]
-        == "git+https://example.invalid/vf.git?x=1&y=<two>"
-    )
-
-
 def linux_autoupdate_units(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, Path]:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    config_home = patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     service = config_home / "systemd/user/slopgate-auto-update.service"
     timer = config_home / "systemd/user/slopgate-auto-update.timer"
     service.parent.mkdir(parents=True)
@@ -330,4 +274,46 @@ def macos_autoupdate_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(autoupdate.sys, "platform", "darwin")
     monkeypatch.setattr(
         slopgate.installer._suite, "find_binary", lambda: "/usr/local/bin/slopgate"
+    )
+
+
+def test_install_suite_dry_run_installs_detected_sites_without_writing(
+    native_hosts: FakeHosts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (native_hosts.home / ".codex").mkdir()
+    before = tree_digest(native_hosts.home)
+    status = slopgate.installer.install_suite(
+        slopgate.installer.SuiteInstallOptions(dry_run=True)
+    )
+    output = capsys.readouterr().out
+    assert status == 0, "suite dry-run should report a successful preview"
+    assert (
+        "Installing codex (native hooks (not a registered plugin); user scope)"
+        in output
+    )
+    assert "Installing claude (native plugin; user scope)" in output
+    assert tree_digest(native_hosts.home) == before, (
+        "suite dry-run must not alter host settings or native staging"
+    )
+    assert native_hosts.mutating_calls() == [], (
+        "suite dry-run must not invoke mutating native manager commands"
+    )
+
+
+def test_uninstall_suite_dry_run_reports_detected_sites_without_writing(
+    native_hosts: FakeHosts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (native_hosts.home / ".claude").mkdir()
+    before = tree_digest(native_hosts.home)
+    status = slopgate.installer.uninstall_suite(
+        slopgate.installer.SuiteUninstallOptions(dry_run=True)
+    )
+    output = capsys.readouterr().out
+    assert status == 0, "suite uninstall dry-run should report a successful preview"
+    assert "Uninstalling claude (native plugin; user scope)" in output
+    assert tree_digest(native_hosts.home) == before, (
+        "suite uninstall dry-run must not alter host settings or native staging"
+    )
+    assert native_hosts.mutating_calls() == [], (
+        "suite uninstall dry-run must not invoke mutating native manager commands"
     )

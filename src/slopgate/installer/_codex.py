@@ -14,7 +14,6 @@ from slopgate.installer._install_scope import (
     scope_paths,
     warn_residual_install_scope,
 )
-import slopgate.installer._shared
 from slopgate.installer._shared import (
     HOOK_TYPE_COMMAND,
     ContainedWrite,
@@ -34,6 +33,9 @@ from slopgate.installer._shared import (
     write_contained_json,
     write_contained_text,
 )
+from slopgate.installer.native.model import HOOKS_KEY
+from slopgate.installer.native.hook_install import prepare_native_hooks_install
+
 
 __all__ = ["install_codex", "uninstall_codex"]
 _CodeHookMeta = dict[str, str | int]
@@ -90,7 +92,7 @@ def codex_hooks_block(binary: str) -> _CodeHooks:
             "type": HOOK_TYPE_COMMAND,
             METADATA_COMMAND: command,
         }
-        entry: _CodeHookEntry = {"hooks": [command_entry]}
+        entry: _CodeHookEntry = {HOOKS_KEY: [command_entry]}
         matcher = meta.get("matcher")
         if isinstance(matcher, str):
             entry["matcher"] = matcher
@@ -176,7 +178,7 @@ def _replace_legacy_codex_hooks_flag(
     match = _CODEX_HOOKS_RE.match(lines[first_index])
     if match:
         lines[first_index] = (
-            f"{match.group(1)}hooks{match.group(2)}true{match.group(3)}"
+            f"{match.group(1)}{HOOKS_KEY}{match.group(2)}true{match.group(3)}"
         )
     _drop_lines(lines, codex_hooks_indexes[1:])
 
@@ -236,7 +238,7 @@ def _install_codex_at(
     if isinstance(prepared, int):
         return prepared
     try:
-        write_contained_json(hooks_path, prepared, root=site.root, label="hooks")
+        write_contained_json(hooks_path, prepared, root=site.root, label=HOOKS_KEY)
         if config_path.exists() and not config_path.is_symlink():
             backup_existing_file_and_report(config_path, "config")
         enable_codex_hooks_toml(config_path, root=site.root)
@@ -254,8 +256,7 @@ def _install_codex_at(
 def install_codex(
     dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
-    install_scope = normalize_install_scope(scope)
-    binary = slopgate.installer._shared.find_binary()
+    install_scope, binary = prepare_native_hooks_install(scope)
     hooks = codex_hooks_block(binary)
     root = resolve_project_root(project_root)
     paths = scope_paths(

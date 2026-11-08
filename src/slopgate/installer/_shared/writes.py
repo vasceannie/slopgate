@@ -42,13 +42,17 @@ def _ensure_real_parent_dirs(target: Path, root: Path) -> None:
             )
 
 
-def _replace_text_atomically(target: Path, content: str) -> None:
+def _replace_text_atomically(
+    target: Path, content: str, *, exact_newlines: bool
+) -> None:
     parent = target.parent
     fd, tmp_name = tempfile.mkstemp(
         prefix=".slopgate-write-", suffix=".tmp", dir=str(parent)
     )
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        # newline="" keeps LF as LF so bytes on disk equal the UTF-8 that was hashed.
+        newline = "" if exact_newlines else None
+        with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as handle:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
@@ -69,7 +73,7 @@ def write_contained_text(target: Path, content: str, write: ContainedWrite) -> P
     _ensure_real_parent_dirs(safe_target, write.root)
     if write.backup:
         backup_existing_file_and_report(safe_target, write.label)
-    _replace_text_atomically(safe_target, content)
+    _replace_text_atomically(safe_target, content, exact_newlines=write.exact_newlines)
     return safe_target
 
 

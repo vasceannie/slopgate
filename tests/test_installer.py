@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 import tomli
+import pytest
 from pytest import CaptureFixture, MonkeyPatch
 import slopgate.installer
 import slopgate.installer._shared
@@ -16,6 +17,8 @@ from slopgate._types import (
     object_list,
     string_value,
 )
+
+pytestmark = pytest.mark.usefixtures("native_hosts")
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,26 +224,38 @@ def test_codex_install_writes_hooks_and_toml_feature(
     }
 
 
+def _claude_settings_refusal_observation(
+    tmp_path: Path, monkeypatch: MonkeyPatch, document: str
+) -> tuple[int, str]:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    config_root = tmp_path / ".claude"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config_root))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / ".pi" / "agent"))
+    settings_path = config_root / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(document, encoding="utf-8")
+    status = slopgate.installer.install_claude(dry_run=False)
+    return status, settings_path.read_text(encoding="utf-8")
+
+
 def test_claude_install_refuses_invalid_existing_json(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text("{not-json", encoding="utf-8")
-    assert slopgate.installer.install_claude(dry_run=False) == 1
-    assert settings_path.read_text(encoding="utf-8") == "{not-json"
+    status, content = _claude_settings_refusal_observation(
+        tmp_path, monkeypatch, "{not-json"
+    )
+
+    assert status == 1, "Claude install must refuse invalid existing settings JSON"
+    assert content == "{not-json", "invalid Claude settings must remain byte-identical"
 
 
 def test_claude_install_refuses_non_object_existing_json(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text("[]", encoding="utf-8")
-    assert slopgate.installer.install_claude(dry_run=False) == 1
-    assert settings_path.read_text(encoding="utf-8") == "[]"
+    status, content = _claude_settings_refusal_observation(tmp_path, monkeypatch, "[]")
+
+    assert status == 1, "Claude install must refuse non-object existing settings JSON"
+    assert content == "[]", "non-object Claude settings must remain byte-identical"
 
 
 def test_codex_install_refuses_invalid_existing_hooks_json(

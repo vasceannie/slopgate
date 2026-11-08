@@ -39,3 +39,6 @@ headroom_memory.db
 docs/plans/
 .migration-backup/
 .qwen/tmp/
+
+# CI-local tool cache
+.ci/

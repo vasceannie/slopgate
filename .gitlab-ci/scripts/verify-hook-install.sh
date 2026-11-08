@@ -8,7 +8,19 @@ platform="$1"
 
 case "$platform" in
   claude)
-    config="$HOME/.claude/settings.json"
+    # Claude installs as a native plugin (registered via `claude plugin`),
+    # not as hook entries in settings.json.
+    if claude plugin list --json | python3 -c '
+import json, sys
+plugins = json.load(sys.stdin)
+match = [p for p in plugins if p.get("id") == "slopgate-enforcement@slopgate-runtime"]
+print(f"claude: {len(match)} slopgate plugin(s) registered")
+sys.exit(0 if match and all(p.get("enabled") for p in match) else 1)
+'; then
+      exit 0
+    fi
+    echo "ERROR: slopgate-enforcement plugin not registered/enabled in Claude"
+    exit 1
     ;;
   codex)
     config="$HOME/.codex/hooks.json"

@@ -4,11 +4,9 @@ Pi events and their canonical mapping:
   tool_call (write/edit/bash)  →  PreToolUse
   tool_result (success)        →  PostToolUse
   tool_result (failure)        →  PostToolUseFailure
-  tool_execution_end (success) →  PostToolUse
-  tool_execution_end (failure) →  PostToolUseFailure
   user_bash                    →  PreToolUse
   input                        →  UserPromptSubmit
-  before_agent_start           →  SessionStart
+  session_start                →  SessionStart
   turn_end                     →  TurnEnd
   agent_end                    →  Stop
 """
@@ -17,18 +15,20 @@ from __future__ import annotations
 
 from typing_extensions import override
 
-from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
+from slopgate._types import ObjectDict, ObjectMapping, string_value
 from slopgate.adapters._payload_fields import (
     canonical_event_name,
     canonical_payload_with_event,
     merge_standard_session_fields,
     sync_tool_result_fields,
+    tool_result_failed,
 )
 from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.adapters.base import PlatformAdapter, render_request_from_call
 from slopgate.adapters.omp import (
     USER_PROMPT_SUBMIT,
     _canonical_tool_name,
+    render_post_tool,
     _sync_tool_input,
     _sync_user_bash_command,
 )
@@ -36,7 +36,6 @@ from slopgate.constants import (
     ASK,
     BLOCK,
     DENY,
-    METADATA_SLOPGATE,
     METADATA_TOOL_NAME,
     PERMISSION_REQUEST,
     POST_TOOL_USE,
@@ -51,7 +50,7 @@ PI_EVENT_NAMES: set[str] = {
     PERMISSION_REQUEST,  # (not directly used by pi)
     POST_TOOL_USE,  # tool_result → PostToolUse (success)
     "PostToolUseFailure",  # failed post-tool execution
-    SESSION_START,  # before_agent_start
+    SESSION_START,  # session_start
     USER_PROMPT_SUBMIT,  # input
     STOP,  # agent_end
     "TurnEnd",  # turn_end
@@ -61,12 +60,12 @@ _PI_EVENT_ALIASES: dict[str, str] = {
     "tool_call": PRE_TOOL_USE,
     "user_bash": PRE_TOOL_USE,
     "tool_result": POST_TOOL_USE,
-    "tool_execution_end": POST_TOOL_USE,
     "input": USER_PROMPT_SUBMIT,
-    "before_agent_start": SESSION_START,
+    "session_start": SESSION_START,
     "turn_end": "TurnEnd",
     "agent_end": STOP,
 }
+
 
 def _canonical_event_name(raw: ObjectMapping) -> str:
     """Map the Pi event and post-tool failure signals to a canonical event."""
@@ -75,22 +74,11 @@ def _canonical_event_name(raw: ObjectMapping) -> str:
     raw_event = string_value(raw.get("hook_event_name")) or string_value(
         raw.get("hookEventName")
     )
-    if raw_event not in {"tool_execution_end", "tool_result"}:
+    if raw_event != "tool_result":
         return event_name
 
-    nested_event = object_dict(raw.get("pi_event"))
-    for event in (raw, nested_event):
-        if event.get("isError") is True:
-            return "PostToolUseFailure"
-        details = object_dict(event.get("details"))
-        for key in ("exitCode", "exit_code"):
-            exit_code = details.get(key)
-            if (
-                isinstance(exit_code, int)
-                and not isinstance(exit_code, bool)
-                and exit_code != 0
-            ):
-                return "PostToolUseFailure"
+    if tool_result_failed(raw):
+        return "PostToolUseFailure"
     return event_name
 
 
@@ -126,6 +114,9 @@ class PiAdapter(PlatformAdapter):
         if not render_request.findings:
             return None
 
+        if render_request.event_name in {POST_TOOL_USE, "PostToolUseFailure"}:
+            return render_post_tool(self, render_request)
+
         output: ObjectDict = {}
         can_block = render_request.event_name in {PRE_TOOL_USE, USER_PROMPT_SUBMIT}
         if can_block and render_request.decision in {DENY, BLOCK, ASK}:
@@ -137,14 +128,4 @@ class PiAdapter(PlatformAdapter):
             output["updated_input"] = render_request.updated_input
         if render_request.context:
             output["context"] = render_request.context
-        if render_request.event_name == POST_TOOL_USE and output:
-            output["tool_result_patch"] = {
-                "details": {
-                    METADATA_SLOPGATE: {
-                        "decision": render_request.decision,
-                        "context": render_request.context,
-                        "reason": output.get("reason"),
-                    }
-                }
-            }
         return output or None

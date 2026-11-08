@@ -56,6 +56,8 @@ CODE_SMELL_DETECTORS = strategies.sampled_from(
         code_smells.detect_too_many_params,
     )
 )
+
+
 def _parsed(source: str, rel: str = "src/example.py") -> ParsedFile:
     tree = ast.parse(source)
     return ParsedFile(
@@ -224,6 +226,7 @@ def test_command_is_slopgate_hook_detects_handle_invocation_property(
     assert isinstance(result, bool)
 
 
+@pytest.mark.usefixtures("native_hosts")
 def test_update_suite_returns_nonzero_when_package_update_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

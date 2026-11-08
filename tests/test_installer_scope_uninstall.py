@@ -20,6 +20,8 @@ from slopgate._types import (
 )
 from slopgate.installer._shared import command_is_slopgate_hook
 
+pytestmark = pytest.mark.usefixtures("native_hosts")
+
 
 def _third_party_shell_hook(command: str = "./existing.sh") -> dict[str, object]:
     return {"command": command}

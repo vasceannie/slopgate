@@ -101,9 +101,18 @@ for name, path in [("Claude", "$HOME/.claude/settings.json"),
     slopgate_cmds = [c for c in cmds if "slopgate" in c or "handle" in c]
     print(f"  {name}: {len(user_cmds)} user, {len(slopgate_cmds)} slopgate")
     assert user_cmds, f"User hooks LOST during install in {name}!"
-    assert slopgate_cmds, f"No slopgate hooks in {name}!"
+    if name != "Claude":  # Claude uses a native plugin, not settings.json hooks
+        assert slopgate_cmds, f"No slopgate hooks in {name}!"
 print("  OK merge")
 PYEOF
+
+echo "  Claude native plugin registered:"
+claude plugin list --json | python3 -c '
+import json, sys
+ids = [p.get("id") for p in json.load(sys.stdin)]
+assert "slopgate-enforcement@slopgate-runtime" in ids, f"plugin missing after install: {ids}"
+print("  OK native plugin")
+'
 
 echo ""
 echo "=== 4. Uninstall slopgate hooks ==="
@@ -147,6 +156,13 @@ for name, path in [("Claude", "$HOME/.claude/settings.json"),
     assert not slopgate_cmds, f"Slopgate hooks survived uninstall in {name}!"
 print("  OK non-destructive uninstall")
 PYEOF
+
+claude plugin list --json | python3 -c '
+import json, sys
+ids = [p.get("id") for p in json.load(sys.stdin)]
+assert "slopgate-enforcement@slopgate-runtime" not in ids, f"plugin survived uninstall: {ids}"
+print("  OK native plugin removed")
+'
 
 echo ""
 echo "=== 6. Verify uninstall is idempotent ==="

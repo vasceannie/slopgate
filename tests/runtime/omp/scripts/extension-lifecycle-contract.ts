@@ -37,23 +37,24 @@ export function registerExtensionLifecycleContractTests(): void {
 		const temporaryPaths: string[] = [];
 		let harness: RuntimeHarness | undefined;
 
-		beforeAll(async () => {
+		beforeAll(() => {
 			configureRuntimeEnvironment();
-			harness = await createRuntimeHarness();
 		});
 
+		// Session state is per identity and startup runs once, so every test owns a fresh session.
 		beforeEach(async () => {
 			configureFakeResponse({});
 			process.env.SLOPGATE_SESSION_ID = FIXED_SESSION_ID;
-			await requireHarness(harness).runner.emit({ type: "session_start" });
+			harness = await createRuntimeHarness({ withUI: true });
 		});
 
 		afterEach(async () => {
+			await harness?.close();
+			harness = undefined;
 			await Promise.all(temporaryPaths.splice(0).map(root => rm(root, { recursive: true, force: true })));
 		});
 
-		afterAll(async () => {
-			await harness?.close();
+		afterAll(() => {
 			clearRuntimeEnvironment();
 		});
 
@@ -72,10 +73,9 @@ export function registerExtensionLifecycleContractTests(): void {
 			expect(result).toEqual(expected);
 		}, 30000);
 
-		test("short-circuits blocked input and emits visible activity", async () => {
+		test("short-circuits blocked input with a notification and no custom message", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
-			const before = activeHarness.sentMessages.length;
 			configureFakeResponse({ block: true, reason: "INPUT_BLOCK_TOKEN" });
 
 			// When
@@ -83,7 +83,8 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// Then
 			expect(result).toEqual({ handled: true });
-			expect(activeHarness.sentMessages.slice(before)).toEqual(["INPUT_BLOCK_TOKEN"]);
+			expect(activeHarness.notifications).toEqual(["INPUT_BLOCK_TOKEN"]);
+			expect(activeHarness.sendMessageCalls).toBe(0);
 		}, 30000);
 
 		test("injects cached session context locally without forwarding before_agent_start", async () => {
@@ -101,12 +102,13 @@ export function registerExtensionLifecycleContractTests(): void {
 			// Then
 			expect(systemPrompt[1]).toContain("SESSION_CONTEXT_TOKEN");
 			expect(await Bun.file(recordPath).exists()).toBe(false);
+			expect(activeHarness.sendMessageCalls).toBe(0);
 		}, 30000);
 
 		test("caches turn_end guidance for the next model invocation", async () => {
 			// Given
 			const activeHarness = requireHarness(harness);
-			configureFakeResponse({ additionalContext: "TURN_GUIDANCE_TOKEN" });
+			configureFakeResponse({ context: "TURN_GUIDANCE_TOKEN" });
 			await activeHarness.runner.emit({
 				type: "turn_end",
 				turnIndex: 1,
@@ -123,14 +125,49 @@ export function registerExtensionLifecycleContractTests(): void {
 			expect(activeHarness.model.systemPrompts.at(-1)).toEqual([...systemPrompt]);
 		}, 30000);
 
-		test("merges the configured tool-result details patch", async () => {
+		test.each([
+			["explicit true", { isError: true }, false, true],
+			["explicit false", { isError: false }, true, false],
+			["absent keeps native false", {}, false, false],
+			["absent keeps native true", {}, true, true],
+		] as const)("merges findings, content, and details into the native result with %s isError", async (_name, patchFlags, nativeIsError, expectedIsError) => {
 			// Given
-			configureFakeResponse({ tool_result_patch: { details: { slopgate: "PATCH_TOKEN" }, isError: true } });
+			const original = [
+				{ type: "text", text: "result" },
+				{ type: "image", data: "AA==", mimeType: "image/png" },
+			] as const;
+			configureFakeResponse({
+				context: "FINDING_TOKEN",
+				tool_result_patch: { details: { slopgate: "PATCH_TOKEN" }, ...patchFlags },
+			});
 
 			// When
 			const result = await requireHarness(harness).runner.emitToolResult({
 				type: "tool_result",
 				toolCallId: "tool-result-fixed",
+				toolName: "custom",
+				input: {},
+				content: [...original],
+				details: { existing: true },
+				isError: nativeIsError,
+			});
+
+			// Then
+			expect(result).toEqual({
+				content: [...original, { type: "text", text: "Slopgate findings:\nFINDING_TOKEN" }],
+				details: { existing: true, slopgate: "PATCH_TOKEN" },
+				isError: expectedIsError,
+			});
+		}, 30000);
+
+		test("leaves the native tool result untouched when the enforcer reports nothing", async () => {
+			// Given
+			configureFakeResponse({});
+
+			// When
+			const result = await requireHarness(harness).runner.emitToolResult({
+				type: "tool_result",
+				toolCallId: "tool-result-quiet",
 				toolName: "custom",
 				input: {},
 				content: [{ type: "text", text: "result" }],
@@ -139,26 +176,28 @@ export function registerExtensionLifecycleContractTests(): void {
 			});
 
 			// Then
-			expect(result).toEqual({
-				content: [{ type: "text", text: "result" }],
-				details: { existing: true, slopgate: "PATCH_TOKEN" },
-				isError: false,
-			});
+			expect(result).toBeUndefined();
 		}, 30000);
 
-		test("treats agent_end findings as telemetry without blocking or visible enforcement", async () => {
+		test("treats agent_end findings as telemetry that never vetoes and is delivered on the next request", async () => {
 			const activeHarness = requireHarness(harness);
 			const root = await createTemporaryRoot("slopgate-omp-agent-end-");
 			temporaryPaths.push(root);
-			const before = activeHarness.sentMessages.length;
 			configureFakeResponse({ block: true, reason: "AGENT_END_BLOCK_TOKEN" });
 			const recordPath = await createRecordPath(root, "agent-end.json");
 			const result = await activeHarness.runner.emit({ type: "agent_end", messages: [], willContinue: false });
 			const payload = await readRecordedPayload(recordPath);
-			expect({ result, displayed: activeHarness.sentMessages.length - before, event: payload.hook_event_name }).toEqual({
+			const systemPrompt = await activeHarness.invokeModel("next", ["BASE_SYSTEM_TOKEN"]);
+			expect({
+				result,
+				displayed: activeHarness.sendMessageCalls,
+				event: payload.hook_event_name,
+				carried: systemPrompt[1]?.includes("AGENT_END_BLOCK_TOKEN"),
+			}).toEqual({
 				result: undefined,
 				displayed: 0,
 				event: "agent_end",
+				carried: true,
 			});
 		}, 30000);
 
@@ -186,16 +225,16 @@ export function registerExtensionLifecycleContractTests(): void {
 			const activeHarness = requireHarness(harness);
 			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
 			await requestContinuations(activeHarness, 8);
-			const before = activeHarness.sentMessages.length;
+			const before = activeHarness.notifications.length;
 
 			// When
 			const ninth = await emitStop(activeHarness, { turnId: 9 });
 			const fresh = await collectContinuationFlags(activeHarness, 8, 20);
 
 			// Then
-			expect({ ninth, displayed: activeHarness.sentMessages.length - before, fresh }).toEqual({
+			expect({ ninth, displayed: activeHarness.notifications.slice(before), fresh }).toEqual({
 				ninth: undefined,
-				displayed: 1,
+				displayed: ["slopgate: continuation cap reached (8); fix remaining findings manually."],
 				fresh: FULL_CONTINUATION_BUDGET,
 			});
 		}, 30000);
@@ -237,9 +276,17 @@ export function registerExtensionLifecycleContractTests(): void {
 				configureFakeResponse({ additionalContext: "GUIDANCE_RESET_TOKEN" });
 				await emitStop(activeHarness);
 			}],
-			["session start", async (activeHarness: RuntimeHarness) => {
+			["session switch", async (activeHarness: RuntimeHarness) => {
 				configureFakeResponse({});
-				await activeHarness.runner.emit({ type: "session_start" });
+				await activeHarness.runner.emit({ type: "session_switch", reason: "new", previousSessionFile: undefined });
+			}],
+			["session branch", async (activeHarness: RuntimeHarness) => {
+				configureFakeResponse({});
+				await activeHarness.runner.emit({ type: "session_branch", previousSessionFile: undefined });
+			}],
+			["session tree", async (activeHarness: RuntimeHarness) => {
+				configureFakeResponse({});
+				await activeHarness.runner.emit({ type: "session_tree", newLeafId: null, oldLeafId: null });
 			}],
 		] as const)("restores eight fresh continuations after %s", async (_name, reset) => {
 			// Given
@@ -254,31 +301,6 @@ export function registerExtensionLifecycleContractTests(): void {
 
 			// Then
 			expect(fresh).toEqual(FULL_CONTINUATION_BUDGET);
-		}, 30000);
-
-		test("session B start prunes session A stale cap and restores eight continuations on revisit", async () => {
-			// Given
-			const sessionA = requireHarness(harness);
-			delete process.env.SLOPGATE_SESSION_ID;
-			await sessionA.runner.emit({ type: "session_start" });
-			const sessionAId = sessionA.sessionManager.getSessionId();
-			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
-			await requestContinuations(sessionA, 8);
-
-			// When
-			const sessionB = await createRuntimeHarness();
-			const sessionBId = sessionB.sessionManager.getSessionId();
-			configureFakeResponse({});
-			await sessionB.runner.emit({ type: "session_start" });
-			await sessionB.close();
-			configureFakeResponse({ continue: true, additionalContext: "CONTINUE_TOKEN" });
-			const fresh = await collectContinuationFlags(sessionA, 8, 20);
-
-			// Then
-			expect({ distinctSessions: sessionAId !== sessionBId, fresh }).toEqual({
-				distinctSessions: true,
-				fresh: FULL_CONTINUATION_BUDGET,
-			});
 		}, 30000);
 	});
 }

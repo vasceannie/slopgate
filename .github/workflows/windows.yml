@@ -31,14 +31,34 @@ jobs:
           tests/test_installer_claude_hooks.py
           tests/test_installer_cursor_hooks.py
           tests/test_installer_ownership.py
+          tests/test_native_commands.py
+          tests/test_native_packages.py
+          tests/test_native_artifacts.py
+          tests/test_native_marketplace.py
+          tests/test_native_marketplace_state.py
+          tests/test_native_integration.py
+          tests/native/test_smoke.py
+          tests/test_installer_omp_extension.py
+          tests/test_installer_omp_safety.py
+          tests/test_installer_omp_registry.py
+          tests/test_installer_claude_native.py
+          tests/test_installer_pi_extension.py
+          tests/test_installer_pi_migration_regressions.py
+          tests/test_installer_pi_registration_failures.py
+          tests/test_installer_pi_native_uninstall.py
+          tests/test_installer_upstream_contracts.py
+          tests/test_suite_native_update_semantics.py
+          tests/test_suite_update_semantics.py
+          tests/test_suite_autoupdate.py
+          tests/test_suite_autoupdate_discovery.py
           tests/test_windows_shell_command.py
           tests/test_powershell_argv_parsing.py
           tests/test_engine_inline_deny_tests.py::test_powershell_git_no_verify_denied
           tests/test_engine_inline_deny_tests.py::test_powershell_windows_system_path_denied
           tests/test_engine_inline_deny_tests.py::test_powershell_path_commands_are_evaluated_through_rules
           tests/engine/test_02_inline_payload_denies_to_shell_command_paths_ignore_wrapped_absolute_executable_position/test_protected_paths.py::test_linter_config_edit_like_aliases_are_denied
-          tests/test_suite_autoupdate.py::test_windows_scheduler_plan_uses_schtasks
-          tests/test_suite_autoupdate.py::test_discover_install_sites_respects_windows_appdata
+          tests/test_suite_autoupdate.py::test_windows_scheduler_plan_records_removed_autoupdater
+          tests/test_suite_autoupdate_discovery.py::test_discover_install_sites_respects_windows_appdata
           -q
 
       - name: Run full test suite
