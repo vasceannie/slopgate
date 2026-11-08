@@ -12,9 +12,30 @@ from slopgate._types import ObjectDict, object_dict, string_value
 from slopgate.lint._config import reset_config
 from slopgate.engine import evaluate_payload
 from slopgate.models import EngineResult
+from tests.native.environment import isolate_native_data_dirs
+from tests.native.hosts import FakeHosts, install_fake_hosts
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1]
-__all__ = ["_slopgate_env", "reset_lint_config"]
+__all__ = ["_slopgate_env", "native_data_dirs", "native_hosts", "reset_lint_config"]
+
+
+@pytest.fixture
+def native_data_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate native Windows data directories for selected tests."""
+    isolate_native_data_dirs(monkeypatch, tmp_path)
+
+
+@pytest.fixture
+def native_hosts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_data_dirs: None,
+) -> FakeHosts:
+    """Isolated native managers, requested explicitly and never autouse."""
+    _ = native_data_dirs
+    return install_fake_hosts(monkeypatch, tmp_path)
+
+
 _RESOURCES = BUNDLE_ROOT / "src" / "slopgate" / "resources"
 
 

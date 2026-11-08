@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from slopgate._types import ObjectDict, ObjectMapping, string_value
+from slopgate._types import ObjectDict, ObjectMapping, object_dict, string_value
 from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
 from slopgate.constants import HOOK_EVENT_NAME_KEY, SESSION_ID
 
@@ -110,3 +110,24 @@ def sync_tool_result_fields(
         canonical["tool_response"] = canonical["tool_result"]
     if "tool_output" in canonical and "tool_result" not in canonical:
         canonical["tool_result"] = canonical["tool_output"]
+
+
+def tool_result_failed(raw: ObjectMapping) -> bool:
+    """Return True when a tool_result reports isError or a non-zero exit code.
+
+    Pi and OMP deliver a non-zero bash exit as ``isError: false`` with
+    ``details.exitCode`` set, so both signals must be consulted.
+    """
+    SESSION_IDENTITY_TELEMETRY.record_metric("payload_fields.tool_result_failed")
+    if raw.get("isError") is True:
+        return True
+    details = object_dict(raw.get("details"))
+    for key in ("exitCode", "exit_code"):
+        exit_code = details.get(key)
+        if (
+            isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+            and exit_code != 0
+        ):
+            return True
+    return False

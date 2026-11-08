@@ -306,6 +306,18 @@
         "void"
       ]
     },
+    "session_branch": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
+    "session_shutdown": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
     "session_start": {
       "fields": {},
       "result_union": [
@@ -333,6 +345,18 @@
       },
       "result_union": [
         "SessionStopEventResult",
+        "void"
+      ]
+    },
+    "session_switch": {
+      "fields": {},
+      "result_union": [
+        "void"
+      ]
+    },
+    "session_tree": {
+      "fields": {},
+      "result_union": [
         "void"
       ]
     },

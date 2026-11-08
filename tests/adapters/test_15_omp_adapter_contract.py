@@ -64,26 +64,36 @@ def test_omp_normalizes_pinned_event_map(
 
 
 @pytest.mark.parametrize(
-    ("is_error", "canonical_event"),
+    ("signals", "canonical_event"),
     [
-        pytest.param(False, POST_TOOL_USE, id="success"),
-        pytest.param(True, "PostToolUseFailure", id="failure"),
+        pytest.param({"isError": False}, POST_TOOL_USE, id="success"),
+        pytest.param({"isError": True}, "PostToolUseFailure", id="is-error"),
+        pytest.param(
+            {"isError": False, "details": {"exitCode": 1}},
+            "PostToolUseFailure",
+            id="nonzero-exit-code",
+        ),
+        pytest.param(
+            {"isError": False, "details": {"exitCode": 0}},
+            POST_TOOL_USE,
+            id="zero-exit-code",
+        ),
     ],
 )
-def test_omp_tool_result_uses_is_error_to_discriminate_failures(
-    is_error: bool,
+def test_omp_tool_result_discriminates_failures_from_native_signals(
+    signals: dict[str, object],
     canonical_event: str,
 ) -> None:
     payload = OmpAdapter().normalize_payload(
         {
             "hook_event_name": "tool_result",
-            "isError": is_error,
             "tool_name": "bash",
             "tool_result": "done",
+            **signals,
         }
     )
     assert payload["hook_event_name"] == canonical_event, (
-        "tool_result isError must select the canonical post-tool event"
+        "tool_result isError/details.exitCode must select the canonical post-tool event"
     )
 
 
@@ -247,18 +257,41 @@ def test_omp_posttool_events_return_advisory_patch(event_name: str) -> None:
         context="inspect the result",
         updated_input={},
     )
+    reason = "[OMP-POST | HIGH] inspect result"
     assert output == {
         "context": "inspect the result",
+        "reason": reason,
         "tool_result_patch": {
             "details": {
                 "slopgate": {
                     "decision": "block",
                     "context": "inspect the result",
-                    "reason": None,
+                    "reason": reason,
                 }
             }
         },
-    }, "both successful and failed tool results must use advisory patches"
+    }, "post-tool findings must reach the bridge as native result guidance"
+
+
+def test_omp_turn_end_context_returns_pending_guidance() -> None:
+    finding = RuleFinding(
+        rule_id="OMP-TURN",
+        title="OMP turn",
+        severity=Severity.LOW,
+        decision="warn",
+        message="turn reminder",
+        additional_context="check the diff",
+    )
+    output = OmpAdapter().render_output(
+        "TurnEnd",
+        [finding],
+        decision="warn",
+        context="check the diff",
+        updated_input={},
+    )
+    assert output == {"context": "check the diff"}, (
+        "turn_end advisories must be renderable for next-prompt guidance"
+    )
 
 
 def test_omp_session_start_returns_context() -> None:

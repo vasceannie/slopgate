@@ -9,12 +9,13 @@ import slopgate.installer._suite
 from slopgate.cli.commands import cmd_install
 from slopgate.cli.parsers import build_parser
 from tests.test_suite_autoupdate import (
-    _patch_linux_installer_config_dirs,
+    patch_linux_installer_config_dirs,
     linux_autoupdate_units,
     macos_autoupdate_context,
     record_suite_subprocess_run,
 )
 from tests.support import SKIP_DARWIN_ONLY, SKIP_LINUX_ONLY, SKIP_WINDOWS_ONLY
+
 
 WINDOWS_SLOPGATE_EXE = "C:\\Tools\\slopgate.exe"
 
@@ -39,7 +40,7 @@ def test_autoupdate_uninstall_refuses_incidental_scheduler_marker_text(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    config_home = _patch_linux_installer_config_dirs(monkeypatch, tmp_path)
+    config_home = patch_linux_installer_config_dirs(monkeypatch, tmp_path)
     timer = config_home / "systemd/user/slopgate-auto-update.timer"
     timer.parent.mkdir(parents=True)
     timer.write_text(
@@ -304,44 +305,3 @@ def test_macos_autoupdate_uninstall_backs_up_owned_launch_agent(
         "marker_present": True,
         "run_commands": [["launchctl", "unload", "-w", snapshot["target_path"]]],
     }
-
-
-def test_install_suite_dry_run_installs_detected_sites_without_writing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    (tmp_path / ".codex").mkdir()
-    called: list[str] = []
-
-    def fake_install(platform: str, dry_run: bool = False) -> int:
-        called.append(f"{platform}:{dry_run}")
-        return 0
-
-    monkeypatch.setattr(slopgate.installer, "install_platform", fake_install)
-    status = slopgate.installer.install_suite(
-        slopgate.installer.SuiteInstallOptions(dry_run=True)
-    )
-    assert (status, called, "Would install: codex" in capsys.readouterr().out) == (
-        0,
-        [],
-        True,
-    )
-
-
-def test_uninstall_suite_dry_run_reports_detected_sites_without_writing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    (tmp_path / ".claude").mkdir()
-    called: list[str] = []
-
-    def fake_uninstall(platform: str, dry_run: bool = False) -> int:
-        called.append(f"{platform}:{dry_run}")
-        return 0
-
-    monkeypatch.setattr(slopgate.installer, "uninstall_platform", fake_uninstall)
-    status = slopgate.installer.uninstall_suite(
-        slopgate.installer.SuiteUninstallOptions(dry_run=True)
-    )
-    output = capsys.readouterr().out
-    assert (status, called, "Would uninstall: claude" in output) == (0, [], True)

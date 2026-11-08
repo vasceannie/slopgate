@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import slopgate.installer
 import slopgate.installer._shared
-from slopgate.constants import PLATFORM_CLAUDE
+from slopgate.installer.native.migration import extract_owned_hooks
 from slopgate.installer._shared import (
     ContainedWrite,
     UnsafeInstallPathError,
@@ -21,15 +21,6 @@ from slopgate.installer._shared import (
     write_contained_text,
     write_json_with_backup,
 )
-
-
-def hook_commands(settings_path: Path) -> list[str]:
-    hooks = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]
-    return [
-        hook["command"]
-        for entry in hooks["PreToolUse"]
-        for hook in entry.get("hooks", [])
-    ]
 
 
 @pytest.mark.parametrize(
@@ -56,73 +47,27 @@ def test_command_ownership_preserves_unrelated_slopgate_named_helpers(
     assert not slopgate.installer._shared.command_is_slopgate_hook(command)
 
 
-def _old_powershell_hook() -> str:
-    return slopgate.installer._shared.hook_command(
-        "C:\\\\Old Tools\\\\slopgate.exe", "handle", windows=True
-    )
-
-
-def _seed_claude_hook_settings(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    first_command: str,
-    second_command: str,
-) -> Path:
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    settings_path.write_text(
-        json.dumps(
+def test_extract_owned_hooks_retains_group_metadata_and_only_owned_commands() -> None:
+    owned = {"type": "command", "command": "slopgate handle --platform claude"}
+    unrelated = {"type": "command", "command": "other-gate"}
+    hooks = {
+        "PreToolUse": [
             {
-                "hooks": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Bash",
-                            "hooks": [
-                                {"type": "command", "command": first_command},
-                                {"type": "command", "command": second_command},
-                            ],
-                        }
-                    ]
-                }
+                "matcher": "Bash",
+                "customMetadata": {"keep": True},
+                "hooks": [owned, unrelated],
             }
-        ),
-        encoding="utf-8",
-    )
-    return settings_path
-
-
-def test_claude_reinstall_replaces_powershell_owned_hook_and_preserves_user_hooks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    old_owned = _old_powershell_hook()
-    settings_path = _seed_claude_hook_settings(
-        tmp_path, monkeypatch, "my-slopgate-helper handle", old_owned
-    )
-    monkeypatch.setattr(slopgate.installer._shared, "find_binary", lambda: "slopgate")
-    result = slopgate.installer.install_claude(dry_run=False)
-    assert {"result": result, "commands": hook_commands(settings_path)} == {
-        "result": 0,
-        "commands": [
-            "my-slopgate-helper handle",
-            slopgate.installer._shared.hook_command(
-                "slopgate", "handle", "--platform", PLATFORM_CLAUDE
-            ),
-        ],
+        ]
     }
-
-
-def test_claude_uninstall_removes_powershell_owned_hook_and_preserves_user_hooks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    settings_path = _seed_claude_hook_settings(
-        tmp_path, monkeypatch, "slopgate-doc handle", _old_powershell_hook()
-    )
-    result = slopgate.installer.uninstall_claude(dry_run=False)
-    assert {"result": result, "commands": hook_commands(settings_path)} == {
-        "result": 0,
-        "commands": ["slopgate-doc handle"],
-    }
+    assert extract_owned_hooks(hooks) == {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "customMetadata": {"keep": True},
+                "hooks": [owned],
+            }
+        ]
+    }, "rollback capture must retain group metadata without unrelated nested commands"
 
 
 def test_find_binary_returns_string() -> None:
@@ -220,7 +165,9 @@ def test_write_json_with_backup_writes_formatted_json(tmp_path: Path) -> None:
     assert written == payload
 
 
-def test_require_contained_install_path_accepts_real_nested_file(tmp_path: Path) -> None:
+def test_require_contained_install_path_accepts_real_nested_file(
+    tmp_path: Path,
+) -> None:
     target = tmp_path / "plugins" / "slopgate-plugin.ts"
     target.parent.mkdir()
     resolved = require_contained_install_path(target, tmp_path)

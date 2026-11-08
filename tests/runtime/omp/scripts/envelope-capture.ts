@@ -134,11 +134,17 @@ async function captureWithHarness(outputDir: string, harness: RuntimeHarness): P
 		}),
 	);
 	await record("input.json", {}, async () => await harness.runner.emitInput("capture input", undefined, "extension"));
+	// Startup runs once per session identity, so the cached-context capture owns a fresh session.
 	await record("before-agent-start.json", { context: "capture session context" }, async () => {
-		await harness.runner.emit({ type: "session_start" });
-		const prompt = await harness.invokeModel("capture turn", ["capture base"]);
-		if (!prompt.some(item => item.includes("capture session context"))) {
-			throw new EnvelopeCaptureError("before_agent_start did not inject cached context");
+		const contextHarness = await createRuntimeHarness();
+		try {
+			await contextHarness.runner.emit({ type: "session_start" });
+			const prompt = await contextHarness.invokeModel("capture turn", ["capture base"]);
+			if (!prompt.some(item => item.includes("capture session context"))) {
+				throw new EnvelopeCaptureError("before_agent_start did not inject cached context");
+			}
+		} finally {
+			await contextHarness.close();
 		}
 	});
 	await record("turn-end.json", { additionalContext: "capture turn context" }, async () =>

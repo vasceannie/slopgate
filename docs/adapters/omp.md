@@ -37,22 +37,39 @@ advisory events emit `{context}`.
   cap notice instead of continuing.
 - OMP's `stop_hook_active` input flag means OMP already has a stop hook active: Slopgate resets
   the counter and stays advisory-only, preventing continuation loops.
-- Counters reset on `session_start`, on `input`, on clean/advisory settle, on active-stop-hook
-  settle, and on cap exhaustion.
+- Counters reset on `input`, on `session_switch` / `session_branch` / `session_tree` navigation, on
+  clean/advisory settle, on active-stop-hook settle, and on cap exhaustion. A repeated
+  `session_start` for a live session does not reset the counter.
 
-## Install sites and resolver
+## Native plugin registration
 
-| Scope | Path |
-|---|---|
-| User | `$PI_CODING_AGENT_DIR/extensions/omp-slopgate/index.ts` when `PI_CODING_AGENT_DIR` is absolute, else `~/.omp/agent/extensions/omp-slopgate/index.ts` |
-| Project | `<project>/.omp/extensions/omp-slopgate/index.ts` |
+`slopgate install omp` stages a Slopgate-owned local marketplace (`slopgate-runtime`) under
+Slopgate's user data directory (`<user data>/slopgate/native/omp/marketplace`, catalog in
+`.omp-plugin/marketplace.json`, an immutable payload snapshot per content digest) and registers
+`omp-slopgate@slopgate-runtime` with `omp plugin install --scope user|project`. Inspect it with
+`omp plugin list --json`. The plugin version is `<slopgate version>+local.<digest>`, so a version
+bump gets a fresh snapshot even when the rendered extension is byte-identical; reinstalling the
+same content runs no native command. Replacing a changed payload uses `omp plugin install --force`,
+which keeps native enabled/disabled state: a disabled plugin is reported as registered but not
+active and is never silently enabled.
 
-Each site holds two Slopgate-owned artifacts: `index.ts` and the canonical `package.json` manifest.
-Install snapshots both with file bytes, modes, and missing directories, refuses to replace
-unrecognized files, and rolls back every completed site when any step fails. Uninstall removes
-owned artifacts and the leftover extension directory. `slopgate install omp` / `slopgate uninstall
-omp` honor `--install-scope` and `--project-root` like the other platforms. Profile-specific roots
-(`~/.omp/profiles/<profile>/...`) are not installed yet.
+Project scope runs OMP with the requested project root as its working directory. If OMP would
+anchor the project on an ancestor repository, the install is refused with both paths named. A
+missing `<project>/.omp` is created empty only during a real install and removed again on rollback.
+
+Legacy loose copies (`$PI_CODING_AGENT_DIR/extensions/omp-slopgate/` when `PI_CODING_AGENT_DIR` is
+absolute, else `~/.omp/agent/extensions/omp-slopgate/`, and `<project>/.omp/extensions/omp-slopgate/`)
+are recognized by their Slopgate ownership markers. They are backed up and removed only after the
+native registration for that scope is verified, so exactly one copy stays active. Unknown files,
+malformed ownership metadata or paths escaping the install root make the install fail before any
+native command runs. If the `omp` CLI is missing the install fails and legacy enforcement is left
+intact. Any later failure rolls back staging, native registrations and legacy files.
+
+`slopgate uninstall omp` honors `--install-scope` and `--project-root`: it removes only the
+selected scope's registration plus recognized legacy files, and keeps the marketplace and staged
+payload because another scope or project may still use them. `--dry-run` prints the exact native
+commands and changes nothing. Start a new OMP session after installing. Profile-specific roots
+(`~/.omp/profiles/<profile>/...`) are not handled yet.
 
 ## Harness usage
 
@@ -97,9 +114,12 @@ cd tests/runtime/omp && bun install && bun run test
   roots are not installed, the latest-OMP conformance lane is not wired into CI, and dashboard
   harness-status probing remains out of scope (see Dashboard deferrals).
 - **Pi failure discrimination fix (FK2=B).** As part of this work, `PiAdapter.normalize_payload` was
-  corrected to classify failed post-execution events into `PostToolUseFailure` from real bridge
-  envelopes, inspecting both top-level fields and the nested `pi_event` envelope. OMP's
-  `tool_result` + `isError` split follows the same pattern.
+  corrected to classify failed `tool_result` events into `PostToolUseFailure` from the bridge's
+  top-level `isError` and `details.exitCode`/`exit_code` fields (the bridge no longer nests the
+  whole event as `pi_event`, and `tool_execution_end` is notification-only and not enforced).
+  OMP's `tool_result` + `isError` split follows the same pattern. The Pi and OMP bridges deliver
+  post-tool findings through the native `tool_result` content patch and add routine session/prompt
+  context to the per-request system prompt rather than persisting a custom conversation message.
 
 ## Captured envelope regeneration
 

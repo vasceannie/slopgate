@@ -9,6 +9,8 @@ variables:
     PIP_DISABLE_PIP_VERSION_CHECK: "1"
     PYTHONUNBUFFERED: "1"
     UV_VERSION: "0.11.19"
+    CLAUDE_CODE_VERSION: "2.1.319"
+    BUN_VERSION: "1.4.0"
     SLOPGATE_TEST_HOME: /tmp/slopgate-ci-home
     CI_SCRIPTS: .gitlab-ci/scripts
 
@@ -63,6 +65,20 @@ opencode-review:
         - uv tool install --force "${CI_PROJECT_DIR}"
         - slopgate --version
 
+.native-cli-setup: &native-cli-setup
+    # Native-registration installs shell out to the Claude Code CLI, so jobs
+    # that run `slopgate install claude` need it on PATH. The pinned binary is
+    # cached under .ci/ keyed by version; a cache hit skips the download.
+    cache:
+        key: "claude-cli-${CLAUDE_CODE_VERSION}"
+        paths:
+            - .ci/claude/
+    before_script:
+        - !reference [.common-setup, before_script]
+        - bash "${CI_PROJECT_DIR}/${CI_SCRIPTS}/install-claude-cli.sh"
+        - export PATH="${CI_PROJECT_DIR}/.ci/claude:$PATH"
+        - claude --version
+
 .windows-uv-setup: &windows-uv-setup
     before_script:
         - $env:UV_UNMANAGED_INSTALL = "${env:CI_PROJECT_DIR}\.ci\uv"
@@ -73,6 +89,20 @@ opencode-review:
         - uv --version
         - Set-Location "${env:CI_PROJECT_DIR}"
         - uv sync --frozen
+
+.runtime-setup: &runtime-setup
+    # The OMP and Pi runtime harnesses are Bun projects whose scripts shell out to
+    # node (tsc) and to the repo's Python environment (slopgate fake enforcers).
+    # Bun is pinned because older releases cannot read the repo's bun.lock.
+    before_script:
+        - apt-get update -qq && apt-get install -y -qq curl git unzip nodejs > /dev/null 2>&1
+        - curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+        - curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
+        - export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+        - export TMPDIR=/tmp
+        - uv --version && bun --version && node --version
+        - cd "${CI_PROJECT_DIR}" && uv sync --frozen
+        - export PATH="${CI_PROJECT_DIR}/.venv/bin:$PATH"
 
 stages:
     - test
@@ -110,6 +140,70 @@ self-test:
     needs: []
 
 # ===================================================================
+# TEST — OMP / Pi runtime harness contracts on the exact locked runners.
+# Required: the lockfiles make this deterministic for unrelated changes.
+# ===================================================================
+runtime-harness:
+    stage: test
+    <<: *runtime-setup
+    parallel:
+        matrix:
+            - HARNESS: [omp, pi]
+    script:
+        - cd "${CI_PROJECT_DIR}/tests/runtime/${HARNESS}"
+        - bun install --frozen-lockfile
+        - bun run typecheck
+        - bun run test
+    needs: []
+
+# ===================================================================
+# TEST — canary: the registry `latest` runners, so an upstream harness change
+# shows up here instead of in a user's session.
+# Never blocks merges. Runs on schedules and on demand from a web pipeline.
+# The runner specs are rewritten to @latest in this job's disposable checkout
+# only; nothing is committed, so the required job above stays deterministic.
+# Only checks that can run on another runner version are used. The OMP harness is
+# a golden-file contract locked to its pinned runner (snapshot and fixtures), so
+# its canary is the typecheck plus the discovery contract; Pi runs its full suite.
+# A red canary means upstream changed: bump the pins deliberately (OMP also needs
+# `bun run lock`), and the required job then verifies the bump.
+# ===================================================================
+runtime-canary:
+    stage: test
+    <<: *runtime-setup
+    timeout: 30m
+    parallel:
+        matrix:
+            - HARNESS: omp
+              RUNNER_PACKAGES: "@oh-my-pi/pi-coding-agent @oh-my-pi/pi-tui"
+              CANARY_TESTS: "discovery-contract.test.ts"
+            - HARNESS: pi
+              RUNNER_PACKAGES: "@earendil-works/pi-coding-agent @earendil-works/pi-tui"
+              CANARY_TESTS: "extension-contract.test.ts"
+    script:
+        # Latest runners may need a newer Bun than the pinned one (OMP 18.18 needs >= 1.4.4).
+        - bun upgrade && bun --version
+        - cd "${CI_PROJECT_DIR}/tests/runtime/${HARNESS}"
+        - |
+          set --
+          for package in ${RUNNER_PACKAGES}; do set -- "$@" "${package}@latest"; done
+          bun add --dev "$@"
+        - |
+          for package in ${RUNNER_PACKAGES}; do
+            node -p "'canary runner ' + '${package} ' + require('./node_modules/${package}/package.json').version"
+          done
+        - bun run typecheck
+        - PATH="${PWD}/node_modules/.bin:${PATH}" bun test ${CANARY_TESTS}
+    needs: []
+    rules:
+        - if: '$CI_PIPELINE_SOURCE == "schedule"'
+          allow_failure: true
+        - if: '$CI_PIPELINE_SOURCE == "web"'
+          when: manual
+          allow_failure: true
+        - when: never
+
+# ===================================================================
 # LINT — slopgate project lint (zero new violations required)
 # ===================================================================
 lint-check:
@@ -138,7 +232,7 @@ lint-strict:
 # ===================================================================
 install-verify:
     stage: install-verify
-    <<: *common-setup
+    <<: *native-cli-setup
     script:
         - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
         - slopgate version
@@ -154,7 +248,8 @@ install-verify:
 
 # ===================================================================
 # WINDOWS-INSTALL — Windows-specific install & schtasks verification
-# Requires a GitLab runner with the `windows` tag.
+# Requires a GitLab runner with the `windows` tag. Runs on schedules and
+# default-branch pushes only (protected runner; see rules below).
 # ===================================================================
 windows-install:
     stage: windows-install
@@ -171,15 +266,18 @@ windows-install:
         - uv run slopgate uninstall all --dry-run
     needs: []
     rules:
+        # The Windows runner is protected (ref_protected): it only accepts jobs
+        # from protected refs. MR refs (refs/merge-requests/N/head) are never
+        # protected, so MR pipelines would hang with stuck_pending_no_matching_runners.
         - if: '$CI_PIPELINE_SOURCE == "schedule"'
-        - if: "$CI_MERGE_REQUEST_ID" # optional: run on MRs with Windows runner
+        - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 # ===================================================================
 # HOOK-INSTALL-VERIFY — install hooks into disposable harness configs
 # ===================================================================
 hook-install-verify:
     stage: hook-install-verify
-    <<: *common-setup
+    <<: *native-cli-setup
     script:
         - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
         - export HOME="${SLOPGATE_TEST_HOME}"
@@ -214,7 +312,7 @@ hook-install-verify:
 # ===================================================================
 hook-uninstall-verify:
     stage: hook-uninstall-verify
-    <<: *common-setup
+    <<: *native-cli-setup
     script:
         - export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
         - export HOME="${SLOPGATE_TEST_HOME}"
@@ -236,6 +334,4 @@ windows-install-tests:
         - uv run slopgate install claude --dry-run
         - uv run slopgate install codex --dry-run
     rules:
-        - if: '$CI_PIPELINE_SOURCE == "schedule"'
-          when: never
-        - if: '$CI_MERGE_REQUEST_ID'
+        - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

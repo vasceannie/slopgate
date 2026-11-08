@@ -40,14 +40,12 @@ def test_omp_extension_contains_required_bridge_contract() -> None:
         'pi.on("user_bash"',
         'pi.on("user_python"',
         "extractSessionStopResponse(event.last_assistant_message)",
-        'enforce("session_stop", event, ctx, { stop_response: stopResponse })',
         '"handle", "--platform", "omp"',
         "findManagedRepoRoot",
         "__SLOPGATE_BIN__",
         "SLOPGATE_OMP_INPUT_REWRITE",
         "SLOPGATE_SESSION_ID",
         "stop_hook_active",
-        "advisory",
     )
     missing = [marker for marker in required if marker not in source]
     assert not missing, f"OMP bridge contract is missing markers: {missing!r}"
@@ -68,16 +66,6 @@ def test_omp_extension_excludes_unsafe_or_foreign_protocols() -> None:
     )
     present = [marker for marker in forbidden if marker in source]
     assert not present, f"OMP bridge contains forbidden markers: {present!r}"
-
-
-def test_omp_extension_declares_every_stop_counter_reset_site() -> None:
-    source = omp_extension_source()
-    assert "stopContinuationCounts.clear()" in source, (
-        "session_start must prune all stored stop-continuation counters"
-    )
-    assert source.count("resetStopContinuationCount(sessionId)") == 5, (
-        "input plus clean, stop-hook, cap-exhaustion, and advisory settles must reset the session counter"
-    )
 
 
 def test_omp_extension_placeholder_substitution_smoke() -> None:

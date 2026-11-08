@@ -1,284 +1,283 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Iterable
 from pathlib import Path
+from typing import NamedTuple, cast
 
 import pytest
 
-import slopgate.installer
-import slopgate.installer._pi
-import slopgate.installer._shared
+import slopgate
+from tests.native.commands import would_run_prefix
+from tests.native.pi_support import (
+    PiHarness,
+    backups_preserved,
+    legacy_active,
+    make_harness,
+    native_actions,
+    native_cwds,
+    package_sources,
+    registered_sources,
+    seed_both_scopes,
+    seed_legacy,
+    tree_digest,
+    untouched_by_install,
+    write_user_settings_text,
+)
 
 
-def _install_user_pi_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0, (
-        "install_pi should create a user-scoped Pi extension for uninstall tests"
-    )
-    return tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
+class _StagedPackage(NamedTuple):
+    entry: bytes
+    version: str
+    name: object
+    dependencies: Iterable[object]
+    peer_dependencies: dict[str, object]
 
 
-def _artifact_state(paths: dict[str, Path]) -> dict[str, bool]:
-    return {name: path.exists() for name, path in paths.items()}
-
-
-def _text_artifact_state(paths: dict[str, Path]) -> dict[str, str]:
-    return {name: path.read_text(encoding="utf-8") for name, path in paths.items()}
-
-
-def test_pi_install_writes_global_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer.install_platform("pi", dry_run=False) == 0
-    extension_path = (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    )
-    config_path = extension_path.parent / "config.json"
-    package_path = extension_path.parent / "package.json"
-    content = extension_path.read_text(encoding="utf-8")
-    package = json.loads(package_path.read_text(encoding="utf-8"))
-    assert {
-        "has_marker": "Pi Slopgate Extension" in content,
-        "has_binary": json.dumps(["/tmp/slopgate"]) in content,
-        "has_handle_args": '"handle", "--platform", "pi"' in content,
-        "config_name": json.loads(config_path.read_text(encoding="utf-8"))["name"],
-            "pi_tui_version": package["peerDependencies"][
-                "@earendil-works/pi-tui"
-            ],
-        "node_types_version": package["dependencies"]["@types/node"],
-    } == {
-        "has_marker": True,
-        "has_binary": True,
-        "has_handle_args": True,
-        "config_name": "pi-slopgate",
-            "pi_tui_version": "*",
-        "node_types_version": "^22.16.5",
-    }, "Pi user install should write extension, config, and package metadata"
-
-
-def test_pi_project_scope_writes_repo_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    monkeypatch.chdir(tmp_path)
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="project") == 0
-    extension_path = tmp_path / ".pi" / "extensions" / "pi-slopgate" / "index.ts"
-    content = extension_path.read_text(encoding="utf-8")
-    assert all(
-        marker in content for marker in slopgate.installer._pi.PI_OWNERSHIP_MARKERS
-    )
-    assert (extension_path.parent / "config.json").exists()
-    assert (extension_path.parent / "package.json").exists()
-
-
-def test_pi_user_extension_path_uses_global_agent_extension_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    expected = tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    assert slopgate.installer._pi.pi_user_extension_path() == expected, (
-        "pi_user_extension_path should point at Pi's user agent extension directory"
+def _invocation_summary(harness: PiHarness) -> tuple[int, list[str], int]:
+    """Summarize native install count, working directories, and call count."""
+    actions = native_actions(harness.fake)
+    return (
+        actions.count("install"),
+        native_cwds(harness.fake),
+        len(harness.fake.calls()),
     )
 
 
-def test_pi_project_extension_path_uses_project_extension_dir(tmp_path: Path) -> None:
-    expected = tmp_path / ".pi" / "extensions" / "pi-slopgate" / "index.ts"
-    assert slopgate.installer._pi.pi_project_extension_path(tmp_path) == expected, (
-        "pi_project_extension_path should point at the repo-local Pi extension"
+def _install_snapshot(
+    harness: PiHarness,
+) -> tuple[int, dict[str, tuple[str, int]], tuple[bytes, bytes]]:
+    """Capture native installs, staged files, and both settings files."""
+    return (
+        native_actions(harness.fake).count("install"),
+        tree_digest(harness.package_root),
+        (harness.user_settings.read_bytes(), harness.project_settings.read_bytes()),
     )
 
 
-def test_pi_extension_has_owned_slopgate_recognizes_installed_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    assert slopgate.installer._pi.install_pi(
-        dry_run=False, scope="project", project_root=tmp_path
-    ) == 0, "install_pi should create the project extension for ownership probing"
-    extension_path = slopgate.installer._pi.pi_project_extension_path(tmp_path)
-    assert slopgate.installer._pi.pi_extension_has_owned_slopgate(extension_path), (
-        "pi_extension_has_owned_slopgate should recognize Slopgate's own template"
-    )
+def _read_json(path: Path) -> dict[str, object]:
+    """Read a JSON object from disk."""
+    return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
 
 
-def test_pi_install_removes_owned_legacy_standalone_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
-    legacy_path.parent.mkdir(parents=True)
-    legacy_path.write_text(
-        "\n".join(
-            (
-                "/* Pi Slopgate Extension */",
-                "const SLOPGATE_ARGV = []",
-                "// slopgate handle --platform pi",
-            )
-        ),
-        encoding="utf-8",
-    )
-
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 0
-    assert not legacy_path.exists()
-    assert list(legacy_path.parent.glob("slopgate.ts.slopgate-bak-*"))
-
-
-def test_pi_install_refuses_to_silently_remove_unrecognized_legacy_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        slopgate.installer._shared, "find_binary", lambda: "/tmp/slopgate"
-    )
-    legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
-    legacy_path.parent.mkdir(parents=True)
-    legacy_path.write_text("export default function custom() {}\n", encoding="utf-8")
-
-    assert slopgate.installer._pi.install_pi(dry_run=False, scope="user") == 1
-    assert (
-        legacy_path.read_text(encoding="utf-8")
-        == "export default function custom() {}\n"
-    )
-    assert (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    ).exists()
-
-
-def test_pi_uninstall_refuses_unrecognized_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    extension_path = (
-        tmp_path / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts"
-    )
-    extension_path.parent.mkdir(parents=True)
-    extension_path.write_text("export default function custom() {}\n", encoding="utf-8")
-    assert slopgate.installer._pi.uninstall_pi(dry_run=False) == 1
-    assert (
-        extension_path.read_text(encoding="utf-8")
-        == "export default function custom() {}\n"
+def _staged_package(source: Path) -> _StagedPackage:
+    """Read the staged Pi entry and manifest fields used by these contracts."""
+    entry = (source / "index.ts").read_bytes()
+    manifest = _read_json(source / "package.json")
+    return _StagedPackage(
+        entry,
+        cast(str, manifest["version"]),
+        manifest["name"],
+        cast(Iterable[object], manifest.get("dependencies", {})),
+        cast(dict[str, object], manifest["peerDependencies"]),
     )
 
 
-def test_pi_uninstall_removes_canonical_config_and_owned_legacy(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
-    legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
-    legacy_path.write_text(
-        "\n".join(
-            (
-                "/* Pi Slopgate Extension */",
-                "const SLOPGATE_ARGV = []",
-                "// slopgate handle --platform pi",
-            )
-        ),
-        encoding="utf-8",
-    )
+def _refresh_observation(
+    harness: PiHarness,
+) -> tuple[list[str], _StagedPackage]:
+    """Capture native actions and staged package contents after an install."""
+    return native_actions(harness.fake), _staged_package(harness.package_root)
 
-    config_path = extension_path.parent / "config.json"
-    package_path = extension_path.parent / "package.json"
-    paths = {
-        "extension_exists": extension_path,
-        "config_exists": config_path,
-        "package_exists": package_path,
-        "legacy_exists": legacy_path,
+
+def _refresh_after_version_bump(
+    harness: PiHarness, monkeypatch: pytest.MonkeyPatch, version: str
+) -> int:
+    """Bump Slopgate's version and reinstall the staged package."""
+    monkeypatch.setattr(slopgate, "__version__", version)
+    return harness.install(install_scope="user")
+
+
+def _write_relative_package_with_empty_filter(
+    harness: PiHarness,
+) -> dict[str, object]:
+    """Register the staged package using a relative source and empty filter."""
+    relative = os.path.relpath(harness.package_root, harness.user_settings.parent)
+    original: dict[str, object] = {
+        "theme": "keep",
+        "packages": [{"source": relative, "extensions": []}],
     }
-    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
-
-    assert {
-        "status": status,
-        **_artifact_state(paths),
-    } == {
-        "status": 0,
-        "extension_exists": False,
-        "config_exists": False,
-        "package_exists": False,
-        "legacy_exists": False,
-    }, "Pi uninstall should remove canonical files and owned legacy extension"
+    write_user_settings_text(harness, json.dumps(original, indent=2) + "\n")
+    return original
 
 
-def test_pi_uninstall_removes_owned_legacy_package_entry(
+def _user_registration_snapshot(harness: PiHarness) -> tuple[list[Path], Path]:
+    """Capture user registrations and the resolved staged package source."""
+    return package_sources(harness.user_settings), harness.package_root.resolve()
+
+
+def test_both_scope_install_registers_same_native_package(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
-    legacy_package_path = extension_path.with_name("index.js")
-    paths = {
-        "extension_exists": extension_path,
-        "config_exists": extension_path.parent / "config.json",
-        "legacy_package_exists": legacy_package_path,
-    }
-    legacy_package_path.write_text(
-        "\n".join(
-            (
-                "export default function piSlopgate() {}",
-                "// pi-slopgate",
-                "// slopgate handle --platform pi",
-            )
-        ),
-        encoding="utf-8",
+    harness = make_harness(tmp_path, monkeypatch)
+    status = harness.install()
+    assert status == 0, "both-scope Pi install should complete native registration"
+
+    user_sources, project_sources = registered_sources(harness)
+    installs, cwds, invocation_count = _invocation_summary(harness)
+    staged_source = harness.package_root.resolve()
+    assert user_sources == [staged_source], (
+        "user settings must register the staged native package source"
+    )
+    assert project_sources == [staged_source], (
+        "project settings must register the same staged native package source"
+    )
+    assert installs == 2, "Pi must be invoked once per previously-unregistered scope"
+    assert cwds == [str(harness.project)] * invocation_count, (
+        "all Pi subprocesses must use the requested project cwd"
     )
 
-    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
 
-    assert {
-        "status": status,
-        **_artifact_state(paths),
-    } == {
-        "status": 0,
-        "extension_exists": False,
-        "config_exists": False,
-        "legacy_package_exists": False,
-    }, "Pi uninstall should remove the owned legacy package entry"
-
-
-def test_pi_uninstall_preserves_unrecognized_artifact_but_removes_owned_leftovers(
+def test_legacy_cutover_backs_up_owned_files_and_preserves_siblings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    extension_path = _install_user_pi_extension(tmp_path, monkeypatch)
-    config_path = extension_path.parent / "config.json"
-    legacy_path = tmp_path / ".pi" / "agent" / "extensions" / "slopgate.ts"
-    paths = {
-        "extension_exists": extension_path,
-        "legacy_exists": legacy_path,
-    }
-    config_path.write_text('{"name": "custom"}\n', encoding="utf-8")
-    legacy_path.write_text(
-        "\n".join(
-            (
-                "/* Pi Slopgate Extension */",
-                "const SLOPGATE_ARGV = []",
-                "// slopgate handle --platform pi",
-            )
-        ),
-        encoding="utf-8",
+    harness = make_harness(tmp_path, monkeypatch)
+    user_seed, project_seed = seed_both_scopes(harness)
+    status = harness.install()
+
+    assert status == 0, "verified native install should retire legacy entries"
+    assert not legacy_active(harness, "user"), (
+        "user legacy entry points must no longer be active"
+    )
+    assert not legacy_active(harness, "project"), (
+        "project legacy entry points must no longer be active"
+    )
+    assert backups_preserved(user_seed, project_seed), (
+        "legacy cleanup must preserve original artifact bytes and modes in backups"
+    )
+    assert (harness.agent_dir / "extensions" / "pi-slopgate" / "keep.txt").exists(), (
+        "unknown siblings in an owned package directory must remain untouched"
     )
 
-    status = slopgate.installer._pi.uninstall_pi(dry_run=False, scope="user")
 
-    assert {
-        "status": status,
-        **_artifact_state(paths),
-        **_text_artifact_state({"config_content": config_path}),
-    } == {
-        "status": 1,
-        "extension_exists": False,
-        "config_content": '{"name": "custom"}\n',
-        "legacy_exists": False,
-    }, "Pi uninstall should preserve custom config but remove owned leftovers"
+def test_success_output_reports_native_source_state_and_activation_requirements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+
+    assert harness.install(install_scope="user") == 0, (
+        "user-scope native package install should succeed"
+    )
+    output = capsys.readouterr().out
+    assert "Installation mode: native package" in output, (
+        "install mode must be explicit"
+    )
+    assert (
+        str(harness.package_root) in output and "native state registered" in output
+    ), "success output must show the exact source and recorded registration state"
+    assert (
+        "Native listing: pi list" in output
+        and "Binary: /tmp/slopgate-test-bin" in output
+    ), "success output must report inventory command and resolved binary"
+    assert "new Pi session" in output, "success must require a fresh Pi session"
+
+
+def test_reinstall_is_idempotent_and_skips_registered_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+    first_status = harness.install()
+    assert first_status == 0, "initial native package registration should succeed"
+
+    installs_before, package_before, settings_before = _install_snapshot(harness)
+    second_status = harness.install()
+    assert second_status == 0, "reinstall of an unchanged source should succeed"
+
+    installs_after, package_after, settings_after = _install_snapshot(harness)
+    assert installs_after == installs_before, (
+        "idempotent install must not rerun native package registration"
+    )
+    assert package_after == package_before, "staged files must remain byte-stable"
+    assert settings_after == settings_before, (
+        "idempotent install must preserve both native settings files"
+    )
+
+
+def test_version_only_upgrade_refreshes_manifest_without_changing_source_or_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+    initial_status = harness.install(install_scope="user")
+    assert initial_status == 0, "initial native package install should succeed"
+
+    before = _staged_package(harness.package_root)
+    next_base_version = "9.8.7-local-test"
+    refresh_status = _refresh_after_version_bump(
+        harness, monkeypatch, next_base_version
+    )
+    assert refresh_status == 0, "version-only package refresh should succeed"
+
+    after = _staged_package(harness.package_root)
+    assert after.entry == before.entry, (
+        "version-only upgrade must preserve identical rendered extension bytes"
+    )
+    assert after.version != before.version, (
+        "staged package version must change when Slopgate's base version changes"
+    )
+    assert after.version.startswith(next_base_version + "+local."), (
+        "Pi manifest must embed the digest version derived from the new Slopgate version"
+    )
+    user_sources, staged_source = _user_registration_snapshot(harness)
+    assert user_sources == [staged_source], (
+        "Pi must preserve its stable package source during version-only refresh"
+    )
+
+
+def test_disabled_extension_filter_survives_explicit_package_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+    original = _write_relative_package_with_empty_filter(harness)
+    status = harness.install(install_scope="user")
+    assert status == 0, "explicit package refresh should succeed"
+
+    settings_after = _read_json(harness.user_settings)
+    assert settings_after == original, (
+        "empty extensions filter and unrelated settings must survive refresh"
+    )
+    output = capsys.readouterr().out
+    assert "native state registered with resource filters" in output, (
+        "success output must not claim an extension with an empty filter is active"
+    )
+    actions, staged = _refresh_observation(harness)
+    assert "install" not in actions, (
+        "refresh must leave the registered source/filter to the host settings"
+    )
+    assert staged.name == "pi-slopgate" and "@types/node" not in staged.dependencies, (
+        "native package identity must avoid the legacy runtime dependency"
+    )
+    assert set(staged.peer_dependencies) == {
+        "@earendil-works/pi-coding-agent",
+        "@earendil-works/pi-tui",
+    }, "Pi host peer dependencies must both be declared"
+
+
+def _dry_run_names_native_commands(capsys: pytest.CaptureFixture[str]) -> bool:
+    """Whether the captured dry-run output previews the install and the inventory check."""
+    output = capsys.readouterr().out
+    return (
+        would_run_prefix("pi", "install") in output
+        and "Would verify user scope with: pi list" in output
+    )
+
+
+def test_dry_run_does_not_change_files_or_spawn_pi(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+    seed_legacy(harness, "user")
+    before = tree_digest(tmp_path)
+
+    assert harness.install(dry_run=True) == 0, "read-only Pi dry-run should succeed"
+    assert tree_digest(tmp_path) == before, (
+        "dry-run must not create staging files or backups"
+    )
+    assert harness.fake.calls() == [], (
+        "dry-run must not spawn Pi's mutating package commands"
+    )
+    assert _dry_run_names_native_commands(capsys), (
+        "dry-run must print the native command and inventory target"
+    )

@@ -10,20 +10,26 @@
 interface NodeProcessLike {
   cwd(): string
   env: Record<string, string | undefined>
+  platform: string
+  kill(pid: number, signal: "SIGKILL"): void
 }
 
-import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { spawn, type ChildProcess } from "node:child_process"
+import { existsSync, realpathSync } from "node:fs"
+import { homedir } from "node:os"
+import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path"
 import runtimeProcessValue from "node:process"
+import { fileURLToPath } from "node:url"
 import { Box, Text } from "@earendil-works/pi-tui"
 import type { Component } from "@earendil-works/pi-tui"
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent"
+import type { ExtensionAPI, ExtensionCommandContext, ToolResultEvent } from "@earendil-works/pi-coding-agent"
 
 const runtimeProcess = runtimeProcessValue as NodeProcessLike
 
 const SLOPGATE_ARGV = runtimeProcess.env.SLOPGATE_BIN ? [runtimeProcess.env.SLOPGATE_BIN] : ["__SLOPGATE_BIN__"]
 const SLOPGATE_EVENT_MESSAGE_TYPE = "slopgate-event"
+const DEFAULT_ENFORCER_TIMEOUT_MS = 10_000
+const ENFORCER_CANCELLED = Symbol("slopgate-enforcer-cancelled")
 const SLOPGATE_SYSTEM_PROMPT_HEADER = "Slopgate hook context for this turn:"
 const SLOPGATE_GUARD_MESSAGE = "Violations flagged by slopgate must be fixed, not disabled, bypassed, or argued as preexisting. Do not modify or delete slopgate configuration files, extension files, or rule definitions. Fix the flagged issue directly."
 
@@ -39,6 +45,84 @@ const SLOPGATE_PROTECTED_SEGMENTS = [
   "slopgate/src/slopgate/rules",
   "slopgate/src/slopgate/adapters",
 ]
+const NATIVE_PI_UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
+const NATIVE_PI_SHELL_DRIVE_PATH = /^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i
+
+function normalizeNativePiShellPath(target: string): string {
+  if (runtimeProcess.platform !== "win32") return target
+  if (!target.startsWith("/") || target.startsWith("//") || target.includes("\\")) return target
+  const match = NATIVE_PI_SHELL_DRIVE_PATH.exec(target)
+  if (match === null) return target
+  const suffix = (match[2] ?? "").replaceAll("/", "\\")
+  return `${(match[1] ?? "").toUpperCase()}:\\${suffix}`
+}
+
+function normalizeNativePiPath(target: string, toolInput: boolean): string {
+  let normalized = toolInput ? target.replace(NATIVE_PI_UNICODE_SPACES, " ") : target
+  if (toolInput && normalized.startsWith("@")) normalized = normalized.slice(1)
+  const shellPath = normalizeNativePiShellPath(normalized)
+  if (shellPath === "~") return homedir()
+  if (shellPath.startsWith("~/") || (runtimeProcess.platform === "win32" && shellPath.startsWith("~\\"))) {
+    return join(homedir(), shellPath.slice(2))
+  }
+  if (/^file:\/\//.test(shellPath)) return fileURLToPath(shellPath)
+  return shellPath
+}
+
+function resolveNativePiMutationPath(target: string, cwd: string): string {
+  const normalizedTarget = normalizeNativePiPath(target, true)
+  const normalizedCwd = normalizeNativePiPath(cwd, false)
+  return isAbsolute(normalizedTarget)
+    ? resolvePath(normalizedTarget)
+    : resolvePath(normalizedCwd, normalizedTarget)
+}
+
+
+function isErrnoCode(error: unknown, codes: readonly string[]): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false
+  const code = error.code
+  return typeof code === "string" && codes.includes(code)
+}
+
+// Resolves symlinks on the longest existing prefix, so a not-yet-created target still maps to its real directory.
+function realPathOrSelf(target: string): string {
+  let existing = target
+  const missing: string[] = []
+  while (!existsSync(existing)) {
+    const parent = dirname(existing)
+    if (parent === existing) return target
+    missing.unshift(existing.slice(parent.length + 1))
+    existing = parent
+  }
+  try {
+    return join(realpathSync(existing), ...missing)
+  } catch (error) {
+    if (isErrnoCode(error, ["ENOENT", "EACCES"])) return target
+    throw error
+  }
+}
+
+// The directory holding this module is the active, host-loaded package; legacy path markers no longer cover it.
+const LOADED_PACKAGE_DIRS: readonly string[] = (() => {
+  const loadedDir = resolvePath(dirname(fileURLToPath(import.meta.url)))
+  return [...new Set([loadedDir, realPathOrSelf(loadedDir)])]
+})()
+
+function isInsideDir(target: string, dir: string): boolean {
+  const rel = relative(dir, target)
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
+}
+
+function isInsideLoadedPackage(target: string, cwd: string): boolean {
+  let resolved: string
+  try {
+    resolved = resolveNativePiMutationPath(target, cwd)
+  } catch {
+    return false
+  }
+  return [resolved, realPathOrSelf(resolved)]
+    .some((candidate) => LOADED_PACKAGE_DIRS.some((dir) => isInsideDir(candidate, dir)))
+}
 
 function isSlopgatePath(target: string): boolean {
   const normalized = target.replace(/\\/g, "/")
@@ -59,8 +143,35 @@ function isSlopgatePath(target: string): boolean {
   }
   return false
 }
-let lastSlopgateContext = ""
-let lastStopGuidance = ""
+interface SessionContextState {
+  readonly cwd: string
+  context: string
+  pendingPromptContext: string
+  pendingGuidance: string
+  lastContext: string
+  promptRevision: number
+  guidanceRevision: number
+  prepared: { promptRevision: number; guidanceRevision: number } | undefined
+  preToolContext: Map<string, string>
+  initialization: Promise<void> | undefined
+}
+
+type EnforcerOutcome = PiEnforcerResult | null | typeof ENFORCER_CANCELLED
+
+function createSessionContextState(cwd: string): SessionContextState {
+  return {
+    cwd,
+    context: "",
+    pendingPromptContext: "",
+    pendingGuidance: "",
+    lastContext: "",
+    promptRevision: 0,
+    guidanceRevision: 0,
+    prepared: undefined,
+    preToolContext: new Map(),
+    initialization: undefined,
+  }
+}
 
 interface PiEnforcerResult {
   block?: boolean
@@ -77,7 +188,7 @@ interface PiEventLike {
   input?: Record<string, unknown>
   args?: Record<string, unknown>
   arguments?: Record<string, unknown>
-  content?: unknown
+  content?: ToolResultEvent["content"] | string
   details?: unknown
   isError?: boolean
   prompt?: string
@@ -101,6 +212,7 @@ interface PiUiLike {
 interface PiContextLike {
   hasUI?: boolean
   cwd?: string
+  signal?: AbortSignal
   ui?: PiUiLike
   sessionManager: {
     getSessionId(): string
@@ -108,6 +220,7 @@ interface PiContextLike {
 }
 
 interface PiToolResultPatch {
+  content?: ToolResultEvent["content"]
   details?: Record<string, unknown>
   isError?: boolean
 }
@@ -118,14 +231,9 @@ interface PiInputTransformResult {
 }
 
 interface PiBeforeAgentStartResult {
-  message?: {
-    customType: string
-    content: string
-    display: boolean
-    details?: Record<string, unknown>
-  }
   systemPrompt?: string
 }
+
 
 type PiMessageRenderer = Parameters<ExtensionAPI["registerMessageRenderer"]>[1]
 
@@ -197,9 +305,8 @@ function toolResultFromEvent(event: PiEventLike): unknown {
       content: event.content,
     }
   }
-  // tool_execution_end may have details/result without a content array
   if (event.details != null || event.isError != null) {
-    const details = event.details as Record<string, unknown> | undefined
+    const details = isRecord(event.details) ? event.details : undefined
     const exitCode = details?.exitCode ?? details?.exit_code ?? null
     return {
       stdout: typeof event.content === "string" ? event.content :
@@ -228,7 +335,6 @@ function messageToText(msg: unknown): string {
 }
 
 function stopResponseFromEvent(event: PiEventLike): string {
-  // Try the last assistant message first (agent_end provides event.message)
   if (event.message != null) {
     return messageToText(event.message)
   }
@@ -270,72 +376,26 @@ function appendSlopgateSystemPrompt(
   return basePrompt ? `${basePrompt}\n\n${slopgateBlock}` : slopgateBlock
 }
 
-function beforeAgentStartResult(
-  event: PiEventLike,
-  result: PiEnforcerResult | null,
-): PiBeforeAgentStartResult | void {
-  const context = result?.context ?? ""
-  const guidance: string = lastStopGuidance
-  if (!context && !guidance) {
-    return
-  }
-  if (context) {
-    lastSlopgateContext = context
-  }
-  // Build system prompt from hook context + stop guidance
-  const promptContext = [context, guidance].filter(Boolean).join("\n\n")
-  lastStopGuidance = ""
-
-  const response: PiBeforeAgentStartResult = {
-    systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, promptContext),
-  }
-  if (result && context) {
-    response.message = {
-      customType: SLOPGATE_EVENT_MESSAGE_TYPE,
-      content: chatMessageContent("context", "before_agent_start", result),
-      display: true,
-      details: slopgateMessageDetails("context", "before_agent_start", result),
+function uniqueNonEmptyFragments(fragments: string[]): string[] {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const fragment of fragments) {
+    const normalized = fragment.trim()
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      unique.push(normalized)
     }
   }
-  return response
+  return unique
 }
 
-function compactSlopgateLines(result: PiEnforcerResult): string[] {
-  const lines = ["slopgate"]
-  const message = result.reason || result.context
-  if (message) {
-    const compact = message.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 4)
-    lines.push(...compact)
-  }
-  return lines
+function combinedContext(state: SessionContextState): string {
+  return uniqueNonEmptyFragments([
+    state.context,
+    state.pendingPromptContext,
+    state.pendingGuidance,
+  ]).join("\n\n")
 }
-
-function slopgateMessageDetails(
-  state: "blocked" | "context" | "warning",
-  eventName: string,
-  result: PiEnforcerResult,
-): Record<string, unknown> {
-  return {
-    state,
-    event: eventName,
-    reason: result.reason,
-    context: result.context,
-    summary: chatMessageContent(state, eventName, result),
-  }
-}
-
-function chatMessageContent(
-  state: "blocked" | "context" | "warning",
-  eventName: string,
-  result: PiEnforcerResult,
-): string {
-  if (state === "context") {
-    return "Context added to this turn. Run /slopgate-context for details."
-  }
-  const compact = compactSlopgateLines(result).slice(1)
-  return compact.length > 0 ? compact.join("\n") : `Slopgate ${state} at ${eventName}`
-}
-
 function stringDetail(details: Record<string, unknown> | undefined, key: string): string {
   const value = details?.[key]
   return typeof value === "string" ? value : ""
@@ -379,87 +439,68 @@ function registerSlopgateMessageRenderer(pi: ExtensionAPI): void {
   pi.registerMessageRenderer(SLOPGATE_EVENT_MESSAGE_TYPE, renderSlopgateMessage)
 }
 
-function registerSlopgateContextCommand(pi: ExtensionAPI): void {
+function registerSlopgateContextCommand(
+  pi: ExtensionAPI,
+  contextFor: (ctx: ExtensionCommandContext) => string,
+): void {
   pi.registerCommand("slopgate-context", {
-    description: "Show the latest Slopgate context injected into the current session.",
+    description: "Show the latest prepared Slopgate context for the current session.",
     async handler(_args: string, ctx: ExtensionCommandContext): Promise<void> {
-      if (!lastSlopgateContext) {
-        ctx.ui?.notify?.("No Slopgate context has been captured yet.", "info")
+      if (!ctx.hasUI) {
         return
       }
-      if (ctx.ui?.editor) {
-        await ctx.ui.editor("Slopgate context", lastSlopgateContext)
+      const latestContext = contextFor(ctx)
+      if (!latestContext) {
+        ctx.ui.notify("No Slopgate context has been captured yet.", "info")
         return
       }
-      ctx.ui?.notify?.("Slopgate context is available after the next TUI turn.", "info")
+      await ctx.ui.editor("Slopgate context", latestContext)
     },
   })
 }
 
-function clearSlopgateContext(): void {
-  lastSlopgateContext = ""
-  lastStopGuidance = ""
-}
-
-function sendSlopgateChatMessage(
-  pi: ExtensionAPI,
-  result: PiEnforcerResult | null,
-  eventName: string,
-  state: "blocked" | "context" | "warning",
-): void {
-  if (!result) {
-    return
-  }
-  pi.sendMessage(
-    {
-      customType: SLOPGATE_EVENT_MESSAGE_TYPE,
-      content: chatMessageContent(state, eventName, result),
-      display: true,
-      details: slopgateMessageDetails(state, eventName, result),
-    },
-    { triggerTurn: false },
-  )
-}
-
-function advisory(pi: ExtensionAPI, eventName: string, result: PiEnforcerResult | null): void {
-  // Only surface guidance (reason) as a chat message.
-  // Context is already in the system prompt via before_agent_start.
-  if (!result?.reason) {
-    return
-  }
-  sendSlopgateChatMessage(pi, result, eventName, "warning")
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function mergeToolResultPatch(
+  state: SessionContextState,
   event: PiEventLike,
   result: PiEnforcerResult | null,
 ): PiToolResultPatch | void {
-  if (!result) {
-    return
+  const toolCallId = event.toolCallId || ""
+  const preToolContext = toolCallId ? state.preToolContext.get(toolCallId) || "" : ""
+  if (toolCallId) {
+    state.preToolContext.delete(toolCallId)
   }
-  const patch: PiToolResultPatch | undefined = result.tool_result_patch
+
+  const findings = uniqueNonEmptyFragments([
+    preToolContext,
+    result?.context || "",
+    result?.reason || "",
+  ])
+  const enforcerPatch = result?.tool_result_patch
   const merged: PiToolResultPatch = {}
-  if (patch?.isError !== undefined) {
-    merged.isError = patch.isError
+
+  if (enforcerPatch?.isError !== undefined) {
+    merged.isError = enforcerPatch.isError
   }
-  if (patch?.details) {
-    const existingDetails = event.details && typeof event.details === "object" && !Array.isArray(event.details)
-      ? event.details as Record<string, unknown>
-      : {}
-    merged.details = { ...existingDetails, ...patch.details }
+  const nativeDetails = isRecord(event.details) ? event.details : undefined
+  const patchDetails = isRecord(enforcerPatch?.details) ? enforcerPatch.details : undefined
+  if (nativeDetails || patchDetails) {
+    merged.details = {
+      ...(nativeDetails || {}),
+      ...(patchDetails || {}),
+    }
   }
-  // Inject guidance (reason) inline so the model sees it immediately
-  // rather than waiting for the next turn's chat message.
-  if (result.reason) {
-    const existingDetails = event.details && typeof event.details === "object" && !Array.isArray(event.details)
-      ? event.details as Record<string, unknown>
-      : {}
-    merged.details = { ...(merged.details ?? existingDetails), slopgate_guidance: result.reason }
+  if (findings.length > 0) {
+    const originalContent: ToolResultEvent["content"] = Array.isArray(event.content) ? event.content : []
+    merged.content = [
+      ...originalContent,
+      { type: "text", text: `Slopgate findings:\n${findings.join("\n\n")}` },
+    ]
   }
-  if (Object.keys(merged).length === 0) {
-    return
-  }
-  return merged
+  return Object.keys(merged).length > 0 ? merged : undefined
 }
 
 function chunkToUtf8(chunk: string | Uint8Array): string {
@@ -473,113 +514,222 @@ function enforcerPayload(
   eventName: string,
   event: PiEventLike,
   ctx: PiContextLike,
+  nativeSessionId: string,
 ): Record<string, unknown> {
   const cwd = cwdFromContext(ctx)
-
-  // Map tool_execution_end with non-zero exit to PostToolUseFailure
-  let hookEventName = eventName
-  if (eventName === "tool_execution_end" && event.isError === true) {
-    hookEventName = "PostToolUseFailure"
-  }
-
-  // Build stop_response for agent_end / turn_end so STOP-001/STOP-002 can inspect it
-  let stopResponse = ""
-  if (eventName === "agent_end" || eventName === "turn_end") {
-    stopResponse = stopResponseFromEvent(event)
-  }
-
-  // Detect interrupt / cancellation from details
-  const details = event.details as Record<string, unknown> | undefined
-  const isInterrupt = details?.cancelled === true || details?.interrupted === true || false
+  const details = isRecord(event.details) ? event.details : undefined
+  const stopResponse = eventName === "agent_end" || eventName === "turn_end"
+    ? stopResponseFromEvent(event)
+    : ""
+  const toolResult = toolResultFromEvent(event)
 
   return {
-    hook_event_name: hookEventName,
+    hook_event_name: eventName,
     tool_name: event.toolName || (typeof event.command === "string" ? "bash" : ""),
     tool_call_id: event.toolCallId || "",
     tool_input: toolInputFromEvent(event),
     cwd,
-    session_id: runtimeProcess.env.SLOPGATE_SESSION_ID || ctx.sessionManager.getSessionId(),
+    session_id: runtimeProcess.env.SLOPGATE_SESSION_ID || nativeSessionId,
     transcript_path: null,
     prompt: promptFromEvent(event),
-    tool_result: toolResultFromEvent(event),
-    tool_response: toolResultFromEvent(event),
+    tool_result: toolResult,
+    isError: event.isError === true,
+    details: event.details,
     stop_response: stopResponse || undefined,
-    is_interrupt: isInterrupt || undefined,
-    pi_event: event,
+    is_interrupt: details?.cancelled === true || details?.interrupted === true || undefined,
+  }
+}
+
+function enforcerTimeoutMs(): number {
+  const rawTimeout = runtimeProcess.env.SLOPGATE_ENFORCER_TIMEOUT_MS
+  const parsedTimeout = rawTimeout === undefined ? DEFAULT_ENFORCER_TIMEOUT_MS : Number(rawTimeout)
+  return Number.isFinite(parsedTimeout) && parsedTimeout > 0
+    ? parsedTimeout
+    : DEFAULT_ENFORCER_TIMEOUT_MS
+}
+
+function reportEnforcerFailure(
+  eventName: string,
+  sessionId: string,
+  category: string,
+  exitCode: number | null,
+): void {
+  const diagnostic = {
+    service: "slopgate",
+    event: eventName.slice(0, 64),
+    session_id: sessionId.slice(0, 128),
+    category,
+    exit_code: exitCode,
+  }
+  console.error(`[slopgate] ${JSON.stringify(diagnostic)}`)
+}
+
+function killProcessTree(child: ChildProcess): void {
+  const pid = child.pid
+  if (pid == null) {
+    child.kill("SIGKILL")
+    return
+  }
+  if (runtimeProcess.platform === "win32") {
+    spawn("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" })
+    child.kill("SIGKILL")
+    return
+  }
+  try {
+    runtimeProcess.kill(-pid, "SIGKILL")
+  } catch {
+    child.kill("SIGKILL")
   }
 }
 
 function callEnforcer(
   payload: Record<string, unknown>,
   managedRepo: boolean,
-): Promise<PiEnforcerResult | null> {
+  eventName: string,
+  sessionId: string,
+  signals: (AbortSignal | undefined)[],
+  activeChildren: Set<ChildProcess>,
+): Promise<EnforcerOutcome> {
   return new Promise((resolve) => {
+    const timeoutMs = enforcerTimeoutMs()
     const cwd = typeof payload.cwd === "string" ? payload.cwd : runtimeProcess.cwd()
-    const proc = spawn(
-      SLOPGATE_ARGV[0],
-      [...SLOPGATE_ARGV.slice(1), "handle", "--platform", "pi"],
-      {
-        cwd,
-        env: runtimeProcess.env,
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    )
+    let child: ChildProcess | undefined
     let stdout = ""
-    let stderr = ""
-    proc.stdout.on("data", (chunk: string | Uint8Array) => {
-      stdout += chunkToUtf8(chunk)
-    })
-    proc.stderr.on("data", (chunk: string | Uint8Array) => {
-      stderr += chunkToUtf8(chunk)
-    })
-    proc.on("error", (error: Error) => {
-      console.error(`[slopgate] enforcer failed: ${error.message}`)
-      resolve(
-        managedRepo
-          ? {
-              block: true,
-              reason: "slopgate degraded mode: enforcer subprocess failed in managed repo.",
-            }
-          : null,
+    let inputLost = false
+    let settled = false
+    let termination: "cancelled" | "timeout" | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const registeredSignals: AbortSignal[] = []
+
+    const cleanup = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      for (const signal of registeredSignals) {
+        signal.removeEventListener("abort", onAbort)
+      }
+    }
+    const finish = (result: EnforcerOutcome): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(result)
+    }
+    const degraded = (reason: string): EnforcerOutcome => managedRepo
+      ? { block: true, reason }
+      : null
+    const terminate = (reason: "cancelled" | "timeout"): void => {
+      if (settled || termination !== undefined) return
+      termination = reason
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        timer = undefined
+      }
+      if (!child) {
+        finish(reason === "cancelled"
+          ? ENFORCER_CANCELLED
+          : degraded("slopgate degraded mode: enforcer subprocess timed out in managed repo."))
+        return
+      }
+      child.stdin?.destroy()
+      child.stdout?.destroy()
+      killProcessTree(child)
+    }
+    const onAbort = (): void => terminate("cancelled")
+
+    if (signals.some((signal) => signal?.aborted)) {
+      finish(ENFORCER_CANCELLED)
+      return
+    }
+    for (const signal of new Set(signals.filter((value): value is AbortSignal => value !== undefined))) {
+      signal.addEventListener("abort", onAbort, { once: true })
+      registeredSignals.push(signal)
+    }
+
+    timer = setTimeout(() => {
+      if (settled) return
+      reportEnforcerFailure(eventName, sessionId, "timeout", null)
+      terminate("timeout")
+    }, timeoutMs)
+    timer.unref?.()
+
+    try {
+      child = spawn(
+        SLOPGATE_ARGV[0],
+        [...SLOPGATE_ARGV.slice(1), "handle", "--platform", "pi"],
+        {
+          cwd,
+          env: runtimeProcess.env,
+          detached: runtimeProcess.platform !== "win32",
+          stdio: ["pipe", "pipe", "ignore"],
+        },
       )
-    })
-    proc.on("close", (code: number | null) => {
-      if (code !== 0) {
-        console.error(`[slopgate] exit ${code}: ${stderr}`)
-        resolve(
-          managedRepo
-            ? {
-                block: true,
-                reason: "slopgate degraded mode: enforcer subprocess failed in managed repo.",
-              }
-            : null,
-        )
-        return
+      activeChildren.add(child)
+      child.stdout?.on("data", (chunk: string | Uint8Array) => {
+        stdout += chunkToUtf8(chunk)
+      })
+      if (child.stdin) {
+        child.stdin.on("error", () => {
+          inputLost = true
+        })
+      } else {
+        inputLost = true
       }
-      const trimmed = stdout.trim()
-      if (!trimmed) {
-        resolve(null)
-        return
-      }
-      try {
-        resolve(JSON.parse(trimmed) as PiEnforcerResult)
-      } catch (error) {
-        if (!(error instanceof Error)) {
-          throw error
+      child.once("error", () => {
+        if (child) activeChildren.delete(child)
+        if (termination === "cancelled") {
+          finish(ENFORCER_CANCELLED)
+          return
         }
-        console.error(`[slopgate] invalid enforcer JSON: ${error.message}`)
-        resolve(
-          managedRepo
-            ? {
-                block: true,
-                reason: "slopgate degraded mode: enforcer returned invalid JSON.",
-              }
-            : null,
-        )
+        if (termination === "timeout") {
+          finish(degraded("slopgate degraded mode: enforcer subprocess timed out in managed repo."))
+          return
+        }
+        reportEnforcerFailure(eventName, sessionId, "spawn_failed", null)
+        finish(degraded("slopgate degraded mode: enforcer subprocess failed in managed repo."))
+      })
+      child.once("close", (exitCode: number | null) => {
+        if (child) activeChildren.delete(child)
+        if (termination === "cancelled") {
+          finish(ENFORCER_CANCELLED)
+          return
+        }
+        if (termination === "timeout") {
+          finish(degraded("slopgate degraded mode: enforcer subprocess timed out in managed repo."))
+          return
+        }
+        if (exitCode !== 0) {
+          reportEnforcerFailure(eventName, sessionId, "nonzero_exit", exitCode)
+          finish(degraded("slopgate degraded mode: enforcer subprocess failed in managed repo."))
+          return
+        }
+        if (inputLost) {
+          reportEnforcerFailure(eventName, sessionId, "stdin_lost", exitCode)
+          finish(degraded("slopgate degraded mode: enforcer did not read its input in managed repo."))
+          return
+        }
+        const trimmed = stdout.trim()
+        if (!trimmed) {
+          finish(null)
+          return
+        }
+        try {
+          finish(JSON.parse(trimmed) as PiEnforcerResult)
+        } catch {
+          reportEnforcerFailure(eventName, sessionId, "invalid_json", exitCode)
+          finish(degraded("slopgate degraded mode: enforcer returned invalid JSON in managed repo."))
+        }
+      })
+      if (child.stdin) {
+        try {
+          child.stdin.end(JSON.stringify(payload))
+        } catch {
+          inputLost = true
+        }
       }
-    })
-    proc.stdin.write(JSON.stringify(payload))
-    proc.stdin.end()
+    } catch {
+      if (child) activeChildren.delete(child)
+      reportEnforcerFailure(eventName, sessionId, "spawn_failed", null)
+      finish(degraded("slopgate degraded mode: enforcer subprocess failed in managed repo."))
+    }
   })
 }
 
@@ -587,98 +737,217 @@ async function enforce(
   eventName: string,
   event: PiEventLike,
   ctx: PiContextLike,
-): Promise<PiEnforcerResult | null> {
+  shutdownSignal: AbortSignal,
+  activeChildren: Set<ChildProcess>,
+): Promise<EnforcerOutcome> {
   const cwd = cwdFromContext(ctx)
-  return callEnforcer(enforcerPayload(eventName, event, ctx), findManagedRepoRoot(cwd) !== null)
+  const nativeSessionId = ctx.sessionManager.getSessionId()
+  const managedRepo = findManagedRepoRoot(cwd) !== null
+  try {
+    const payload = enforcerPayload(eventName, event, ctx, nativeSessionId)
+    return await callEnforcer(
+      payload,
+      managedRepo,
+      eventName,
+      nativeSessionId,
+      [ctx.signal, shutdownSignal],
+      activeChildren,
+    )
+  } catch {
+    reportEnforcerFailure(eventName, nativeSessionId, "payload_failed", null)
+    return managedRepo
+      ? { block: true, reason: "slopgate degraded mode: enforcer subprocess failed in managed repo." }
+      : null
+  }
 }
 
 export default function slopgatePiExtension(pi: ExtensionAPI) {
-  registerSlopgateMessageRenderer(pi)
-  registerSlopgateContextCommand(pi)
+  const sessionStates = new Map<string, SessionContextState>()
+  let shutdownController = new AbortController()
+  const activeChildren = new Set<ChildProcess>()
 
-  pi.on("session_start", () => {
-    clearSlopgateContext()
+  const stateFor = (ctx: PiContextLike): SessionContextState => {
+    const sessionId = ctx.sessionManager.getSessionId()
+    const cwd = cwdFromContext(ctx)
+    const existing = sessionStates.get(sessionId)
+    if (existing && existing.cwd === cwd) {
+      return existing
+    }
+    const state = createSessionContextState(cwd)
+    sessionStates.set(sessionId, state)
+    return state
+  }
+
+  const replacePendingGuidance = (state: SessionContextState, value: string): void => {
+    const guidance = value.trim()
+    if (!guidance) return
+    state.pendingGuidance = guidance
+    state.guidanceRevision += 1
+  }
+
+  const clearPendingState = (state: SessionContextState): void => {
+    state.pendingPromptContext = ""
+    state.pendingGuidance = ""
+    state.promptRevision += 1
+    state.guidanceRevision += 1
+    state.prepared = undefined
+    state.preToolContext.clear()
+  }
+
+  const clearPreparedState = (state: SessionContextState): void => {
+    const prepared = state.prepared
+    if (!prepared) return
+    if (state.promptRevision === prepared.promptRevision) {
+      state.pendingPromptContext = ""
+    }
+    if (state.guidanceRevision === prepared.guidanceRevision) {
+      state.pendingGuidance = ""
+    }
+    state.prepared = undefined
+  }
+
+  const initializeSession = (
+    state: SessionContextState,
+    event: PiEventLike,
+    ctx: PiContextLike,
+  ): Promise<void> => {
+    if (state.initialization) return state.initialization
+    const initialization = Promise.resolve().then(async () => {
+      const result = await enforce("session_start", event, ctx, shutdownController.signal, activeChildren)
+      if (result === ENFORCER_CANCELLED) return
+      if (result?.context) {
+        state.context = result.context
+      }
+      if (result?.block) {
+        const reason = result.reason || "Blocked by Slopgate during session initialization."
+        replacePendingGuidance(state, reason)
+        if (ctx.hasUI && ctx.ui?.notify) {
+          ctx.ui.notify(reason, "warning")
+        } else {
+          console.error(`[slopgate] ${reason}`)
+        }
+      }
+    })
+    state.initialization = initialization
+    return initialization
+  }
+
+  registerSlopgateMessageRenderer(pi)
+  registerSlopgateContextCommand(pi, (ctx) => stateFor(ctx).lastContext)
+
+  pi.on("session_start", async (event, ctx) => {
+    const state = stateFor(ctx)
+    await initializeSession(state, event, ctx)
   })
 
   pi.on("tool_call", async (event, ctx) => {
-    // Block write/edit/delete operations on slopgate-owned files
+    const state = stateFor(ctx)
     const toolName = event.toolName || ""
     if (toolName === "write" || toolName === "edit" || toolName === "replace" || toolName === "bash") {
       const toolPath = toolPathFromEvent(event)
-      if (toolPath && isSlopgatePath(toolPath)) {
-        const cwd = cwdFromContext(ctx)
-        if (findManagedRepoRoot(cwd)) {
-          return {
-            block: true,
-            reason: `Cannot modify slopgate infrastructure: ${toolPath}. Fix the flagged issue instead.`,
-          }
+      const cwd = cwdFromContext(ctx)
+      if (toolPath && (isInsideLoadedPackage(toolPath, cwd)
+        || (isSlopgatePath(toolPath) && findManagedRepoRoot(cwd)))) {
+        return {
+          block: true,
+          reason: `Cannot modify slopgate infrastructure: ${toolPath}. Fix the flagged issue instead.`,
         }
       }
     }
 
-    const result = await enforce("tool_call", event, ctx)
+    const result = await enforce("tool_call", event, ctx, shutdownController.signal, activeChildren)
+    if (result === ENFORCER_CANCELLED) return
     applyUpdatedInput(event, result?.updated_input)
     if (result?.block) {
-      sendSlopgateChatMessage(pi, result, "tool_call", "blocked")
       return { block: true, reason: result.reason || "Blocked by slopgate" }
     }
-    advisory(pi, "tool_call", result)
+    const toolCallId = event.toolCallId
+    if (toolCallId && result?.context?.trim()) {
+      state.preToolContext.set(toolCallId, result.context)
+    }
   })
 
   pi.on("tool_result", async (event, ctx) => {
-    const result = await enforce("tool_result", event, ctx)
-    advisory(pi, "tool_result", result)
-    return mergeToolResultPatch(event, result)
-  })
-
-  pi.on("tool_execution_end", async (event, ctx) => {
-    const result = await enforce("tool_execution_end", event, ctx)
-    advisory(pi, "tool_execution_end", result)
+    const state = stateFor(ctx)
+    const result = await enforce("tool_result", event, ctx, shutdownController.signal, activeChildren)
+    if (result === ENFORCER_CANCELLED) {
+      if (event.toolCallId) state.preToolContext.delete(event.toolCallId)
+      return
+    }
+    return mergeToolResultPatch(state, event, result)
   })
 
   pi.on("input", async (event, ctx) => {
-    const result = await enforce("input", event, ctx)
+    const state = stateFor(ctx)
+    const result = await enforce("input", event, ctx, shutdownController.signal, activeChildren)
+    if (result === ENFORCER_CANCELLED) return
+
+    state.pendingPromptContext = result?.block ? "" : result?.context || ""
+    state.promptRevision += 1
     if (result?.block) {
-      sendSlopgateChatMessage(pi, result, "input", "blocked")
-      if (result.reason && ctx.ui?.notify) {
-        ctx.ui.notify(result.reason, "warning")
+      const reason = result.reason || "Blocked by slopgate"
+      if (ctx.hasUI && ctx.ui?.notify) {
+        ctx.ui.notify(reason, "warning")
+      } else {
+        console.error(`[slopgate] input blocked: ${reason}`)
       }
       return { action: "handled" }
     }
-    const transform = inputTransformFromUpdatedInput(result?.updated_input)
-    if (transform) {
-      return transform
-    }
-    advisory(pi, "input", result)
+    return inputTransformFromUpdatedInput(result?.updated_input) || undefined
   })
 
-  pi.on("before_agent_start", async (event, ctx) => {
-    const result = await enforce("before_agent_start", event, ctx)
-    const response = beforeAgentStartResult(event, result)
-    if (!response) {
-      advisory(pi, "before_agent_start", result)
+  pi.on("before_agent_start", (event, ctx) => {
+    const state = stateFor(ctx)
+    const promptContext = combinedContext(state)
+    state.prepared = {
+      promptRevision: state.promptRevision,
+      guidanceRevision: state.guidanceRevision,
     }
-    return response
+    if (!promptContext) return
+    state.lastContext = promptContext
+    const result: PiBeforeAgentStartResult = {
+      systemPrompt: appendSlopgateSystemPrompt(event.systemPrompt, promptContext),
+    }
+    return result
   })
 
   pi.on("turn_end", async (event, ctx) => {
-    const result = await enforce("turn_end", event, ctx)
-    if (result?.reason) {
-      lastStopGuidance = result.reason
-    }
+    const state = stateFor(ctx)
+    clearPreparedState(state)
+    const result = await enforce("turn_end", event, ctx, shutdownController.signal, activeChildren)
+    if (result === ENFORCER_CANCELLED) return
+    replacePendingGuidance(state, result?.context || result?.reason || "")
   })
 
   pi.on("agent_end", async (event, ctx) => {
-    const result = await enforce("agent_end", event, ctx)
-    if (result?.reason) {
-      lastStopGuidance = result.reason
-    }
+    const state = stateFor(ctx)
+    const result = await enforce("agent_end", event, ctx, shutdownController.signal, activeChildren)
+    state.preToolContext.clear()
+    if (result === ENFORCER_CANCELLED) return
+    replacePendingGuidance(state, result?.context || result?.reason || "")
+  })
+
+  pi.on("agent_settled", (_event, ctx) => {
+    stateFor(ctx).preToolContext.clear()
+  })
+
+  pi.on("session_tree", (_event, ctx) => {
+    clearPendingState(stateFor(ctx))
+  })
+
+  pi.on("session_shutdown", () => {
+    sessionStates.clear()
+    // Swap before aborting: later sessions in this process must not inherit a dead signal.
+    const controller = shutdownController
+    shutdownController = new AbortController()
+    controller.abort()
   })
 
   pi.on("user_bash", async (event, ctx) => {
-    const result = await enforce("user_bash", event, ctx)
+    const state = stateFor(ctx)
+    const result = await enforce("user_bash", event, ctx, shutdownController.signal, activeChildren)
+    if (result === ENFORCER_CANCELLED) return
     if (result?.block) {
-      sendSlopgateChatMessage(pi, result, "user_bash", "blocked")
       return {
         result: {
           output: result.reason || "Blocked by slopgate",
@@ -688,6 +957,6 @@ export default function slopgatePiExtension(pi: ExtensionAPI) {
         },
       }
     }
-    advisory(pi, "user_bash", result)
+    replacePendingGuidance(state, result?.context || "")
   })
 }

@@ -47,7 +47,11 @@ _CODEX_FEATURE_LINE = strategies.sampled_from(
 )
 # Installer dry-run walks config/FS. Hypothesis's 200ms deadline flakes under
 # slopgate xdist load (observed 216-319ms); these pass in isolation.
-_INSTALLER_DRY_RUN = settings(deadline=None, max_examples=1)
+_INSTALLER_DRY_RUN = settings(
+    deadline=None,
+    max_examples=1,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
 
 
 @given(strategies.just(None))
@@ -75,6 +79,7 @@ def test_command_is_slopgate_hook_rejects_non_string_inputs_property(_: None) ->
     assert command_is_slopgate_hook([]) is False
 
 
+@pytest.mark.usefixtures("native_hosts")
 @_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_update_suite_dry_run_returns_zero_property(dry_run: bool) -> None:
@@ -100,9 +105,7 @@ def test_uninstall_autoupdate_dry_run_returns_zero_property(dry_run: bool) -> No
 
 @given(strategies.sampled_from(["PreToolUse", "PostToolUse"]))
 def test_merge_owned_hooks_preserves_unrelated_events_property(event: str) -> None:
-    existing: ObjectDict = {
-        "hooks": {event: [{"hooks": [{"command": "echo keep"}]}]}
-    }
+    existing: ObjectDict = {"hooks": {event: [{"hooks": [{"command": "echo keep"}]}]}}
     managed: dict[str, list[ObjectDict]] = {
         event: [{"hooks": [{"command": "slopgate handle --platform claude"}]}]
     }
@@ -126,12 +129,14 @@ def test_filter_owned_hook_commands_keeps_external_hooks_property(_: None) -> No
     assert isinstance(filtered["hooks"], list)
 
 
+@pytest.mark.usefixtures("native_hosts")
 @_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_install_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
     assert install_claude(dry_run=dry_run) == 0
 
 
+@pytest.mark.usefixtures("native_hosts")
 @_INSTALLER_DRY_RUN
 @given(strategies.just(True))
 def test_uninstall_claude_dry_run_returns_zero_property(dry_run: bool) -> None:
@@ -212,9 +217,7 @@ _SAFE_NAME = strategies.text(
     min_size=1,
     max_size=8,
 )
-_CONTAINED_PATH = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture]
-)
+_CONTAINED_PATH = settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 
 
 @_CONTAINED_PATH

@@ -1,143 +1,183 @@
 from __future__ import annotations
 
+import hashlib
 import json
-import stat
+import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-
-import pytest
+from typing import Protocol, cast
 
 import slopgate.installer._omp
 import slopgate.installer._shared
-from slopgate.installer._shared import ContainedWrite
+from slopgate.constants import INSTALL_SCOPE_PROJECT, INSTALL_SCOPE_USER
+from slopgate.installer._omp_support import MANIFEST_TEXT
 from slopgate.resources import resource_path
+from tests.native.environment import isolate_native_data_dirs
+from tests.native.omp_fake import OMP_PLUGIN_ID, write_fake_omp
 
-TEST_BINARY = str(Path.cwd() / "slopgate-test-bin")
-MANIFEST_PAYLOAD = {
-    "name": "omp-slopgate",
-    "private": True,
-    "type": "module",
-    "omp": {"extensions": ["./index.ts"]},
-    "peerDependencies": {
-        "@oh-my-pi/pi-coding-agent": "*",
-        "@oh-my-pi/pi-tui": "*",
-    },
-}
-MANIFEST_BYTES = (json.dumps(MANIFEST_PAYLOAD, indent=2) + "\n").encode()
+TEST_BINARY = "slopgate-test-bin"
+REFRESHED_BINARY = "slopgate-refreshed-bin"
+
+
+class _EnvironmentPatch(Protocol):
+    def setattr(self, target: object, name: str, value: object) -> None: ...
+
+    def setenv(self, name: str, value: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
-class OwnedSiteSeed:
-    index_bytes: bytes
-    manifest_bytes: bytes
-    index_mode: int = 0o640
-    manifest_mode: int = 0o600
-
-    @classmethod
-    def from_paths(cls, index_path: Path, manifest_path: Path) -> OwnedSiteSeed:
-        return cls(
-            index_bytes=index_path.read_bytes(),
-            manifest_bytes=manifest_path.read_bytes(),
-            index_mode=stat.S_IMODE(index_path.stat().st_mode),
-            manifest_mode=stat.S_IMODE(manifest_path.stat().st_mode),
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class CrossSiteFailureScenario:
+class OmpSandbox:
+    home: Path
+    agent_dir: Path
     project_root: Path
-    project_index: Path
-    user_index: Path
-    user_manifest: Path
-    expected_user: OwnedSiteSeed
+    bin_dir: Path
+    launcher: Path
+    state_path: Path
 
 
-def patch_install(
-    monkeypatch: pytest.MonkeyPatch, home: Path, binary: str = TEST_BINARY
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+@dataclass(frozen=True, slots=True)
+class _EnvironmentPaths:
+    home: Path
+    agent_dir: Path
+    xdg_root: Path
+    state_path: Path
+    bin_dir: Path
+
+
+def prepare_omp_sandbox(
+    monkeypatch: _EnvironmentPatch, tmp_path: Path, binary: str = TEST_BINARY
+) -> OmpSandbox:
+    isolate_native_data_dirs(monkeypatch, tmp_path)
+    paths = _EnvironmentPaths(
+        home=tmp_path / "home",
+        agent_dir=tmp_path / "home" / ".omp" / "agent",
+        xdg_root=tmp_path / "xdg",
+        state_path=tmp_path / "omp-state.json",
+        bin_dir=tmp_path / "bin",
+    )
+    project_root = tmp_path / "project with space"
+    project_root.mkdir()
+    _set_environment(monkeypatch, paths)
+    launcher = write_fake_omp(paths.bin_dir)
+    monkeypatch.setattr(Path, "home", lambda: paths.home)
     monkeypatch.setattr(slopgate.installer._shared, "find_binary", lambda: binary)
+    return OmpSandbox(
+        paths.home,
+        paths.agent_dir,
+        project_root,
+        paths.bin_dir,
+        launcher,
+        paths.state_path,
+    )
 
 
-def patch_unreadable_artifact(
-    monkeypatch: pytest.MonkeyPatch,
-    artifact: Path,
-) -> None:
-    original_read_text = Path.read_text
-
-    def unreadable_read_text(
-        path: Path,
-        encoding: str | None = None,
-        errors: str | None = None,
-    ) -> str:
-        if path == artifact:
-            raise OSError(f"unreadable artifact: {path}")
-        return original_read_text(path, encoding=encoding, errors=errors)
-
-    monkeypatch.setattr(Path, "read_text", unreadable_read_text)
+def _set_environment(monkeypatch: _EnvironmentPatch, paths: _EnvironmentPaths) -> None:
+    monkeypatch.setenv("HOME", str(paths.home))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(paths.agent_dir))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(paths.xdg_root / "config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(paths.xdg_root / "data"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(paths.xdg_root / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(paths.xdg_root / "cache"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(paths.xdg_root / "run"))
+    monkeypatch.setenv("FAKE_OMP_STATE", str(paths.state_path))
+    current_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", str(paths.bin_dir) + os.pathsep + current_path)
 
 
-def site_paths(agent_dir: Path) -> tuple[Path, Path]:
-    package_dir = agent_dir / "extensions" / "omp-slopgate"
-    return package_dir / "index.ts", package_dir / "package.json"
+def legacy_paths(sandbox: OmpSandbox, scope: str) -> tuple[Path, Path]:
+    if scope == INSTALL_SCOPE_USER:
+        index = sandbox.agent_dir / "extensions" / "omp-slopgate" / "index.ts"
+    elif scope == INSTALL_SCOPE_PROJECT:
+        index = (
+            sandbox.project_root / ".omp" / "extensions" / "omp-slopgate" / "index.ts"
+        )
+    else:
+        raise ValueError(f"unsupported legacy OMP scope: {scope}")
+    return index, index.with_name("package.json")
 
 
-def owned_index(binary: str) -> bytes:
+def owned_index(binary: str = TEST_BINARY) -> bytes:
     template = resource_path("omp_extension.ts").read_text(encoding="utf-8")
     return slopgate.installer._omp.render_omp_extension(template, binary).encode()
 
 
-def write_owned_site(agent_dir: Path, seed: OwnedSiteSeed) -> tuple[Path, Path]:
-    index_path, manifest_path = site_paths(agent_dir)
-    index_path.parent.mkdir(parents=True)
-    index_path.write_bytes(seed.index_bytes)
-    manifest_path.write_bytes(seed.manifest_bytes)
-    index_path.chmod(seed.index_mode)
-    manifest_path.chmod(seed.manifest_mode)
-    return index_path, manifest_path
+def seed_legacy(sandbox: OmpSandbox, scope: str) -> tuple[Path, Path]:
+    index, manifest = legacy_paths(sandbox, scope)
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_bytes(owned_index())
+    manifest.write_text(MANIFEST_TEXT, encoding="utf-8")
+    index.chmod(0o640)
+    manifest.chmod(0o600)
+    return index, manifest
 
 
-def prepare_cross_site_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> CrossSiteFailureScenario:
-    home = tmp_path / "home"
-    project_root = tmp_path / "repo"
-    project_root.mkdir()
-    patch_install(monkeypatch, home)
-    expected_user = OwnedSiteSeed(
-        b"// retained prefix\n" + owned_index(str(tmp_path / "old-bin")),
-        json.dumps(MANIFEST_PAYLOAD, separators=(",", ":")).encode(),
+def native_inventory(sandbox: OmpSandbox, cwd: Path) -> dict[str, object]:
+    completed = subprocess.run(
+        [str(sandbox.launcher), "plugin", "list", "--json"],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
-    user_index, user_manifest = write_owned_site(
-        home / ".omp" / "agent", expected_user
-    )
-    project_index, project_manifest = site_paths(project_root / ".omp")
-    fail_manifest_write(monkeypatch, project_manifest)
-    return CrossSiteFailureScenario(
-        project_root=project_root,
-        project_index=project_index,
-        user_index=user_index,
-        user_manifest=user_manifest,
-        expected_user=expected_user,
-    )
+    return cast(dict[str, object], json.loads(completed.stdout))
 
 
-def transaction_residue(root: Path) -> tuple[Path, ...]:
-    return tuple(root.rglob("*.slopgate-bak-*")) + tuple(
-        root.rglob(".slopgate-write-*.tmp")
-    )
+def entries_for_scope(
+    inventory: dict[str, object], scope: str
+) -> list[dict[str, object]]:
+    plugins = cast(list[dict[str, object]], inventory["marketplace"])
+    return [
+        entry
+        for plugin in plugins
+        if plugin.get("id") == OMP_PLUGIN_ID
+        for entry in cast(list[dict[str, object]], plugin["entries"])
+        if entry.get("scope") == scope
+    ]
 
 
-def fail_manifest_write(
-    monkeypatch: pytest.MonkeyPatch, manifest_path: Path
+def seed_marketplace_collision(sandbox: OmpSandbox, source: Path) -> None:
+    state: dict[str, object] = {
+        "marketplaces": {"slopgate-runtime": str(source.resolve())},
+        "registrations": [],
+        "calls": [],
+    }
+    sandbox.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def seed_unrelated_registration(sandbox: OmpSandbox) -> None:
+    state: dict[str, object] = {
+        "marketplaces": {},
+        "registrations": [
+            {
+                "id": "unrelated-package@other-marketplace",
+                "scope": "project",
+                "project": str(sandbox.project_root.resolve()),
+                "version": "1.0.0",
+                "enabled": True,
+            }
+        ],
+        "calls": [],
+    }
+    sandbox.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def set_fake_failure(
+    monkeypatch: _EnvironmentPatch, command: str, *, after_mutation: bool = False
 ) -> None:
-    original = slopgate.installer._omp.write_contained_text
+    monkeypatch.setenv("FAKE_OMP_FAIL_ON", command)
+    mutation_mode = "1" if after_mutation else "0"
+    monkeypatch.setenv("FAKE_OMP_FAIL_AFTER_MUTATION", mutation_mode)
 
-    def fail_manifest(target: Path, content: str, write: ContainedWrite) -> Path:
-        if target == manifest_path:
-            raise OSError("manifest write failed")
-        return original(target, content, write)
 
-    monkeypatch.setattr(slopgate.installer._omp, "write_contained_text", fail_manifest)
+def tree_hash(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        digest.update(str(path.relative_to(root)).encode())
+        if path.is_dir():
+            digest.update(b"directory")
+        elif path.is_file():
+            digest.update(b"file")
+            digest.update(path.read_bytes())
+    return digest.hexdigest()

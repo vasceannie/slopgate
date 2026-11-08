@@ -20,6 +20,8 @@ from slopgate.adapters.cursor_output import (
     render_cursor_output,
 )
 from slopgate.adapters.cursor import CursorAdapter
+from slopgate.adapters.omp import OmpAdapter
+from slopgate.adapters.pi import PiAdapter
 from slopgate.models import RuleFinding, Severity
 
 
@@ -57,12 +59,32 @@ def test_merge_standard_session_fields_via_adapter_helpers() -> None:
 def test_canonical_event_name_feeds_real_adapter_normalization() -> None:
     raw = {"hookEventName": "tool-call", "toolName": "write"}
 
-    assert canonical_event_name(
-        raw, {"PreToolUse"}, {"toolcall": "PreToolUse"}
-    ) == "PreToolUse"
-    assert CodexAdapter().normalize_payload({"hookEventName": "session-start"})[
-        "hook_event_name"
-    ] == "SessionStart"
+    assert (
+        canonical_event_name(raw, {"PreToolUse"}, {"toolcall": "PreToolUse"})
+        == "PreToolUse"
+    )
+    assert (
+        CodexAdapter().normalize_payload({"hookEventName": "session-start"})[
+            "hook_event_name"
+        ]
+        == "SessionStart"
+    )
+
+
+_FAILED_EXIT_RESULT = {
+    "hook_event_name": "tool_result",
+    "isError": False,
+    "details": {"exitCode": 2},
+}
+
+
+def test_tool_result_failed_drives_omp_and_pi_failure_events() -> None:
+    assert _payload_fields.tool_result_failed(_FAILED_EXIT_RESULT), "exit 2 is failure"
+    events = {
+        OmpAdapter().normalize_payload(_FAILED_EXIT_RESULT)["hook_event_name"],
+        PiAdapter().normalize_payload(_FAILED_EXIT_RESULT)["hook_event_name"],
+    }
+    assert events == {"PostToolUseFailure"}, "non-zero exit must be a failure"
 
 
 def test_canonical_payload_with_event_feeds_adapter_normalization() -> None:

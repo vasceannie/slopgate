@@ -19,9 +19,14 @@ from slopgate.adapters._payload_fields import (
     canonical_payload_with_event,
     merge_standard_session_fields,
     sync_tool_result_fields,
+    tool_result_failed,
 )
 from slopgate.adapters._session_identity import SESSION_IDENTITY_TELEMETRY
-from slopgate.adapters.base import PlatformAdapter, RenderRequest, render_request_from_call
+from slopgate.adapters.base import (
+    PlatformAdapter,
+    RenderRequest,
+    render_request_from_call,
+)
 from slopgate.constants import (
     ASK,
     BLOCK,
@@ -103,7 +108,7 @@ def _raw_event_name(raw: ObjectMapping) -> str:
 def _canonical_event_name(raw: ObjectMapping) -> str:
     SESSION_IDENTITY_TELEMETRY.record_metric("omp.event.canonical_name")
     event_name = canonical_event_name(raw, _OMP_CANONICAL_EVENTS, _OMP_EVENT_ALIASES)
-    if _raw_event_name(raw) == "tool_result" and raw.get("isError") is True:
+    if _raw_event_name(raw) == "tool_result" and tool_result_failed(raw):
         return "PostToolUseFailure"
     return event_name
 
@@ -162,18 +167,19 @@ def _sync_user_python_code(raw: ObjectMapping, canonical: ObjectDict) -> None:
     canonical.setdefault(METADATA_TOOL_NAME, "Python")
 
 
+def _blocking_reason(adapter: PlatformAdapter, request: RenderRequest) -> str:
+    return adapter.join_messages(
+        adapter.decision_findings(request.findings, request.decision)
+    )
+
+
 def _render_pre_tool_use(
     adapter: PlatformAdapter,
     request: RenderRequest,
 ) -> ObjectDict | None:
     SESSION_IDENTITY_TELEMETRY.record_metric("omp.render.pre_tool_use")
     if request.decision in {DENY, BLOCK, ASK}:
-        return {
-            BLOCK: True,
-            "reason": adapter.join_messages(
-                adapter.decision_findings(request.findings, request.decision)
-            ),
-        }
+        return {BLOCK: True, "reason": _blocking_reason(adapter, request)}
     if request.decision == "allow" and request.updated_input:
         return {"updated_input": request.updated_input}
     if request.context:
@@ -216,7 +222,7 @@ def _render_stop(
     return None
 
 
-def _render_post_tool(
+def render_post_tool(
     adapter: PlatformAdapter,
     request: RenderRequest,
 ) -> ObjectDict:
@@ -224,10 +230,15 @@ def _render_post_tool(
     output: ObjectDict = {}
     if request.context:
         output["context"] = request.context
+    reason = ""
+    if request.decision in {DENY, BLOCK, ASK}:
+        reason = _blocking_reason(adapter, request)
+    if reason:
+        output["reason"] = reason
     slopgate_details: ObjectDict = {
         DECISION_KEY: request.decision,
         "context": request.context,
-        "reason": None,
+        "reason": reason or None,
     }
     patch_details: ObjectDict = {METADATA_SLOPGATE: slopgate_details}
     output["tool_result_patch"] = {"details": patch_details}
@@ -278,7 +289,7 @@ class OmpAdapter(PlatformAdapter):
         if request.event_name == STOP:
             return _render_stop(self, request)
         if request.event_name in {POST_TOOL_USE, "PostToolUseFailure"}:
-            return _render_post_tool(self, request)
-        if request.event_name == SESSION_START:
+            return render_post_tool(self, request)
+        if request.event_name in {SESSION_START, "TurnEnd"}:
             return _render_context(self, request)
         return None

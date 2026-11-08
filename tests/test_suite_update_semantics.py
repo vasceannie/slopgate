@@ -1,12 +1,17 @@
 """Suite update semantics: package update is safe unless hook refresh is explicit."""
 
 from __future__ import annotations
+
 import subprocess
 import sys
-import pytest
 from pathlib import Path
+
+import pytest
 import slopgate.installer
 import slopgate.installer._suite
+from tests.native.hosts import FakeHosts, tree_digest
+
+pytestmark = pytest.mark.usefixtures("native_hosts")
 
 _UPDATE_SOURCE = "git+https://example.invalid/vf.git@main"
 _INSTALLED_PLUGIN = "the plugin this device already runs\n"
@@ -38,32 +43,64 @@ def test_update_suite_dry_run_uses_uv_without_refreshing_hooks(
     ) == (0, True, True, True, True)
 
 
-def test_update_suite_refresh_hooks_is_explicit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(slopgate.installer._suite, "find_binary", lambda: "slopgate")
-
-    def fake_which(_name: str) -> str:
-        return "/usr/bin/uv"
-
-    monkeypatch.setattr(slopgate.installer._suite.shutil, "which", fake_which)
-    (tmp_path / ".claude").mkdir()
+def _explicit_refresh_preview(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    native_hosts: FakeHosts,
+) -> tuple[int, str, str, str, list[str]]:
+    monkeypatch.chdir(native_hosts.project)
+    (native_hosts.home / ".claude").mkdir()
+    monkeypatch.setattr(
+        slopgate.installer._suite,
+        "_package_update_command",
+        lambda source: ["/usr/bin/uv", "tool", "install", "--force", source],
+    )
+    before = tree_digest(native_hosts.home)
     status = slopgate.installer.update_suite(
         slopgate.installer.SuiteUpdateOptions(
             dry_run=True,
-            source="git+https://example.invalid/vf.git@main",
+            source=_UPDATE_SOURCE,
             refresh_hooks=True,
         )
     )
     output = capsys.readouterr().out
-    assert (
+    return (
         status,
-        "Would run:" in output,
-        "Refreshing claude hooks" in output,
-        "Would install: claude" in output,
-        "Hook refresh: skipped" not in output,
-    ) == (0, True, True, True, True)
+        output,
+        before,
+        tree_digest(native_hosts.home),
+        native_hosts.mutating_calls(),
+    )
+
+
+def test_update_suite_refresh_hooks_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    native_hosts: FakeHosts,
+) -> None:
+    result = _explicit_refresh_preview(monkeypatch, capsys, native_hosts)
+
+    assert (
+        result[0],
+        "Would run:" in result[1],
+        "Refreshing claude (native plugin; user scope)" in result[1],
+        "Installation mode: native plugin" in result[1],
+        "Hook refresh: skipped" not in result[1],
+    ) == (0, True, True, True, True), (
+        "an explicit refresh preview should show native plugin work, not skip it"
+    )
+
+
+def test_update_suite_refresh_hooks_dry_run_is_read_only(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    native_hosts: FakeHosts,
+) -> None:
+    result = _explicit_refresh_preview(monkeypatch, capsys, native_hosts)
+
+    assert (result[0], result[2] == result[3], result[4]) == (0, True, []), (
+        "refresh dry-run must leave files unchanged and avoid native mutations"
+    )
 
 
 def test_update_suite_dry_run_falls_back_to_pip_without_refreshing_hooks(

@@ -28,11 +28,11 @@ slopgate config init
 slopgate config path   # print the active config.json location
 
 # Install hooks for your platform
-slopgate install claude    # patches ~/.claude/settings.json
+slopgate install claude    # registers the native Claude plugin (claude plugin install)
 slopgate install codex     # patches ~/.codex/hooks.json
 slopgate install opencode  # copies plugin to the user OpenCode plugins dir
-slopgate install pi        # copies extension to ~/.pi/agent/extensions/
-slopgate install omp       # copies extension to ~/.omp/agent/extensions/
+slopgate install pi        # registers the native Pi package (pi install)
+slopgate install omp       # registers the native OMP plugin (omp plugin install)
 
 # Or use the native all-harness installer and OS auto-updater
 slopgate install all                # auto-update is on by default
@@ -115,7 +115,7 @@ make dashboard-dev                # Vite → http://localhost:18835
 | **Pi** | ⚠️ Partial | `slopgate install pi [--install-scope user\|project\|both]` |
 | **OMP** | ⚠️ Partial | `slopgate install omp [--install-scope user\|project\|both]` |
 
-`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile, then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the package and rewrites the local Claude/Codex/OpenCode/Pi/OMP install sites when each device is online. Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
+`slopgate install all` is the multi-device path: each enrolled device installs hooks only for harnesses that already exist on that OS/user profile (a config root, a host CLI on PATH, or Slopgate's own staging counts as existing), then registers the native scheduler for that OS. Linux uses a user `systemd` timer, macOS uses a LaunchAgent, and native Windows uses `schtasks` plus a PowerShell shim. The scheduler polls the GitHub source and runs `slopgate update`, so a push to `github.com/vasceannie/slopgate` refreshes the installed package when each device is online. Package-only updates leave native registrations and staged payloads alone; run `slopgate update --refresh-hooks` to restage and re-register them (for Pi the one staged package is shared by user and project scope, so a refresh changes its code for both while enablement and filters stay per scope). Use `--include-missing` only when intentionally creating every supported harness config on that device. Pass `--disable-autoupdate` to skip the scheduler.
 
 ## Agent bundle
 
@@ -143,7 +143,9 @@ claude --plugin-dir ./bundle/claude-plugin
 
 ## Platform Notes
 
-- **Claude Code**: full first-class hook target. Installs into `~/.claude/settings.json` and/or `.claude/settings.json` (`--install-scope`). Session startup hooks cover `startup`, `resume`, `clear`, `compact`, and `fork`; Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
+Installation modes: Claude Code and OMP register native plugins and Pi a native package through each host's own local package manager. OpenCode (auto-discovered plugin, not a native package install), Codex CLI and Cursor (native hooks, not a registered plugin) keep their existing mechanisms because no supported local, non-interactive, scope-preserving plugin install route exists for them; each installer prints an `Installation mode:` line. Native registration is separate from activation: follow each host's own reload/trust guidance, and a native registration that is disabled or not yet trusted is reported but never silently enabled.
+
+- **Claude Code**: full first-class hook target, registered as the native plugin `slopgate-enforcement@slopgate-runtime` through a local Slopgate-owned marketplace (`claude plugin install --scope user|project`; confirm with `claude plugin list --json`). Install moves Slopgate-owned hooks out of `~/.claude/settings.json` and/or `.claude/settings.json` only after native registration is verified, preserving unrelated hooks and settings; start a new Claude session (and check `/hooks`) to confirm it loads. Session startup hooks cover `startup`, `resume`, `clear`, `compact`, and `fork`; Slopgate uses Claude's `hookSpecificOutput` permission and `decision`/`reason` shapes per the [hooks reference](https://code.claude.com/docs/en/hooks).
 - **Cursor**: native hooks via `~/.cursor/hooks.json` (user) and/or `.cursor/hooks.json` (project). Install with `slopgate install <platform>` (user default), `--install-scope project|both`, and optional `--project-root /path/to/repo`. The same flags apply to `install all`, `setup`, `update`, and `uninstall`. Slopgate maps Cursor events to its canonical model and renders Cursor-native stdout (`permission` gates, `continue` for `beforeSubmitPrompt`, `additional_context` for `postToolUse`/`afterFileEdit`, `followup_message` for `stop`/`subagentStop`). Post-tool hooks cannot hard-block edits the way Claude `PostToolUse` denial does; use `preToolUse`, `beforeShellExecution`, or `beforeReadFile` for enforcement. Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`) are installed for inline-completion policy; `workspaceOpen` is not wired yet.
 - **Codex CLI**: GA hooks with platform-specific gaps via `~/.codex/hooks.json` and/or `.codex/hooks.json`; the installer keeps `features.hooks = true` in the adjacent `config.toml` for compatibility. Matchers cover all Codex-supported local function and MCP tools, while hosted tools such as `WebSearch` remain outside the hook path. After installation or refresh, run `/hooks` in Codex to review and trust the changed hook definitions. Post-tool critical blocks use Codex's top-level `continue`/`stopReason`; other findings use `hookSpecificOutput.additionalContext` or `decision`/`reason` per the [Codex hooks reference](https://developers.openai.com/codex/hooks).
 - **OpenCode**: the OpenCode 2.2.5 V2 plugin is installed in the user config plugins directory and/or `.opencode/plugins/slopgate-plugin.ts`; these are host auto-discovered local-plugin locations. The implementation follows the [OpenCode V2 plugin migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1/) and the pinned native tool declarations in `node_modules/@opencode/plugin/dist/promise/tool.d.ts`. `tool.execute.before` is the only hard pre-execution mutation control. `tool.execute.after` receives completed or error outcomes after execution and can report advisory or unknown mutation evidence, but cannot reject or roll back the edit; when a post-tool check blocks, Slopgate adds the reason, and the recovery steps if repair is armed, to the result the model reads. Public event data is filtered to the matching plugin-instance location; session-scoped tool hooks resolve session directories, and the event subscription stops through abort cleanup. Stop findings remain advisory; generic events and permission spellings are version-sensitive. OpenCode exposes typed session/tool APIs, but no documented prompt-blocking contract, so prompt guidance remains advisory.
@@ -151,35 +153,37 @@ claude --plugin-dir ./bundle/claude-plugin
   At install time Slopgate records the host runtime version from `opencode --version` separately from declared, locked, and installed `@opencode/plugin` metadata under the OpenCode config directory. Those metadata files describe local dependency state; they do not replace verification of the host SDK/runtime that loads the plugin. The generated plugin logs a per-load plugin instance ID, plugin directory, host app version, resolved binary, and install identity through structured console output. No health or version request runs on the per-hook path. The [machine-readable regression matrix](tests/fixtures/opencode_hook_contract_matrix.json) separates documented, typed, pinned-source, locally observed, and unresolved behavior.
   Native V2 mutations use `write({path, content})`, `edit({path, oldString, newString, replaceAll?})`, and `patch({patchText})`; native command execution is `shell({command, workdir?})`. Patch projection follows the pinned [2.2.5 implementation](https://github.com/anomalyco/opencode/blob/v2.2.5/packages/core/src/tool/plugin/patch.ts), including sequential sections and moves that replace existing destinations, while preserving original preimage fingerprints and inspecting intermediate writes. Reinstall the plugin after upgrading: V1 hook objects, hashline edits, and V1 projection payloads are not supported, and a V2 host refuses to load a V1 plugin, leaving enforcement off with only a log warning. `slopgate check` warns on stderr when it finds one. OpenCode keeps one plugin per ID, so with both user and project installs the user copy stays active and the project copy reports `Duplicate plugin ID: slopgate`. OpenCode supplies the runtime SDK; do not install a private SDK copy beside the plugin.
   Slopgate's awaited post-mutation latency target and reproducible benchmark are documented in [OpenCode mutation-hook latency](docs/opencode-mutation-latency.md). The target is Slopgate-owned and is not an upstream OpenCode timeout or SLO.
-- **Pi**: extension shim at `~/.pi/agent/extensions/pi-slopgate/index.ts` and/or `.pi/extensions/pi-slopgate/index.ts`. Native events (`tool_call`, `tool_result`, `tool_execution_end`, `user_bash`, `input`, `before_agent_start`, `turn_end`, and `agent_end`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool_call`, where Pi supports `{ block: true, reason }` and mutable `event.input` for argument patches; `user_bash` blocks are returned as synthetic failed shell results because Pi's user-bash hook is an interception surface, not the same block schema as model tool calls. The `input` event can return Pi's documented handled action for blocked prompts. Post-tool findings attach Slopgate metadata through Pi's `tool_result` patch shape, while visible Slopgate activity is sent as compact custom chat messages instead of footer/status widgets or routine stderr output. Installs migrate away the legacy standalone `slopgate.ts` shim when it is Slopgate-owned to avoid duplicate Pi extension loading.
-- **OMP**: extension shim at `$PI_CODING_AGENT_DIR/extensions/omp-slopgate/index.ts` (default `~/.omp/agent/extensions/omp-slopgate/index.ts`) and/or `.omp/extensions/omp-slopgate/index.ts` in the project. Native events (`tool_call`, `tool_result`, `user_bash`, `user_python`, `input`, `before_agent_start`, `session_stop`, `turn_end`, `agent_end`) are forwarded into Slopgate's canonical model (`tool_call`, `user_bash`, `user_python` to `PreToolUse`; `input` to `UserPromptSubmit`; `session_stop` to `Stop`; `tool_result` to `PostToolUse` or `PostToolUseFailure` via `isError`; `turn_end` to `TurnEnd`). Blocking is strongest at `tool_call` and `input` with native `{ block, reason }` and `{ handled, reason }` shapes. `session_stop` findings request an OMP continuation turn via `{ continue, additionalContext }`, capped at 8 per session, and OMP's `stop_hook_active` flag is honored to avoid continuation loops. `user_bash` and `user_python` blocks are returned as synthetic failed shell results. Tool-input rewriting is best-effort and off by default (set `SLOPGATE_OMP_INPUT_REWRITE=1`); it applies only to proven Bash inputs. Post-tool findings attach Slopgate metadata through OMP's `tool_result` patch shape. See [the OMP adapter doc](docs/adapters/omp.md) for the full event map, harness usage, and known limitations.
+- **Pi**: registered as the native Pi package `pi-slopgate` (a Slopgate-owned package staged under its user data directory, added with `pi install [-l]`; confirm with `pi list`). Existing package declarations and resource filters are left untouched on refresh, project scope may need your trust approval in Pi (Slopgate never passes trust flags), and a Slopgate-owned legacy `extensions/pi-slopgate/` or `slopgate.ts` copy is migrated away only after registration is verified. Start a new Pi session after install. Native events (`tool_call`, `tool_result`, `tool_execution_end`, `user_bash`, `input`, `before_agent_start`, `turn_end`, and `agent_end`) are forwarded into Slopgate's canonical model. Blocking is strongest at `tool_call`, where Pi supports `{ block: true, reason }` and mutable `event.input` for argument patches; `user_bash` blocks are returned as synthetic failed shell results because Pi's user-bash hook is an interception surface, not the same block schema as model tool calls. The `input` event can return Pi's documented handled action for blocked prompts. Post-tool findings attach Slopgate metadata through Pi's `tool_result` patch shape, while visible Slopgate activity is sent as compact custom chat messages instead of footer/status widgets or routine stderr output.
+- **OMP**: registered as the native plugin `omp-slopgate@slopgate-runtime` through a local Slopgate-owned marketplace staged under Slopgate's user data directory (`omp plugin install --scope user|project`; confirm with `omp plugin list --json`). Install migrates a Slopgate-owned legacy `extensions/omp-slopgate/` copy only after native registration is verified; native disabled state is preserved and never silently re-enabled, and `uninstall` removes only the selected scope's registration. Start a new OMP session after install. Native events (`tool_call`, `tool_result`, `user_bash`, `user_python`, `input`, `session_start`, `session_stop`, `turn_end`, `agent_end`) are forwarded into Slopgate's canonical model (`tool_call`, `user_bash`, `user_python` to `PreToolUse`; `input` to `UserPromptSubmit`; `session_stop` to `Stop`; `tool_result` to `PostToolUse` or `PostToolUseFailure` via `isError`; `turn_end` to `TurnEnd`). Blocking is strongest at `tool_call` and `input` with native `{ block, reason }` and `{ handled, reason }` shapes. `session_stop` findings request an OMP continuation turn via `{ continue, additionalContext }`, capped at 8 per session, and OMP's `stop_hook_active` flag is honored to avoid continuation loops. `user_bash` and `user_python` blocks are returned as synthetic failed shell results. Tool-input rewriting is best-effort and off by default (set `SLOPGATE_OMP_INPUT_REWRITE=1`); it applies only to proven Bash inputs. Post-tool findings attach Slopgate metadata through OMP's `tool_result` patch shape. See [the OMP adapter doc](docs/adapters/omp.md) for the full event map, harness usage, and known limitations.
 
 ## Architecture
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Claude Code  │  │   Cursor    │  │  Codex CLI  │  │OpenCode/Pi │
-│ settings.json│  │ hooks.json  │  │ hooks.json  │  │TS extension│
-└──────┬───────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       │                 │                 │                 │
-       └─────────────────┴─────────────────┴─────────────────┘
-                         ▼
-              ┌────────────────────┐
-              │  slopgate handle │
-              │  --platform X      │
-              └─────────┬──────────┘
-                        ▼
-              ┌────────────────────┐
-              │   Rule Engine      │
-              │ 87 hook rules      │
-              │ (42 Py + 45 regex) │
-              └─────────┬──────────┘
-                        ▼
-              ┌────────────────────┐
-              │  Platform Adapter  │
-              │  (per-platform)    │
-              └────────────────────┘
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Claude Code  │  │   Cursor    │  │  Codex CLI  │  │  OpenCode   │  │     Pi      │  │     OMP     │
+│settings.json│  │ hooks.json  │  │ hooks.json  │  │ TS plugin   │  │ native pkg  │  │ marketplace │
+└──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+       │                │                │                │                │                │
+       └────────────────┴────────────────┴────────────────┴────────────────┴────────────────┘
+                                                  ▼
+                                       ┌────────────────────┐
+                                       │  slopgate handle   │
+                                       │  --platform X      │
+                                       └─────────┬──────────┘
+                                                 ▼
+                                       ┌────────────────────┐
+                                       │   Rule Engine      │
+                                       │ 87 hook rules      │
+                                       │ (42 Py + 45 regex) │
+                                       └─────────┬──────────┘
+                                                 ▼
+                                       ┌────────────────────┐
+                                       │  Platform Adapter  │
+                                       │  (per-platform)    │
+                                       └────────────────────┘
 ```
+
+OpenCode is translated to a TypeScript plugin; Pi registers a native package; OMP registers a native marketplace plugin.
 
 No shell wrappers. No bootstrap scripts. Just `slopgate handle` on PATH.
 

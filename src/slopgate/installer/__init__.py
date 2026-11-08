@@ -1,12 +1,12 @@
 """Platform installer — patches settings files to wire slopgate hooks.
 
 Supports:
-  slopgate install claude    → ~/.claude/settings.json and/or .claude/settings.json
+  slopgate install claude    → native Claude plugin marketplace (user and/or project scope)
   slopgate install codex     → ~/.codex/hooks.json and/or .codex/hooks.json
   slopgate install opencode  → user plugin dir and/or .opencode/plugins/
   slopgate install cursor    → ~/.cursor/hooks.json and/or .cursor/hooks.json
-  slopgate install pi        → ~/.pi/agent/extensions/pi-slopgate/index.ts and/or .pi/extensions/pi-slopgate/index.ts
-  slopgate install omp       → active OMP agent extensions dir and/or .omp/extensions/omp-slopgate/index.ts
+  slopgate install pi        → native Pi package (Slopgate user-data `native/pi/package`)
+  slopgate install omp       → native OMP plugin marketplace (user and/or project scope)
 
 Use --install-scope {user,project,both} (alias: --cursor-scope) on install/uninstall.
 """

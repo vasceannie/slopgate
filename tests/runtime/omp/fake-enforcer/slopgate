@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 
+import { randomUUID } from "node:crypto";
+import { rename } from "node:fs/promises";
+
 const DEFAULT_RESPONSE = "{}";
 
 class InvalidExitCodeError extends Error {
@@ -18,10 +21,41 @@ function parseExitCode(rawExitCode: string | undefined): number {
 	return exitCode;
 }
 
+const FAKE_MODE = process.env.SLOPGATE_FAKE_MODE;
+const pidsPath = process.env.SLOPGATE_FAKE_PIDS_PATH;
+
+if (FAKE_MODE === "ignore-stdin") {
+	// Exit cleanly without reading the payload, so an oversized write loses its reader.
+	process.exit(0);
+}
+
+if (FAKE_MODE === "hang") {
+	// Publish the pid barrier for this process and a grandchild, then never exit.
+	const grandchild = Bun.spawn(["sleep", "3600"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+	if (pidsPath !== undefined) {
+		const temporaryPath = `${pidsPath}.${process.pid}.${randomUUID()}.tmp`;
+		await Bun.write(temporaryPath, JSON.stringify({ child: process.pid, grandchild: grandchild.pid }));
+		await rename(temporaryPath, pidsPath);
+	}
+	await new Promise<never>(() => {
+		setInterval(() => {}, 1000);
+	});
+}
+
 const stdin = await Bun.stdin.arrayBuffer();
 const recordPath = process.env.SLOPGATE_FAKE_RECORD_PATH;
 if (recordPath !== undefined) {
 	await Bun.write(recordPath, stdin);
+}
+
+const logPath = process.env.SLOPGATE_FAKE_LOG_PATH;
+if (logPath !== undefined) {
+	// One line per invocation proves how many evaluations ran, whatever the response.
+	const parsed: unknown = JSON.parse(new TextDecoder().decode(stdin));
+	const eventName = typeof parsed === "object" && parsed !== null && "hook_event_name" in parsed
+		? String(parsed.hook_event_name)
+		: "";
+	await Bun.write(logPath, `${(await Bun.file(logPath).exists() ? await Bun.file(logPath).text() : "")}${eventName}\n`);
 }
 
 const realBinary = process.env.SLOPGATE_FAKE_REAL_BIN;

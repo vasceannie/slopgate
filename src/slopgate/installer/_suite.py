@@ -22,6 +22,10 @@ from slopgate.installer.suite import (
 )
 
 __all__ = ["AUTOUPDATE_MARKER"]
+from slopgate.installer.native.packages import (
+    native_host_root,
+    owned_staging_present,
+)
 from slopgate.util.platform import (
     child_creation_flags,
     is_windows,
@@ -92,38 +96,59 @@ def current_device_label() -> str:
     return f"{system}/{machine}"
 
 
+_HOST_EXECUTABLES = {
+    CLAUDE_PLATFORM: ("claude",),
+    CODEX_PLATFORM: ("codex",),
+    OPENCODE_PLATFORM: ("opencode",),
+    CURSOR_PLATFORM: ("cursor-agent", "cursor"),
+    PI_PLATFORM: ("pi",),
+    OMP_PLATFORM: ("omp",),
+}
+_INSTALLATION_MODES = {
+    CLAUDE_PLATFORM: "native plugin",
+    OMP_PLATFORM: "native plugin",
+    PI_PLATFORM: "native package",
+    CODEX_PLATFORM: "native hooks (not a registered plugin)",
+    CURSOR_PLATFORM: "native hooks (not a registered plugin)",
+    OPENCODE_PLATFORM: "auto-discovered plugin (not a native package install)",
+}
+
+
+def _host_present(platform_name: str, config_root: Path) -> bool:
+    """A harness is present via its config root, a CLI on PATH, or owned staging.
+
+    Presence means the harness is available, not that Slopgate is registered.
+    """
+    if config_root.exists() or owned_staging_present(platform_name):
+        return True
+    return any(
+        shutil.which(name) is not None for name in _HOST_EXECUTABLES[platform_name]
+    )
+
+
 def discover_install_sites(*, include_missing: bool = False) -> list[InstallSite]:
-    """Discover current-device hook install sites for supported harnesses."""
+    """Discover current-device harnesses and where Slopgate stages or writes for them."""
     home = Path.home()
+    opencode_root = user_config_dir(OPENCODE_PLATFORM)
+    roots = {
+        CLAUDE_PLATFORM: home / ".claude",
+        CODEX_PLATFORM: home / ".codex",
+        OPENCODE_PLATFORM: opencode_root,
+        CURSOR_PLATFORM: home / ".cursor",
+        PI_PLATFORM: home / ".pi" / "agent",
+        OMP_PLATFORM: omp_agent_dir(),
+    }
+    destinations = {
+        CLAUDE_PLATFORM: native_host_root(CLAUDE_PLATFORM),
+        CODEX_PLATFORM: home / ".codex" / "hooks.json",
+        OPENCODE_PLATFORM: opencode_root / "plugins" / "slopgate-plugin.ts",
+        CURSOR_PLATFORM: home / ".cursor" / "hooks.json",
+        PI_PLATFORM: native_host_root(PI_PLATFORM),
+        OMP_PLATFORM: native_host_root(OMP_PLATFORM),
+    }
     sites = [
-        InstallSite(
-            CLAUDE_PLATFORM,
-            home / ".claude" / "settings.json",
-            (home / ".claude").exists(),
-        ),
-        InstallSite(
-            CODEX_PLATFORM, home / ".codex" / "hooks.json", (home / ".codex").exists()
-        ),
-        InstallSite(
-            OPENCODE_PLATFORM,
-            user_config_dir(OPENCODE_PLATFORM) / "plugins" / "slopgate-plugin.ts",
-            user_config_dir(OPENCODE_PLATFORM).exists(),
-        ),
-        InstallSite(
-            CURSOR_PLATFORM,
-            home / ".cursor" / "hooks.json",
-            (home / ".cursor").exists(),
-        ),
-        InstallSite(
-            PI_PLATFORM,
-            home / ".pi" / "agent" / "extensions" / "pi-slopgate" / "index.ts",
-            (home / ".pi" / "agent").exists(),
-        ),
-        InstallSite(
-            OMP_PLATFORM,
-            omp_agent_dir() / "extensions" / "omp-slopgate" / "index.ts",
-            omp_agent_dir().exists(),
-        ),
+        InstallSite(name, destinations[name], _host_present(name, roots[name]))
+        for name in _INSTALL_TARGETS
     ]
     if include_missing:
         return sites
@@ -181,6 +206,11 @@ def uninstall_autoupdate(*, dry_run: bool = False) -> int:
     return autoupdate.uninstall_autoupdate(dry_run=dry_run)
 
 
+def _site_summary(verb: str, site: InstallSite, install_scope: str) -> str:
+    mode = _INSTALLATION_MODES[site.platform]
+    return f"{verb} {site.platform} ({mode}; {install_scope} scope)"
+
+
 def install_suite(options: SuiteInstallOptions | None = None) -> int:
     """Install Slopgate hooks for all detected harnesses on this device."""
     from slopgate.installer import install_platform
@@ -194,14 +224,11 @@ def install_suite(options: SuiteInstallOptions | None = None) -> int:
         )
     status = 0
     for site in sites:
-        print(f"Installing {site.platform} hooks at {site.path}")
-        if resolved_options.dry_run:
-            print(f"Would install: {site.platform}")
-            continue
+        print(_site_summary("Installing", site, resolved_options.install_scope))
         status = (
             install_platform(
                 site.platform,
-                dry_run=False,
+                dry_run=resolved_options.dry_run,
                 install_scope=resolved_options.install_scope,
                 project_root=resolved_options.project_root,
             )
@@ -229,14 +256,11 @@ def uninstall_suite(options: SuiteUninstallOptions | None = None) -> int:
     print(f"Device: {current_device_label()}")
     status = 0
     for site in sites:
-        print(f"Uninstalling {site.platform} hooks at {site.path}")
-        if resolved_options.dry_run:
-            print(f"Would uninstall: {site.platform}")
-            continue
+        print(_site_summary("Uninstalling", site, resolved_options.install_scope))
         status = (
             uninstall_platform(
                 site.platform,
-                dry_run=False,
+                dry_run=resolved_options.dry_run,
                 install_scope=resolved_options.install_scope,
                 project_root=resolved_options.project_root,
             )
@@ -272,14 +296,11 @@ def update_suite(options: SuiteUpdateOptions) -> int:
         return 0
     status = 0
     for site in discover_install_sites(include_missing=options.include_missing):
-        print(f"Refreshing {site.platform} hooks at {site.path}")
-        if options.dry_run:
-            print(f"Would install: {site.platform}")
-            continue
+        print(_site_summary("Refreshing", site, options.install_scope))
         status = (
             install_platform(
                 site.platform,
-                dry_run=False,
+                dry_run=options.dry_run,
                 install_scope=options.install_scope,
                 project_root=options.project_root,
             )
