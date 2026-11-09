@@ -22,7 +22,6 @@ from tests.native.pi_support import (
     seed_both_scopes,
     seed_legacy,
     tree_digest,
-    untouched_by_install,
     write_user_settings_text,
 )
 

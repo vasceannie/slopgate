@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -35,7 +35,7 @@ class _RecordingInstaller:
 
 
 @contextmanager
-def _resolved_binary() -> Iterator[None]:
+def _resolved_binary() -> Generator[None]:
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(slopgate.installer.native.entry, "find_binary", lambda: BINARY)
         yield

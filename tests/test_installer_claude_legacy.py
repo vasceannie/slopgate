@@ -106,8 +106,8 @@ def _assert_restored_hook_groups(hooks: dict[str, object]) -> None:
         group
         for group in groups
         if any(
-            isinstance(command.get("command"), str)
-            and "slopgate handle" in cast(str, command["command"])
+            isinstance(text := command.get("command"), str)
+            and "slopgate handle" in text
             for command in cast(list[dict[str, object]], group["hooks"])
         )
     ]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -54,7 +54,7 @@ _UNINSTALL_CASES = _SCOPE_VALUES
 @contextmanager
 def _property_sandbox(
     tmp_path_factory: pytest.TempPathFactory,
-) -> Iterator[tuple[Path, pytest.MonkeyPatch]]:
+) -> Generator[tuple[Path, pytest.MonkeyPatch]]:
     root = tmp_path_factory.mktemp("pi-native-property")
     with pytest.MonkeyPatch.context() as monkeypatch:
         yield root, monkeypatch

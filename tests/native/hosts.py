@@ -97,7 +97,8 @@ class FakeHosts:
             if _claude_is_mutating(call)
         )
         calls.extend(
-            "pi " + " ".join(str(arg) for arg in record.get("argv", []))
+            "pi "
+            + " ".join(str(arg) for arg in cast(list[object], record.get("argv", [])))
             for record in self.pi_calls()
             if _pi_is_mutating(record)
         )

@@ -69,7 +69,7 @@ reportPrivateUsage = true
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python3"
 project-includes = ["src", "tests"]
-search_path = ["src", ".", "dashboard/scripts"]
+search_path = ["src", ".", "dashboard/scripts", "tests/runtime/scripts"]
 disable-search-path-heuristics = true
 disable-project-excludes-heuristics = true
 min-severity = "warn"

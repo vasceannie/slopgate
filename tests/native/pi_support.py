@@ -28,7 +28,8 @@ class _TestPatch(Protocol):
 
 
 class _CaptureResult(Protocol):
-    out: str
+    @property
+    def out(self) -> str: ...
 
 
 class _Capture(Protocol):
