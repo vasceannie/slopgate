@@ -21,6 +21,7 @@ DEFAULT_DAEMON_TIMEOUT_SECONDS = 30.0
 DAEMON_STARTUP_RETRY_SECONDS = 0.25
 DAEMON_STARTUP_RETRY_INTERVAL_SECONDS = 0.01
 DAEMON_ACCEPTED_FAILURE_ERROR = "daemon request accepted but response unavailable"
+DAEMON_UNSUPPORTED_ERROR = "unix domain sockets are unavailable on this Python"
 DAEMON_ACCEPTED_FAILURE_EXIT_CODE = 1
 
 
@@ -36,9 +37,17 @@ def send_daemon_request(
         platform=request.platform or UNKNOWN_DAEMON_VALUE,
         event=request.event or UNKNOWN_DAEMON_VALUE,
     )
+    unix_family: int | None = getattr(socket, "AF_UNIX", None)
+    if unix_family is None:
+        logger.warning(
+            "hook daemon client unsupported",
+            socket_path=str(socket_path),
+            error=DAEMON_UNSUPPORTED_ERROR,
+        )
+        return DaemonResponse(ok=False, error=DAEMON_UNSUPPORTED_ERROR)
     request_sent = False
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        with socket.socket(unix_family, socket.SOCK_STREAM) as client:
             client.settimeout(timeout)
             _connect_daemon_client(client, socket_path)
             client.sendall(encode_request(request))

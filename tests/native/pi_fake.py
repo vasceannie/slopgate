@@ -9,6 +9,9 @@ from typing import Protocol, cast
 
 from tests.native.launchers import write_python_launcher
 
+# Matches the pinned Pi runtime contract in tests/runtime/pi/package.json.
+PINNED_PI_VERSION = "0.85.1"
+
 
 class _EnvironmentPatch(Protocol):
     def setenv(self, name: str, value: str) -> None: ...
@@ -30,6 +33,7 @@ class FakePi:
                     "failure_scope": None,
                     "failure_mutates": False,
                     "project_trusted": True,
+                    "version": PINNED_PI_VERSION,
                 }
             ),
             encoding="utf-8",
@@ -53,6 +57,11 @@ class FakePi:
                 "failure_mutates": mutate_before_failure,
             }
         )
+        self._write_state(state)
+
+    def set_version(self, version: str) -> None:
+        state = self._state()
+        state["version"] = version
         self._write_state(state)
 
     def set_project_trusted(self, trusted: bool) -> None:
@@ -155,6 +164,8 @@ if action in ("install", "remove", "uninstall") and source is not None:
     if should_fail():
         fail_now()
     print(("Installed " if action == "install" else "Removed ") + str(source))
+elif action == "--version":
+    print(state["version"])
 elif action == "list":
     document = read_settings()
     packages = document.get("packages", [])

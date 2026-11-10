@@ -26,6 +26,7 @@ from slopgate.installer.native.pi.legacy import (
     pi_extension_has_owned_slopgate,
     pi_has_owned_extension_entry,
 )
+from slopgate.util.platform import is_link_or_junction
 
 __all__ = ["PiCutover"]
 
@@ -40,7 +41,7 @@ _LEGACY_FILE_NAMES = (
 
 
 def _present(path: Path) -> bool:
-    return path.exists() or path.is_symlink()
+    return path.exists() or is_link_or_junction(path)
 
 
 def _extension_files(directory: Path) -> tuple[Path, ...]:
@@ -73,7 +74,7 @@ def _scope_roots(request: NativeRequest, scope: str) -> tuple[Path, Path]:
 def _validate_extension_dir(directory: Path, contain_root: Path) -> None:
     if not _present(directory):
         return
-    if directory.is_symlink() or not directory.is_dir():
+    if is_link_or_junction(directory) or not directory.is_dir():
         raise LegacyRefusal(
             f"Refusing unsafe legacy Pi extension directory: {directory}"
         )

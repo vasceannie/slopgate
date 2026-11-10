@@ -255,10 +255,11 @@ def test_disabled_extension_filter_survives_explicit_package_refresh(
 
 
 def _dry_run_names_native_commands(capsys: pytest.CaptureFixture[str]) -> bool:
-    """Whether the captured dry-run output previews the install and the inventory check."""
+    """Whether the dry-run output previews the version gate, install, and inventory check."""
     output = capsys.readouterr().out
     return (
-        would_run_prefix("pi", "install") in output
+        "Would require Pi 0.74.0 or newer (checked with: pi --version)" in output
+        and would_run_prefix("pi", "install") in output
         and "Would verify user scope with: pi list" in output
     )
 
@@ -278,5 +279,5 @@ def test_dry_run_does_not_change_files_or_spawn_pi(
         "dry-run must not spawn Pi's mutating package commands"
     )
     assert _dry_run_names_native_commands(capsys), (
-        "dry-run must print the native command and inventory target"
+        "dry-run must print the version gate, native command, and inventory target"
     )

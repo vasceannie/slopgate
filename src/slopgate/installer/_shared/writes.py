@@ -16,6 +16,13 @@ from slopgate.installer._shared.paths import (
     report_contained_install_path,
     require_contained_install_path,
 )
+from slopgate.util.platform import is_link_or_junction
+
+
+def _link_refusal(path: Path) -> UnsafeInstallPathError:
+    return UnsafeInstallPathError(
+        f"Refusing to install through a symlink or junction: {path}"
+    )
 
 
 def _ensure_real_parent_dirs(target: Path, root: Path) -> None:
@@ -24,22 +31,16 @@ def _ensure_real_parent_dirs(target: Path, root: Path) -> None:
     current = root_abs
     if not current.exists():
         current.mkdir(parents=True)
-    if current.is_symlink() or not current.is_dir():
-        raise UnsafeInstallPathError(
-            f"Refusing to install through a symlink: {current}"
-        )
+    if is_link_or_junction(current) or not current.is_dir():
+        raise _link_refusal(current)
     for part in relative.parts[:-1]:
         current /= part
-        if current.is_symlink():
-            raise UnsafeInstallPathError(
-                f"Refusing to install through a symlink: {current}"
-            )
+        if is_link_or_junction(current):
+            raise _link_refusal(current)
         if not current.exists():
             current.mkdir()
-        if current.is_symlink() or not current.is_dir():
-            raise UnsafeInstallPathError(
-                f"Refusing to install through a symlink: {current}"
-            )
+        if is_link_or_junction(current) or not current.is_dir():
+            raise _link_refusal(current)
 
 
 def _replace_text_atomically(
@@ -56,10 +57,8 @@ def _replace_text_atomically(
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        if target.is_symlink():
-            raise UnsafeInstallPathError(
-                f"Refusing to install through a symlink: {target}"
-            )
+        if is_link_or_junction(target):
+            raise _link_refusal(target)
         os.replace(tmp_name, target)
     except Exception:
         if os.path.lexists(tmp_name):

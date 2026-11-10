@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slopgate.installer._shared import UnsafeInstallPathError
+from slopgate.util.platform import is_link_or_junction
 
 __all__ = [
     "ArtifactSnapshot",
@@ -90,8 +91,8 @@ def unsafe_anchor_issue(anchor: Path) -> str | None:
     Native managers write their settings below this directory, so a symlink
     (or non-directory) would redirect those writes outside the project.
     """
-    if anchor.is_symlink():
-        return f"Refusing to use a symlinked project config directory: {anchor}"
+    if is_link_or_junction(anchor):
+        return f"Refusing to use a symlinked or junctioned project config directory: {anchor}"
     if anchor.exists() and not anchor.is_dir():
         return f"Refusing to use a non-directory project config path: {anchor}"
     return None

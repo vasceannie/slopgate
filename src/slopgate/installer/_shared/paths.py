@@ -5,13 +5,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from slopgate.util.platform import is_link_or_junction
+
 
 class UnsafeInstallPathError(ValueError):
-    """Raised when an installer path escapes its selected root via a symlink."""
+    """Raised when an installer path escapes its selected root via a link."""
 
 
 def require_contained_install_path(target: Path, root: Path) -> Path:
-    """Return the path under resolved root if no post-root component is a symlink."""
+    """Return the path under resolved root if no post-root component is a link."""
     root_lex = Path(os.path.abspath(os.fspath(root)))
     target_lex = Path(os.path.abspath(os.fspath(target)))
     try:
@@ -27,9 +29,9 @@ def require_contained_install_path(target: Path, root: Path) -> Path:
     current = root.resolve()
     for part in relative.parts:
         current /= part
-        if current.is_symlink():
+        if is_link_or_junction(current):
             raise UnsafeInstallPathError(
-                f"Refusing to install through a symlink: {current}"
+                f"Refusing to install through a symlink or junction: {current}"
             )
     return current
 
@@ -43,9 +45,7 @@ def report_contained_install_path(target: Path, root: Path) -> Path | None:
         return None
 
 
-def contained_scope_root(
-    target: Path, *, project_root: Path, user_root: Path
-) -> Path:
+def contained_scope_root(target: Path, *, project_root: Path, user_root: Path) -> Path:
     """Choose the project root when target stays inside it, otherwise user_root."""
     target_lex = Path(os.path.abspath(os.fspath(target)))
     project_lex = Path(os.path.abspath(os.fspath(project_root)))
