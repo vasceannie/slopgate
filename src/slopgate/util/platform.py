@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _WINDOWS_UNC_RE = re.compile(r"^\\\\[^\\]+\\[^\\]+")
+# Windows IO_REPARSE_TAG_MOUNT_POINT (NTFS junction); typeshed only exposes it on win32.
+NTFS_JUNCTION_REPARSE_TAG = 0xA0000003
 
 
 def is_windows() -> bool:
@@ -27,6 +30,18 @@ def child_creation_flags() -> int:
     on POSIX, so callers can pass the result unconditionally.
     """
     return CREATE_NO_WINDOW if is_windows() else 0
+
+
+def is_link_or_junction(path: Path) -> bool:
+    """Return True for symlinks and NTFS junctions, which ``is_symlink`` misses."""
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    reparse_tag = getattr(info, "st_reparse_tag", 0)
+    return reparse_tag == NTFS_JUNCTION_REPARSE_TAG
 
 
 def user_config_dir(app_name: str) -> Path:

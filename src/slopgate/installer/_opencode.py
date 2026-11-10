@@ -223,13 +223,15 @@ def _install_opencode_target(
         content,
         binary,
         InstallAt(
-            root=contained_scope_root(
-                target.path,
-                project_root=project_root,
-                user_root=_opencode_config_dir(),
-            ),
+            root=_opencode_contain_root(target.path, project_root),
             dry_run=target.dry_run,
         ),
+    )
+
+
+def _opencode_contain_root(target: Path, project_root: Path) -> Path:
+    return contained_scope_root(
+        target, project_root=project_root, user_root=_opencode_config_dir()
     )
 
 
@@ -270,7 +272,8 @@ def install_opencode(
                 rollback_completed_installs(
                     completed,
                     lambda rollback_path: _uninstall_opencode_at(
-                        rollback_path, dry_run=False
+                        rollback_path,
+                        InstallAt(root=_opencode_contain_root(rollback_path, root)),
                     ),
                 )
             return status
@@ -281,14 +284,16 @@ def install_opencode(
     return last_status
 
 
-def _uninstall_opencode_at(target: Path, *, dry_run: bool) -> int:
+def _uninstall_opencode_at(target: Path, site: InstallAt) -> int:
+    if report_contained_install_path(target, site.root) is None:
+        return 1
     if not target.exists():
         return 0
     content = target.read_text(encoding="utf-8", errors=REPLACE)
     if not all((marker in content for marker in PLUGIN_OWNERSHIP_MARKERS)):
         print(f"Refusing to remove unrecognized OpenCode plugin: {target}")
         return 1
-    if dry_run:
+    if site.dry_run:
         print(f"Would back up and delete: {target}")
         return 0
     remove_file_with_backup(target, "file")
@@ -311,7 +316,10 @@ def uninstall_opencode(
     for target in paths:
         if target.exists():
             any_found = True
-        status = _uninstall_opencode_at(target, dry_run=dry_run)
+        status = _uninstall_opencode_at(
+            target,
+            InstallAt(root=_opencode_contain_root(target, root), dry_run=dry_run),
+        )
         if status != 0:
             return status
         last_status = status

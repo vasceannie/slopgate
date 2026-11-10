@@ -9,6 +9,7 @@ import pytest
 from slopgate.installer.native.packages import PackagePlan, StagingSnapshot
 from slopgate.installer.native.pi import install as pi_install
 from tests.native.pi_support import (
+    native_mutations,
     PiHarness,
     artifacts_unchanged,
     make_harness,
@@ -231,3 +232,56 @@ def test_staging_symlink_swap_after_preflight_fails_cleanly_without_escaping(
     assert not list((tmp_path / "outside").iterdir()), "nothing written via symlink"
     assert original_artifacts_match(seeded), "legacy enforcement must stay intact"
     assert "Refusing" in capsys.readouterr().out, "the refusal must be reported"
+
+
+class _PiVersionOutcome(NamedTuple):
+    status: int
+    registered: bool
+    staged: bool
+    legacy_retired: bool
+
+
+_REFUSED = _PiVersionOutcome(1, registered=False, staged=False, legacy_retired=False)
+_INSTALLED = _PiVersionOutcome(0, registered=True, staged=True, legacy_retired=True)
+
+
+def _install_against_pi_version(harness: PiHarness, version: str) -> _PiVersionOutcome:
+    seeded = seed_legacy(harness, "user")
+    harness.fake.set_version(version)
+    status = harness.install(install_scope="user")
+    return _PiVersionOutcome(
+        status,
+        registered=bool(native_mutations(harness.fake)),
+        staged=harness.package_root.exists(),
+        legacy_retired=not original_artifacts_match(seeded),
+    )
+
+
+_PI_VERSION_CASES = [
+    pytest.param("0.73.1", _REFUSED, id="pre-scope-rename"),
+    pytest.param("0.74.0-rc.1", _REFUSED, id="prerelease-of-minimum"),
+    pytest.param("0.74.0", _INSTALLED, id="first-supported"),
+    pytest.param("0.75.0-beta.2+build.7", _INSTALLED, id="prerelease-above"),
+    pytest.param("pi (dev build)", _REFUSED, id="unparseable"),
+    pytest.param("node v20.1.0\n0.73.1", _REFUSED, id="extra-output"),
+    pytest.param("00.75.0", _REFUSED, id="leading-zero"),
+    pytest.param("0.75.0-rc..1", _REFUSED, id="empty-prerelease-identifier"),
+    pytest.param("0.7\uff15.0", _REFUSED, id="non-ascii-digit"),
+]
+
+
+@pytest.mark.parametrize(("version", "expected"), _PI_VERSION_CASES)
+def test_install_registers_only_on_pi_versions_that_can_load_the_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version: str,
+    expected: _PiVersionOutcome,
+) -> None:
+    harness = make_harness(tmp_path, monkeypatch)
+
+    outcome = _install_against_pi_version(harness, version)
+
+    assert outcome == expected, (
+        "only Pi releases exposing @earendil-works modules may be staged and "
+        "registered; refusals must leave legacy enforcement in place"
+    )

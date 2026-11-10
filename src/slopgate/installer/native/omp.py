@@ -40,6 +40,7 @@ from slopgate.installer.native.packages import (
 )
 from slopgate.installer.template_rendering import InvocationTemplateRenderer
 from slopgate.resources import resource_path
+from slopgate.util.platform import is_link_or_junction
 
 OMP_PLUGIN_NAME = "omp-slopgate"
 OMP_PLUGIN_ID = f"{OMP_PLUGIN_NAME}@{MARKETPLACE_NAME}"
@@ -236,7 +237,8 @@ class OmpMarketplaceHost(MarketplaceHost):
     def project_anchor_issue(self, root: Path) -> str | None:
         requested = root.resolve()
         omp_dir = requested / ".omp"
-        if omp_dir.exists() and (omp_dir.is_symlink() or not omp_dir.is_dir()):
+        # Check the link first: exists() follows a dangling junction and returns False.
+        if is_link_or_junction(omp_dir) or (omp_dir.exists() and not omp_dir.is_dir()):
             return f"OMP project anchor is not a safe directory: {omp_dir}"
         anchor = _effective_project_root(requested)
         if anchor != requested:

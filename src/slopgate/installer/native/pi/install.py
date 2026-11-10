@@ -26,7 +26,10 @@ from slopgate.installer.native.packages import (
     write_staging,
 )
 from slopgate.installer.native.pi.commands import (
+    PI_MINIMUM_VERSION_TEXT,
+    PI_VERSION_COMMAND,
     pi_scope_command,
+    require_supported_pi_version,
     run_pi_command,
 )
 from slopgate.installer.native.pi.cutover import PiCutover
@@ -109,6 +112,8 @@ def _preflight(
                 "pi was not found on PATH; install the Pi CLI. Existing enforcement "
                 "was left unchanged."
             )
+        if not request.dry_run:
+            require_supported_pi_version(request)
         return _read_state(plan, request)
     except (
         LegacyRefusal,
@@ -248,6 +253,11 @@ def _print_dry_run(context: _DryRunContext) -> None:
         context.binary,
     )
     print("Installation mode: native package")
+    version_check = shell_command(list(PI_VERSION_COMMAND))
+    print(
+        f"Would require Pi {PI_MINIMUM_VERSION_TEXT} or newer "
+        f"(checked with: {version_check})"
+    )
     print(f"Package source: {plan.entry_root}")
     print(f"Scope: {', '.join(request.scopes)} (project root: {request.root})")
     print(

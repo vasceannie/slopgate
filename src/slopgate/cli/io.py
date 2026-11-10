@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import json
 import sys
 from typing import cast
@@ -23,7 +24,7 @@ def load_stdin_json() -> ObjectDict:
         raise CliInputError(
             "No JSON payload on stdin. 'slopgate handle' is a hook entrypoint; pipe a harness payload, e.g. echo '{}' | slopgate handle --platform cursor"
         )
-    raw = sys.stdin.read()
+    raw = _read_stdin_text()
     if not raw.strip():
         return {}
     try:
@@ -31,6 +32,22 @@ def load_stdin_json() -> ObjectDict:
     except json.JSONDecodeError as exc:
         raise CliInputError(f"Invalid JSON on stdin: {exc.msg}") from None
     return object_dict(parsed)
+
+
+def _read_stdin_text() -> str:
+    """Decode hook payload bytes as UTF-8 (JSON's wire encoding), not the locale code page."""
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:
+        return sys.stdin.read()
+    data = cast(bytes, buffer.read())
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        # utf-8-sig reports offsets after the stripped BOM; report stdin offsets.
+        bom = len(codecs.BOM_UTF8) if data.startswith(codecs.BOM_UTF8) else 0
+        raise CliInputError(
+            f"Invalid UTF-8 on stdin at byte {bom + exc.start}: {exc.reason}"
+        ) from None
 
 
 def report_cli_input_error(exc: CliInputError) -> int:
