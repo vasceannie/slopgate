@@ -133,8 +133,11 @@ def catalog(path):
     catalog_path = Path(path) / ".claude-plugin" / "marketplace.json"
     return json.loads(catalog_path.read_text(encoding="utf-8"))
 
+def marketplace_root(marketplace):
+    return marketplace.get("root", marketplace["path"])
+
 def plugin_version(marketplace):
-    source = marketplace["path"]
+    source = marketplace_root(marketplace)
     data = catalog(source)
     plugin = data["plugins"][0]
     manifest_path = Path(source) / plugin["source"].removeprefix("./") / ".claude-plugin" / "plugin.json"
@@ -171,7 +174,10 @@ def main(args):
         if market_action == "add":
             root = str(Path(args[3]).resolve())
             data = catalog(root)
-            state["marketplaces"][data["name"]] = {"path": root, "source": "directory"}
+            # FAKE_CLAUDE_RELATIVE_SOURCE: report the source as given, like a
+            # CLI that does not canonicalize a ./relative marketplace path.
+            reported = args[3] if os.environ.get("FAKE_CLAUDE_RELATIVE_SOURCE") == "1" else root
+            state["marketplaces"][data["name"]] = {"path": reported, "root": root, "source": "directory"}
             set_known_marketplace(data["name"], root)
             save_state(state)
         elif market_action == "update":
@@ -212,7 +218,7 @@ def main(args):
                 "version": plugin_version(marketplace),
                 "scope": scope,
                 "enabled": True,
-                "installPath": marketplace["path"],
+                "installPath": marketplace_root(marketplace),
             }
             if scope == "project":
                 entry["projectPath"] = str(Path.cwd().resolve())

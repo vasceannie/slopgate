@@ -39,6 +39,8 @@ REPLACE = "replace"
 SESSION_ID = "session_id"
 SESSION_ID_CAMEL = "sessionId"
 METADATA_CWD = "cwd"
+WSL_DISTRO_ENV = "WSL_DISTRO_NAME"
+WSL_USER_ENV = "SLOPGATE_WSL_USER"
 PYTEST_TEST_PREFIX = "test_"
 EDIT_TOOL_NAMES = {
     "edit",

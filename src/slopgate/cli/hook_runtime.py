@@ -15,17 +15,29 @@ from slopgate.cli.io import (
     report_cli_input_error,
     string_arg,
 )
-from slopgate.constants import PLATFORM_CLAUDE, UNKNOWN_VALUE
+from slopgate.cli.payload_paths import UnmappedWslPathError, payload_with_windows_paths
+from slopgate.constants import (
+    DENY,
+    HOOK_EVENT_NAME_KEY,
+    PERMISSION_REQUEST,
+    PLATFORM_CLAUDE,
+    PRE_TOOL_USE,
+    UNKNOWN_VALUE,
+)
 from slopgate.daemon.paths import (
     daemon_socket_path_candidates,
     default_daemon_socket_path,
 )
 from slopgate.hook_platform import resolve_hook_platform
+from slopgate.models import RuleFinding, Severity
 from slopgate.util import logger
 
 SLOPGATE_DAEMON_SOCKET_ENV = "SLOPGATE_DAEMON_SOCKET"
 HOOK_HANDLE_EVENT = "handle"
 CLAUDE_TEAM_EVENT_EXIT_CODE = 2
+HOOK_ERROR_EXIT_CODE = 1
+UNMAPPED_WSL_PATH_RULE_ID = "HOOK-WSL-PATH"
+_BLOCKABLE_TOOL_EVENTS = frozenset({PRE_TOOL_USE, PERMISSION_REQUEST})
 
 
 def cmd_daemon(args: argparse.Namespace) -> int:
@@ -62,6 +74,10 @@ def cmd_handle(args: argparse.Namespace) -> int:
         return 0
     requested_platform = string_arg(args, "platform", UNKNOWN_VALUE)
     platform = resolve_hook_platform(requested_platform, payload)
+    try:
+        payload = payload_with_windows_paths(payload)
+    except UnmappedWslPathError as exc:
+        return _refuse_unmapped_payload(payload, platform, exc)
     logger.info(
         "hook cli handle payload",
         platform=platform,
@@ -82,6 +98,45 @@ def cmd_handle(args: argparse.Namespace) -> int:
             _ = sys.stderr.write(feedback.rstrip() + "\n")
             return CLAUDE_TEAM_EVENT_EXIT_CODE
     return dump_output(result.output)
+
+
+def _refuse_unmapped_payload(
+    payload: dict[str, object], platform: str, error: UnmappedWslPathError
+) -> int:
+    """Fail closed: a payload whose files cannot be located is never evaluated.
+
+    Tool gates get the platform's own deny on stdout. An exit code is no use
+    there: the Windows hook command runs under ``powershell.exe -Command``,
+    which turns any failing exit code into 1, a non-blocking error. Other
+    events only report the error, because denying ``Stop`` or
+    ``UserPromptSubmit`` would trap the session instead of protecting a file.
+    """
+    from slopgate.adapters import get_adapter
+
+    adapter_platform = platform.strip().lower()
+    if adapter_platform in {"", UNKNOWN_VALUE}:
+        adapter_platform = PLATFORM_CLAUDE
+    adapter = get_adapter(adapter_platform)
+    event = adapter.normalize_payload(payload).get(HOOK_EVENT_NAME_KEY)
+    logger.warning("hook cli refused unmapped WSL payload", hook_event=str(event))
+    _ = sys.stderr.write(f"slopgate: {error}\n")
+    if event not in _BLOCKABLE_TOOL_EVENTS:
+        return HOOK_ERROR_EXIT_CODE
+    finding = RuleFinding(
+        rule_id=UNMAPPED_WSL_PATH_RULE_ID,
+        title="Hook payload path could not be translated by its WSL distribution",
+        severity=Severity.HIGH,
+        decision=DENY,
+        message=str(error),
+    )
+    output = adapter.render_output(
+        event, [finding], context=None, updated_input={}, decision=DENY
+    )
+    if not output:
+        # Only adapters without this event's deny shape get here (OMP/Pi have no
+        # PermissionRequest); report an error rather than exit 0 with no decision.
+        return HOOK_ERROR_EXIT_CODE
+    return dump_output(output)
 
 
 def _try_handle_via_daemon(payload: dict[str, object], platform: str) -> int | None:

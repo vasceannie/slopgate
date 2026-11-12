@@ -31,6 +31,7 @@ __all__ = [
     "Preflight",
     "compensation_commands",
     "marketplace_command",
+    "marketplace_registered",
     "preflight",
     "registration_for",
     "run_checked",
@@ -75,9 +76,26 @@ def registration_for(
     return None
 
 
-def _same_source(source: str, entry_root: Path) -> bool:
+def marketplace_registered(host: MarketplaceHost, root: Path) -> bool:
+    """Whether the Slopgate marketplace is registered; unknown counts as yes.
+
+    Used after a failed add so rollback removes only what actually landed, yet
+    never leaks a registration it cannot rule out.
+    """
     try:
-        return Path(source).resolve() == entry_root.resolve()
+        return MARKETPLACE_NAME in host.marketplace_sources(root)
+    except NativeCommandError:
+        return True
+
+
+def _same_source(source: str, entry_root: Path, added_from: Path) -> bool:
+    """Whether a reported source is ``entry_root``.
+
+    A host may report the relative source it was added with (``./marketplace``),
+    which names a directory relative to where the add ran, not to this process.
+    """
+    try:
+        return (added_from / source).resolve() == entry_root.resolve()
     except OSError:
         return False
 
@@ -86,7 +104,8 @@ def _read_state(
     host: MarketplaceHost, plan: PackagePlan, request: NativeRequest
 ) -> Preflight:
     source = host.marketplace_sources(request.root).get(MARKETPLACE_NAME)
-    if source is not None and not _same_source(source, plan.entry_root):
+    added_from = host.commands.marketplace_add_cwd(plan.entry_root, request.root)
+    if source is not None and not _same_source(source, plan.entry_root, added_from):
         raise LegacyRefusal(
             f"Refusing to use existing {host.label} marketplace "
             f"'{MARKETPLACE_NAME}' with a different source: {source} "
