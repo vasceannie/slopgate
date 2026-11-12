@@ -411,6 +411,22 @@ enabled = false
   version. When Codex hooks are unavailable or degraded on Windows, use WSL or
   Git Bash for runtime enforcement and use `slopgate lint check` natively for
   batch quality checks.
+- A `claude.bat`/`claude.cmd` that forwards to WSL (`wsl [-d <distro>] [-u
+  <user>] claude %*`, by bare name or quoted path, quoted option values
+  included) is detected: the installer reads Claude's state and `~/.claude`
+  from that distribution and user, and the installed hook command forwards
+  `WSL_DISTRO_NAME` and its own user (`SLOPGATE_WSL_USER`) through `WSLENV`.
+  Only payloads that carry the distribution are translated: as that user,
+  the distribution resolves each Linux path field (`realpath -m`, so symlinks
+  and `..` resolve as they do for the tool) and maps it with its own
+  `wslpath -w` (custom automount roots included), in one `wsl` call per hook.
+  If the user is missing or the distribution cannot answer (including a path
+  no process can receive, such as one with a NUL), the payload is never
+  evaluated: `PreToolUse` and `PermissionRequest` get a deny decision, other
+  events exit 1 with the reason on stderr. Payloads without `WSL_DISTRO_NAME`
+  come from hosts running natively on Windows and are evaluated as sent; hook
+  commands installed for a WSL Claude before this forwarding existed must be
+  reinstalled.
 - Installer containment treats NTFS junctions like symlinks: install and
   uninstall refuse any path that crosses a junction below the selected root.
 - `slopgate handle` decodes hook stdin as UTF-8 (a BOM is accepted) regardless

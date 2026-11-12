@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import os
-from functools import partial
+from dataclasses import replace
+from functools import cache, partial
 from pathlib import Path
 
 from slopgate.constants import (
@@ -12,9 +13,12 @@ from slopgate.constants import (
     PLATFORM_CLAUDE,
     POST_TOOL_USE,
     PRE_TOOL_USE,
+    WSL_DISTRO_ENV,
+    WSL_USER_ENV,
 )
 from slopgate.installer._shared import HOOK_TYPE_COMMAND, hook_command
 from slopgate.installer.native.claude import (
+    CLAUDE_EXECUTABLE,
     CLAUDE_PLUGIN_DESCRIPTION,
     CLAUDE_PLUGIN_NAME,
     ClaudeHost,
@@ -35,6 +39,7 @@ from slopgate.installer.native.paths import (
     project_host_file,
     user_host_root,
 )
+from slopgate.installer.native.wsl import WslPaths, wsl_paths_for
 
 __all__ = ["install_claude", "uninstall_claude"]
 
@@ -59,12 +64,22 @@ _PLUGIN_HOOKS = "hooks/hooks.json"
 _ClaudeHookCommand = dict[str, str]
 _ClaudeHookEntry = dict[str, str | list[_ClaudeHookCommand]]
 _ClaudeHooks = dict[str, list[_ClaudeHookEntry]]
+# Prepended for a Claude that runs inside WSL: its POSIX shell runs the hook,
+# and WSLENV hands the distribution name and the hook's own user to the
+# Windows Slopgate, so Linux payload paths resolve in the distribution, and
+# with the permissions, of the session that sent them.
+_WSL_ORIGIN_FORWARD = (
+    f'{WSL_USER_ENV}="$(id -un)" '
+    f'WSLENV="{WSL_DISTRO_ENV}:{WSL_USER_ENV}${{WSLENV:+:$WSLENV}}" '
+)
 
 
-def claude_hooks_block(binary: str) -> _ClaudeHooks:
+def claude_hooks_block(binary: str, *, wsl_hosted: bool = False) -> _ClaudeHooks:
     """Build the hook definitions used by the Claude enforcement plugin."""
     hooks: _ClaudeHooks = {}
     command = hook_command(binary, "handle", "--platform", PLATFORM_CLAUDE)
+    if wsl_hosted:
+        command = _WSL_ORIGIN_FORWARD + command
     for event in CLAUDE_EVENTS:
         command_entry: _ClaudeHookCommand = {
             "type": HOOK_TYPE_COMMAND,
@@ -77,13 +92,15 @@ def claude_hooks_block(binary: str) -> _ClaudeHooks:
     return hooks
 
 
-def _render_payload(binary: str, version: str) -> dict[str, str]:
+def _render_payload(
+    binary: str, version: str, *, wsl_hosted: bool = False
+) -> dict[str, str]:
     manifest = {
         "name": CLAUDE_PLUGIN_NAME,
         VERSION_KEY: version,
         "description": CLAUDE_PLUGIN_DESCRIPTION,
     }
-    hooks = {HOOKS_KEY: claude_hooks_block(binary)}
+    hooks = {HOOKS_KEY: claude_hooks_block(binary, wsl_hosted=wsl_hosted)}
     return {
         _PLUGIN_MANIFEST: json.dumps(manifest, indent=2) + "\n",
         _PLUGIN_HOOKS: json.dumps(hooks, indent=2) + "\n",
@@ -112,6 +129,25 @@ _LAYOUT = ClaudeLayout(
 )
 
 
+def _wsl_layout(wsl: WslPaths) -> ClaudeLayout:
+    """The layout whose user settings live in the WSL home, opened from Windows."""
+    user_root = cache(wsl.claude_config_dir)
+    return replace(
+        _LAYOUT,
+        user_root=user_root,
+        user_settings=lambda: user_root() / _SETTINGS_FILE,
+        render_payload=partial(_render_payload, wsl_hosted=True),
+    )
+
+
+def _claude_host() -> ClaudeHost:
+    """The Claude host, bridged to WSL when ``claude`` is a WSL-forwarding shim."""
+    wsl = wsl_paths_for(CLAUDE_EXECUTABLE, Path.cwd())
+    if wsl is None:
+        return ClaudeHost(_LAYOUT)
+    return ClaudeHost(_wsl_layout(wsl), wsl)
+
+
 def install_claude(
     dry_run: bool = False, *, scope: str = "user", project_root: Path | None = None
 ) -> int:
@@ -119,7 +155,7 @@ def install_claude(
         scope,
         project_root,
         dry_run,
-        partial(install_marketplace_host, ClaudeHost(_LAYOUT)),
+        partial(install_marketplace_host, _claude_host()),
     )
 
 
@@ -129,4 +165,4 @@ def uninstall_claude(
     request = make_request_or_report(scope, project_root, dry_run)
     if request is None:
         return 1
-    return uninstall_marketplace_host(ClaudeHost(_LAYOUT), request)
+    return uninstall_marketplace_host(_claude_host(), request)

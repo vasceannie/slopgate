@@ -41,6 +41,7 @@ from slopgate.installer.native.packages import (
     marketplace_plan,
 )
 from slopgate.installer.native.settings_guard import NativeSettingsFile
+from slopgate.installer.native.wsl import WslPaths
 
 CLAUDE_PLUGIN_NAME = "slopgate-enforcement"
 CLAUDE_PLUGIN_DESCRIPTION = "Slopgate code hygiene enforcement"
@@ -85,13 +86,19 @@ class ClaudeCommands(MarketplaceCommands):
     """Argument arrays for Claude's native local plugin manager."""
 
     def marketplace_add(self, entry_root: Path) -> list[str]:
+        # Claude rejects absolute Windows paths ("C:\...") as an invalid
+        # marketplace source; only owner/repo, URLs and ./relative are accepted.
         return [
             CLAUDE_EXECUTABLE,
             _PLUGIN_COMMAND,
             "marketplace",
             "add",
-            str(entry_root),
+            f"./{entry_root.name}",
         ]
+
+    def marketplace_add_cwd(self, entry_root: Path, root: Path) -> Path:
+        _ = root
+        return entry_root.parent
 
     def marketplace_update(self) -> list[str]:
         return _marketplace_action("update")
@@ -130,9 +137,10 @@ class ClaudeHost(MarketplaceHost):
     list_command = CLAUDE_LIST_COMMAND
     activation_note = CLAUDE_ACTIVATION_NOTE
 
-    def __init__(self, layout: ClaudeLayout) -> None:
+    def __init__(self, layout: ClaudeLayout, wsl: WslPaths | None = None) -> None:
         self.layout = layout
         self.commands = ClaudeCommands()
+        self._wsl = wsl
 
     def build_plan(self, binary: str) -> PackagePlan:
         renderer = partial(self.layout.render_payload, binary)
@@ -155,7 +163,7 @@ class ClaudeHost(MarketplaceHost):
             marketplace = object_dict(item)
             name = marketplace.get("name")
             if isinstance(name, str):
-                sources[name] = _marketplace_path(marketplace)
+                sources[name] = self._windows_path(_marketplace_path(marketplace))
         return sources
 
     def registrations(self, cwd: Path) -> list[Registration]:
@@ -167,10 +175,19 @@ class ClaudeHost(MarketplaceHost):
             scope = entry.get("scope")
             if scope not in {INSTALL_SCOPE_USER, INSTALL_SCOPE_PROJECT}:
                 continue
+            project = entry.get("projectPath")
+            if isinstance(project, str):
+                entry = {**entry, "projectPath": self._windows_path(project)}
             registrations.append(
                 _registration(entry, cast(str, scope), self.layout, cwd)
             )
         return registrations
+
+    def _windows_path(self, reported: str) -> str:
+        """A path as the host reported it, in the form this installer compares."""
+        if self._wsl is None:
+            return reported
+        return str(self._wsl.to_windows(reported))
 
     def native_settings(self, scope: str, root: Path) -> tuple[NativeSettingsFile, ...]:
         path = (

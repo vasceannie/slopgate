@@ -15,6 +15,7 @@ from slopgate.installer.native.marketplace.state import (
     Preflight,
     compensation_commands,
     marketplace_command,
+    marketplace_registered,
     preflight,
     registration_for,
     run_checked,
@@ -87,12 +88,26 @@ class _InstallRun:
             return
         if self.state.marketplace_present:
             self.marketplace_refreshed = True
-        else:
-            self.marketplace_added = True
-            self.marketplace_guards = capture_guards(
-                self.host.native_settings(INSTALL_SCOPE_USER, self.request.root)
+            _ = run_checked(self.host, command, self.request.root)
+            return
+        self.marketplace_guards = capture_guards(
+            self.host.native_settings(INSTALL_SCOPE_USER, self.request.root)
+        )
+        cwd = self.host.commands.marketplace_add_cwd(
+            self.plan.entry_root, self.request.root
+        )
+        try:
+            _ = run_checked(self.host, command, cwd)
+        except NativeCommandError:
+            # Only a registration that actually landed needs removing; a
+            # rejected add must not trigger a removal that itself fails.
+            self.marketplace_added = marketplace_registered(
+                self.host, self.request.root
             )
-        _ = run_checked(self.host, command, self.request.root)
+            if not self.marketplace_added:
+                restore_guards(self.marketplace_guards)
+            raise
+        self.marketplace_added = True
 
     def _register(self, scope: str) -> None:
         prior = self.state.prior[scope]

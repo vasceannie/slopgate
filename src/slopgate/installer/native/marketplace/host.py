@@ -19,6 +19,11 @@ class MarketplaceCommands(ABC):
     def marketplace_add(self, entry_root: Path) -> list[str]:
         """Register the staged local marketplace."""
 
+    def marketplace_add_cwd(self, entry_root: Path, root: Path) -> Path:
+        """Directory ``marketplace_add`` runs in; defaults to the install root."""
+        _ = entry_root
+        return root
+
     @abstractmethod
     def marketplace_update(self) -> list[str]:
         """Refresh the cached marketplace catalog from its source."""

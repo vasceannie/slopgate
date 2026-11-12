@@ -24,7 +24,7 @@ from tests.native.pi_support import (
 
 FIRST_WRITE_COUNT = 1
 FAILING_WRITE_COUNT = 2
-REFRESHED_VERSION = "2.4.3"
+REFRESHED_VERSION_SUFFIX = ".post1"
 
 
 def _staging_snapshot(
@@ -89,7 +89,9 @@ def _prepare_existing_package(
         raise AssertionError(
             "already-staged scenario setup should register the initial package"
         )
-    monkeypatch.setattr(slopgate, "__version__", REFRESHED_VERSION)
+    monkeypatch.setattr(
+        slopgate, "__version__", slopgate.__version__ + REFRESHED_VERSION_SUFFIX
+    )
 
 
 def _partial_staging_observation(

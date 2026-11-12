@@ -49,7 +49,7 @@ def _expected_command_argv(scope: str) -> tuple[object, ...]:
             "plugin",
             "marketplace",
             "add",
-            str(Path("/sandbox/native/claude/marketplace")),
+            "./marketplace",
         ],
         [install_argv],
         [
@@ -78,6 +78,16 @@ def test_claude_commands_build_scoped_marketplace_plugin_and_disable_argv(
         "ClaudeCommands must preserve marketplace path, selected scope, disabled "
         "state, and marketplace data"
     )
+
+
+def test_claude_marketplace_add_runs_from_staged_parent_so_relative_source_resolves() -> (
+    None
+):
+    entry_root = Path("/sandbox/native/claude/marketplace")
+    commands = ClaudeCommands()
+    assert commands.marketplace_add_cwd(entry_root, Path("/project")) == (
+        entry_root.parent
+    ), "Claude add uses a ./relative source, so cwd must be the marketplace parent"
 
 
 def _claude_layout() -> ClaudeLayout:
